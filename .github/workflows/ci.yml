@@ -35,12 +35,6 @@ jobs:
       - run: npm test
       - run: npm run i18n -- check
       - run: npm run i18n:check-app
-      - run: npm run i18n -- check --locale zh-Hant
-      - run: npm run i18n -- check --scope review --locale zh-Hant
-      - run: npm run i18n -- check --scope site --locale zh-Hant
-      - run: npm run i18n -- check --scope readme --locale zh-Hant
-      - run: npm run i18n -- check --scope errors --locale zh-Hant
-      - run: npm run i18n -- check --scope errors --locale zh-CN
       - run: npm run build
       # Checks the generated UI demos and local asset links before main.
       - run: npm run site

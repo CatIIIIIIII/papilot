@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { readLegacyChinese } from './i18n/catalog.ts';
@@ -30,7 +31,7 @@ async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     locale: { type: 'string', default: 'zh-CN' }, model: { type: 'string', default: 'gemini-4-argon-medium' },
     scope: { type: 'string', default: 'workspace' },
-    'batch-size': { type: 'string', default: '30' }, limit: { type: 'string' },
+    'batch-size': { type: 'string', default: '80' }, limit: { type: 'string' },
     'dry-run': { type: 'boolean', default: false }, 'out-dir': { type: 'string' }, help: { type: 'boolean', short: 'h' },
   } });
   const command = positionals[0];
@@ -39,6 +40,18 @@ async function main() {
     return;
   }
   if (!['extract', 'check', 'translate'].includes(command) || positionals.length !== 1) throw new Error('Choose extract, check, or translate.');
+  if (command === 'check' && !values['out-dir'] && (!process.argv.includes('--scope') || !process.argv.includes('--locale'))) {
+    const configuration = readJson<{ locales: Record<string, LocaleConfig> }>(path.join(root, 'i18n/config.json'), { locales: {} });
+    let failed = false;
+    for (const scope of process.argv.includes('--scope') ? [values.scope] : scopes) {
+      for (const locale of process.argv.includes('--locale') ? [values.locale] : Object.keys(configuration.locales)) {
+        const result = spawnSync(process.execPath, ['--import', 'tsx', path.join(root, 'scripts/i18n.ts'), 'check', '--scope', scope, '--locale', locale, ...(values['out-dir'] ? ['--out-dir', values['out-dir']] : [])], { stdio: 'inherit' });
+        if (result.status !== 0) failed = true;
+      }
+    }
+    if (failed) process.exitCode = 1;
+    return;
+  }
   const scope = values.scope as Scope;
   if (!scopes.includes(scope)) throw new Error('Choose workspace, review, site, readme, or errors for --scope.');
   const catalog = scopeCatalog(root, scope);
@@ -53,14 +66,15 @@ async function main() {
   const locale = values.locale;
   const configuration = readJson<{ locales: Record<string, LocaleConfig> }>(path.join(root, 'i18n/config.json'), { locales: {} });
   if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(locale) || !Object.hasOwn(configuration.locales, locale)) throw new Error(`Add ${locale} to i18n/config.json first.`);
-  const config = configuration.locales[locale];
+  const baseConfig = configuration.locales[locale];
+  const config = { ...baseConfig, instructions: baseConfig.instructions + (baseConfig.scopeInstructions?.[scope] || ''), glossary: { ...baseConfig.glossary, ...baseConfig.scopeGlossary?.[scope] } };
   const directory = values['out-dir'] ? path.resolve(values['out-dir']) : path.join(root, scopeDirectory(scope));
   const file = path.join(directory, `${locale}.json`);
   const stateFile = path.join(values['out-dir'] ? path.join(directory, '.state') : path.join(root, 'i18n/state'), `${scope === 'workspace' ? '' : scope + '.'}${locale}.json`);
   const translations = readJson<Record<string, string>>(file, {});
   const state = readJson<TranslationState>(stateFile, {});
   const curated = locale === 'zh-CN' && (scope === 'workspace' || scope === 'review') ? readLegacyChinese(root, scope === 'review' ? 'vendor/latex-review/src/web/zh-CN.ts' : undefined) : {};
-  const messages = catalog.messages;
+  const messages = catalog.messages.map(message => baseConfig.messageInstructions?.[message.source] ? { ...message, occurrences: [...message.occurrences, { file: 'i18n/config.json', line: 1, context: baseConfig.messageInstructions[message.source] }] } : message);
   const merged = { ...translations, ...curated };
   if (command === 'check') {
     const failures = messages.flatMap(message => {
@@ -81,7 +95,7 @@ async function main() {
   const pending = pendingMessages(messages, locale, config, translations, state, curated);
   console.log(`${scope}/${locale}: ${messages.length} source messages; ${pending.length} pending; ${Math.min(limit, pending.length)} selected. Existing curated and hand-edited translations are preserved.`);
   if (values['dry-run']) return;
-  if (!pending.length) { if (scope === 'readme' && !values['out-dir']) renderReadme(root, translations); return; }
+  if (!pending.length) { if (scope === 'readme' && !values['out-dir']) renderReadme(root, translations, locale); return; }
   const selected = pending.slice(0, limit);
   // Prevent two runs for the same locale from overwriting each other's progress.
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
@@ -122,7 +136,7 @@ async function main() {
       if (batch.length) throw new Error(`${batch.length} messages still failed validation. Valid translations were saved; rerun to resume.`);
     }
   } finally { fs.rmSync(lock, { force: true }); }
-  if (scope === 'readme' && !values['out-dir']) renderReadme(root, translations);
+  if (scope === 'readme' && !values['out-dir']) renderReadme(root, translations, locale);
   console.log(`Saved ${completed} translations to ${file}. Run check for full coverage before enabling a language.`);
 }
 

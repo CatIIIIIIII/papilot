@@ -23,8 +23,8 @@ export async function translateWithAgy(prompt: string, count: number, model: str
   try {
     const { stdout } = await promisify(execFile)(process.env.PAPILOT_AGY_BIN || 'agy', [
       '-p', prompt, '--model', model, '--mode', 'plan', '--output-format', 'json',
-      '--json-schema', JSON.stringify(responseSchema(count)), '--print-timeout', '120s',
-    ], { cwd, env, timeout: 135_000, maxBuffer: 4 * 1024 * 1024 });
+      '--json-schema', JSON.stringify(responseSchema(count)), '--print-timeout', '300s',
+    ], { cwd, env, timeout: 315_000, maxBuffer: 4 * 1024 * 1024 });
     return decodeAgyResponse(stdout);
   } catch (error) {
     const failure = error as Error & { stdout?: string; stderr?: string };

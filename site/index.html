@@ -4,23 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Papilot · A Cursor-like workspace for your papers</title>
-<script>
-// The page's languages, in menu order. ?lang= or a saved choice wins; otherwise
-// the first language the browser prefers that the page has, else English.
-// Traditional Chinese is not Simplified Chinese, so it falls through.
-const LANGS = { en: 'English', 'zh-CN': '简体中文' };
-function supportedLang(tag) {
-  tag = String(tag || '').toLowerCase();
-  if (/^zh-(tw|hk|mo|hant)/.test(tag)) return null;
-  return Object.keys(LANGS).find(code => tag === code.toLowerCase() || tag.split('-')[0] === code.split('-')[0].toLowerCase()) || null;
-}
-{
-  let saved = null;
-  try { saved = localStorage.getItem('papilot-lang'); } catch {}
-  const asked = supportedLang(new URLSearchParams(location.search).get('lang')) || supportedLang(saved);
-  document.documentElement.lang = asked || (navigator.languages?.length ? navigator.languages : [navigator.language]).map(supportedLang).find(Boolean) || 'en';
-}
-</script>
+<!-- language-preference -->
 <meta name="description" content="Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject." data-zh-content="直接在 PDF 上批注和审阅，完全不用碰 LaTeX。AI 智能体去改 LaTeX，每处改动都以排版后的修改前后对比回到你面前，由你接受或拒绝。">
 <meta name="theme-color" content="#ffffff">
 <link rel="canonical" href="https://papilot.ai/">
@@ -29,7 +13,7 @@ function supportedLang(tag) {
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Papilot">
 <meta property="og:title" content="Papilot · A Cursor-like workspace for your papers">
-<meta property="og:description" content="Annotate and review PDFs directly without ever touching LaTeX.">
+<meta property="og:description" content="Annotate and review PDFs directly without ever touching LaTeX." data-zh-content="">
 <meta property="og:url" content="https://papilot.ai/">
 <meta property="og:image" content="https://papilot.ai/assets/social-preview.png">
 <meta property="og:image:width" content="2560">
@@ -371,35 +355,11 @@ for (const button of document.querySelectorAll('[data-copy]')) {
   });
 }
 
-// Each language sits in its own lang="…" spans, and the stylesheet shows the
-// one matching <html lang>. Attributes can't hold two languages, so their
-// Chinese waits in data-zh-* until it is chosen.
-const titles = { en: document.title, 'zh-CN': 'Papilot · 像 Cursor 一样改论文' };
+// The build emits real links; JavaScript only adds menu interaction and persistence.
 const menu = document.querySelector('.lang-menu'), menuButton = document.getElementById('lang-button'), list = document.getElementById('lang-list');
-function setLanguage(lang) {
-  document.documentElement.lang = lang;
-  document.title = titles[lang] || titles.en;
-  for (const name of ['alt', 'aria-label', 'title', 'href', 'content']) {
-    for (const element of document.querySelectorAll(`[data-zh-${name}]`)) {
-      if (!element.hasAttribute(`data-en-${name}`)) element.setAttribute(`data-en-${name}`, element.getAttribute(name));
-      element.setAttribute(name, element.getAttribute(`data-${lang === 'zh-CN' ? 'zh' : 'en'}-${name}`));
-    }
-  }
-  for (const item of list.children) item.setAttribute('aria-checked', String(item.dataset.setLang === lang));
-}
-for (const [code, name] of Object.entries(LANGS)) {
-  const item = document.createElement('button');
-  item.type = 'button'; item.setAttribute('role', 'menuitemradio'); item.lang = code; item.dataset.setLang = code; item.tabIndex = -1;
-  item.innerHTML = `<span>${name}</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
-  item.addEventListener('click', () => {
-    setLanguage(code);
-    try { localStorage.setItem('papilot-lang', code); } catch {}
-    const url = new URL(location.href);
-    if (url.searchParams.has('lang')) { url.searchParams.delete('lang'); history.replaceState(null, '', url); }
-    closeMenu(true);
-  });
-  list.append(item);
-}
+for (const item of list.children) item.addEventListener('click', () => {
+  try { localStorage.setItem('papilot-lang', item.lang); } catch {}
+});
 function openMenu() {
   list.hidden = false; menuButton.setAttribute('aria-expanded', 'true');
   (list.querySelector('[aria-checked=true]') || list.firstElementChild).focus();
@@ -417,7 +377,6 @@ list.addEventListener('keydown', event => {
   else if (event.key === 'Tab') closeMenu();
 });
 document.addEventListener('pointerdown', event => { if (!menu.contains(event.target)) closeMenu(); });
-setLanguage(document.documentElement.lang);
 menu.hidden = false;
 
 // The download menu leads with this computer's system, and on a Mac whose

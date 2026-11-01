@@ -9,6 +9,9 @@ on:
       - src/web/fonts/**
       - public/*.png
       - scripts/build-site.mjs
+      - i18n/config.json
+      - i18n/languages.json
+      - src/web/brand-icons/**
       - scripts/site-i18n.mjs
       - package.json
       - package-lock.json

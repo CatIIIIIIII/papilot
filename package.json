@@ -113,6 +113,8 @@
     "remark-math": "^6.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
-    "parse5": "^8.0.1"
+    "parse5": "^8.0.1",
+    "@babel/parser": "^8.0.10",
+    "@babel/types": "^8.0.10"
   }
 }

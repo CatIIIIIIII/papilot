@@ -26,8 +26,20 @@ export function scopeDirectory(scope: Scope) {
   return { workspace: 'src/web/locales', review: 'vendor/latex-review/src/web/locales', site: 'site/locales', readme: 'i18n/readme', errors: 'src/web/locales/errors' }[scope];
 }
 export function scopeValidation(scope: Scope, source: string, translated: string): string | null {
+  if ((scope === 'site' || scope === 'readme') && typeof translated === 'string') {
+    const code = (text: string) => scope === 'site'
+      ? [...text.matchAll(/<code[^>]*>([\s\S]*?)<\/code>/g)].map(match => match[1])
+      : [...text.matchAll(/(?<!`)`([^`\n]+)`(?!`)/g)].map(match => match[1]);
+    if (JSON.stringify(code(source)) !== JSON.stringify(code(translated))) return 'Inline code changed';
+    for (const name of ['Papilot', 'Codex', 'Claude', 'Cursor', 'GitHub Copilot', 'Grok', 'Antigravity', 'Kimi', 'GLM', 'DeepSeek', 'Qwen', 'OpenCode', 'LaTeX', 'SyncTeX', 'Git']) {
+      const count = (text: string) => (text.match(new RegExp(`(?<![A-Za-z])${name}(?![A-Za-z])`, 'g')) || []).length;
+      if (count(source) !== count(translated)) return `Product name changed: ${name}`;
+    }
+  }
   if (scope === 'site' && htmlStructure(source) !== htmlStructure(translated)) return 'HTML tags or attributes changed';
   if (scope === 'readme') {
+    const switcher = (text: string) => text.match(/<p data-language-switcher>[\s\S]*?<\/p>/)?.[0];
+    if (switcher(source) !== switcher(translated)) return 'README language switcher changed';
     const blocks = (text: string) => text.match(/^```[^\n]*\n[\s\S]*?^```/gm) || [];
     if (JSON.stringify(blocks(source)) !== JSON.stringify(blocks(translated))) return 'README code blocks changed';
     const links = (text: string) => [...text.matchAll(/\]\(([^)]+)\)|\b(?:href|src|srcset)="([^"]+)"/g)].map(match => match[1] || match[2]).sort();
@@ -37,7 +49,7 @@ export function scopeValidation(scope: Scope, source: string, translated: string
   return null;
 }
 
-export function renderReadme(root: string, translations: Record<string, string>) {
+export function renderReadme(root: string, translations: Record<string, string>, locale = 'zh-Hant') {
   const source = scopeCatalog(root, 'readme').messages[0].source;
   let result = translations[source];
   if (!result) throw new Error('Translate the current README before rendering it.');
@@ -46,6 +58,5 @@ export function renderReadme(root: string, translations: Record<string, string>)
   const headings = [...source.matchAll(/^## (.+)$/gm)].map(match => match[1].toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/ /g, '-'));
   let index = 0;
   result = result.replace(/^## /gm, () => `<a id="${headings[index++]}"></a>\n\n## `);
-  result = result.replace(/<p>English · <a href="README.zh-CN.md">简体中文<\/a> · <a href="README.zh-Hant.md">繁體中文<\/a><\/p>/, '<p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · 繁體中文</p>');
-  fs.writeFileSync(path.join(root, 'README.zh-Hant.md'), result);
+  fs.writeFileSync(path.join(root, `README.${locale}.md`), result);
 }

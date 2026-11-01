@@ -19,30 +19,31 @@ export function siteMessages(html) {
   return [...messages].map(([source, context]) => ({ source, occurrences: [{ file: 'site/index.html + site/demo-templates.mjs', line: 1, context }] }));
 }
 
-export function translatedSite(html, translations) {
+export function translatedSite(html, translations, locale = 'zh-Hant') {
   const document = parse(html);
+  const translate = source => {
+    if (locale === 'en') return source;
+    if (translations[source] === undefined) throw new Error(`Missing website translation: ${source}`);
+    return translations[source];
+  };
   visit(document, node => {
-    if (attr(node, 'lang') === 'en' && node.tagName !== 'html' && !attr(node, 'role')?.startsWith('menuitem')) {
-      const source = serialize(node), translated = translations[source];
-      if (translated === undefined) throw new Error(`Missing website translation: ${source}`);
-      const clone = parseFragment(serializeOuter(node)).childNodes[0];
-      clone.attrs.find(item => item.name === 'lang').value = 'zh-Hant';
-      clone.childNodes = parseFragment(translated).childNodes;
-      for (const child of clone.childNodes) child.parentNode = clone;
-      clone.parentNode = node.parentNode;
+    if (attr(node, 'lang') === 'zh-CN') {
       const siblings = node.parentNode.childNodes;
-      siblings.splice(siblings.indexOf(node) + 1, 0, clone);
+      siblings.splice(siblings.indexOf(node), 1);
+      return;
+    }
+    if (attr(node, 'lang') === 'en') {
+      node.attrs.find(item => item.name === 'lang').value = locale;
+      if (node.tagName !== 'html') {
+        node.childNodes = parseFragment(translate(serialize(node))).childNodes;
+        for (const child of node.childNodes) child.parentNode = node;
+      }
     }
     for (const name of attributeNames) if (attr(node, `data-zh-${name}`) !== undefined) {
-      const source = attr(node, name), translated = translations[source];
-      if (translated === undefined) throw new Error(`Missing website attribute translation: ${source}`);
-      node.attrs.push({ name: `data-hant-${name}`, value: translated });
+      node.attrs.find(item => item.name === name).value = translate(attr(node, name));
     }
-    if (node.tagName === 'title') {
-      const translated = translations[serialize(node)];
-      if (translated === undefined) throw new Error('Missing website title translation');
-      node.attrs.push({ name: 'data-hant-title', value: translated });
-    }
+    if (node.tagName === 'title') node.childNodes = parseFragment(translate(serialize(node))).childNodes;
+    if (node.attrs) node.attrs = node.attrs.filter(item => !item.name.startsWith('data-zh-'));
   });
   return serialize(document);
 }

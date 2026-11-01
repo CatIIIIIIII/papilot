@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Message } from './catalog.ts';
 
-export type LocaleConfig = { name: string; instructions: string; glossary: Record<string, string>; locked?: string[] };
+export type LocaleConfig = { name: string; instructions: string; glossary: Record<string, string>; locked?: string[]; scopeInstructions?: Record<string, string>; scopeGlossary?: Record<string, Record<string, string>>; messageInstructions?: Record<string, string> };
 export type TranslationState = Record<string, { revision: string; textHash: string; model: string }>;
 export const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 export const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();

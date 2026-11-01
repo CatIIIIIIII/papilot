@@ -12,6 +12,10 @@
         "agent": "智能体",
         "worktree": "工作树",
         "skill": "技能"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "zh-Hant": {
@@ -26,6 +30,10 @@
         "agent": "智慧代理",
         "worktree": "工作樹",
         "skill": "技能"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "ja": {
@@ -40,6 +48,13 @@
         "agent": "エージェント",
         "worktree": "作業ツリー",
         "skill": "スキル"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase 組版済みの変更前後として返され is awkward and obscures the comparison. Explain naturally that the user sees a comparison of the typeset pages before and after each change and can accept or reject it. Preserve the full meaning, product names and professional tone."
       }
     },
     "ko": {
@@ -54,6 +69,10 @@
         "agent": "에이전트",
         "worktree": "작업 트리",
         "skill": "스킬"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "de": {
@@ -68,6 +87,10 @@
         "agent": "Agent",
         "worktree": "Arbeitsbaum",
         "skill": "Skill"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "fr": {
@@ -82,6 +105,10 @@
         "agent": "agent",
         "worktree": "arbre de travail",
         "skill": "compétence"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "es": {
@@ -96,6 +123,10 @@
         "agent": "agente",
         "worktree": "árbol de trabajo",
         "skill": "habilidad"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "pt": {
@@ -110,6 +141,10 @@
         "agent": "agente",
         "worktree": "árvore de trabalho",
         "skill": "habilidade"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "it": {
@@ -124,6 +159,10 @@
         "agent": "agente",
         "worktree": "albero di lavoro",
         "skill": "abilità"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       }
     },
     "sv": {
@@ -138,6 +177,18 @@
         "agent": "agent",
         "worktree": "arbetskatalog",
         "skill": "färdighet"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "scopeGlossary": {
+        "site": {
+          "worktree": "arbetsträd"
+        },
+        "readme": {
+          "worktree": "arbetsträd"
+        }
       }
     }
   }

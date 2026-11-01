@@ -8,10 +8,11 @@ import { validateTranslation } from '../scripts/i18n/translate.ts';
 import { translatedSite } from '../scripts/site-i18n.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-for (const scope of ['review', 'site', 'readme', 'errors'] as Scope[]) {
-  test(`${scope} has complete Traditional Chinese translations with preserved structure`, () => {
+const locales = Object.keys(JSON.parse(fs.readFileSync(`${root}/i18n/config.json`, 'utf8')).locales);
+for (const scope of ['review', 'site', 'readme', 'errors'] as Scope[]) for (const locale of locales) {
+  test(`${scope} has complete ${locale} translations with preserved structure`, () => {
     const catalog = scopeCatalog(root, scope).messages;
-    const translations = JSON.parse(fs.readFileSync(`${root}/${scopeDirectory(scope)}/zh-Hant.json`, 'utf8'));
+    const translations = JSON.parse(fs.readFileSync(`${root}/${scopeDirectory(scope)}/${locale}.json`, 'utf8'));
     assert.ok(catalog.length > 0);
     for (const { source } of catalog) {
       assert.equal(validateTranslation(source, translations[source]), null, source.slice(0, 100));
@@ -23,6 +24,7 @@ for (const scope of ['review', 'site', 'readme', 'errors'] as Scope[]) {
 test('website rendering requires translated content and retains inline markup', () => {
   const source = '<html lang="en"><head><title>Title</title></head><body><span lang="en">Read <b>PDF</b></span><span lang="zh-CN">阅读 PDF</span></body></html>';
   const rendered = translatedSite(source, { Title: '標題', 'Read <b>PDF</b>': '閱讀 <b>PDF</b>' });
+  assert.doesNotMatch(rendered, /lang="(?:en|zh-CN)"/);
   assert.match(rendered, /<span lang="zh-Hant">閱讀 <b>PDF<\/b><\/span>/);
   assert.throws(() => translatedSite(source, { Title: '標題' }), /Missing website translation/);
   assert.equal(scopeValidation('site', 'Read <b>PDF</b>', '閱讀 <i>PDF</i>'), 'HTML tags or attributes changed');
