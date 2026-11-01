@@ -38,8 +38,12 @@ All ten website catalogs contain 161 messages. Each README contains the complete
 
 ## Mechanical rejections and layout
 
-- Rejected malformed Swedish JSON without accepting partial content; regenerated successfully.
+- Rejected malformed Swedish and Korean JSON responses without accepting partial content; regenerated successfully.
 - Rejected a Swedish inflection that changed the protected Cursor name; regenerated the card with the exact name.
 - Early Chinese and Japanese setup-label batches retried code-order mismatches. Validation now permits natural word order while requiring the same exact code fragments.
 - Screenshot checks cover zh-CN, ja, de and sv at 390px and 1440px. Download buttons, menus and all agent cards fit their containers. Japanese headline wrapping uses strict line-start rules so a prolonged-sound mark cannot start a line.
 - Automated browser checks cover every language at 320, 390, 768 and 1440px, including static content, canonical/hreflang/sitemap, assets, demo playback, reduced motion and saved language choices.
+
+## App catalog refresh
+
+The merged source added or changed 55 workspace messages and four review-viewer messages in each non-curated locale, plus 11 error messages in every locale. Obsolete generated entries were removed. The final all-scope check passes for all ten locales: 1,137 workspace messages, 248 review messages, 236 errors, 161 website messages and one complete README document per locale.
