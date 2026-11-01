@@ -103,6 +103,11 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
     finally { setSending(false); }
   }
   if (!status) return <div className="update-settings settings-page"><section className="settings-card update-summary update-loading"><p role="status">{t('Reading update status…')}</p><button className="button secondary" disabled={sending} onClick={() => void send('/updates/check')}>{t('Check for updates')}</button>{error && <p className="inline-error" role="alert">{updateError(error)}</p>}</section></div>;
+  if (status.downloadUrl) return <div className="update-settings settings-page"><section className="settings-card update-summary">
+    <div className="update-product-row"><div className="update-product"><span className="update-product-mark"><img src={logo} width="34" height="34" alt=""/></span><div><h3>Papilot</h3><p className="update-current-version">{t('Current version')} <code>{versionLabel(status.currentVersion)}</code></p></div></div>
+      <a className="button secondary" href={status.downloadUrl} target="_blank" rel="noreferrer">{t('Download desktop updates')}</a></div>
+    <p className="update-settings-notice">{t('Download the latest desktop app for your system from GitHub Releases. Your papers and settings stay in place.')}</p>
+  </section></div>;
   const busy = working(status), available = status.latestVersion && status.latestVersion !== status.currentVersion && status.phase !== 'idle' && status.phase !== 'checking';
   const checking = status.phase === 'checking';
   const message = error || status.error;

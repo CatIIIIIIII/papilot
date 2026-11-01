@@ -278,7 +278,7 @@ try {
   assert.equal(await diagnostics.getByRole('heading', { name: 'Agent configuration', exact: true }).count(), 0);
   assert.equal(await diagnostics.getByRole('button', { name: 'Check again', exact: true }).count(), 0);
   const agentCards = diagnostics.locator('.diagnostic-agent-card[data-agent]');
-  assert.deepEqual(await agentCards.locator('h4').allTextContents(), ['Codex', 'Claude', 'Cursor', 'Antigravity', 'Kimi', 'GLM', 'DeepSeek', 'Qwen', 'OpenCode']);
+  assert.deepEqual(await agentCards.locator('h4').allTextContents(), ['Codex', 'Claude', 'Cursor', 'Copilot', 'Grok', 'Antigravity', 'Kimi', 'GLM', 'DeepSeek', 'Qwen', 'OpenCode']);
   const availability = id => diagnostics.locator(`[data-agent="${id}"] .diagnostic-availability`);
   assert.equal(await availability('codex').innerText(), 'Ready');
   assert.equal(await availability('cursor').innerText(), 'Not detected');
@@ -297,7 +297,7 @@ try {
   await availability('claude').getByText('Ready', { exact: true }).waitFor();
   await diagnostics.locator('.settings-content').evaluate(element => { element.scrollTop = 0; });
   await page.screenshot({ path: 'test-results/settings-agents-desktop.png' });
-  assert.equal(await agentCards.locator('.brand-icon').count(), 9);
+  assert.equal(await agentCards.locator('.brand-icon').count(), await agentCards.count());
   const agentDetail = diagnostics.locator('#runtime-agent-detail');
   const codexCard = diagnostics.getByRole('button', { name: 'Codex details', exact: true });
   const originalCatalog = snapshot.runtime.models;
@@ -376,6 +376,26 @@ try {
   await agentDetail.getByRole('button', { name: 'Close agent details' }).click();
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await availability('cursor').getByText('Not detected', { exact: true }).waitFor();
+  snapshot.runtimes.copilot = { installed: false, connected: false, authenticated: false, account: null, error: null, models: [] };
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await availability('copilot').getByText('Not detected', { exact: true }).waitFor();
+  await diagnostics.getByRole('button', { name: 'Copilot details', exact: true }).click();
+  await agentDetail.getByText('copilot was not found by Papilot.', { exact: true }).waitFor();
+  await agentDetail.getByText('copilot login', { exact: true }).waitFor();
+  await agentDetail.locator('.runtime-agent-detection').getByText('Installation & setup', { exact: true }).click();
+  await agentDetail.getByText(/PAPILOT_COPILOT_BIN/).waitFor();
+  await page.screenshot({ path: 'test-results/copilot-setup.png', animations: 'disabled' });
+  await agentDetail.getByRole('button', { name: 'Close agent details' }).click();
+  snapshot.runtimes.grok = { installed: false, connected: false, authenticated: false, account: null, error: null, models: [] };
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await availability('grok').getByText('Not detected', { exact: true }).waitFor();
+  await diagnostics.getByRole('button', { name: 'Grok details', exact: true }).click();
+  await agentDetail.getByText('grok was not found by Papilot.', { exact: true }).waitFor();
+  await agentDetail.getByText('grok login', { exact: true }).waitFor();
+  await agentDetail.locator('.runtime-agent-detection').getByText('Installation & setup', { exact: true }).click();
+  await agentDetail.getByText(/PAPILOT_GROK_BIN/).waitFor();
+  await page.screenshot({ path: 'test-results/grok-setup.png', animations: 'disabled' });
+  await agentDetail.getByRole('button', { name: 'Close agent details' }).click();
   const checksBeforeLatex = diagnosticRequests.length;
   await diagnostics.getByRole('button', { name: 'LaTeX', exact: true }).click();
   await diagnostics.getByRole('heading', { name: 'MacTeX', exact: true }).waitFor();
@@ -576,7 +596,8 @@ try {
   await page.getByRole('menuitem', { name: 'Add paper…', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a paper' });
   await dialog.waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Choose folder', exact: true }).evaluate(el => el === document.activeElement), true);
+  // The folder chooser leads; typing a path is a collapsed fallback.
+  await expect(dialog.getByRole('button', { name: 'Choose folder', exact: true })).toBeFocused();
   for (let i = 0; i < 9; i++) {
     await page.keyboard.press(i < 5 ? 'Tab' : 'Shift+Tab');
     assert.equal(await dialog.evaluate(el => el.contains(document.activeElement)), true);
@@ -743,6 +764,9 @@ try {
   assert.ok((await page.locator('.manuscript-pages').boundingBox()).width > beforeCollapseWidth + 250);
   await page.waitForFunction(() => document.activeElement === document.querySelector('.pdf-toolbar .manuscript-panel-toggle'));
   assert.equal(await expandPanel.getAttribute('aria-expanded'), 'false');
+  // Collapsed, the toggle is the last toolbar control and the PDF link leaves with the panel.
+  assert.equal(await page.locator('.manuscript-pages .pdf-toolbar > :last-child').first().getAttribute('aria-label'), 'Expand manuscript panel');
+  assert.equal(await page.locator('.pdf-toolbar').getByRole('link', { name: 'Open PDF', exact: true }).count(), 0);
   await page.screenshot({ path: 'test-results/manuscript-panel-collapsed.png', fullPage: true });
   await expandPanel.press('Enter');
   await manuscriptSide.waitFor();
@@ -1023,6 +1047,7 @@ try {
   assert.match(await gitPanel.locator('.git-branch').innerText(), /↑1/);
   assert.equal(await gitPanel.locator('.git-sync').getAttribute('title'), 'Tracking origin/main');
   assert.match(gitText, /Draft the introduction\s+abc1234/);
+  await gitPanel.getByText('Git details', { exact: true }).click();
   const worktrees = gitPanel.getByRole('region', { name: 'Worktrees', exact: true });
   const proposalTree = worktrees.locator(`[data-task-id="${task.id}"]`);
   await proposalTree.getByText(task.title, { exact: true }).waitFor();
@@ -1262,6 +1287,22 @@ try {
   await option('deepseek/DeepSeek V4 Pro · OpenCode').waitFor();
   assert.deepEqual((await groupNames()).filter(name => name !== 'Recent'), ['Codex', 'Claude', 'Antigravity', 'Kimi', 'OpenCode']);
   await page.screenshot({ path: 'test-results/detected-agent-settings.png', fullPage: true });
+  snapshot.runtimes.copilot = { installed: true, connected: true, authenticated: true, account: 'Local Copilot configuration', error: null, models: [{ id: 'copilot-model', name: 'Copilot model', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'low' }] };
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await option('Copilot model · Copilot').waitFor();
+  await choose('Copilot model · Copilot');
+  assert.equal(await effortChoice.getAttribute('aria-valuetext'), 'High');
+  assert.deepEqual(await page.evaluate(() => [localStorage.getItem('papilot:agent'), localStorage.getItem('papilot:model:copilot')]), ['copilot', 'copilot-model']);
+  assert.equal(await agentSettings.getByRole('group', { name: 'Copilot', exact: true }).locator('[data-brand=copilot]').count(), 1);
+  await page.screenshot({ path: 'test-results/copilot-agent-settings.png', fullPage: true });
+  snapshot.runtimes.grok = { installed: true, connected: true, authenticated: true, account: 'Local Grok configuration', error: null, models: [{ id: 'grok-model', name: 'Grok model', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'low' }] };
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await option('Grok model · Grok').waitFor();
+  await choose('Grok model · Grok');
+  assert.equal(await effortChoice.getAttribute('aria-valuetext'), 'High');
+  assert.deepEqual(await page.evaluate(() => [localStorage.getItem('papilot:agent'), localStorage.getItem('papilot:model:grok')]), ['grok', 'grok-model']);
+  assert.equal(await agentSettings.getByRole('group', { name: 'Grok', exact: true }).locator('[data-brand=grok]').count(), 1);
+  await page.screenshot({ path: 'test-results/grok-agent-settings.png', fullPage: true });
   const claudeRuntime = structuredClone(snapshot.runtimes.claude);
   Object.assign(snapshot.runtimes.claude, { connected: false, authenticated: false, error: 'Claude needs an Anthropic API key: Start Papilot with ANTHROPIC_API_KEY set to use Claude.' });
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
@@ -1616,7 +1657,7 @@ try {
     await drawer.getByRole('button', { name: 'Paper: Example paper', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Add paper…', exact: true }).click();
     await page.getByRole('dialog', { name: 'Add a paper' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Choose folder', exact: true }).evaluate(el => el === document.activeElement), true);
+    await expect(page.getByRole('dialog', { name: 'Add a paper' }).getByRole('button', { name: 'Choose folder', exact: true })).toBeFocused();
     await page.keyboard.press('Escape');
     if (width === 390) {
       await page.locator('.manuscript-link').click();
@@ -1636,6 +1677,7 @@ try {
       await page.waitForFunction(() => document.querySelector('[aria-label="Page number"]').value === '2');
       await page.getByRole('button', { name: 'Git, 2 changed' }).click();
       await page.getByRole('region', { name: 'Git status' }).getByText('main.tex', { exact: true }).waitFor();
+      if (!await page.locator('.git-advanced').evaluate(el => el.open)) await page.getByText('Git details', { exact: true }).click();
       await page.getByRole('region', { name: 'Worktrees', exact: true }).locator(`[data-task-id="${task.id}"]`).waitFor();
       await page.getByRole('region', { name: 'Commit graph', exact: true }).scrollIntoViewIfNeeded();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
@@ -1742,8 +1784,8 @@ try {
   assert.deepEqual(await work.locator('.tool-label').allInnerTexts(), ['cat main.tex', 'git status --short', 'Edited main.tex']);
   assert.equal(await page.locator('.thread > .tool-item .tool-label').innerText(), 'latexmk -pdf main.tex');
   // A task on the host's default model names that model.
-  assert.equal(await page.locator('.composer-model .agent-model-name').innerText(), 'Fast model');
-  assert.equal(await page.locator('.composer-model .agent-model-label small').innerText(), 'Medium');
+  assert.equal(await page.locator('.activity-panel .agent-picker .agent-model-name').innerText(), 'Fast model');
+  assert.equal(await page.locator('.activity-panel .agent-picker .agent-model-label small').innerText(), 'Medium');
   console.log('PASS: Notes sent from the PDF read as notes, and consecutive commands fold into one line with task paths');
 
   history = Array.from({ length: 120 }, (_, i) => ({ id: `history-${i}`, taskId: task.id, type: 'assistant', text: `Message ${i}: A detailed review of the argument.`, createdAt: i + 1 }));

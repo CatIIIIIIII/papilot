@@ -41,3 +41,25 @@
   .task-commit-toolbar:has(.task-commit-alternative) .task-commit-branch{max-width:calc(100% - 44px)}
 }
 @media(max-width:520px){.task-commit textarea{font-size:16px;line-height:24px}.task-commit-actions button{min-height:36px}.task-commit-generate{width:32px;height:32px}}
+.task-commit-preview summary{cursor:pointer}
+.task-commit-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;padding:10px;background:var(--bg-subtle);border-radius:6px;font:12px/1.6 var(--mono,monospace)}
+.task-commit-preview{padding:8px 0;font-size:12px}
+
+.task-commit.task-merge-status{flex-direction:row;align-items:center;justify-content:space-between;gap:8px;min-height:28px}
+.task-merge-status>span{display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-2);font-size:12px}
+.task-merge-status>span>svg{flex:none;color:var(--text-3)}
+.task-merge-status .task-commit-actions{flex:none}
+.review-complete:has(.task-merge-status){padding:10px 12px}
+.review-complete:has(.task-merge-status)>strong,.review-complete:has(.task-merge-status)>span{display:none}
+.review-complete:has(.task-merge-status) .review-complete-actions{margin:0}
+.review-complete:has(.task-merge-status)+#review-lock{display:none}
+.review-complete:has(.task-save-result){padding:10px 12px;border-radius:10px}
+.review-complete:has(.task-save-result)>strong,.review-complete:has(.task-save-result)>span{display:none}
+.review-complete:has(.task-save-result) .review-complete-actions{margin:0;justify-content:flex-start}
+.task-save-result{display:inline-flex;align-items:center;gap:7px;min-width:0;overflow-wrap:anywhere}
+.task-save-result>svg{flex:none;color:var(--green)}
+.task-commit.task-saved{flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
+.task-saved .task-commit-actions{flex:none}
+.review-complete:has(.task-apply)>span{display:none}
+.task-apply textarea{field-sizing:content}
+@container task-commit (max-width:460px){.task-apply .task-commit-toolbar .task-commit-actions{flex-basis:auto;padding-top:0}}

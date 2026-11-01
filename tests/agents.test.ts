@@ -161,9 +161,9 @@ test('Claude turns use the local Claude Code login, resume their session, and re
   assert.equal((await agent.request('model/list')).data[0].defaultReasoningEffort, 'xhigh');
   // The next turn resumes the same Claude session.
   const next = events(agent);
-  await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Again.' }], cwd: '/work' });
+  await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Again.' }], cwd: '/work', model: 'haiku', effort: 'low' });
   await completed(next);
-  assert.deepEqual([fake.calls[2].options.resume, fake.calls[2].options.sessionId, fake.calls[2].options.effort], [thread.id, undefined, undefined]);
+  assert.deepEqual([fake.calls[2].options.resume, fake.calls[2].options.sessionId, fake.calls[2].options.model, fake.calls[2].options.effort], [thread.id, undefined, 'haiku', 'low']);
 });
 
 test('pausing a Claude turn aborts it and declines its pending approval', async () => {
@@ -246,6 +246,9 @@ test('executables are found on PATH or by path', () => {
     fs.mkdirSync(path.join(dir, '.local/bin'), { recursive: true });
     fs.copyFileSync(file, path.join(dir, '.local/bin/claude')); fs.chmodSync(path.join(dir, '.local/bin/claude'), 0o755);
     assert.equal(findExecutable('claude', { PATH: '/usr/bin:/bin', HOME: dir }), path.join(dir, '.local/bin/claude'));
+    fs.mkdirSync(path.join(dir, '.grok/bin'), { recursive: true });
+    fs.copyFileSync(file, path.join(dir, '.grok/bin/grok')); fs.chmodSync(path.join(dir, '.grok/bin/grok'), 0o755);
+    assert.equal(findExecutable('grok', { PATH: '/usr/bin:/bin', HOME: dir }), path.join(dir, '.grok/bin/grok'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -1,0 +1,104 @@
+name: Desktop
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        default: ''
+  push:
+    branches: [main, codex/electron-desktop]
+    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'vendor/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
+  pull_request:
+    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'vendor/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}-${{ inputs.release_tag || 'check' }}
+  cancel-in-progress: ${{ !inputs.release_tag }}
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: mac
+            arch: arm64
+            executable: mac-arm64/Papilot.app/Contents/MacOS/Papilot
+          - os: macos-15-intel
+            platform: mac
+            arch: x64
+            executable: mac/Papilot.app/Contents/MacOS/Papilot
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x64
+            executable: linux-unpacked/papilot
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/latex-review/package-lock.json
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgtk-3-0 libnss3 libxss1 libxtst6 libasound2 libgbm1 libnotify4 libsecret-1-0 libfuse2 xvfb xauth openbox
+      - run: npm ci
+      - name: Build the app and installers
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run desktop:build
+      - name: Launch the packaged app and check its backend
+        if: runner.os == 'macOS'
+        env:
+          PAPILOT_DESKTOP_EXECUTABLE: ${{ github.workspace }}/release/desktop/${{ matrix.executable }}
+        run: npm run test:desktop
+      - name: Test the Linux directory, AppImage and installed deb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' bash scripts/check-desktop-linux.sh
+      - name: Save installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Papilot-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/desktop/*.dmg
+            release/desktop/*.zip
+            release/desktop/*.AppImage
+            release/desktop/*.deb
+          if-no-files-found: error
+          retention-days: 7
+      - name: Save desktop screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-check-${{ matrix.platform }}-${{ matrix.arch }}
+          path: test-results/desktop*.png
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Attach installers to the version release
+        if: inputs.release_tag != '' && inputs.release_tag != null
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          gh release upload "$RELEASE_TAG" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb --clobber

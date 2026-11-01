@@ -1,6 +1,6 @@
 {
   "name": "papilot",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A Cursor-like workspace for your papers: annotate and review PDFs directly without ever touching LaTeX.",
   "keywords": [
     "latex",
@@ -58,21 +58,25 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "i18n": "tsx scripts/i18n.ts",
     "dev": "tsx watch src/server/main.ts",
     "start": "tsx src/server/main.ts",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p desktop/tsconfig.json --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "setup:review": "npm --prefix vendor/latex-review ci && npm --prefix vendor/latex-review run build",
     "demo": "tsx scripts/demo.ts",
     "doctor": "node bin/papilot.mjs doctor",
     "service:install": "tsx scripts/service.ts install",
     "service:stop": "tsx scripts/service.ts stop",
-    "test:ui": "npm run build && node scripts/check-ui.mjs && node scripts/check-appearance.mjs && node scripts/check-updates.mjs && node scripts/check-papers.mjs && node scripts/check-imports.mjs && node scripts/check-compilation.mjs && node scripts/check-build-problems.mjs && node scripts/check-review-notes.mjs && node --import tsx scripts/check-note-groups.mjs && node scripts/check-note-selection.mjs && node scripts/check-ai-review.mjs && node --import tsx scripts/check-note-results.mjs && node --import tsx scripts/check-review-flow.mjs && node scripts/check-skills.mjs && node --import tsx scripts/check-skill-library.mjs && node scripts/check-attachments.mjs && node --import tsx scripts/check-accounts.mjs",
+    "test:ui": "npm run build && node scripts/check-ui.mjs && node scripts/check-task-model.mjs && node scripts/check-appearance.mjs && node scripts/check-updates.mjs && node scripts/check-papers.mjs && node scripts/check-imports.mjs && node scripts/check-compilation.mjs && node scripts/check-build-problems.mjs && node scripts/check-review-notes.mjs && node --import tsx scripts/check-note-groups.mjs && node scripts/check-note-selection.mjs && node scripts/check-ai-review.mjs && node --import tsx scripts/check-note-results.mjs && node --import tsx scripts/check-review-flow.mjs && node scripts/check-skills.mjs && node --import tsx scripts/check-skill-library.mjs && node scripts/check-attachments.mjs && node --import tsx scripts/check-accounts.mjs",
     "site": "node scripts/build-site.mjs",
     "test:site": "npm run site && node scripts/check-site.mjs",
     "prepack": "npm run build && npm run setup:review",
+    "desktop:compile": "tsc -p desktop/tsconfig.json",
+    "desktop": "npm run setup:review && npm run build && npm run desktop:compile && node scripts/desktop.mjs dev",
+    "desktop:build": "npm run setup:review && npm run build && npm run desktop:compile && node scripts/desktop.mjs package",
+    "test:desktop": "node scripts/check-desktop.mjs",
+    "i18n": "tsx scripts/i18n.ts",
     "i18n:check-app": "tsx scripts/i18n/app-locales.ts",
     "test:locales": "npm run build && npm --prefix vendor/latex-review run build && node --import tsx scripts/check-locales.mjs"
   },
@@ -90,8 +94,6 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.311",
-    "@babel/parser": "^8.0.10",
-    "@babel/types": "^8.0.10",
     "@openai/codex": "0.164.0",
     "@simplewebauthn/browser": "^14.0.0",
     "@types/node": "^22.20.5",
@@ -99,8 +101,9 @@
     "@types/react-dom": "^19.3.0",
     "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0",
     "katex": "^0.16.47",
-    "parse5": "^8.0.1",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -109,6 +112,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "parse5": "^8.0.1"
   }
 }

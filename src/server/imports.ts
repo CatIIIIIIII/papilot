@@ -12,6 +12,7 @@ import type { PaperImport, Project } from '../shared.ts';
 import type { Manuscripts } from './manuscript.ts';
 
 const execute = promisify(execFile);
+// These limits apply to uploads, not folders already on this computer.
 const MAX_BYTES = 64 * 1024 * 1024, MAX_FILES = 5000;
 const CONFIG = '.latex-review.json';
 const skip = (name: string) => ['.git', '__macosx', '.ds_store', 'node_modules', '.papilot'].includes(name.toLowerCase()) || name.startsWith('._');
@@ -33,40 +34,71 @@ function config(root: string): Record<string, unknown> {
   return data;
 }
 export function texFiles(root: string) {
-  const files: string[] = []; let count = 0;
-  function walk(folder: string, depth: number) {
-    if (depth > 20) return;
+  const files: string[] = [], folders = [''];
+  while (folders.length) {
+    const folder = folders.pop()!;
     for (const item of fs.readdirSync(path.join(root, folder), { withFileTypes: true })) {
-      if (++count > MAX_FILES) throw new Error('This folder has too many files. Select the folder containing just the paper.');
       if (skip(item.name) || ['build', 'out', 'output'].includes(item.name)) continue;
       const file = path.posix.join(folder, item.name);
-      if (item.isDirectory()) walk(file, depth + 1);
+      if (item.isDirectory()) folders.push(file);
       else if (item.isFile() && /\.tex$/i.test(file)) files.push(file);
     }
   }
-  walk('', 0); return files.sort();
+  return files.sort();
+}
+function existingTex(root: string, file: unknown): file is string {
+  if (typeof file !== 'string' || !/\.tex$/i.test(file)) return false;
+  try {
+    safeName(file);
+    let current = root;
+    for (const part of file.split('/')) {
+      current = path.join(current, part);
+      if (fs.lstatSync(current).isSymbolicLink()) return false;
+    }
+    return fs.statSync(current).isFile();
+  } catch { return false; }
+}
+function sourceHead(file: string) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const buffer = Buffer.alloc(300000);
+    return buffer.subarray(0, fs.readSync(fd, buffer, 0, buffer.length, 0)).toString('utf8');
+  } finally { fs.closeSync(fd); }
 }
 export async function inspectPaper(root: string) {
-  const files = texFiles(root), roots = files.filter(file => {
-    const text = fs.readFileSync(path.join(root, file), 'utf8').slice(0, 300000).replace(/(?<!\\)%[^\n]*/g, '');
-    return /\\documentclass\b/.test(text) && /\\begin\s*\{document\}/.test(text);
-  });
-  let main = roots.length === 1 ? roots[0] : '', engine = '', error: string | undefined;
+  let settings: Record<string, unknown> = {}, error: string | undefined;
+  try { settings = config(root); } catch (failure) { error = (failure as Error).message; }
+  let main = existingTex(root, settings.main) ? settings.main : '', engine = '';
+  // Most papers already declare their main file or keep it near the root.
+  // Do not enumerate caches, assets and supporting papers just to open them.
+  if (!main) {
+    try {
+      const module = await import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href);
+      const detected = module.detectMain(root);
+      if (existingTex(root, detected)) main = detected;
+    } catch { /* Unusual layouts fall back to a deeper search. */ }
+  }
+  let candidates = main ? [main] : [];
+  if (!main) {
+    const files = texFiles(root), roots = files.filter(file => {
+      const text = sourceHead(path.join(root, file)).replace(/(?<!\\)%[^\n]*/g, '');
+      return /\\documentclass\b/.test(text) && /\\begin\s*\{document\}/.test(text);
+    });
+    main = roots.length === 1 ? roots[0] : '';
+    const found = new Set(roots);
+    candidates = [...roots, ...files.filter(file => !found.has(file))];
+  }
   try {
-    const settings = config(root);
-    if (typeof settings.main === 'string' && files.includes(settings.main)) main = settings.main;
-    const module = await import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href);
-    if (!main) { try { main = module.detectMain(root); } catch { /* The author chooses among all TeX files. */ } }
     // Engine detection also works before Git initialization by reading the source hints.
     if (main) {
-      const text = fs.readFileSync(path.join(root, main), 'utf8');
+      const text = sourceHead(path.join(root, main));
       engine = typeof settings.engine === 'string' ? settings.engine : '';
       const rc = [path.join(path.dirname(main), '.latexmkrc'), path.join(path.dirname(main), 'latexmkrc'), '.latexmkrc', 'latexmkrc'].find(file => fs.existsSync(path.join(root, file)));
       const mode = rc ? fs.readFileSync(path.join(root, rc), 'utf8').match(/^\s*\$pdf_mode\s*=\s*(\d)/m)?.[1] : undefined;
       if (!engine) engine = text.match(/^%\s*!\s*TEX\s+(?:TS-)?program\s*=\s*(pdflatex|xelatex|lualatex)/im)?.[1].toLowerCase() || ({ '1': 'pdflatex', '4': 'lualatex', '5': 'xelatex' } as Record<string, string>)[mode || ''] || (/\\(?:usepackage(?:\[[^\]]*\])?\{[^}]*\b(?:fontspec|xeCJK|unicode-math|polyglossia)\b|documentclass(?:\[[^\]]*\])?\{ctex)/.test(text) ? 'xelatex' : 'pdflatex');
     }
   } catch (failure) { error = (failure as Error).message; }
-  return { candidates: [...roots, ...files.filter(file => !roots.includes(file))], main, engine: engine || 'pdflatex', error };
+  return { candidates, main, engine: engine || 'pdflatex', error };
 }
 async function repositoryRoot(root: string) {
   let top: string | undefined;
@@ -170,7 +202,7 @@ export class PaperImports {
     if (this.active.has(id)) return value;
     if (this.registered(value.path)) throw new Error('This paper is already added. Open it from the paper list.');
     const main = input.main ?? value.main, engine = input.engine ?? value.engine;
-    if (typeof main !== 'string' || !texFiles(value.path).includes(main)) throw new Error('Choose an existing TeX main file.');
+    if (!existingTex(value.path, main)) throw new Error('Choose an existing TeX main file.');
     if (!['pdflatex', 'xelatex', 'lualatex'].includes(engine as string)) throw new Error('Choose a supported LaTeX engine.');
     if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120)) throw new Error('Enter a paper name under 120 characters.');
     this.active.add(id);
@@ -181,13 +213,20 @@ export class PaperImports {
       try {
         await repositoryRoot(value.path);
         if (!repair) {
-          const settings = config(value.path);
-          fs.writeFileSync(path.join(value.path, CONFIG), JSON.stringify({ ...settings, main, engine, source_dir: '' }, null, 2) + '\n');
+          // Keep the author's settings, including a source folder that still
+          // contains the main file; without one, the whole folder compiles.
+          const settings = config(value.path), folder = typeof settings.source_dir === 'string' ? settings.source_dir.replace(/\/+$/, '') : null;
+          const contains = folder === '' || (folder !== null && (main as string).startsWith(folder + '/'));
+          const next = { ...settings, main, engine, ...(contains ? {} : { source_dir: '' }) };
+          if (JSON.stringify(next) !== JSON.stringify(settings)) fs.writeFileSync(path.join(value.path, CONFIG), JSON.stringify(next, null, 2) + '\n');
         }
         await prepareRepository(value.path); value.versioned = true;
         if (repair) { value.summary = await repair(value.path, previousError); Object.assign(value, await inspectPaper(value.path)); }
         value.phase = 'building'; this.save(value);
-        let result = await this.manuscripts.state('import-' + id, value.path, true);
+        // A retry starts a new build without forcing a clean one, so the
+        // opened paper finds this PDF in the cache instead of compiling again.
+        this.manuscripts.forgetProject('import-' + id);
+        let result = await this.manuscripts.state('import-' + id, value.path);
         while (result.build.status === 'building') { await new Promise(resolve => setTimeout(resolve, 400)); result = await this.manuscripts.state('import-' + id, value.path); }
         value.phase = result.build.status === 'ready' ? 'ready' : 'failed'; value.error = result.build.error;
       } catch (error) { value.phase = 'failed'; value.error = (error as Error).message; }

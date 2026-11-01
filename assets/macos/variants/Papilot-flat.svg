@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Papilot macOS app icon</title>
+  <desc>The Papilot blue and white pen nib on a softly shaded, continuous-corner square. Transparent outside the tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#F5F8FC"/>
+      <stop offset="1" stop-color="#DFE8F3"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#B9CADD"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="32" y1="6" x2="46" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#568CC0"/>
+      <stop offset="0.55" stop-color="#356AA0"/>
+      <stop offset="1" stop-color="#285784"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="25" y1="6" x2="25" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EFF4FA"/>
+    </linearGradient>
+    <filter id="tile-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="11" flood-color="#152B43" flood-opacity="0.16"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#152B43" flood-opacity="0.12"/>
+    </filter>
+    <filter id="nib-shadow" x="0" y="0" width="64" height="68" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="0.8" stdDeviation="0.9" flood-color="#1D426B" flood-opacity="0.14"/>
+    </filter>
+    <path id="tile-shape" d="M358 100H666C753 100 797 100 832 118C864 134 890 160 906 192C924 227 924 271 924 358V666C924 753 924 797 906 832C890 864 864 890 832 906C797 924 753 924 666 924H358C271 924 227 924 192 906C160 890 134 864 118 832C100 797 100 753 100 666V358C100 271 100 227 118 192C134 160 160 134 192 118C227 100 271 100 358 100Z"/>
+  </defs>
+  <g filter="url(#tile-shadow)">
+    <use href="#tile-shape" fill="url(#tile)"/>
+    <use href="#tile-shape" stroke="url(#rim)" stroke-width="2"/>
+  </g>
+  <g id="brand-mark" transform="translate(134.4 134.4) scale(11.8)" stroke="#193A59" stroke-width="1.8" stroke-linejoin="round">
+    <g filter="url(#nib-shadow)">
+      <path d="M18 48H32V58H18Z" fill="#F0F4F8"/>
+      <path d="M32 48H46V58H32Z" fill="#BDCEE1"/>
+      <path d="M32 6L12 34L18 48H32V6Z" fill="url(#paper)" stroke="none"/>
+      <path d="M32 6L52 34L46 48H32V6Z" fill="url(#blue)" stroke="none"/>
+      <path d="M32 6L52 34L46 48H18L12 34L32 6Z"/>
+      <path d="M32 6V20"/>
+      <path d="M32 20Q35 31 46 34Q35 37 32 48Q29 37 18 34Q29 31 32 20Z" fill="#FFFFFF"/>
+    </g>
+  </g>
+</svg>

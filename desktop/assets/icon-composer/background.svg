@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Papilot full-bleed background layer</title>
+  <defs>
+    <linearGradient id="background" x1="0.242718" y1="0" x2="0.740291" y2="1">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.38" stop-color="#ECF3FB"/>
+      <stop offset="0.72" stop-color="#D2E1F2"/>
+      <stop offset="1" stop-color="#ABC5E3"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#background)"/>
+</svg>

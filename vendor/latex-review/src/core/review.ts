@@ -121,8 +121,8 @@ export class Review {
         "SELECT * FROM actions WHERE task=? AND status='applied' ORDER BY seq DESC LIMIT 1",
         name,
       );
-    const delivered = this.app.delivery.get(name);
-    return action && latest && action.round === latest.number && (!delivered || action.seq > delivered.seq) ? action : null;
+    const delivered = this.app.delivery.get(name), reconciliation = this.app.reconciliation.get(name);
+    return action && latest && (!reconciliation || action.round > reconciliation.round) && action.round === latest.number && (!delivered || action.seq > delivered.seq) ? action : null;
   }
   summary(name: string): Summary {
     const task = this.app.tasks.get(name),
@@ -367,6 +367,9 @@ export class Review {
     const task = this.app.tasks.get(name),
       kind = data.action;
     this.app.delivery.assertReady(name);
+    const reconciliation = this.app.reconciliation.get(name);
+    if (reconciliation && (!reconciliation.ready || data.round <= reconciliation.round))
+      throw new Error("Review the new merge suggestion before changing decisions.");
     if (!Object.hasOwn(DECIDED, kind))
       throw new Error("The action must be accept, reject or comment.");
     const identity = data.id || randomUUID();

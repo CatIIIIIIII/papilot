@@ -8,3 +8,7 @@
 *.toc
 *.bbl
 *.blg
+
+# The desktop's first-run preview is intentionally shipped with the sources.
+!preview/main.pdf
+!preview/main.synctex.gz

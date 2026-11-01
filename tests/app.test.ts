@@ -60,6 +60,23 @@ async function fixture() {
   return { updates, diagnosticRequests, manuscripts: shared.manuscripts, store, workspace, review, accounts, local, remote, ada, joined, session, state, as, async close() { updates.close(); await local.close(); await remote.close(); workspace.close(); store.close(); fs.rmSync(dist, { recursive: true }); } };
 }
 
+test('task model changes keep the agent fixed and require task access and valid settings', async () => {
+  const f = await fixture();
+  try {
+    f.workspace.runtime.models = [{ id: 'deep', name: 'Deep', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high' }];
+    const request = { method: 'POST' as const, url: '/api/tasks/thesis-task/model', headers: f.as, payload: { model: 'deep', effort: 'low' } };
+    const changed = await f.remote.inject(request);
+    assert.equal(changed.statusCode, 200); assert.equal(changed.json().model, 'deep'); assert.equal(changed.json().effort, 'low');
+    assert.equal((await f.remote.inject({ ...request, payload: { effort: '' } })).json().effort, null);
+    for (const payload of [{ agent: 'claude' }, { effort: 'extreme' }, { effort: 3 }, { model: 3 }, { model: 'foreign' }]) {
+      assert.equal((await f.remote.inject({ ...request, payload })).statusCode, 400);
+    }
+    assert.equal((await f.remote.inject({ ...request, url: '/api/tasks/grant-task/model' })).statusCode, 400);
+    assert.equal((await f.remote.inject({ ...request, headers: { ...f.as, 'x-papilot-token': 'wrong' } })).statusCode, 403);
+    assert.equal(f.store.task('thesis-task').agent, undefined);
+  } finally { await f.close(); }
+});
+
 test('skill management is owner-only and writes require CSRF', async () => {
   const f = await fixture();
   try {

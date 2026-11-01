@@ -321,6 +321,7 @@ export class Publisher {
     const app = this.app,
       name = job.task,
       project = app.project;
+    if (app.reconciliation.get(name)?.ready === false) throw new Error("Retry applying to finish preparing the merge review.");
     let task = app.tasks.get(name);
     if (!fs.existsSync(task.worktree))
       throw new PublishError(
@@ -335,13 +336,18 @@ export class Publisher {
       latest = app.review.latestRound(name),
       decided = app.review.lastChange(name),
       violations = scopeViolations(app.repo, task.base, after, task.scope);
+    const reconciliation = app.reconciliation.get(name);
+    if (reconciliation) {
+      for (const file of app.repo.changedFiles(task.base, after))
+        if (!reconciliation.files.includes(file) && !violations.includes(file)) violations.push(file);
+    }
     if (violations.length)
       throw new PublishError(
         "Some edits are outside the task scope: " +
           violations.slice(0, 10).join(", "),
         [
           "Allowed: " +
-            (task.scope.sections.length
+            (reconciliation ? reconciliation.files : task.scope.sections.length
               ? task.scope.sections.map((s) => `${s.number} ${s.title}`)
               : task.scope.paths
             ).join(", "),

@@ -16,7 +16,8 @@ test('saved task status distinguishes local commits, confirmed pushes and applie
   assert.equal(taskSaveStatus(task()), null);
   assert.equal(taskSaveStatus(task({ committed })), 'committed');
   assert.equal(taskSaveStatus(task({ committed: { ...committed, pushed: true } })), 'pushed');
-  assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'branch', accepted: 'accepted', commit: 'branch-commit' } })), 'committed');
+  assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'branch', accepted: 'accepted', commit: 'branch-commit' } })), null);
+  assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'commit', accepted: 'accepted', commit: 'main-commit', branch: 'main' } })), 'committed');
   assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'workspace', accepted: 'accepted' } })), 'applied');
   assert.equal(taskSaveStatus(task({ deferred: true, committed })), null, 'isolated tasks use their own delivery');
 });

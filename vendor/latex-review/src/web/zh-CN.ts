@@ -1,7 +1,9 @@
 // Simplified Chinese for the review viewer, keyed by the English text.
 export const zhCN: Record<string, string> = {
-  "Accepted changes are saved in this task. Choose where to save them below.": "已接受的改动保存在此任务中，请在下方选择保存方式。",
-  "Accepted changes are committed to the task branch.": "已接受的改动已提交到任务分支。",
+  "Merge review": "合并审阅",
+  "Your manuscript is unchanged until you save the merged result.": "保存合并结果前，论文保持不变。",
+  "Wait for the merge suggestion before changing review decisions.": "请等待合并建议生成后再审核。",
+  "Choose how to save the accepted changes to your manuscript.": "请选择如何将已接受的改动保存到论文。",
   "There are no accepted changes to save.": "没有需要保存的已接受改动。",
 
   // Overview

@@ -18,6 +18,21 @@ function fixture(overrides: Record<string, any> = {}) {
   const updates = new Updates({ root: process.cwd(), data, version: '0.6.0', port: 1, supported: true, latest: async () => '0.7.0', busy: () => false, shutdown() {}, ...overrides });
   return { data, updates, close() { updates.close(); fs.rmSync(data, { recursive: true, force: true }); } };
 }
+test('desktop updates cannot install npm releases or switch to a dev checkout', async () => {
+  let checked = false, installed = false;
+  const downloadUrl = 'https://github.com/PapilotAI/papilot/releases/latest';
+  const f = fixture({ downloadUrl, latest: async () => { checked = true; return '0.7.0'; }, install: async () => { installed = true; return '/tmp/unwanted'; } });
+  try {
+    f.updates.start();
+    const status = await f.updates.check();
+    assert.equal(status.downloadUrl, downloadUrl);
+    assert.equal(status.canUpdate, false);
+    assert.equal(status.phase, 'idle');
+    assert.throws(() => f.updates.setChannel('dev'), /desktop updates/);
+    assert.throws(() => f.updates.install('0.7.0'), /desktop updates/);
+    assert.equal(checked, false); assert.equal(installed, false);
+  } finally { f.close(); }
+});
 test('release comparisons reject unsafe targets and never downgrade', () => {
   for (const version of ['latest', '../1.0.0', '1.2.3;whoami', '1.2.3-beta.1', '01.2.3', '1.2']) assert.equal(stableVersion(version), false, version);
   assert.ok(newerVersion('0.10.0', '0.9.0'));

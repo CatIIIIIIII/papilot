@@ -32,6 +32,7 @@ const validTarget = (version: unknown, channel: UpdateChannel): version is strin
 const available = (next: string, current: string, channel: UpdateChannel) => validTarget(next, channel)
   && (channel === 'dev' || devRevision(current) ? next !== current : newerVersion(next, current));
 interface Options {
+  downloadUrl?: string;
   root: string; data: string; version: string; port: number;
   busy: () => boolean; shutdown: () => void;
   latest?: (channel: UpdateChannel) => Promise<string>; install?: (data: string, version: string) => Promise<string>;
@@ -42,7 +43,6 @@ interface Options {
 export class Updates {
   private state: UpdateStatus;
   private checking: Promise<UpdateStatus> | null = null;
-  private operation: Promise<void> | null = null;
   private prepared = '';
   private inFlight = 0;
   private timer?: NodeJS.Timeout;
@@ -53,7 +53,7 @@ export class Updates {
   constructor(private options: Options) {
     this.file = path.join(options.data, 'updates/status.json'); this.lock = path.join(options.data, 'updates/install.lock');
     const preference = readJson(path.join(options.data, 'updates/channel.json'))?.channel;
-    this.channel = preference === 'dev' || preference === 'stable' ? preference : devRevision(options.version) ? 'dev' : 'stable';
+    this.channel = options.downloadUrl ? 'stable' : preference === 'dev' || preference === 'stable' ? preference : devRevision(options.version) ? 'dev' : 'stable';
     let supported = options.supported ?? true;
     if (options.supported === undefined) try { npmCli(); } catch { supported = false; }
     this.state = { currentVersion: options.version, latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: supported };
@@ -62,6 +62,7 @@ export class Updates {
     if (saved && activePhases.has(saved.phase) && !alive(saved.pid)) this.change({ phase: 'failed', checkedAt: Date.now(), error: 'The update was interrupted. Your current installation is still available; retry the update.' });
   }
   snapshot(): UpdateStatus {
+    if (this.options.downloadUrl) return { currentVersion: this.options.version, latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: false, channel: 'stable', downloadUrl: this.options.downloadUrl };
     const saved = readJson(this.file);
     if (saved && activePhases.has(this.state.phase) && ['updated', 'failed'].includes(saved.phase)) this.state = { ...this.state, ...saved, currentVersion: this.options.version };
     const { currentVersion, latestVersion, phase, checkedAt, error, canUpdate } = this.state;
@@ -70,6 +71,7 @@ export class Updates {
   get restarting() { return this.snapshot().phase === 'restarting'; }
   enter() { this.inFlight++; let released = false; return () => { if (!released) { released = true; this.inFlight--; } }; }
   start() {
+    if (this.options.downloadUrl) return;
     if (this.state.phase !== 'failed') void this.check();
     this.timer = setInterval(() => {
       if (this.state.phase === 'waiting') void this.activate();
@@ -82,6 +84,7 @@ export class Updates {
     writeJson(this.file, { ...this.state, pid: process.pid });
   }
   setChannel(channel: unknown) {
+    if (this.options.downloadUrl) throw new Error('Download desktop updates from GitHub Releases.');
     if (channel !== 'stable' && channel !== 'dev') throw new Error('Choose a valid update channel.');
     if (activePhases.has(this.state.phase)) throw new Error('Wait for the current update to finish before changing channels.');
     if (channel === this.channel) return this.check();
@@ -92,6 +95,7 @@ export class Updates {
     return this.check();
   }
   check(): Promise<UpdateStatus> {
+    if (this.options.downloadUrl) return Promise.resolve(this.snapshot());
     if (this.checking) return this.checking;
     if (activePhases.has(this.state.phase)) return Promise.resolve(this.snapshot());
     this.change({ phase: 'checking' });
@@ -108,6 +112,7 @@ export class Updates {
     return this.checking;
   }
   install(version: unknown) {
+    if (this.options.downloadUrl) throw new Error('Download desktop updates from GitHub Releases.');
     if (activePhases.has(this.state.phase)) return this.snapshot();
     if (!this.state.canUpdate) throw new Error('npm is unavailable to Papilot.');
     if (!validTarget(version, this.channel) || version !== this.state.latestVersion || !available(version, this.options.version, this.channel)) throw new Error('Check for a newer release before updating.');
@@ -117,11 +122,11 @@ export class Updates {
     if (previous) fs.rmSync(this.lock);
     const fd = fs.openSync(this.lock, 'wx', 0o600); fs.writeFileSync(fd, JSON.stringify({ pid: process.pid })); fs.closeSync(fd);
     this.change({ phase: 'installing', error: null });
-    this.operation = (this.options.install || installRelease)(this.options.data, version).then(root => {
+    void (this.options.install || installRelease)(this.options.data, version).then(root => {
       if (this.closed) return;
       this.prepared = root; this.change({ phase: 'waiting' });
       return this.activate();
-    }).catch(error => { this.change({ phase: 'failed', error: error instanceof Error ? error.message : 'The update failed.' }); this.release(); }).finally(() => { this.operation = null; });
+    }).catch(error => { this.change({ phase: 'failed', error: error instanceof Error ? error.message : 'The update failed.' }); this.release(); });
     return this.snapshot();
   }
   // Public for deterministic tests; the periodic tick calls this in production.

@@ -10,8 +10,8 @@ import { flushSync } from 'react-dom';
 import { readNotesInstructions, type NoteSummary } from '../notes.ts';
 import { aiReviewSummary, isFeedbackPrompt } from '../conversation.ts';
 import { ignorePattern } from '../commit.ts';
-import { AGENT_IDS, AGENT_NAMES, isAgentId } from '../shared.ts';
-import type { LatexInstallation, AgentId, AgentModel, Annotation, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem, Viewer } from '../shared.ts';
+import { AGENT_IDS, AGENT_NAMES, isAgentId, taskFinished } from '../shared.ts';
+import type { TaskCommitReview, LatexInstallation, AgentId, Annotation, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem, Viewer } from '../shared.ts';
 import { SkillChip, SkillMenu, SkillPicker, matchSkills, skillName, skillQuery } from './skills.tsx';
 import { ComposerDraft, sendsMessage, taskTitle, unsentReviewFeedback } from './composer.ts';
 import { DraftAttachments, MessageAttachments, useAttachmentDraft } from './attachments.tsx';
@@ -27,6 +27,7 @@ import { DeleteTaskDialog } from './task-dialog.tsx';
 import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
 import { UpdateNotice, versionLabel } from './update-notice.tsx';
+import { DesktopWindowChrome } from './desktop-chrome.tsx';
 import { PaperDialog } from './paper-dialog.tsx';
 import { ImportDialog } from './import-dialog.tsx';
 import { CompileButton } from './compile-button.tsx';
@@ -37,7 +38,11 @@ import type { DiagnosticReport } from '../shared.ts';
 import { CommitDialog } from './commit-dialog.tsx';
 import { TaskCommit } from './task-commit.tsx';
 import { TaskCommitDraft } from './task-commit-draft.ts';
+import { TaskConflict } from './task-conflict.tsx';
+import { TaskApply } from './task-apply.tsx';
+import { TaskApplyState } from './task-apply-state.ts';
 import { taskSaveStatus } from './task-save-status.ts';
+import { TaskSaved } from './task-saved.tsx';
 import { GitCounts, GitRepository } from './git-overview.tsx';
 import { problemCount, ReferencesPanel, useBibliography } from './references-panel.tsx';
 import { Invite, SignIn } from './sign-in.tsx';
@@ -46,8 +51,9 @@ import { errorText, locale, t, tn, useLanguage } from './i18n.ts';
 import { notificationState, notify, notifying, subscribeNotifications, taskAlerts } from './notifications.ts';
 import { Markdown } from './markdown.tsx';
 import logo from './logo.svg';
-import { AgentConnectionNotice, AgentPicker, ModelLabel } from './agent-picker.tsx';
+import { AgentConnectionNotice, AgentPicker } from './agent-picker.tsx';
 import { taskEffort } from './task-effort.ts';
+import { TaskModelPicker } from './task-model-picker.tsx';
 import { TaskFlight, type TaskFlightData } from './task-flight.tsx';
 import { UsageSummary } from './usage.tsx';
 import { useNoteUndo } from './use-note-undo.ts';
@@ -86,7 +92,7 @@ const ACTIVE = ['running', 'waiting_input', 'queued'];
 function Status({ task }: { task: Task }) {
   const answered = noManuscriptChanges(task), done = task.status === 'reviewing' && task.review?.state === 'done';
   const saved = taskSaveStatus(task);
-  return <span className={`status ${task.status}${done || answered ? ' done' : ''}`}><i/>{saved === 'pushed' ? t('Committed and pushed') : saved === 'committed' ? t('Committed') : saved === 'applied' ? t('Applied to working directory') : answered ? t('Completed') : done ? t('Review complete') : task.status === 'running' ? t('{agent} is working', { agent: agentName(task) }) : statusNames()[task.status] || task.status}</span>;
+  return <span className={`status ${task.status}${done || answered ? ' done' : ''}`}><i/>{saved === 'pushed' ? t('Committed and pushed') : saved === 'committed' ? t('Committed') : saved === 'applied' ? t('Applied to manuscript') : answered ? t('Completed') : done ? t('Review complete') : task.status === 'running' ? t('{agent} is working', { agent: agentName(task) }) : statusNames()[task.status] || task.status}</span>;
 }
 function time(timestamp: number) { return new Date(timestamp).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); }
 function ago(timestamp: number) {
@@ -284,8 +290,9 @@ function timelineEntries(items: TimelineItem[]) {
   return entries;
 }
 
-function Activity({ task, models, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, reportError, pause, pausing, openReview, feedback, connection, tools, lead }: { tools?: React.ReactNode; lead?: React.ReactNode; task: Task; models: AgentModel[]; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
+function Activity({ task, runtime, reconnecting, onReconnect, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, reportError, pause, pausing, openReview, feedback, connection, tools, lead }: { tools?: React.ReactNode; lead?: React.ReactNode; task: Task; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
   const input = useRef<HTMLTextAreaElement>(null);
+  const [savingModel, setSavingModel] = useState(false);
   const { text: draft, sending, sendingSource } = useSyncExternalStore(composer.subscribe, composer.getSnapshot);
   const viewer = useContext(ViewerContext);
   const files = useAttachmentDraft(`papilot:files:${viewer?.id || 'owner'}:task:${task.id}`);
@@ -304,7 +311,7 @@ function Activity({ task, models, skills, composer, answerDrafts, items, loading
     observer.observe(scroller.current); return () => observer.disconnect();
   }, []);
   async function submit(source: 'draft' | 'feedback') {
-    if (composer.sending || ['uncertain', 'deleting'].includes(task.status) || (source === 'draft' && files.draft.getSnapshot().blocked)) return;
+    if (savingModel || composer.sending || ['uncertain', 'deleting'].includes(task.status) || (source === 'draft' && files.draft.getSnapshot().blocked)) return;
     const chosen = source === 'draft' ? skill : null;
     const attached = source === 'draft' ? files.draft.getSnapshot().files : [];
     const pending = composer.submit(source, message => api('/tasks/' + task.id + '/messages', message), chosen?.id, attached.map(file => file.id));
@@ -315,9 +322,6 @@ function Activity({ task, models, skills, composer, answerDrafts, items, loading
   const unsent = unsentReviewFeedback(task.review);
   const hint = task.status === 'deleting' ? t('This task is being deleted') : task.status === 'uncertain' ? t('Check task status before sending') : sendingSource === 'feedback' ? t('Sending feedback…') : sending ? t('Sending…')
     : unsent ? tn(unsent, '{n} review update will be sent with this message', '{n} review updates will be sent with this message') : active ? t('{agent} is working · new instructions run next', { agent: agentName(task) }) : '';
-  // Name the model the next turn uses: the chosen one, or the host's current default.
-  const model = models.find(m => m.id === task.model) || (task.model ? undefined : models.find(m => m.isDefault));
-  const modelName = model?.name || task.model || t('Default model');
   return <section id="conversation-panel" className="activity-panel" aria-label={t('{agent} conversation', { agent: agentName(task) })}><div className="panel-heading">{lead}{tools && <div className="panel-tools">{tools}</div>}</div>
     <div className="conversation-history"><div className="messages" ref={scroller} onScroll={() => { if (scroller.current) { const el = scroller.current; shouldFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; setFollowing(shouldFollow.current); } }}><div className="thread">
       {loading && <p className="muted" role="status">{t('Loading conversation…')}</p>}
@@ -333,23 +337,14 @@ function Activity({ task, models, skills, composer, answerDrafts, items, loading
     <div className="composer-wrap">
       {connection}
       <Composer attachments={task.mode === 'review' ? undefined : files.draft} upload={(file, signal) => uploadAttachment(task.projectId, file, signal)} filesDisabled={sending || blocked} imageHint={task.agent === 'antigravity' && files.files.some(file => file.mime.startsWith('image/'))} inputRef={input} label={t('Instructions for {agent}', { agent: agentName(task) })} value={draft} onChange={value => composer.edit(value)} onSubmit={() => void submit('draft')} placeholder={task.mode === 'review' ? t('Ask for another review of this PDF version…') : active ? t('Queue instructions for the next turn…') : t('Ask a question or request changes…')} skills={task.mode === 'review' ? [] : skills.filter(skill => skill.output !== 'annotations')} skill={skill} onSkill={setSkill}
-        footer={attach => <div className="composer-options">{task.mode !== 'review' && <SkillPicker onAttach={attach} skills={skills.filter(skill => skill.output !== 'annotations')} selected={skill} disabled={sending || blocked} onPick={value => { setSkill(value); input.current?.focus(); }}/>}<span className="composer-model" title={`${agentName(task)} · ${task.model ? modelName : model ? t('the default model on this host ({model})', { model: model.name }) : t('the default model on this host')}`}><ModelLabel model={modelName} effort={task.effort || model?.defaultEffort} fast={Boolean(task.serviceTier && task.serviceTier !== 'default')}/></span></div>}
+        footer={attach => <div className="composer-options">{task.mode !== 'review' && <SkillPicker onAttach={attach} skills={skills.filter(skill => skill.output !== 'annotations')} selected={skill} disabled={sending || blocked} onPick={value => { setSkill(value); input.current?.focus(); }}/>}<TaskModelPicker task={task} runtime={runtime} disabled={sending || blocked} reconnecting={reconnecting} onReconnect={onReconnect} save={settings => api<Task>(`/tasks/${task.id}/model`, settings)} onSaving={setSavingModel} refresh={refresh} reportError={reportError}/></div>}
         action={<div className="composer-actions">
           {active && <button type="button" className="send-button stop" aria-label={t('Pause task')} title={t('Pause {agent}', { agent: agentName(task) })} disabled={pausing} aria-busy={pausing} onClick={pause}><Icon name="stop" size={18}/></button>}
-          {(!active || draft.trim() || skill || files.entries.length || sending) && <button aria-label={t('Send instructions')} title={t('Send (Enter) · New line (Shift+Enter)')} disabled={(!draft.trim() && !skill && !files.files.length) || files.blocked || sending || blocked} className="send-button" type="submit"><Icon name="arrowUp" size={18}/></button>}
+          {(!active || draft.trim() || skill || files.entries.length || sending) && <button aria-label={t('Send instructions')} title={t('Send (Enter) · New line (Shift+Enter)')} disabled={(!draft.trim() && !skill && !files.files.length) || files.blocked || sending || savingModel || blocked} className="send-button" type="submit"><Icon name="arrowUp" size={18}/></button>}
         </div>}/>
       {hint && <p className="composer-hint" role="status">{hint}</p>}
     </div>
   </section>;
-}
-
-// The files a finished review accepted from this task since its last commit
-// that are still uncommitted in the manuscript. Committing them is optional.
-function commitReady(task: Task, git: GitStatus | null) {
-  if (task.deferred) return task.status === 'reviewing' && !task.pendingReview && !task.review?.counts?.pending ? task.review?.files || [] : [];
-  if (!Array.isArray(git?.files) || git.merging || task.status !== 'reviewing' || task.review?.counts?.pending) return [];
-  const changed = new Set(git.files.map(file => file.path));
-  return (task.review?.files || []).filter(file => changed.has(file));
 }
 
 // Comments go back to the agent for another round; so does a round that
@@ -520,7 +515,7 @@ function GitPanel({ projectId, git, onStatus, writer, tasks, onOpenTask }: { tas
         </li>;
       })}</ul>
     </> : <p className="git-clean"><Icon name="check" size={15}/>{t('No uncommitted changes')}</p>}
-    <GitRepository git={git} load={loadOverview} tasks={tasks} onOpenTask={onOpenTask} taskStatus={task => <Status task={task}/>}/>
+    <details className="git-advanced"><summary><Icon name="branch" size={14}/><span>{t('Git details')}</span><Icon name="chevronRight" size={13}/></summary><GitRepository git={git} load={loadOverview} tasks={tasks} onOpenTask={onOpenTask} taskStatus={task => <Status task={task}/>}/></details>
   </section>;
 }
 
@@ -703,7 +698,7 @@ function ManuscriptView({ project, data, error, view, setView, region, setRegion
     setCollapsed(value => !value); pdf.current?.fitWidth();
     requestAnimationFrame(() => panelToggle.current?.focus());
   }}><Icon name={hidden ? 'panelExpand' : 'panelCollapse'} size={18}/></button>;
-  const pageTools = <>{tools}{hidden && togglePanel}{(hidden || !sideBySide) && openPdf}</>;
+  const pageTools = <>{tools}{!hidden && !sideBySide && openPdf}{hidden && togglePanel}</>;
   const [mode, setMode] = useState<PdfMode>('pdf'), [committing, setCommitting] = useState(false);
   // The last build's problems sit beside Recompile and open only when asked.
   const problems = useRef<ProblemsHandle>(null);
@@ -711,7 +706,7 @@ function ManuscriptView({ project, data, error, view, setView, region, setRegion
     load={() => api<ManuscriptProblems>(`/projects/${project.id}/manuscript/problems`, undefined, undefined, 60000)}
     onJump={problem => { if (problem.page === undefined || !problem.rect) return; if (phone()) setView('pdf'); const { page, rect } = problem; requestAnimationFrame(() => pdf.current?.showPlace(page, rect)); }}
     onFix={onFixProblems && (list => { onFixProblems(fixRequest(list)); setView('task'); setCollapsed(false); })}/>;
-  const pdfTools = <>{tools}{problemsButton}<button type="button" className={'icon-button' + (readingNotes ? ' active' : '')} aria-label={t('My notes')} title={t('My notes')} aria-pressed={readingNotes} onClick={() => { if (readingNotes) void closeReadingNotes(); else { setActive(''); setReadingNotes(true); } }}><Icon name="notes" size={16}/></button>{hidden && togglePanel}{(hidden || !sideBySide) && openPdf}</>;
+  const pdfTools = <>{tools}{problemsButton}<button type="button" className={'icon-button' + (readingNotes ? ' active' : '')} aria-label={t('My notes')} title={t('My notes')} aria-pressed={readingNotes} onClick={() => { if (readingNotes) void closeReadingNotes(); else { setActive(''); setReadingNotes(true); } }}><Icon name="notes" size={16}/></button>{!hidden && !sideBySide && openPdf}{hidden && togglePanel}</>;
   const switcher = <>{navigation}<ModeSwitch mode={mode} onMode={async value => { if (await closeReadingNotes()) setMode(value); }}/></>;
   const staged = Array.isArray(git?.files) && !git.merging ? git.files.filter(file => file.staged).map(file => file.path) : [];
   const reloadGit = () => void api<GitStatus>(`/projects/${project.id}/git`).then(onGit, () => undefined);
@@ -745,7 +740,7 @@ function ManuscriptView({ project, data, error, view, setView, region, setRegion
     {mode === 'changes' ? <section className="manuscript-pages" aria-label={t('Uncommitted changes in the PDF')}>
       <ReviewFrame key={'changes:' + project.id} changesOf={project.id} lead={switcher} tools={<>{commitButton(false)}{pageTools}</>} completion={commitButton(true)} onDecided={reloadGit}/>
     </section> : <section className="manuscript-pages" aria-label={t('PDF preview')} aria-busy={!build || build.status === 'building'}>
-      {!build?.key && <div className="manuscript-lead">{switcher}{pdfTools}</div>}
+      {!build?.key && <div className="pdf-toolbar manuscript-lead" role="toolbar" aria-label={t('PDF controls')}>{switcher}<div className="pdf-section"/>{pdfTools}</div>}
       {error && <div className="manuscript-note error" role="alert">{error}</div>}
       {build?.status === 'failed' && (build.key
         // The previous PDF stays readable; the details wait in the problem list.
@@ -806,6 +801,7 @@ function App() {
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
   const [modal, setModal] = useState<'project' | null>(null);
   // Commit drafts survive switching tasks or moving between review and chat.
+  const applyStates = useRef(new Map<string, TaskApplyState>());
   const commitDrafts = useRef(new Map<string, TaskCommitDraft>());
   const formTaskId = useRef<string>(uuid());
   const newTaskInput = useRef<HTMLTextAreaElement>(null);
@@ -874,7 +870,7 @@ function App() {
   const [git, setGit] = useState<{ projectId: string; status: GitStatus | null }>({ projectId: '', status: null });
   const [chatWidth, setChatWidth] = useState(() => Number(browserStorage.getItem('papilot:chat-width')) || 0);
   // Appearance, language and notifications live in Settings; a new language re-renders everything.
-  const theme = useTheme(), { language } = useLanguage();
+  const theme = useTheme(); useLanguage();
   const [settings, setSettings] = useState<false | 'general' | 'shortcuts'>(false);
   useEffect(() => {
     const open = () => setSettings('shortcuts');
@@ -1089,7 +1085,7 @@ function App() {
     const archived = !target.archivedAt;
     if (!await action('/tasks/' + target.id + '/archive', { archived })) return;
     if (archived && selectedRef.current === target.id) { setProjectId(target.projectId); setSelected(''); }
-    if (!archived) setShowArchived(false);
+    setShowArchived(false);
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.task-search input')?.focus());
   }
   const sidebarShown = narrow ? sidebar : sidebarVisible;
@@ -1294,33 +1290,44 @@ function App() {
   const pause = () => { if (task) void action('/tasks/' + task.id + '/interrupt'); };
   // With only the chat in view, the feedback bar moves to the end of the conversation.
   const chatOnly = mobile ? taskTab === 'conversation' : taskLayout === 'conversation';
-  // A finished review can be committed from its card in the viewer, or from
-  // the end of the chat when the review is hidden.
-  const ready = task ? commitReady(task, projectGit) : [];
   const saved = task ? taskSaveStatus(task) : null;
-  const deliveryReady = ready.length > 0 || task?.delivery?.pending;
-  const commitKey = task ? JSON.stringify([task.id, task.deferred, task.review?.round, task.review?.counts, ready, task.delivery?.accepted, task.committed?.accepted, task.deferred ? task.name : projectGit?.branch]) : '';
-  if (deliveryReady && !commitDrafts.current.has(commitKey)) commitDrafts.current.set(commitKey, new TaskCommitDraft());
-  const commitStep = task && (deliveryReady ? <TaskCommit key={commitKey} draft={commitDrafts.current.get(commitKey)!}
-    branch={task.deferred ? `papilot/${task.name}` : projectGit?.branch ?? null} isolated={Boolean(task.deferred)} remote={!task.deferred && Boolean(projectGit?.remote)} agent={agentName(task)} disabled={taskActionBusy}
-    apply={task.deferred && task.delivery?.mode !== 'branch' ? async () => {
-      const result = await api<{ git?: GitStatus }>(`/tasks/${task.id}/apply`, {});
-      if (result.git) updateGit(task.projectId, result.git);
-      await refresh(true);
-      return t('Applied to working directory');
-    } : undefined}
-    generate={task.delivery?.mode === 'workspace' ? undefined : fresh => api<{ message: string }>(task.deferred ? `/tasks/${task.id}/commit-message` : `/projects/${task.projectId}/git/message`, { paths: ready, agent: task.agent || 'codex', fresh }, undefined, 130000).then(result => result.message)}
+  const savedResult = (message: string) => <TaskSaved message={message} disabled={taskActionBusy} onArchive={task && saved && !task.archivedAt && taskFinished(task) ? () => void archiveTask(task) : undefined}/>;
+  const merging = task?.reconciliation;
+  const mergeWaiting = Boolean(merging && (!merging.ready || (task?.review?.round ?? 0) <= merging.round));
+  const deliveryReady = task?.deferred && task.status === 'reviewing' && !task.pendingReview && task.review?.state === 'done' && !task.review.counts.pending
+    && (Boolean(task.review.files?.length) || task.delivery?.mode === 'branch' || task.delivery?.pending || merging);
+  const applyKey = task?.id || '';
+  if (deliveryReady && !applyStates.current.has(applyKey)) applyStates.current.set(applyKey, new TaskApplyState(merging?.intent?.message || task!.title));
+  const saveTask = async (mode: 'workspace' | 'commit', message?: string, confirmation?: string) => {
+    if (!task) return;
+    const result = await api<{ git?: GitStatus; commitReview?: TaskCommitReview }>(`/tasks/${task.id}/apply`, { mode, message, confirmation, keepCurrent: mergeWaiting && merging?.ready }, undefined, 130000);
+    if (result.git) updateGit(task.projectId, result.git);
+    await refresh(true);
+    return result;
+  };
+  // Older tasks accepted directly into the manuscript; retain their existing
+  // commit form while new isolated tasks save only their reviewed delta.
+  const legacyFiles = task && !task.deferred && !projectGit?.merging && task.status === 'reviewing' && !task.pendingReview && !pending
+    ? (task.review?.files || []).filter(file => projectGit?.files.some(item => item.path === file)) : [];
+  const legacyKey = JSON.stringify([task?.id, legacyFiles, task?.committed?.accepted, projectGit?.branch]);
+  if (legacyFiles.length && !commitDrafts.current.has(legacyKey)) commitDrafts.current.set(legacyKey, new TaskCommitDraft());
+  const legacySave = task && legacyFiles.length ? <TaskCommit draft={commitDrafts.current.get(legacyKey)!} branch={projectGit?.branch ?? null} isolated={false} remote={Boolean(projectGit?.remote)} agent={agentName(task)} disabled={taskActionBusy}
+    generate={fresh => api<{ message: string }>(`/projects/${task.projectId}/git/message`, { paths: legacyFiles, agent: task.agent || 'codex', fresh }, undefined, 130000).then(result => result.message)}
     commit={async (message, push) => {
       const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/tasks/${task.id}/commit`, { message, push }, undefined, 130000);
       updateGit(task.projectId, result.git);
-      const note = push && !result.pushError ? t('Committed {hash} and pushed.', { hash: result.commit }) : t('Committed {hash}.', { hash: result.commit });
       if (result.pushError) reportError(result.pushError);
       await refresh(true);
-      return note;
-    }}/>
-    : !saved ? null
-    : task.deferred && task.delivery ? <span className="commit-state">{task.delivery.mode === 'workspace' ? t('Applied to working directory') : t('Committed {hash} to {branch}', { hash: task.delivery.commit?.slice(0, 7) || '', branch: task.delivery.branch || '' })}</span>
-    : task.committed ? <span className="commit-state">{saved === 'pushed' ? t('Committed {hash} and pushed.', { hash: task.committed.hash }) : t('Committed {hash}.', { hash: task.committed.hash })}</span> : null);
+      return push && !result.pushError ? t('Committed {hash} and pushed.', { hash: result.commit }) : t('Committed {hash}.', { hash: result.commit });
+    }}/> : task?.committed && saved ? savedResult(saved === 'pushed' ? t('Committed {hash} and pushed.', { hash: task.committed.hash }) : t('Committed {hash}.', { hash: task.committed.hash })) : null;
+  const applicationStep = task && (deliveryReady ? <TaskApply key={applyKey} draft={applyStates.current.get(applyKey)!} merging={Boolean(merging)} keepCurrent={mergeWaiting && merging?.ready} disabled={taskActionBusy}
+    branch={projectGit?.branch ?? null} canCommit={Boolean(task.review?.files?.length || task.delivery?.mode === 'branch' || task.delivery?.pending)} preferred={merging?.intent?.mode}
+    pending={task.delivery?.pending && task.delivery.mode !== 'branch' ? task.delivery.mode : undefined}
+    apply={() => saveTask('workspace')} commit={(message, confirmation) => saveTask('commit', message, confirmation)}
+    generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { fresh: true }, undefined, 130000).then(result => result.message)}/>
+    : merging ? <TaskConflict status={task.status} waiting={mergeWaiting} onChat={() => selectLayout('conversation')}/>
+    : saved === 'committed' && task.delivery ? savedResult(t('Committed {hash} to {branch}', { hash: task.delivery.commit?.slice(0, 7) || '', branch: task.delivery.branch || '' }))
+    : !task.deferred ? legacySave : saved === 'applied' ? savedResult(t('Applied to manuscript')) : null);
   const reviewFeedback = (card: boolean) => task?.mode === 'review' ? (card && task.aiReview?.notes ? <button type="button" className="ai-review-link" onClick={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }}><Icon name="notes" size={14}/>{tn(task.aiReview.notes, 'View {n} review suggestion', 'View {n} review suggestions')}<Icon name="arrowRight" size={13}/></button> : null) : task && <ReviewFeedback key={'review-feedback:' + task.id} card={card} task={task} composer={composers.current.get(task.id)!} refresh={() => void refresh(true)} reportError={reportError}
     onSent={() => { if (selectedRef.current !== task.id) return; setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}/>;
   const sidebarToggle = (narrow || !sidebarVisible) && <button className="icon-button sidebar-toggle" aria-label={t('Show task list')} title={t('Show task list')} aria-expanded={sidebarShown} aria-controls="task-sidebar" onClick={() => narrow ? setSidebar(true) : setSidebarVisible(true)}><Icon name={narrow ? 'menu' : 'sidebar'} size={20}/>{addedTask && !sidebarShown && <span key={addedTask.id} className="task-added-dot" aria-hidden="true"/>}</button>;
@@ -1407,6 +1414,7 @@ function App() {
   </section>;
 
   return <ViewerContext.Provider value={viewer || null}><NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
+    <DesktopWindowChrome/>
     <aside ref={sidebarRef} role={narrow && sidebar ? 'dialog' : undefined} aria-modal={narrow && sidebar ? true : undefined} onKeyDown={e => { if (!narrow || !sidebar || modal || editingPaper) return; if (e.key === 'Escape') { e.preventDefault(); setSidebar(false); } else keepDialogFocus(e); }} id="task-sidebar" className={'sidebar ' + (sidebar ? 'is-open' : '')} aria-label={t('Papers and tasks')}>
       <div className="sidebar-header">
         {state?.projects.length && project ? <ActionMenu label={t('Paper: {name}', { name: project.name })} className="project-switcher" menuClassName="paper-menu" align="start" actions={[
@@ -1473,9 +1481,9 @@ function App() {
           <section id="review-panel" className="review-panel" aria-label={t('PDF review')}>
           {!mobile && !chatOnly && task.mode !== 'review' && (!task.review?.round || task.status === 'deleting') && (sidebarToggle || !conversationVisible) && <div className="review-placeholder-toolbar">{sidebarToggle}{!conversationVisible && workspaceViews}<div className="panel-tools">{!conversationVisible && taskStateActions}</div></div>}
           {task.status === 'failed' && task.review?.job?.status === 'failed' && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
-          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : task.review?.round ? <ReviewFrame key={task.id} task={task} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : commitStep} onSendNotes={async message => { await api('/tasks/' + task.id + '/messages', message); void refresh(true); }}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>}
+          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : task.review?.round ? <ReviewFrame key={task.id} task={task} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onSendNotes={async message => { await api('/tasks/' + task.id + '/messages', message); void refresh(true); }}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>}
           {!chatOnly && reviewFeedback(false)}
-        </section><Activity key={task.id} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} models={runtimes[task.agent || 'codex']?.models || []} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={state?.requests.filter(r => r.taskId === task.id) || []} refresh={() => void refresh(true)} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{commitStep && <div className="review-feedback card commit-card task-delivery">{commitStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
+        </section><Activity key={task.id} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={state?.requests.filter(r => r.taskId === task.id) || []} refresh={() => void refresh(true)} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
       : manuscriptOpen && project ? <ManuscriptView key={project.id + project.path} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }} navigation={!mobile ? sidebarToggle : null} project={project} data={manuscriptData.data} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} openPdf={!mobile ? manuscriptOpenPdf : null} onFixProblems={fixProblems} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>

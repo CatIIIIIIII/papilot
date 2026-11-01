@@ -247,15 +247,6 @@ export function buildOutline(
       .slice(0, 20),
   };
 }
-export function overlaps(a: Ranges, b: Ranges) {
-  return Object.keys(a).some(
-    (file) =>
-      b[file] &&
-      a[file].some(([x, y]) =>
-        b[file].some(([u, v]) => Math.max(x, u) <= Math.min(y, v)),
-      ),
-  );
-}
 export function selectedRanges(
   nodes: Heading[],
   ids: string[],

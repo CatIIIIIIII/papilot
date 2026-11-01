@@ -83,14 +83,6 @@ export class Store extends EventEmitter {
     });
     this.emit('change');
   }
-  // Runs a one-off change the first time this database sees its key.
-  migrate(key: string, fn: () => void) {
-    this.transaction(() => {
-      if (this.db.prepare('SELECT 1 FROM migrations WHERE key=?').get(key)) return;
-      fn();
-      this.db.prepare('INSERT INTO migrations VALUES(?,?)').run(key, Date.now());
-    });
-  }
   transaction<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const result = fn(); this.db.exec('COMMIT'); return result; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
   recover() {
     this.transaction(() => {

@@ -8,6 +8,7 @@ const paths: Record<string, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14"/>,
   attachment: <path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.8-2.8l8-8"/>,
   archive: <><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13h14V7M10 11h4"/></>,
+  folder: <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>,
   restore: <><path d="M3 10a9 9 0 1 1 2 9M3 4v6h6M12 7v5l3 2"/></>,
   bolt: <path d="m13 2-9 12h7l-1 8 10-12h-7Z"/>,
   compose: <><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></>,

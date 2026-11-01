@@ -1,6 +1,6 @@
 import type { ReviewSnapshot } from './ai-review.ts';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -223,14 +223,29 @@ async function gitAction(root: string, args: string[], timeout = 60_000) {
 }
 
 // The preview shows the manuscript as it is on disk, including accepted but
-// uncommitted review changes. A temporary index records it as a Git tree
-// without touching the real index, branches or files.
+// uncommitted review changes. A private index records it as a Git tree
+// without touching the real index, branches or files. It starts from the
+// previous snapshot's index, or the repository's, so Git rehashes only files
+// whose size or modification time changed.
 export async function workingTree(root: string) {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-index-')), env = { GIT_INDEX_FILE: path.join(folder, 'index') };
-  try {
-    await git(root, ['read-tree', 'HEAD'], env);
+  const dir = gitDir(root), saved = dir && path.join(dir, 'latex-review', 'working-index');
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-index-')), index = path.join(folder, 'index'), env = { GIT_INDEX_FILE: index };
+  const snapshot = async (seed: string | null | undefined) => {
+    if (seed && fs.existsSync(seed)) fs.copyFileSync(seed, index);
+    else { fs.rmSync(index, { force: true }); await git(root, ['read-tree', 'HEAD'], env).catch(() => git(root, ['read-tree', '--empty'], env)); }
     await git(root, ['add', '-A'], env);
     return (await git(root, ['write-tree'], env)).trim();
+  };
+  try {
+    let tree: string;
+    try { tree = await snapshot(saved && fs.existsSync(saved) ? saved : dir && path.join(dir, 'index')); }
+    catch { tree = await snapshot(null); }
+    if (saved) try {
+      fs.mkdirSync(path.dirname(saved), { recursive: true });
+      const temporary = `${saved}.${randomUUID()}.tmp`;
+      fs.copyFileSync(index, temporary); fs.renameSync(temporary, saved);
+    } catch { /* The next snapshot rehashes more files. */ }
+    return tree;
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 }
 
@@ -361,8 +376,29 @@ export class Manuscripts extends EventEmitter {
   busyForProject(id: string) { return this.builds.get(id)?.status === 'building'; }
   forgetProject(id: string) { this.builds.delete(id); }
 
+  // The caller verifies the example's source tree. An edit or explicit rebuild
+  // uses Builder; the original PDF can be read before TeX is installed.
+  async seedPreview(projectId: string, root: string, tree: string, pdf: string) {
+    const { mupdf } = await engine(), bytes = fs.readFileSync(pdf);
+    const document = mupdf.Document.openDocument(bytes, 'application/pdf');
+    const pages: [number, number][] = [];
+    try {
+      for (let i = 0; i < document.countPages(); i++) {
+        const page = document.loadPage(i);
+        try { const [x0, y0, x1, y1] = page.getBounds(); pages.push([Math.round(x1 - x0), Math.round(y1 - y0)]); }
+        finally { page.destroy(); }
+      }
+    } finally { document.destroy(); }
+    const key = createHash('sha256').update(tree).update(bytes).digest('hex').slice(0, 16);
+    this.builds.set(projectId, { tree, status: 'ready', key, pdf, root, sourceDir: '', pages,
+      builtAt: fs.statSync(pdf).mtimeMs, problems: [], problemsKey: key });
+  }
+
   async state(projectId: string, root: string, rebuild = false): Promise<{ git: GitStatus; build: ManuscriptBuild }> {
-    const [status, tree] = await Promise.all([gitStatus(root), workingTree(root)]);
+    const current = this.builds.get(projectId);
+    // Polling an in-flight build needs its status, not another source snapshot.
+    // Once it finishes, the next read checks for edits made during compilation.
+    const [status, tree] = await Promise.all([gitStatus(root), current?.status === 'building' ? current.tree : workingTree(root)]);
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
     const { status: state, key, pages, builtAt, error } = build;
@@ -426,7 +462,7 @@ export class Manuscripts extends EventEmitter {
   async reanchor(projectId: string, root: string, notes: Annotation[]): Promise<Annotation[]> {
     const build = this.builds.get(projectId);
     if (!build?.pdf || !build.key || build.status !== 'ready' || !notes.some(note => note.key !== build.key)) return notes;
-    const { PdfDocument, loadProject } = await engine();
+    const { PdfDocument } = await engine();
     const current = new PdfDocument(build.pdf), target = new AnnotationPages(current);
     const old = new Map<string, { document: InstanceType<typeof PdfDocument>; pages: AnnotationPages }>();
     try {

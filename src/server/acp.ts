@@ -34,8 +34,22 @@ const choices = (option?: ConfigOption): Choice[] => (option?.options || []).fla
 export interface AcpProfile {
   id: AgentId; name: string; bin: string; binEnv: string; args: string[]; modes: string[]; setup: string;
   env?: () => NodeJS.ProcessEnv;
+  config?: Record<string, string>;
+  authMethods?: string[];
+  sessionMeta?: Record<string, unknown>;
 }
 export const ACP_PROFILES = {
+  // Grok owns authentication and tools. A dedicated process and explicit
+  // session metadata keep new and restored sessions out of yolo/auto mode.
+  grok: { id: 'grok', name: 'Grok', bin: 'grok', binEnv: 'PAPILOT_GROK_BIN', args: ['--no-auto-update', 'agent', '--no-leader', 'stdio'],
+    modes: [], authMethods: ['xai.api_key', 'cached_token'], sessionMeta: { yoloMode: false, autoMode: false },
+    setup: 'Install Grok Build CLI from https://x.ai/cli and run grok login on this host, or configure XAI_API_KEY, then select Reconnect. Set PAPILOT_GROK_BIN if grok is not on PATH.' },
+  // Copilot's agent mode and permission mode are separate: leaving autopilot
+  // does not disable allow-all. Pin both, including when resuming a session.
+  copilot: { id: 'copilot', name: 'Copilot', bin: 'copilot', binEnv: 'PAPILOT_COPILOT_BIN', args: ['--acp', '--stdio', '--no-auto-update'],
+    modes: ['https://agentclientprotocol.com/protocol/session-modes#agent'], config: { allow_all: 'off' },
+    setup: 'Install GitHub Copilot CLI (npm install -g @github/copilot) and run copilot login on this host, then select Reconnect. Set PAPILOT_COPILOT_BIN if copilot is not on PATH.',
+    env: () => ({ ...process.env, COPILOT_ALLOW_ALL: 'false', COPILOT_ASSISTED_APPROVAL: 'false' }) },
   kimi: { id: 'kimi', name: 'Kimi', bin: 'kimi', binEnv: 'PAPILOT_KIMI_BIN', args: ['acp'], modes: ['default'],
     setup: 'Install Kimi Code CLI and run kimi login on this host, then select Reconnect. Set PAPILOT_KIMI_BIN if kimi is not on PATH.' },
   qwen: { id: 'qwen', name: 'Qwen', bin: 'qwen', binEnv: 'PAPILOT_QWEN_BIN', args: ['--acp'], modes: ['auto-edit', 'default'],
@@ -109,10 +123,16 @@ export class AcpAgent extends Adapter {
       const init = await this.rpc('initialize', { protocolVersion: 1, clientInfo: { name: 'papilot', version: VERSION }, clientCapabilities: {} }, 60000);
       if (init.protocolVersion !== 1) throw new Error(`${this.name} returned an unsupported ACP version. Update it.`);
       this.capabilities = init.agentCapabilities || {};
+      if (this.profile.authMethods) {
+        const methodId = this.profile.authMethods.find(id => init.authMethods?.some((method: { id: string }) => method.id === id));
+        if (!methodId) throw new Error(`${this.name} has no saved login or configured API credentials.`);
+        await this.rpc('authenticate', { methodId, _meta: { headless: true } }, 60000);
+      }
       // No generation: a disposable session checks configuration and exposes models.
-      const probe: Session = await this.rpc('session/new', { cwd, mcpServers: [] }, 60000);
+      const probe: Session = await this.rpc('session/new', { cwd, mcpServers: [], ...(this.profile.sessionMeta ? { _meta: this.profile.sessionMeta } : {}) }, 60000);
       this.catalog = [];
       if (this.profile.modes.length) this.mode(probe);
+      this.config(probe);
       this.readModels(probe, true);
       const sessionCapabilities = this.capabilities.sessionCapabilities || {};
       if (sessionCapabilities.delete) await this.rpc('session/delete', { sessionId: probe.sessionId });
@@ -140,7 +160,7 @@ export class AcpAgent extends Adapter {
     let session = id ? this.sessions.get(id) : undefined;
     if (!session) {
       if (id && !this.capabilities.loadSession && !this.capabilities.sessionCapabilities?.resume) throw new Error(`This ${this.name} version cannot resume sessions. Update it.`);
-      const result = await this.rpc(id ? this.capabilities.sessionCapabilities?.resume ? 'session/resume' : 'session/load' : 'session/new', { ...(id ? { sessionId: id } : {}), cwd, mcpServers: [] });
+      const result = await this.rpc(id ? this.capabilities.sessionCapabilities?.resume ? 'session/resume' : 'session/load' : 'session/new', { ...(id ? { sessionId: id } : {}), cwd, mcpServers: [], ...(this.profile.sessionMeta ? { _meta: this.profile.sessionMeta } : {}) });
       session = { ...result, sessionId: id || result.sessionId };
       if (!session!.sessionId) throw new Error(`${this.name} did not return a session ID.`);
       // Do not inherit an auto-approve mode from the user's global configuration.
@@ -152,6 +172,10 @@ export class AcpAgent extends Adapter {
           const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId: option!.id, value: mode });
           if (result?.configOptions) session!.configOptions = result.configOptions;
         }
+      }
+      for (const [configId, value] of this.config(session!)) {
+        const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId, value });
+        if (result?.configOptions) session!.configOptions = result.configOptions;
       }
       this.sessions.set(session!.sessionId, session!);
     }
@@ -173,6 +197,15 @@ export class AcpAgent extends Adapter {
     if (!mode) throw new Error(`${this.name} does not offer manual approvals. Update it.`);
     return { mode, option };
   }
+  private config(session: Session) {
+    const settings = Object.entries(this.profile.config || {});
+    for (const [id, value] of settings) {
+      if (!choices(session.configOptions?.find(option => option.id === id)).some(choice => choice.value === value)) {
+        throw new Error(`${this.name} does not offer the required ${id} setting. Update it.`);
+      }
+    }
+    return settings;
+  }
   private readModels(session: Session, initial = false) {
     const model = session.configOptions?.find(option => option.category === 'model' || option.id === 'model');
     const thinking = session.configOptions?.find(option => option.category === 'thought_level' || option.id === 'thinking');
@@ -185,7 +218,8 @@ export class AcpAgent extends Adapter {
       const previous = this.catalog.find(entry => entry.model === option.value);
       const entry = { model: option.value, displayName: option.name, isDefault: option.value === this.defaultModel,
         supportedReasoningEfforts: option.value === current ? levels.map(choice => ({ reasoningEffort: choice.value })) : previous?.supportedReasoningEfforts || [],
-        defaultReasoningEffort: option.value === current ? level : previous?.defaultReasoningEffort || null };
+        // A turn's explicit effort must not become the catalog's default.
+        defaultReasoningEffort: previous?.supportedReasoningEfforts.length ? previous.defaultReasoningEffort : option.value === current ? level : null };
       if (previous) Object.assign(previous, entry); else this.catalog.push(entry);
     }
   }
@@ -206,10 +240,13 @@ export class AcpAgent extends Adapter {
     };
     try {
       const session = await this.session(turn.threadId, thread.cwd, thread.model);
-      if (effort) {
-        const option = session.configOptions?.find(option => option.category === 'thought_level' || option.id === 'thinking');
-        if (!option || !choices(option).some(choice => choice.value === effort)) throw new Error(`${this.name} does not support reasoning effort ${effort} for this model.`);
-        await this.rpc('session/set_config_option', { sessionId: turn.threadId, configId: option.id, value: effort });
+      const option = session.configOptions?.find(option => option.category === 'thought_level' || option.id === 'thinking');
+      const defaultEffort = choices(option).some(choice => choice.value === 'default') ? 'default' : this.catalog.find(model => model.model === thread.model)?.defaultReasoningEffort;
+      const chosenEffort = effort || defaultEffort;
+      if (chosenEffort) {
+        if (!option || !choices(option).some(choice => choice.value === chosenEffort)) throw new Error(`${this.name} does not support reasoning effort ${chosenEffort} for this model.`);
+        const result = await this.rpc('session/set_config_option', { sessionId: turn.threadId, configId: option.id, value: chosenEffort });
+        if (result?.configOptions) session.configOptions = result.configOptions;
       }
       const prompt: any[] = [{ type: 'text', text: thread.started ? text : `${thread.instructions}\n\n---\n\n${text}` }];
       if (images.length && !this.capabilities.promptCapabilities?.image) throw new Error(`This ${this.name} version does not support image input. Update it, or send the images to another agent.`);

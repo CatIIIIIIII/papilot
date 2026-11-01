@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { Repo } from "./git.ts";
 import { listFiles, readJson, writeJson, withLock, now } from "./files.ts";
 import { stripComments } from "./outline.ts";
@@ -28,6 +29,27 @@ const AUXILIARY = new Set([
   ".out",
   ".thm",
 ]);
+// Output that TeX writes for this folder: SyncTeX data and the log name its
+// absolute path.
+const OUTPUT = /\.(?:pdf|xdv|dvi|log|synctex(?:\.gz)?)$/i;
+function clone(file: string, target: string) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(file, target, fs.constants.COPYFILE_FICLONE);
+}
+// Output that latexmk kept from an earlier build folder still names that
+// folder. Build folders differ only in their equal-length key, so the paths
+// are replaced in place without moving anything else in the file.
+export function relocate(file: string, from: string, to: string) {
+  if (!fs.existsSync(file)) return;
+  const old = Buffer.from(from + path.sep), next = Buffer.from(to + path.sep);
+  if (old.length !== next.length) return;
+  const zipped = file.endsWith(".gz"),
+    data = zipped ? gunzipSync(fs.readFileSync(file)) : fs.readFileSync(file);
+  let at = data.indexOf(old);
+  if (at < 0) return;
+  for (; at >= 0; at = data.indexOf(old, at + next.length)) next.copy(data, at);
+  fs.writeFileSync(file, zipped ? gzipSync(data) : data);
+}
 const hash = (value: string | Buffer) =>
   createHash("sha256").update(value).digest("hex");
 export const includes = (text: string) =>
@@ -215,6 +237,7 @@ export class Builder {
     }
     const tree = this.repo.treeId(rev, p.source_dir),
       date = buildDate(),
+      context = hash(JSON.stringify([signature(p), version])),
       key = hash(
         JSON.stringify([
           tree,
@@ -239,108 +262,168 @@ export class Builder {
         fs.utimesSync(folder, new Date(), new Date());
         return cached;
       }
-      fs.rmSync(folder, { recursive: true, force: true });
-      const source = path.join(folder, "src");
-      this.repo.export(rev, p.source_dir, source);
-      const cwd = path.join(
-          source,
-          path.posix.relative(p.source_dir || ".", p.doc_dir || "."),
-        ),
-        main = path.posix.basename(p.main),
-        job = path.posix.basename(main, ".tex"),
-        out = path.join(cwd, "build");
-      fs.mkdirSync(out, { recursive: true });
-      for (const target of includes(
-        fs.readFileSync(path.join(cwd, main), "utf8"),
-      ))
-        fs.mkdirSync(path.join(out, path.dirname(target)), { recursive: true });
-      const args = [
-        "-norc",
-        ...(p.latexmkrc
-          ? ["-r", path.posix.relative(p.doc_dir || ".", p.latexmkrc)]
-          : []),
-        { pdflatex: "-pdf", xelatex: "-xelatex", lualatex: "-lualatex" }[
-          p.engine
-        ],
-        "-outdir=build",
-        `-jobname=${job}`,
-        "-synctex=1",
-        "-interaction=nonstopmode",
-        "-halt-on-error",
-        "-file-line-error",
-      ];
-      if (partial) {
-        const seedOut = path.dirname(seed!.pdf);
-        for (const file of listFiles(seedOut))
-          if (AUXILIARY.has(path.extname(file))) {
-            const target = path.join(out, path.relative(seedOut, file));
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            if (!fs.existsSync(target)) fs.copyFileSync(file, target);
-          }
-        const preload = Object.entries(p.preload)
-          .filter(
-            ([name, file]) =>
-              !targets.includes(name) && fs.existsSync(path.join(cwd, file)),
-          )
-          .map(([, file]) => `\\input{${file}}`)
-          .join("");
-        args.push(
-          `-usepretex=\\includeonly{${targets.join(",")}}` +
-            (preload ? `\\AtBeginDocument{${preload}}` : ""),
-        );
-      }
-      args.push(main);
-      const transcript = path.join(folder, "latexmk.log"),
-        fd = fs.openSync(transcript, "w"),
-        started = now();
-      let failure: Error | null = null;
+      // A full build continues from the latest completed one, or from the
+      // author's own latexmk output, as latexmk does when a folder is
+      // compiled again: unchanged files are cloned and LaTeX keeps its state,
+      // so it reruns only as often as the edit requires. Manual recompilation
+      // starts clean, and so does a retry when leftover state broke a build.
+      const start = partial || options.force ? null : this.latest(context) ?? "author";
+      let result: BuildInfo;
       try {
-        await runAsync("latexmk", args, {
-          cwd,
-          env: { ...process.env, ...date },
-          timeout: 1800000,
-          output: (chunk) => fs.writeSync(fd, chunk),
-        });
+        result = await this.compile(rev, tree, key, targets, seed, date, start);
       } catch (error) {
-        failure = error as Error;
-      } finally {
-        fs.closeSync(fd);
+        if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
+        result = await this.compile(rev, tree, key, targets, seed, date, null);
       }
-      const pdf = path.join(out, job + ".pdf"),
-        log = path.join(out, job + ".log"),
-        logText = fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "";
-      if (failure || !fs.existsSync(pdf)) {
-        const transcriptText = fs.readFileSync(transcript, "utf8"),
-          details = compilerDiagnostics(logText, transcriptText),
-          kept = path.join(p.state, "logs", key + ".log");
-        fs.mkdirSync(path.dirname(kept), { recursive: true });
-        fs.writeFileSync(
-          kept,
-          transcriptText + (logText ? "\n\n--- TeX log ---\n" + logText : ""),
-        );
-        const tail = transcriptText.split("\n").slice(-25);
-        fs.rmSync(folder, { recursive: true, force: true });
-        throw new BuildError(
-          failure?.message.includes("ENOENT")
-            ? "latexmk was not found. Install TeX Live or MacTeX."
-            : "LaTeX failed to compile.",
-          details.length ? details : tail,
-          kept,
-        );
-      }
-      const result: BuildInfo = {
-        key,
-        tree,
-        targets,
-        root: source,
-        cwd,
-        pdf,
-        seconds: Math.round((now() - started) * 10) / 10,
-        warnings: warnings(logText),
-      };
-      writeJson(path.join(folder, "result.json"), result);
+      if (!partial) writeJson(path.join(this.cache, "latest.json"), { key, context, date: date.SOURCE_DATE_EPOCH });
       return result;
     });
+  }
+  private latest(context: string): { info: BuildInfo; date: unknown } | null {
+    const latest = readJson<{ key?: unknown; context?: unknown; date?: unknown } | null>(path.join(this.cache, "latest.json"), null);
+    if (typeof latest?.key !== "string" || !/^[0-9a-f]{32}$/.test(latest.key) || latest.context !== context) return null;
+    const info = readJson<BuildInfo | null>(path.join(this.cache, latest.key, "result.json"), null);
+    return info && JSON.stringify(info.targets) === '["full"]' && fs.existsSync(info.pdf) && fs.existsSync(info.root) ? { info, date: latest.date } : null;
+  }
+  private async compile(
+    rev: string,
+    tree: string,
+    key: string,
+    targets: string[],
+    seed: BuildInfo | null,
+    date: ReturnType<typeof buildDate>,
+    start: { info: BuildInfo; date: unknown } | "author" | null,
+  ): Promise<BuildInfo> {
+    const p = this.project,
+      partial = JSON.stringify(targets) !== '["full"]',
+      folder = path.join(this.cache, key);
+    fs.rmSync(folder, { recursive: true, force: true });
+    const source = path.join(folder, "src");
+    const base = start && start !== "author" ? start.info : null;
+    await this.repo.export(rev, p.source_dir, source, base ? { root: base.root, tree: base.tree } : undefined);
+    const cwd = path.join(
+        source,
+        path.posix.relative(p.source_dir || ".", p.doc_dir || "."),
+      ),
+      main = path.posix.basename(p.main),
+      job = path.posix.basename(main, ".tex"),
+      out = path.join(cwd, "build");
+    fs.mkdirSync(out, { recursive: true });
+    const included = includes(fs.readFileSync(path.join(cwd, main), "utf8"));
+    for (const target of included)
+      fs.mkdirSync(path.join(out, path.dirname(target)), { recursive: true });
+    // The PDF, SyncTeX data and log carry over only within a day, so that
+    // \today stays current; latexmk then skips TeX when no input changed.
+    const reused = base !== null && start !== "author" && start?.date === date.SOURCE_DATE_EPOCH;
+    if (base) {
+      const previous = path.dirname(base.pdf);
+      for (const file of listFiles(previous))
+        if (!/\.fls$/i.test(file) && (reused || !OUTPUT.test(file)))
+          clone(file, path.join(out, path.relative(previous, file)));
+    } else if (start === "author") {
+      // Only this job's state: the author's folder may hold other editions.
+      const own = path.join(p.root, p.doc_dir, "build");
+      if (fs.existsSync(path.join(own, job + ".fdb_latexmk")))
+        for (const name of [
+          ...fs.readdirSync(own).filter((name) => (name.startsWith(job + ".") && !OUTPUT.test(name) && !name.endsWith(".fls")) || name.startsWith("_minted")),
+          ...included.map((target) => target + ".aux"),
+        ])
+          try {
+            if (fs.statSync(path.join(own, name)).isDirectory()) fs.cpSync(path.join(own, name), path.join(out, name), { recursive: true });
+            else clone(path.join(own, name), path.join(out, name));
+          } catch {
+            /* A missing file is regenerated. */
+          }
+    }
+    const args = [
+      "-norc",
+      ...(p.latexmkrc
+        ? ["-r", path.posix.relative(p.doc_dir || ".", p.latexmkrc)]
+        : []),
+      { pdflatex: "-pdf", xelatex: "-xelatex", lualatex: "-lualatex" }[
+        p.engine
+      ],
+      "-outdir=build",
+      `-jobname=${job}`,
+      "-synctex=1",
+      "-interaction=nonstopmode",
+      "-halt-on-error",
+      "-file-line-error",
+    ];
+    if (partial) {
+      const seedOut = path.dirname(seed!.pdf);
+      for (const file of listFiles(seedOut))
+        if (AUXILIARY.has(path.extname(file))) {
+          const target = path.join(out, path.relative(seedOut, file));
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          if (!fs.existsSync(target)) fs.copyFileSync(file, target);
+        }
+      const preload = Object.entries(p.preload)
+        .filter(
+          ([name, file]) =>
+            !targets.includes(name) && fs.existsSync(path.join(cwd, file)),
+        )
+        .map(([, file]) => `\\input{${file}}`)
+        .join("");
+      args.push(
+        `-usepretex=\\includeonly{${targets.join(",")}}` +
+          (preload ? `\\AtBeginDocument{${preload}}` : ""),
+      );
+    }
+    args.push(main);
+    const transcript = path.join(folder, "latexmk.log"),
+      fd = fs.openSync(transcript, "w"),
+      started = now();
+    let failure: Error | null = null;
+    try {
+      await runAsync("latexmk", args, {
+        cwd,
+        env: { ...process.env, ...date },
+        timeout: 1800000,
+        output: (chunk) => fs.writeSync(fd, chunk),
+      });
+    } catch (error) {
+      failure = error as Error;
+    } finally {
+      fs.closeSync(fd);
+    }
+    const pdf = path.join(out, job + ".pdf"),
+      log = path.join(out, job + ".log");
+    if (reused && !failure)
+      for (const file of [path.join(out, job + ".synctex.gz"), log])
+        relocate(file, path.dirname(base!.root), folder);
+    const logText = fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "";
+    if (failure || !fs.existsSync(pdf)) {
+      const transcriptText = fs.readFileSync(transcript, "utf8"),
+        details = compilerDiagnostics(logText, transcriptText),
+        kept = path.join(p.state, "logs", key + ".log");
+      fs.mkdirSync(path.dirname(kept), { recursive: true });
+      fs.writeFileSync(
+        kept,
+        transcriptText + (logText ? "\n\n--- TeX log ---\n" + logText : ""),
+      );
+      const tail = transcriptText.split("\n").slice(-25);
+      fs.rmSync(folder, { recursive: true, force: true });
+      throw new BuildError(
+        failure?.message.includes("ENOENT")
+          ? "latexmk was not found. Install TeX Live or MacTeX."
+          : "LaTeX failed to compile.",
+        details.length ? details : tail,
+        kept,
+      );
+    }
+    const result: BuildInfo = {
+      key,
+      tree,
+      targets,
+      root: source,
+      cwd,
+      pdf,
+      seconds: Math.round((now() - started) * 10) / 10,
+      warnings: warnings(logText),
+    };
+    writeJson(path.join(folder, "result.json"), result);
+    return result;
   }
   async prune(keep: Set<string>, maxAge = 3 * 86400) {
     if (!fs.existsSync(this.cache)) return;

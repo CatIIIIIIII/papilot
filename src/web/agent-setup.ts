@@ -5,6 +5,7 @@ import { t } from './i18n.ts';
 export function agentSetup(id: AgentId) {
   const cli = {
     codex: ['codex', 'PAPILOT_CODEX_BIN'], claude: ['claude', 'PAPILOT_CLAUDE_BIN'],
+    copilot: ['copilot', 'PAPILOT_COPILOT_BIN'], grok: ['grok', 'PAPILOT_GROK_BIN'],
     antigravity: ['agy', 'PAPILOT_AGY_BIN'], kimi: ['kimi', 'PAPILOT_KIMI_BIN'],
     deepseek: ['dsh', 'PAPILOT_DSH_BIN'], qwen: ['qwen', 'PAPILOT_QWEN_BIN'], opencode: ['opencode', 'PAPILOT_OPENCODE_BIN'],
   };

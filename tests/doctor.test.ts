@@ -224,3 +224,47 @@ test('doctor checks Kimi ACP availability without login, prompts or reading cred
     assert.match(item(missing.report, 'agent.kimi').fix!, /kimi login/);
   } finally { f.cleanup(); }
 });
+
+test('doctor checks Copilot ACP support and reports missing or incompatible CLIs without signing in', async () => {
+  const f = fixture();
+  try {
+    f.baseTools();
+    const copilot = f.tool('copilot', `if (JSON.stringify(process.argv.slice(2)) !== '["--help"]') process.exit(99); console.log('--acp Start as Agent Client Protocol server');`);
+    const result = await f.run(['--json'], { PAPILOT_COPILOT_BIN: copilot });
+    assert.equal(item(result.report, 'agent.copilot').ok, true);
+    assert.match(item(result.report, 'agent.copilot').detail, /login and generation were not tested/);
+    assert.equal(fs.existsSync(f.data), false);
+    const missing = await f.run(['--json'], { PAPILOT_COPILOT_BIN: path.join(f.dir, 'absent') });
+    assert.equal(item(missing.report, 'agent.copilot').severity, 'info');
+    assert.match(item(missing.report, 'agent.copilot').fix!, /copilot login/);
+    f.tool('copilot', `console.log('Old CLI without agent protocol support');`);
+    const old = await f.run(['--json'], { PAPILOT_COPILOT_BIN: copilot });
+    assert.equal(item(old.report, 'agent.copilot').ok, false);
+    assert.equal(item(old.report, 'agent.copilot').severity, 'warn');
+    assert.match(item(old.report, 'agent.copilot').fix!, /Update GitHub Copilot CLI/);
+  } finally { f.cleanup(); }
+});
+
+test('doctor detects Grok in its installer folder and checks only the isolated stdio help', async () => {
+  const f = fixture();
+  try {
+    f.baseTools();
+    const bin = f.tool('grok', `if (JSON.stringify(process.argv.slice(2)) !== '["--no-auto-update","agent","--no-leader","stdio","--help"]') process.exit(99); console.log('Usage: grok agent stdio [OPTIONS]');`);
+    const dir = path.join(f.env.HOME!, '.grok/bin');
+    fs.mkdirSync(dir, { recursive: true });
+    const installed = path.join(dir, 'grok');
+    fs.renameSync(bin, installed);
+    const result = await f.run(['--json']);
+    assert.equal(item(result.report, 'agent.grok').ok, true);
+    assert.match(item(result.report, 'agent.grok').detail, /login and generation were not tested/);
+    assert.equal(fs.existsSync(f.data), false);
+    const missing = await f.run(['--json'], { PAPILOT_GROK_BIN: path.join(f.dir, 'absent') });
+    assert.equal(item(missing.report, 'agent.grok').severity, 'info');
+    assert.match(item(missing.report, 'agent.grok').fix!, /grok login.*XAI_API_KEY/);
+    const wrong = f.tool('other-grok', `console.log('Unrelated grok pattern parser');`);
+    const incompatible = await f.run(['--json'], { PAPILOT_GROK_BIN: wrong });
+    assert.equal(item(incompatible.report, 'agent.grok').ok, false);
+    assert.equal(item(incompatible.report, 'agent.grok').severity, 'warn');
+    assert.match(item(incompatible.report, 'agent.grok').fix!, /Update Grok Build CLI/);
+  } finally { f.cleanup(); }
+});

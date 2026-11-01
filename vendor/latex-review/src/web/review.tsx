@@ -1354,7 +1354,7 @@ export function ReviewApp({
                         : state?.workspace?.status === "building" ||
                             state?.state === "building"
                           ? "Preparing the next review…"
-                          : "All changes reviewed",
+                          : state?.workspace?.merging ? "Merge review" : "All changes reviewed",
                 )}
               </strong>
               <span>
@@ -1365,14 +1365,16 @@ export function ReviewApp({
                           state?.workspace?.status || "",
                         ) || state?.state === "building"
                       ? "New changes will appear here when ready."
-                      : state?.workspace?.comments
+                      : state?.workspace?.merging
+                        ? "Your manuscript is unchanged until you save the merged result."
+                        : state?.workspace?.comments
                         ? "Your comments are saved. Send feedback so the agent can revise."
                         : state?.workspace?.deferred
                           ? state.workspace.accepted
-                            ? "Accepted changes are saved in this task. Choose where to save them below."
+                            ? "Choose how to save the accepted changes to your manuscript."
                             : state.workspace.destination === "branch"
-                              ? "Accepted changes are committed to the task branch."
-                              : state.workspace.destination === "workspace"
+                              ? "Choose how to save the accepted changes to your manuscript."
+                              : (state.workspace.destination === "workspace" || state.workspace.destination === "commit")
                                 ? "Accepted changes are in your manuscript."
                                 : "There are no accepted changes to save."
                         : state?.workspace?.accepted

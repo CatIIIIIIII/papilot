@@ -30,7 +30,6 @@ export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note:
 // A touch selection also has its ends: the edge of its first and last word, with that line's top and bottom.
 interface Selection { page: number; rects: Rect[]; quote: string; handles?: { from: [number, number, number]; to: [number, number, number] } }
 
-const touch = () => window.matchMedia('(pointer: coarse)').matches;
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 const percent = ([x0, y0, x1, y1]: Rect): React.CSSProperties => ({ left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
 const bounds = (rects: Rect[]): Rect => [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1])), Math.max(...rects.map(r => r[2])), Math.max(...rects.map(r => r[3]))];

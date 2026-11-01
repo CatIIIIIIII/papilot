@@ -20,9 +20,9 @@ const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', n
 let latest = 1, serial = 0, undo = null;
 let effectFixture = true, effectRequests = 0;
 const rounds = { 1: { first: 'pending', second: 'pending', third: 'pending', fourth: 'pending' } };
-const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [];
+const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [], archiveRequests = [];
 let gitFiles = [];
-let pushError;
+let pushError, conflictOnApply = false, combinedOnCommit = false;
 let timeline = [];
 const state = round => ({ task: 'flow', title: task.title, csrf: 'fixture', closed: false, state: task.review.state, latest, history: Object.keys(rounds).map(number => ({ number: Number(number), created: 1793322000 + Number(number) * 120 })), round, revision: `after-${round}`, decisions: rounds[round], comments: {}, undo, job: null });
 function update() {
@@ -56,12 +56,28 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
   if (url.pathname === '/api/tasks/question-fixture/items') return route.fulfill({ json: { items: [{ id: 'answer', taskId: 'question-fixture', type: 'assistant', text: 'This equation expresses conservation of mass.', createdAt: 1 }] } });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items: timeline } });
+  if (url.pathname.endsWith('/archive')) {
+    const body = route.request().postDataJSON(); archiveRequests.push(body);
+    task.archivedAt = body.archived ? Date.now() : null;
+    return route.fulfill({ json: task });
+  }
   if (url.pathname.endsWith('/git')) return route.fulfill({ json: { branch: 'main', upstream: 'origin/main', remote: true, ahead: 0, behind: 0, head: null, files: gitFiles } });
+  if (url.pathname.endsWith('/manuscript')) return route.fulfill({ json: { git: { branch: 'main', remote: true, ahead: 0, behind: 0, head: null, files: gitFiles }, build: { status: 'building', current: false }, annotations: [] } });
   if (url.pathname.endsWith('/git/message') || url.pathname.endsWith('/commit-message')) { messageRequests.push(route.request().postDataJSON()); return route.fulfill({ json: { message: 'Explain the method', agent: 'codex' } }); }
   if (url.pathname.endsWith('/apply')) {
-    applyRequests.push(route.request().postDataJSON()); task.review.files = [];
-    task.delivery = { mode: 'workspace', accepted: 'accepted' };
-    return route.fulfill({ json: task.delivery });
+    const body = route.request().postDataJSON();
+    applyRequests.push(body);
+    if (conflictOnApply) {
+      conflictOnApply = false; task.status = 'queued';
+      task.reconciliation = { id: 'merge-fixture', round: latest, files: ['main.tex'], ready: true, intent: { mode: body.mode, message: body.message || '' } };
+      return route.fulfill({ json: { reconciliation: task.reconciliation } });
+    }
+    if (combinedOnCommit && body.mode === 'commit' && body.confirmation !== 'combined-version') return route.fulfill({ json: { commitReview: { token: 'combined-version', files: ['main.tex'], diff: '-Original title\n+Final reviewed title' } } });
+    combinedOnCommit = false;
+    task.review.files = []; task.reconciliation = null;
+    task.delivery = { mode: body.mode || 'workspace', accepted: 'accepted', ...(body.mode === 'commit' ? { branch: 'main', commit: 'abc1234' } : {}) };
+    if (body.mode === 'commit') commitRequests.push(body);
+    return route.fulfill({ json: { delivery: task.delivery } });
   }
   if (url.pathname.endsWith('/commit')) {
     const body = route.request().postDataJSON();
@@ -372,111 +388,172 @@ try {
   await viewer().locator('.source-unit').filter({ hasText: 'main.tex · lines 4–4' }).getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(viewer().locator('.mixed-reviewed .side:visible')).toHaveCount(0);
   await expect(viewer().getByText('Reviewed changes · View in History', { exact: true })).toBeVisible();
-  // A finished review offers to commit what the task accepted; the agent writes the message.
+  // Existing direct-accept tasks retain their commit form; isolated tasks offer both save choices.
   task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
   await sync();
   const card = viewer().locator('.review-complete');
-  const message = () => card.getByRole('textbox', { name: 'Commit message', exact: true });
-  await expect(message()).toHaveValue('Explain the method');
-  await expect(card.getByTitle('Commit to main', { exact: true })).toBeVisible();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.deepEqual(messageRequests, [{ paths: ['main.tex'], agent: 'codex', fresh: false }]);
-  // Typed text survives moving the form between the iframe and chat.
-  await message().fill('My reviewed method');
+  const taskStatus = page.locator(`[data-task="${task.id}"] .status`);
+  await expect(card.getByRole('textbox', { name: 'Commit message', exact: true })).toBeVisible();
+  task.deferred = true; task.review.files = ['main.tex']; gitFiles = [];
+  await sync();
+  const applyButton = () => card.getByRole('button', { name: 'Apply to workspace', exact: true });
+  const commitButton = () => card.getByRole('button', { name: 'Commit to manuscript', exact: true });
+  const messageBefore = messageRequests.length;
+  await expect(applyButton()).toBeVisible();
+  await expect(commitButton()).toBeEnabled();
+  await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toHaveCount(0);
+  await card.getByRole('textbox', { name: 'Commit message' }).fill('My reviewed task');
+  await expect(card.getByText('Choose how to save the accepted changes to your manuscript.', { exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Commit message', exact: true })).toHaveValue('My reviewed method');
+  await expect(page.getByRole('button', { name: 'Apply to workspace', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Commit message' })).toHaveValue('My reviewed task');
   await page.getByRole('button', { name: 'Split', exact: true }).click();
-  await expect(message()).toHaveValue('My reviewed method');
-  assert.equal(messageRequests.length, 1, 'switching views reuses the agent message and user draft');
-  await message().fill('');
-  await expect(card.getByRole('button', { name: 'Commit', exact: true })).toBeDisabled();
-  await message().fill('Explain the method');
-  // A long finished review keeps the full form at the top and offers a
-  // compact return path without pulling the author away from the PDF.
+  await expect(applyButton()).toBeVisible();
+  assert.equal(messageRequests.length, messageBefore, 'Applying needs no agent-written commit message');
   assert.equal(await card.evaluate(el => el.parentElement.firstElementChild === el), true);
   await viewer().locator('.document').evaluate(el => { el.style.minHeight = '1800px'; });
   const summaryLink = () => viewer().getByRole('button', { name: 'Back to summary', exact: true });
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     if (width === 390) await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
-    await expect(message()).toBeVisible();
+    await expect(applyButton()).toBeVisible();
     await viewer().locator('#paper').hover();
     await page.mouse.wheel(0, 1800);
     await expect(summaryLink()).toBeInViewport();
-    assert.ok(await viewer().locator('#paper').evaluate(el => el.scrollTop > 500), 'The summary does not automatically scroll the review');
+    assert.ok(await viewer().locator('#paper').evaluate(el => el.scrollTop > 500));
     assert.equal(await viewer().locator('.review-complete-jump').evaluate(el => el.getBoundingClientRect().right <= document.documentElement.clientWidth), true);
     await page.screenshot({ path: `test-results/review-summary-jump-${width}.png`, animations: 'disabled' });
     await summaryLink().click();
     await expect.poll(() => viewer().locator('#paper').evaluate(el => el.scrollTop)).toBeLessThan(2);
     await expect(summaryLink()).toHaveCount(0);
     await expect(card).toBeFocused();
-    await expect(message()).toHaveValue('Explain the method');
+    await expect(applyButton()).toBeVisible();
     assert.deepEqual(await viewer().locator('#root').evaluate(el => [el.scrollTop, document.documentElement.scrollTop]), [0, 0]);
   }
   await viewer().locator('.document').evaluate(el => { el.style.minHeight = ''; });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  assert.equal(commitRequests.length, 0, 'Returning to the summary never commits automatically');
-  fs.mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/review-completed.png', fullPage: true, animations: 'disabled' });
-  await card.getByRole('button', { name: 'Commit and push', exact: true }).click();
-  assert.deepEqual(commitRequests, [{ message: 'Explain the method', push: true }]);
-  await expect(card.getByText('Committed abc1234 and pushed.', { exact: true })).toBeVisible();
-  const taskStatus = page.locator(`[data-task="${task.id}"] .status`);
-  await expect(taskStatus).toHaveText('Committed and pushed');
-  await expect(message()).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/task-apply-desktop.png', fullPage: true, animations: 'disabled' });
+  await applyButton().click();
+  await expect(card.getByText('Applied to manuscript', { exact: true })).toBeVisible();
+  await expect(taskStatus).toHaveText('Applied to manuscript');
+  task.review.comments = 1; await sync();
+  await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toHaveCount(0);
+  task.review.comments = 0; await sync();
+  await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toBeVisible();
   await page.reload();
-  await expect(taskStatus).toHaveText('Committed and pushed');
-  await expect(card.getByText('Committed abc1234 and pushed.', { exact: true })).toBeVisible();
-  // New accepted text needs another commit. A failed push still records the
-  // successful local commit, including after reloading the page.
-  task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
-  pushError = 'The remote is unavailable.'; await sync();
-  await expect(taskStatus).toHaveText('Review complete');
-  await expect(message()).toHaveValue('Explain the method');
-  await card.getByRole('button', { name: 'Commit and push', exact: true }).click();
-  await expect(taskStatus).toHaveText('Committed');
-  await expect(page.getByText(pushError, { exact: true })).toBeVisible();
-  await expect(card.getByText('Committed abc1234.', { exact: true })).toBeVisible();
-  pushError = undefined;
-  await page.reload();
-  await expect(taskStatus).toHaveText('Committed');
-  await expect(card.getByText('Committed abc1234.', { exact: true })).toBeVisible();
-  // New tasks offer both destinations and an automatic message inline.
-  task.deferred = true; task.review.files = ['main.tex']; gitFiles = [];
+  await expect(taskStatus).toHaveText('Applied to manuscript');
+  assert.equal(archiveRequests.length, 0, 'saving and reloading never archives without a click');
+  // Tasks committed by older versions use the same action, even with no new edits.
+  task.delivery = { mode: 'branch', branch: 'papilot/flow', commit: 'abc1234', accepted: 'old' };
   await sync();
-  await expect(card.getByRole('button', { name: 'Apply to working directory', exact: true })).toBeVisible();
-  await expect(card.getByRole('button', { name: 'Commit to task branch', exact: true })).toBeVisible();
-  await expect(card.getByText('Accepted changes are saved in this task. Choose where to save them below.', { exact: true })).toBeVisible();
-  await expect(message()).toHaveValue('Explain the method');
-  await expect(card.getByTitle('Commit to papilot/flow', { exact: true })).toBeVisible();
-  await expect(card.getByRole('button', { name: 'Commit and push', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  assert.equal(commitRequests.length, 2, 'generating a message does not commit automatically');
-  await page.screenshot({ path: 'test-results/task-destinations-desktop.png', fullPage: true, animations: 'disabled' });
-  await message().fill('My accepted revision');
-  await card.getByRole('button', { name: 'Commit to task branch', exact: true }).click();
-  assert.deepEqual(commitRequests.at(-1), { message: 'My accepted revision', push: false });
-  await expect(card.getByText('Committed abc1234 to papilot/flow', { exact: true })).toBeVisible();
+  await expect(applyButton()).toBeVisible();
+  await applyButton().click();
+  await expect(card.getByText('Applied to manuscript', { exact: true })).toBeVisible();
+  // A legacy branch can instead become one commit on the current manuscript branch.
+  task.delivery = { mode: 'branch', branch: 'papilot/flow', commit: 'old1234', accepted: 'old' };
+  await sync();
+  await expect(commitButton()).toBeEnabled();
+  await card.getByRole('textbox', { name: 'Commit message' }).fill('One reviewed commit');
+  await commitButton().click();
   await expect(taskStatus).toHaveText('Committed');
+  await expect(card.getByText('Committed abc1234 to main', { exact: true })).toBeVisible();
+  assert.equal(commitRequests.at(-1).message, 'One reviewed commit');
+  // Conflicts retain the chosen save mode and edited message across reload. Review is required.
+  task.delivery = null; task.review.files = ['main.tex']; conflictOnApply = true;
+  await sync();
+  await card.getByRole('textbox', { name: 'Commit message' }).fill('Commit after merge review');
+  await commitButton().click();
+  await expect(card.getByText('AI is resolving conflicts…', { exact: true })).toBeVisible();
+  await expect(card.getByRole('radio')).toHaveCount(0);
+  await expect(card.getByRole('button', { name: /Resolve|Manual/i })).toHaveCount(0);
+  await expect(card.getByRole('textbox')).toHaveCount(0);
+  assert.equal(task.reconciliation.intent.mode, 'commit');
+  await page.screenshot({ path: 'test-results/conflict-ai-desktop.png', fullPage: true, animations: 'disabled' });
   await page.reload();
+  await expect(card.getByText('AI is resolving conflicts…', { exact: true })).toBeVisible();
+  await expect(card.getByText('There are no accepted changes to save.', { exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Confirm and apply', exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
+  await expect(card.getByText('AI is resolving conflicts…', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/conflict-ai-mobile.png', fullPage: true, animations: 'disabled' });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  task.status = 'reviewing'; task.reconciliation.round = latest - 1;
+  task.review.state = 'reviewing'; task.review.counts.pending = 1;
+  await sync();
+  await expect(card.getByRole('button', { name: 'Confirm and apply', exact: true })).toHaveCount(0);
+  task.review.state = 'done'; task.review.counts.pending = 0;
+  await sync();
+  await expect(card.getByRole('button', { name: 'Confirm and apply', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/task-merge-review-desktop.png', fullPage: true, animations: 'disabled' });
+  await expect(card.getByRole('textbox', { name: 'Commit message' })).toHaveValue('Commit after merge review');
+  await card.getByRole('button', { name: 'Confirm and commit', exact: true }).click();
   await expect(taskStatus).toHaveText('Committed');
-  await expect(card.getByText('Committed abc1234 to papilot/flow', { exact: true })).toBeVisible();
+  assert.equal(commitRequests.at(-1).message, 'Commit after merge review');
+  // If the agent needs a content decision, keeping the current text is explicit.
+  task.delivery = null; task.review.files = ['main.tex'];
+  task.reconciliation = { id: 'question-merge', round: latest, files: ['main.tex'], ready: true };
+  await sync();
+  await expect(card.getByRole('button', { name: 'Keep latest wording and apply', exact: true })).toBeVisible();
+  await card.getByRole('button', { name: 'Keep latest wording and apply', exact: true }).click();
+  assert.equal(applyRequests.at(-1).keepCurrent, true);
+  await expect(taskStatus).toHaveText('Applied to manuscript');
+  // If AI needs an answer or is interrupted, continue in chat without a source editor.
+  task.delivery = null; task.review.files = ['main.tex'];
+  task.reconciliation = { id: 'pending-merge', round: latest, files: ['main.tex'], ready: true };
+  for (const [status, label] of [['waiting_input', 'AI needs your input'], ['interrupted', 'Conflict resolution paused']]) {
+    task.status = status; await sync();
+    await expect(card.getByText(label, { exact: true })).toBeVisible();
+    await expect(card.getByRole('textbox')).toHaveCount(0);
+    await expect(card.getByRole('button', { name: /apply|commit|manual/i })).toHaveCount(0);
+    await card.getByRole('button', { name: 'Open chat', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Chat', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Split', exact: true }).click();
+  }
+  task.status = 'reviewing'; task.reconciliation = null;
+  // The title depends on an earlier applied edit: offer a reviewed combined
+  // commit instead of a raw Git error, and require that explicit choice.
+  task.delivery = null; task.review.files = ['main.tex']; combinedOnCommit = true; await sync();
+  await commitButton().click();
+  await expect(card.getByRole('button', { name: 'Commit together', exact: true })).toBeVisible();
+  assert.equal(commitRequests.length, 2);
+  await expect(card.locator('.task-commit-error')).toHaveCount(0);
+  await card.getByText('View changes included in this commit', { exact: true }).click();
+  await expect(card.locator('.task-commit-preview')).toContainText('Final reviewed title');
+  await page.screenshot({ path: 'test-results/combined-title-commit.png', fullPage: true });
+  await card.getByRole('button', { name: 'Commit together', exact: true }).click();
+  assert.equal(commitRequests.at(-1).confirmation, 'combined-version');
+  await expect(taskStatus).toHaveText('Committed');
   task.delivery = null; task.review.files = ['main.tex']; await sync();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.sidebar')).toBeHidden();
-  await expect(card.getByText('Accepted changes are saved in this task. Choose where to save them below.', { exact: true })).toBeVisible();
-  await expect(message()).toHaveValue('Explain the method');
-  await expect(card.getByRole('button', { name: 'Apply to working directory', exact: true })).toBeVisible();
-  await page.screenshot({ path: 'test-results/task-destinations-mobile.png', fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
+  await expect(applyButton()).toBeVisible();
+  await page.screenshot({ path: 'test-results/task-apply-mobile.png', fullPage: true, animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
-  await card.getByRole('button', { name: 'Apply to working directory', exact: true }).click();
-  await expect(card.getByText('Applied to working directory', { exact: true })).toBeVisible();
-  assert.equal(applyRequests.length, 1);
-  assert.equal(commitRequests.length, 3, 'apply never commits');
-  await expect(taskStatus).toHaveText('Applied to working directory');
+  await applyButton().click();
+  await expect(card.getByText('Applied to manuscript', { exact: true })).toBeVisible();
+  assert.equal(commitRequests.length, 3, 'Only explicit commit choices create commits');
+  await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/archive-offer-mobile.png', fullPage: true, animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const reviewBeforeArchive = structuredClone(task.review);
+  await card.getByRole('button', { name: 'Archive task', exact: true }).click();
+  await expect(page.locator('.review-frame')).toHaveCount(0);
+  await expect(page.locator('.archive-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator(`[data-task="${task.id}"]`)).toHaveCount(0);
+  assert.deepEqual(archiveRequests, [{ archived: true }]);
+  assert.deepEqual(task.review, reviewBeforeArchive, 'archiving leaves the review intact');
+  await page.locator('.archive-toggle').click();
+  await page.locator(`[data-task="${task.id}"] .task-link`).click();
+  await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toHaveCount(0);
+  await expect(card.getByText('Applied to manuscript', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: `Task actions for ${task.title}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Restore task', exact: true }).click();
+  await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toBeVisible();
   task.deferred = false; task.delivery = null;
   await page.setViewportSize({ width: 1440, height: 1000 }); await sync();
-  console.log('PASS: Automatic inline commit messages for legacy and isolated tasks; editable drafts survive view switches; no dialog; desktop and mobile; persistent result and apply without commit');
+  console.log('PASS: Both save choices, shared message, legacy branch migration, automatic AI conflict resolution, combined commit confirmation, intent recovery, desktop and mobile');
   // A note link reveals even an accepted change without opening history.
   await viewer().locator('body').evaluate(() => { location.href = '?task=flow&round=1&change=0'; });
   await expect(viewer().locator('.change[data-stop="0"] .change-head')).toBeVisible();

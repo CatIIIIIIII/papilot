@@ -50,16 +50,16 @@ function agentState(runtime?: RuntimeStatus) {
 // selected model's reasoning effort and fast mode sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled }: {
+export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description }: {
   agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
-  onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean;
+  onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string;
 }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(''), [recent, setRecent] = useState(readRecent);
   const current = agents.find(item => item.value === agent) || agents[0];
   const runtime = current?.runtime, models = runtime?.models || [];
-  const selected = models.find(item => item.id === model) || models.find(item => item.isDefault);
+  const selected = model ? models.find(item => item.id === model) : models.find(item => item.isDefault);
   const agentName = current?.label || agent;
   const modelName = selected?.name || model || agentName;
   const currentEffort = effort || selected?.defaultEffort;
@@ -159,6 +159,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
         {!visible.length && <p className="model-empty">{t('No models match “{query}”', { query: query.trim() })}</p>}
       </div>
       <AgentConnectionNotice key={agent} name={agentName} runtime={runtime} reconnecting={reconnecting} onReconnect={onReconnect}/>
+      {description && <p className="effort-description">{description}</p>}
       {selected?.efforts.length ? <EffortSlider efforts={selected.efforts} value={effort} fallback={selected.defaultEffort} onChange={value => onChange({ effort: value })}/> : null}
       {fastMode && <label className="agent-fast"><span><strong><Icon name="bolt" size={14}/>{t('Fast mode')}</strong><small>{fastMode.description || t('Faster responses; may use more of your limit.')}</small></span><input type="checkbox" role="switch" aria-label={t('Fast mode')} checked={fast} onChange={event => onChange({ fast: event.target.checked })}/></label>}
     </div>

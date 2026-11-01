@@ -10,6 +10,7 @@ import { CONFIG_NAME, loadProject, type Project } from "./core/config.ts";
 import { Store } from "./core/store.ts";
 import { Tasks } from "./core/tasks.ts";
 import { Review } from "./core/review.ts";
+import { Reconciliations } from "./core/reconcile.ts";
 import { Deliveries } from "./core/delivery.ts";
 import { more, PublishError, Publisher } from "./core/publish.ts";
 import { view, type ViewRequest } from "./core/view.ts";
@@ -29,6 +30,7 @@ export class App {
   tasks: Tasks;
   review: Review;
   delivery: Deliveries;
+  reconciliation: Reconciliations;
   publisher: Publisher;
   references: ReferenceChecker;
   confirmations: Confirmations;
@@ -42,6 +44,7 @@ export class App {
     this.tasks = new Tasks(this);
     this.review = new Review(this);
     this.delivery = new Deliveries(this);
+    this.reconciliation = new Reconciliations(this);
     this.publisher = new Publisher(this);
     this.references = new ReferenceChecker(
       path.join(this.state, "references.json"),
@@ -51,6 +54,7 @@ export class App {
     );
     this.review.recover();
     this.delivery.recover();
+    this.reconciliation.recover();
   }
   get project() {
     const config = path.join(this.root, CONFIG_NAME),
@@ -67,11 +71,13 @@ export class App {
   taskInfo(name: string) {
     const task = this.tasks.get(name),
       delivery = this.delivery.get(name),
-      scope = task.scope;
+      reconciliation = this.reconciliation.get(name),
+      scope = reconciliation ? { ...task.scope, paths: reconciliation.files, ranges: null } : task.scope;
     return {
       ...this.review.summary(name),
       deferred: Boolean(task.deferred),
       delivery: delivery ? { ...this.delivery.result(delivery), pending: !delivery.done } : null,
+      reconciliation: reconciliation ?? null,
       worktree: task.worktree,
       url: this.page(name),
       viewing: now() - (this.viewers.get(name) ?? 0) < 15,
@@ -336,6 +342,11 @@ export function createServer(app: App) {
       "/api/tasks/:name/view",
       { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", maxItems: 8, items: { type: "string", maxLength: 1000 } }, pages: { type: "array", maxItems: 8, items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
       (request) => view(app, request.params.name, request.body),
+    );
+    server.post<{ Params: { name: string }; Body: { keepCurrent?: boolean; mode?: "workspace" | "commit"; message?: string; confirmation?: string } }>(
+      "/api/tasks/:name/apply",
+      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { confirmation: { type: "string", maxLength: 100 }, keepCurrent: { type: "boolean" }, mode: { enum: ["workspace", "commit"] }, message: { type: "string", maxLength: 5000 } } } } },
+      request => app.delivery.apply(request.params.name, request.body.keepCurrent === true, request.body.mode, request.body.message, request.body.confirmation),
     );
     server.post<{ Params: { name: string }; Body: { mode: "workspace" | "branch"; message?: string } }>(
       "/api/tasks/:name/deliver",

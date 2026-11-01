@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Papilot pen nib foreground layer</title>
+  <desc>Unmasked vector artwork without baked-in lighting or shadows, for system-applied effects.</desc>
+  <g transform="translate(42.749514563 42.749514563) scale(14.66407767)" stroke="#193A59" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M18 48H32V58H18Z" fill="#F0F4F8"/>
+    <path d="M32 48H46V58H32Z" fill="#BDCEE1"/>
+    <path d="M32 6L12 34L18 48H32V6Z" fill="#FFFFFF" stroke="none"/>
+    <path d="M32 6L52 34L46 48H32V6Z" fill="#356AA0" stroke="none"/>
+    <path d="M32 6L52 34L46 48H18L12 34L32 6Z"/>
+    <path d="M32 6V20"/>
+    <path d="M32 20Q35 31 46 34Q35 37 32 48Q29 37 18 34Q29 31 32 20Z" fill="#FFFFFF"/>
+  </g>
+</svg>

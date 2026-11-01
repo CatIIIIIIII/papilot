@@ -16,7 +16,7 @@ const errors = []; page.on('pageerror', error => errors.push(error.message));
 const task = { id: 'revision', projectId: 'paper', name: 'revision', title: 'Revise the introduction', status: 'reviewing', createdAt: 1, updatedAt: 1, review: { state: 'reviewing', round: 1, counts: { pending: 1 } } };
 const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper' }], tasks: [task], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
 const git = { branch: 'main', files: [] };
-const build = { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]], current: true };
+const build = { status: 'building', pages: [[612, 792], [612, 792]], current: false };
 const annotations = [];
 let posts = 0, reads = 0, releaseBuild, heldBuild, failRequest = false, holdRead = false, releaseRead;
 function holdNextBuild() { heldBuild = new Promise(resolve => { releaseBuild = resolve; }); }
@@ -74,6 +74,42 @@ const green = 'rgb(21, 128, 61)', blue = 'rgb(37, 99, 235)', red = 'rgb(220, 38,
 try {
   fs.mkdirSync('test-results', { recursive: true });
   await page.goto(`http://127.0.0.1:${server.server.address().port}`);
+  // The first build has no PDF yet. Its fallback toolbar must keep actions
+  // together instead of distributing each icon across the whole empty row.
+  const initialToolbar = page.locator('.manuscript-lead');
+  for (const [width, colorScheme] of [[1440, 'light'], [1440, 'dark'], [1000, 'dark'], [768, 'dark'], [390, 'dark'], [320, 'dark']]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme });
+    if (width <= 680) await page.getByRole('group', { name: 'Manuscript view', exact: true }).getByRole('button', { name: 'PDF', exact: true }).click();
+    await expect(initialToolbar).toBeVisible();
+    await check(compile, colorScheme === 'dark' ? 'rgb(138, 180, 255)' : blue, true);
+    const spacing = await initialToolbar.evaluate(toolbar => {
+      const boxes = [...toolbar.querySelectorAll(':scope > button, :scope > .problems-anchor > button')].map(button => button.getBoundingClientRect());
+      const modes = toolbar.querySelector('.pdf-modes').getBoundingClientRect();
+      const nav = toolbar.querySelector('.sidebar-toggle')?.getBoundingClientRect();
+      const tools = boxes.filter(box => box.x >= modes.right);
+      return { count: tools.length, gaps: tools.slice(1).map((box, index) => box.x - tools[index].right),
+        tops: tools.map(box => box.y), navGap: nav && modes.x - nav.right,
+        contained: boxes.every(box => box.x >= toolbar.getBoundingClientRect().x && box.right <= toolbar.getBoundingClientRect().right) };
+    });
+    assert.equal(spacing.count, width > 680 ? 3 : 2, 'Compile, log and notes remain available; phones keep compile in the navigation bar');
+    assert.ok(spacing.gaps.every(gap => gap >= 0 && gap <= 6.1), `Initial toolbar has compact action spacing at ${width}px: ${JSON.stringify(spacing)}`);
+    assert.ok(spacing.tops.every(top => Math.abs(top - spacing.tops[0]) < 1), 'Initial toolbar actions align');
+    if (spacing.navGap !== undefined) assert.ok(spacing.navGap >= 0 && spacing.navGap <= 6.1, 'Navigation stays next to PDF modes');
+    assert.ok(spacing.contained, 'Initial toolbar actions remain inside the panel');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+    await initialToolbar.screenshot({ path: `test-results/compile-initial-${width}-${colorScheme}.png` });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  Object.assign(build, { status: 'failed', error: 'Undefined control sequence.' });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await check(compile, red);
+  await expect(initialToolbar).toBeVisible();
+  await expect(page.getByText('The manuscript did not compile.', { exact: true })).toBeVisible();
+  Object.assign(build, { status: 'ready', key: 'pdf', current: true, error: undefined });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(initialToolbar).toHaveCount(0);
   await check(compile, green);
   await page.locator('.pdf-toolbar').screenshot({ path: 'test-results/compile-ready.png' });
 

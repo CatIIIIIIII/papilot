@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { beforeEach, afterEach, it, expect } from "vitest";
 import { Fixture, METHOD, fakeRound } from "./helpers.ts";

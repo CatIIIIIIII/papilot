@@ -29,6 +29,18 @@
 .git-status-counts .is-clean{color:var(--green)}
 .git-panel .has-conflicts,.git-worktree-unavailable{color:var(--red)}
 .git-no-upstream{font-size:11px;color:var(--text-3)}
+.git-advanced{margin-top:10px;padding-top:4px;border-top:1px solid var(--line)}
+.git-advanced>summary{display:flex;align-items:center;gap:7px;min-height:32px;margin:0 6px;padding:5px 6px;border-radius:6px;list-style:none;color:var(--text-3);font:500 12px/20px var(--sans);cursor:pointer;user-select:none;transition:background-color .15s,color .15s}
+.git-advanced>summary::-webkit-details-marker{display:none}
+.git-advanced>summary::marker{content:""}
+.git-advanced>summary:hover{background:var(--bg-hover);color:var(--text)}
+.git-advanced>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.git-advanced>summary>svg{flex:none}
+.git-advanced>summary>svg:last-child{margin-left:auto;transition:transform .15s}
+.git-advanced[open]>summary>svg:last-child{transform:rotate(90deg)}
+.git-advanced>.git-repository{margin-top:2px;border-top:0}
+@media(pointer:coarse){.git-advanced>summary{min-height:40px}}
+@media(prefers-reduced-motion:reduce){.git-advanced>summary,.git-advanced>summary>svg:last-child{transition:none}}
 .git-repository{margin-top:8px;border-top:1px solid var(--line)}
 .git-overview-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:30px;padding:3px 12px}
 .git-overview-heading h3{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;font-weight:600;color:var(--text-2)}

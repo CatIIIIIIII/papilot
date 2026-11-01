@@ -69,6 +69,65 @@ function identifiedTurn(run: Run, status = 'inProgress') {
   return { id: 'turn-confirmed', status, items: [{ type: 'userMessage', clientId: run.id }] };
 }
 
+const taskModels = [
+  { id: 'deep', name: 'Deep', isDefault: true, efforts: ['low', 'high', 'xhigh'], defaultEffort: 'high', fastMode: { serviceTier: 'priority', description: '' } },
+  { id: 'small', name: 'Small', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'low' },
+];
+
+test('task model settings persist, validate capabilities and clear incompatible options', () => {
+  const f = fixture();
+  try {
+    f.workspace.runtime.models = taskModels;
+    f.store.updateTask(f.task.id, { model: 'deep', effort: 'xhigh', serviceTier: 'priority', status: 'running', turnId: 'live-turn' });
+    const changed = f.workspace.updateTaskModel(f.task.id, { model: 'small' });
+    assert.deepEqual([changed.model, changed.effort, changed.serviceTier, changed.status, changed.threadId, changed.turnId], ['small', null, 'default', 'running', 'thread', 'live-turn']);
+    assert.equal(f.codex.calls.length, 0, 'changing settings does not interrupt an active turn');
+    assert.throws(() => f.workspace.updateTaskModel(f.task.id, { model: 'other-agent-model' }), /available model/);
+    assert.throws(() => f.workspace.updateTaskModel(f.task.id, { effort: 'xhigh' }), /reasoning effort/);
+    assert.throws(() => f.workspace.updateTaskModel(f.task.id, { serviceTier: 'priority' }), /Fast mode/);
+    f.workspace.updateTaskModel(f.task.id, { effort: 'high' });
+    assert.equal(f.workspace.updateTaskModel(f.task.id, { effort: '' }).effort, null);
+    f.store.updateTask(f.task.id, { status: 'deleting' });
+    assert.throws(() => f.workspace.updateTaskModel(f.task.id, { effort: 'low' }), /deleted/);
+  } finally { f.close(); }
+});
+
+test('a loaded task uses its changed model and the selected model default effort', async () => {
+  const f = fixture();
+  try {
+    f.workspace.runtime.models = taskModels;
+    f.store.updateTask(f.task.id, { model: 'deep', effort: 'xhigh' });
+    await f.workspace.enqueue(f.task.id, 'Continue.', 'model-change', false);
+    f.workspace.updateTaskModel(f.task.id, { model: 'small', effort: '' });
+    f.codex.ready = true;
+    await tick();
+    const call = f.codex.calls.find(call => call.method === 'turn/start');
+    assert.equal(call?.params.model, 'small'); assert.equal(call?.params.effort, 'low');
+    assert.equal(call?.params.threadId, 'thread');
+    assert.ok(!f.codex.calls.some(call => call.method === 'thread/start' || call.method === 'thread/resume'));
+  } finally { f.close(); }
+});
+
+test('changing settings during thread resume preserves the next turn choice', async () => {
+  const f = fixture(), gate = deferred<any>();
+  try {
+    f.workspace.runtime.models = taskModels;
+    f.store.updateTask(f.task.id, { model: 'deep', effort: 'xhigh' });
+    (f.workspace as any).loaded.clear();
+    f.codex.handler = async method => method === 'thread/resume' ? gate.promise : { turn: { id: 'turn-new' } };
+    f.codex.ready = true;
+    await f.workspace.enqueue(f.task.id, 'Continue.', 'resume-model-change', false);
+    await tick();
+    assert.ok(f.codex.calls.some(call => call.method === 'thread/resume'));
+    f.workspace.updateTaskModel(f.task.id, { model: 'small', effort: 'low' });
+    gate.resolve({ thread: { id: 'thread' }, model: 'deep' });
+    await tick();
+    assert.deepEqual([f.store.task(f.task.id).model, f.store.task(f.task.id).effort], ['small', 'low']);
+    const turn = f.codex.calls.find(call => call.method === 'turn/start');
+    assert.deepEqual([turn?.params.model, turn?.params.effort], ['deep', 'xhigh']);
+  } finally { gate.resolve({ thread: { id: 'thread' } }); f.close(); }
+});
+
 const pendingReview: PendingReview = { route: '/api/tasks/p-task/decide', body: { id: 'decision-123', action: 'accept', round: 1, changes: ['change-1'] }, previousStatus: 'reviewing' };
 const pageState = { csrf: 'test', task: 'p-task', title: 'Task', closed: false, state: 'reviewing', latest: 1, round: 1, revision: 'revision', decisions: { 'change-1': 'accepted' }, comments: {}, undo: null, job: null };
 
@@ -1409,12 +1468,12 @@ test('an agent resolves a merge in the manuscript checkout, and review writes wa
   } finally { f.close(); fs.rmSync(base, { recursive: true, force: true }); }
 });
 
-test('deferred tasks deliver accepted changes through the review engine and generate a message from their isolated diff', async () => {
+for (const mode of ['workspace', 'commit'] as const) test(`tasks save to the manuscript using ${mode} without task branches`, async () => {
   const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture(), app = disk.app();
   const f = fixture(async (method, route, body: any) => {
     if (route.includes('/feedback')) return app.review.feedback('p-task');
-    if (method === 'POST' && route.endsWith('/deliver')) return app.delivery.deliver('p-task', body.mode, body.message);
+    if (method === 'POST' && route.endsWith('/apply')) return app.delivery.apply('p-task', body.keepCurrent, body.mode, body.message);
     return app.taskInfo('p-task');
   });
   try {
@@ -1426,27 +1485,133 @@ test('deferred tasks deliver accepted changes through the review engine and gene
     await f.workspace.refresh(f.task.id);
     assert.equal(f.store.task(f.task.id).deferred, true);
     assert.deepEqual(f.store.task(f.task.id).review?.files, [METHOD]);
-    f.codex.ready = true;
-    (f.workspace as any).oneOff = async (_id: string, input: any) => {
-      assert.match(input.prompt, /Accepted isolated text/);
-      assert.match(input.prompt, /Diff:/);
-      return 'Explain the method';
-    };
-    assert.equal((await f.workspace.commitMessage(f.task.projectId, [METHOD], { taskId: f.task.id })).message, 'Explain the method');
-    await assert.rejects(f.workspace.commitTask(f.task.id, 'Commit', true), /kept locally/);
     f.store.updateTask(f.task.id, { status: 'running' });
-    await assert.rejects(f.workspace.deliverTask(f.task.id, 'workspace'), /Wait for the task/);
+    await assert.rejects(f.workspace.applyTask(f.task.id), /Wait for the task/);
     f.store.updateTask(f.task.id, { status: 'reviewing' });
     const gate = deferred<void>();
     const writing = f.workspace.reviewWrite(f.task.id, true, () => gate.promise);
-    await assert.rejects(f.workspace.commitTask(f.task.id, 'Commit'), /current review action/);
+    await assert.rejects(f.workspace.applyTask(f.task.id), /current review action/);
     gate.resolve(); await writing;
-    const result = await f.workspace.commitTask(f.task.id, 'Explain the method');
-    assert.equal(f.store.task(f.task.id).delivery?.commit, result.commit);
+    const result = await f.workspace.applyTask(f.task.id, false, mode === 'commit' ? { message: 'Reviewed task' } : undefined);
+    assert.equal(result.delivery?.mode, mode);
+    assert.equal(f.store.task(f.task.id).delivery?.mode, mode);
     assert.deepEqual(f.store.task(f.task.id).review?.files, []);
-    assert.doesNotMatch(disk.read(METHOD), /Accepted isolated text/);
-    assert.deepEqual(result.git.files, []);
-    assert.equal((await f.workspace.commitTask(f.task.id, 'Retry')).commit, result.commit);
+    assert.match(disk.read(METHOD), /Accepted isolated text/);
+    assert.equal(result.git.files.length, mode === 'commit' ? 0 : 1);
+    assert.equal(disk.repo.text(['for-each-ref', '--format=%(refname)', 'refs/heads/papilot/']), '');
+    assert.equal(f.codex.calls.length, 0);
+    if (mode === 'commit') {
+      assert.equal(disk.repo.rev('HEAD'), result.delivery?.commit);
+      assert.equal((await f.workspace.commitTask(f.task.id, 'Retry')).commit, result.delivery?.commit);
+    } else assert.deepEqual((await f.workspace.applyTask(f.task.id)).delivery, result.delivery);
+  } finally { f.close(); await disk.close(); }
+});
+
+test('application conflicts automatically queue one AI suggestion and require review before saving', async () => {
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const disk = new Fixture(), app = disk.app();
+  const f = fixture(async (method, route, body: any) => {
+    if (route.includes('/feedback')) return app.review.feedback('p-task');
+    if (method === 'POST' && route.endsWith('/apply')) return app.delivery.apply('p-task', body.keepCurrent, body.mode, body.message);
+    return app.taskInfo('p-task');
+  });
+  try {
+    const target = app.tasks.create('p-task', 'Conflicting revision', [], ['paper'], true);
+    disk.edit(target, METHOD, 'Method sentence 2.', 'Accepted proposal.');
+    const round = fakeRound(app, target.name);
+    app.review.decide(target.name, { id: 'accept-before-conflict', action: 'accept', round: round.number, changes: round.units.map((unit: any) => unit.id) });
+    disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'Latest manuscript.'));
+    f.store.saveProject({ id: f.task.projectId, name: 'Paper', path: disk.root, createdAt: 1 });
+    f.store.updateTask(f.task.id, { worktree: target.worktree });
+    await f.workspace.refresh(f.task.id);
+    const result = await f.workspace.applyTask(f.task.id);
+    assert.ok(result.reconciliation);
+    assert.match(disk.read(METHOD), /Latest manuscript/);
+    assert.equal(f.store.task(f.task.id).status, 'queued');
+    const run = f.store.runs()[0];
+    await f.workspace.refresh(f.task.id);
+    assert.equal(f.store.runs().length, 1, 'refresh does not duplicate the automatic suggestion');
+    assert.match(run.prompt, /Do not guess which scientific statement is correct/);
+    assert.match(run.prompt, /Resolve conflicts yourself whenever/);
+    assert.match(run.prompt, /Only when the available context cannot determine/);
+    assert.match(run.prompt, /Use the user-input tool when available/);
+    assert.match(run.prompt, /continue the merge after the author answers/);
+    assert.match(run.prompt, /ask before making any edits/);
+    assert.ok(run.prompt.includes(result.reconciliation.sourceAccepted));
+    assert.ok(run.prompt.includes(METHOD));
+    assert.doesNotMatch(f.store.items(f.task.id)[0].text, /git show|refs\//, 'internal version identifiers stay out of the displayed request');
+    await assert.rejects(f.workspace.applyTask(f.task.id), /Wait for the task/);
+    f.store.saveRun({ ...run, status: 'completed' });
+    f.store.updateTask(f.task.id, { status: 'reviewing' });
+    await f.workspace.applyTask(f.task.id);
+    assert.equal(f.store.runs().length, 1, 'retry cannot queue the same suggestion twice');
+    disk.edit(target, METHOD, 'Latest manuscript.', 'Reviewed combined wording.');
+    const next = fakeRound(app, target.name);
+    await assert.rejects(f.workspace.applyTask(f.task.id), /Finish reviewing/);
+    app.review.decide(target.name, { id: 'accept-combination', action: 'accept', round: next.number, changes: next.units.map((unit: any) => unit.id) });
+    const applied = await f.workspace.applyTask(f.task.id);
+    assert.equal(applied.delivery?.mode, 'workspace');
+    assert.equal(f.store.task(f.task.id).reconciliation, null);
+    assert.match(disk.read(METHOD), /Reviewed combined wording/);
+  } finally { f.close(); await disk.close(); }
+});
+
+for (const recovery of ['lost-response', 'restart', 'legacy-manual'] as const) test(`merge suggestions recover after ${recovery} without duplicate agent runs`, async () => {
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const disk = new Fixture(), app = disk.app();
+  const f = fixture(async (method, route) => {
+    if (route.includes('/feedback')) return app.review.feedback('p-task');
+    if (method === 'POST' && route.endsWith('/apply')) { app.delivery.apply('p-task'); throw new Error('Response lost'); }
+    return app.taskInfo('p-task');
+  });
+  try {
+    const target = app.tasks.create('p-task', 'Review', [], ['paper'], true);
+    disk.edit(target, METHOD, 'Method sentence 2.', 'Accepted proposal.');
+    const round = fakeRound(app, target.name);
+    app.review.decide(target.name, { id: crypto.randomUUID(), action: 'accept', round: round.number, changes: round.units.map((unit: any) => unit.id) });
+    disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'Latest text.'));
+    f.store.saveProject({ id: f.task.projectId, name: 'Paper', path: disk.root, createdAt: 1 });
+    f.store.updateTask(f.task.id, { worktree: target.worktree, deferred: true });
+    if (recovery === 'lost-response') await f.workspace.applyTask(f.task.id);
+    else {
+      const merge = app.delivery.apply(target.name).reconciliation!;
+      if (recovery === 'legacy-manual') {
+        // Older sessions could stop at the manual choice. Keep their edits
+        // intact, but let AI finish instead of reopening the removed editor.
+        app.store.execute('UPDATE reconciliations SET data=? WHERE task=?', JSON.stringify({ ...merge, resolution: 'manual' }), target.name);
+        disk.edit(target, METHOD, 'Detail sentence 2.', 'Existing draft detail.');
+      }
+      await f.workspace.refresh(f.task.id);
+      if (recovery === 'legacy-manual') assert.match(fs.readFileSync(path.join(target.worktree, METHOD), 'utf8'), /Existing draft detail/);
+    }
+    assert.equal(f.store.task(f.task.id).status, 'queued');
+    assert.equal(f.store.runs().length, 1);
+    await f.workspace.refresh(f.task.id);
+    assert.equal(f.store.runs().length, 1);
+    assert.match(disk.read(METHOD), /Latest text/);
+  } finally { f.close(); await disk.close(); }
+});
+
+for (const stage of ['reviewed', 'interrupted', 'waiting_input'] as const) test(`automatic conflict recovery respects ${stage} tasks`, async () => {
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const disk = new Fixture(), app = disk.app();
+  const f = fixture(async (_method, route) => route.includes('/feedback') ? app.review.feedback('p-task') : app.taskInfo('p-task'));
+  try {
+    const target = app.tasks.create('p-task', 'Review', [], ['paper'], true);
+    disk.edit(target, METHOD, 'Method sentence 2.', 'Accepted proposal.');
+    const round = fakeRound(app, target.name);
+    app.review.decide(target.name, { id: crypto.randomUUID(), action: 'accept', round: round.number, changes: round.units.map((unit: any) => unit.id) });
+    disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'Latest text.'));
+    app.delivery.apply(target.name);
+    if (stage === 'reviewed') {
+      disk.edit(target, METHOD, 'Latest text.', 'Combined proposal.');
+      fakeRound(app, target.name);
+    }
+    f.store.saveProject({ id: f.task.projectId, name: 'Paper', path: disk.root, createdAt: 1 });
+    f.store.updateTask(f.task.id, { worktree: target.worktree, deferred: true, status: stage === 'reviewed' ? 'reviewing' : stage });
+    await f.workspace.refresh(f.task.id);
+    assert.equal(f.store.runs().length, 0, 'do not replace a review or restart paused work');
+    assert.match(disk.read(METHOD), /Latest text/);
   } finally { f.close(); await disk.close(); }
 });
 
@@ -1522,7 +1687,7 @@ test('agents that are not found on the host are neither started nor offered, and
   const codex = new FakeCodex(); codex.handler = async (method: string) => method === 'account/read' ? { account: { email: 'me@example.com' }, requiresOpenaiAuth: false } : { data: [] };
   (codex as any).start = async () => { codex.ready = true; };
   const qwen = new Detected();
-  const others = Object.fromEntries((['claude', 'cursor', 'antigravity', 'kimi', 'glm', 'deepseek', 'opencode'] as const).map(id => [id, Object.assign(new Detected(), { found: false })]));
+  const others = Object.fromEntries((['claude', 'cursor', 'copilot', 'grok', 'antigravity', 'kimi', 'glm', 'deepseek', 'opencode'] as const).map(id => [id, Object.assign(new Detected(), { found: false })]));
   const workspace = new Workspace(store, codex as unknown as Codex, 2, async () => { throw new Error('unused'); }, { ...others, qwen } as any);
   try {
     await workspace.connect();

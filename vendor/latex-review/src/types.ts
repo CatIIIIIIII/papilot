@@ -50,12 +50,14 @@ export interface Task {
   closed: number | null;
 }
 export interface Delivery {
-  mode: "workspace" | "branch";
+  mode: "workspace" | "commit" | "branch";
   accepted: string;
   seq: number;
   branch?: string;
   commit?: string;
   parent?: string;
+  indexBefore?: string;
+  indexAfter?: string;
   previous?: string;
   done: boolean;
   writes: { file: string; before: string | null; after: string | null }[];
@@ -422,8 +424,9 @@ export interface PageState {
    * and how many manuscript files this task's accepted changes touched.
    */
   workspace?: {
+    merging?: boolean;
     deferred?: boolean;
-    destination?: "workspace" | "branch";
+    destination?: "workspace" | "commit" | "branch";
     status: string;
     unsent: number;
     comments?: number;

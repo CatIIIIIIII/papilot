@@ -45,9 +45,9 @@ p code,li code{font-size:.94em;padding:1px 6px;border-radius:6px;background:var(
 
 /* Both languages are in the page; <html lang> picks the one shown. CJK headings
    fall back to Songti and need no tightening. */
-html[lang=en] :is([lang=zh-CN],[lang=zh-Hant]):not([role=menuitemradio]),html[lang=zh-CN] :is([lang=en],[lang=zh-Hant]):not([role=menuitemradio]),html[lang=zh-Hant] :is([lang=en],[lang=zh-CN]):not([role=menuitemradio]){display:none!important}
-html[lang^=zh] :is(h1,h2,h3,.brand){letter-spacing:0}
-html[lang^=zh] .hero h1{line-height:1.16}
+html[lang=en] [lang=zh-CN]:not([role=menuitemradio]),html[lang=zh-CN] [lang=en]:not([role=menuitemradio]){display:none!important}
+html[lang=zh-CN] :is(h1,h2,h3,.brand){letter-spacing:0}
+html[lang=zh-CN] .hero h1{line-height:1.16}
 
 /* Buttons and other controls are pills. */
 .button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border:1px solid transparent;border-radius:999px;font-size:15px;font-weight:500;white-space:nowrap;text-decoration:none;transition:background-color .15s,border-color .15s,color .15s}
@@ -97,17 +97,49 @@ html[lang^=zh] .hero h1{line-height:1.16}
 .copy .icon-check,.copy.copied .icon-copy{display:none}
 .copy.copied .icon-check{display:block;color:var(--green)}
 .demo{margin-top:64px}
-.agent{display:inline-flex;align-items:center;gap:8px}
-.agent::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--dot)}
-.agent.codex{--dot:#10a37f}
-.agent.claude{--dot:#d97757}
-.agent.antigravity{--dot:#4285f4}
-.agent.kimi{--dot:#6366f1}
-.agent.cursor{--dot:#8b8b8b}
-.agent.glm{--dot:#3b5bdb}
-.agent.deepseek{--dot:#4d6bfe}
-.agent.qwen{--dot:#7c3aed}
-.agent.opencode{--dot:#f59e0b}
+/* Agent marks: the app's monochrome brand icons, tinted, on a quiet tile */
+.agent{display:flex;align-items:center;gap:12px}
+.agent i{display:grid;place-items:center;flex:none;width:40px;height:40px;border:1px solid var(--line);border-radius:12px;background:var(--bg-subtle)}
+.agent i::before{content:"";width:22px;height:22px;background:var(--brand,var(--text));-webkit-mask:var(--logo) center/contain no-repeat;mask:var(--logo) center/contain no-repeat}
+.agent.codex{--logo:url("assets/agents/codex.svg")}
+.agent.claude{--logo:url("assets/agents/claude.svg");--brand:#d97757}
+.agent.cursor{--logo:url("assets/agents/cursor.svg")}
+.agent.copilot{--logo:url("assets/agents/copilot.svg")}
+.agent.grok{--logo:url("assets/agents/grok.svg")}
+.agent.antigravity{--logo:url("assets/agents/antigravity.svg");--brand:#4285f4}
+.agent.kimi{--logo:url("assets/agents/kimi.svg");--brand:#6366f1}
+.agent.glm{--logo:url("assets/agents/glm.svg");--brand:#5d78e5}
+.agent.deepseek{--logo:url("assets/agents/deepseek.svg");--brand:#4d6bfe}
+.agent.qwen{--logo:url("assets/agents/qwen.svg");--brand:#8b5cf6}
+.agent.opencode{--logo:url("assets/agents/opencode.svg")}
+
+/* The strip of agents under the hero: quiet, monochrome until hovered */
+.logos{padding:56px 0 0}
+.logos h2{text-align:center;font:500 13.5px/1.4 var(--sans);letter-spacing:.02em;color:var(--text-3)}
+.logos ul{list-style:none;padding:0;margin:20px auto 0;display:flex;flex-wrap:wrap;justify-content:center;gap:10px 28px;max-width:960px}
+.logos li{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:500;color:var(--text-2)}
+.logos .agent i{width:auto;height:auto;border:0;background:none}
+.logos .agent i::before{width:20px;height:20px;background:var(--text-3);transition:background-color .2s}
+.logos li:hover i::before{background:var(--brand,var(--text))}
+.agent-guide{border-style:dashed;background:var(--bg-subtle);color:inherit;transition:border-color .15s,background-color .15s}
+.agent-guide:hover{border-color:var(--line-strong);background:var(--bg);text-decoration:none}
+.agent-guide h3{color:var(--text)}
+.agent-guide>p.sign-in{color:var(--accent)}
+
+/* Desktop downloads: one button, a menu of builds for each system */
+.download{position:relative}
+.download-button{min-width:212px}
+.download-button .chevron{margin-left:2px;opacity:.85;transition:transform .15s}
+.download-button[aria-expanded=true] .chevron{transform:rotate(180deg)}
+.download.linux .os-mac,.download.linux .for-mac,.download:not(.linux) .os-linux,.download:not(.linux) .for-linux{display:none}
+.download-list{position:absolute;z-index:20;top:calc(100% + 8px);left:0;min-width:100%;width:280px;padding:6px;border:1px solid var(--line);border-radius:16px;background:var(--bg);box-shadow:0 1px 2px rgb(15 23 42/.04),0 16px 40px -12px rgb(15 23 42/.22);text-align:left}
+.download-group+.download-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+.download-label{padding:8px 12px 4px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--text-3)}
+.download-list a{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:9px 12px;border-radius:10px;color:var(--text);font-size:14.5px}
+.download-list a strong{font-weight:500}
+.download-meta{font-size:13px;color:var(--text-3);white-space:nowrap}
+.download-list a:hover,.download-list a:focus-visible{background:var(--bg-hover);outline:none;text-decoration:none}
+.hero-note{margin-top:16px;text-align:center;font-size:13.5px;color:var(--text-3)}
 
 /* Statement */
 .statement{padding:112px 0 0}
@@ -197,9 +229,13 @@ html[lang^=zh] .hero h1{line-height:1.16}
   .hero h1 [lang=en] br{display:none}
   .hero-actions{flex-direction:column;align-items:stretch;width:100%;max-width:360px}
   .install{justify-content:space-between}
+  .download-button{width:100%}
+  .download-list{width:100%}
   .install code{font-size:15px}
   .demo{margin-top:44px}
   .statement{padding:72px 0 0}
+  .logos{padding-top:40px}
+  .logos ul{gap:10px 20px}
   .section{padding:80px 0}
   .section-head{margin-bottom:44px}
   .feature h3{font-size:28px}

@@ -46,7 +46,7 @@ describe("Git snapshots", () => {
     expect(f.repo.rev("HEAD")).toBe(head);
     expect(fs.readFileSync(path.join(f.root, ".git/index"))).toEqual(index);
   });
-  it("reads missing files, privately commits added/deleted files and exports", () => {
+  it("reads missing files, privately commits added/deleted files and exports", async () => {
     const head = f.repo.rev("HEAD");
     expect(f.repo.blobs(head, ["paper/main.tex", "missing", "paper"])).toEqual({
       "paper/main.tex": Buffer.from(MAIN),
@@ -69,15 +69,15 @@ describe("Git snapshots", () => {
     ]);
     expect(f.repo.rev("HEAD")).toBe(head);
     const out = path.join(f.base, "export");
-    f.repo.export(head, "paper", out);
+    await f.repo.export(head, "paper", out);
     expect(fs.readFileSync(path.join(out, "main.tex"), "utf8")).toBe(MAIN);
   });
-  it("rejects escaping exported symlinks", () => {
+  it("rejects escaping exported symlinks", async () => {
     fs.symlinkSync("../../outside", path.join(f.root, "paper/link"));
     const rev = f.repo.snapshot(["paper"]);
-    expect(() =>
+    await expect(
       f.repo.export(rev, "paper", path.join(f.base, "export")),
-    ).toThrow("outside");
+    ).rejects.toThrow("outside");
   });
   it.each(["../x", "/etc/passwd", ".git/config"])(
     "rejects unsafe path %s",

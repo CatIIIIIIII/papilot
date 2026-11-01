@@ -17,6 +17,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     permissions:
       contents: write # the GitHub release
       id-token: write # npm trusted publishing
@@ -68,3 +70,12 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" --title "$(cat "$RUNNER_TEMP/title.txt")" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag --latest
           fi
+
+  desktop:
+    needs: release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/desktop.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    secrets: inherit

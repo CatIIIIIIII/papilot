@@ -4,6 +4,26 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **Open local paper folders in place.** In the desktop app, choose or drag in a folder and only its path is used: there are no upload size or file count limits, and existing configuration and main files are detected without scanning caches or reference material. Importing keeps the author's `.latex-review.json` unchanged unless the main file or engine changes. ZIP imports still create a separate copy.
+- **Compilation as fast as latexmk in the paper's folder.** Each build continues from the previous one: unchanged files are cloned, latexmk keeps its auxiliary state and decides what to rerun, and a change to a file TeX does not read finishes in about two seconds without running TeX. On a 240 MB thesis, an edit now takes one XeLaTeX pass instead of a five-pass clean build, and opening or importing a paper continues from the author's own latexmk output when present. Working-tree snapshots rehash only changed files, large figures stream to disk, and opening a newly imported paper no longer compiles it again. **Recompile PDF** starts clean, and a build broken by leftover auxiliary files retries clean automatically. See [Compilation performance](docs/performance.md).
+- Collapsing the manuscript panel puts its expand button at the far right of the PDF toolbar and hides **Open PDF** until the panel returns.
+
+## [0.8.1] - 2026-11-01 — Desktop Apps and Agent Support
+
+Papilot 0.8.1 adds desktop apps for macOS and Linux, an editable demo paper, and support for Copilot and Grok. It also fixes saving accepted changes to the manuscript while preserving other work in progress.
+
+### Added
+
+- **macOS and Linux desktop apps.** Electron reuses Papilot's React interface and local server, bundling Node, npm, Codex and the review engine. Window controls blend into the sidebar without a separate title bar, and first launch includes an editable example paper with a prebuilt PDF. Native CI builds and tests Apple Silicon/Intel DMG/ZIP and Linux x64 AppImage/deb packages, attaching them to each version release. Branch builds provide downloadable installers and screenshots. Desktop data and updates are separate from the CLI installation.
+- **Grok Build CLI support.** Papilot connects through ACP with the CLI’s saved login or configured API credentials. It disables automatic approvals in new and restored sessions and supports streamed replies, tool approvals, images and model selection. Setup guidance and `papilot doctor` include Grok; use `PAPILOT_GROK_BIN` for a custom executable.
+- **GitHub Copilot CLI support.** Papilot detects `copilot` and connects through ACP using its local login or configured provider. Tasks support streamed replies, tool approvals, images and session recovery. Papilot selects Agent mode and turns off allow-all for each new or resumed session. Settings and `papilot doctor` include setup guidance; use `PAPILOT_COPILOT_BIN` for a custom CLI path.
+
+### Changed
+
+- Fix task saving: **Commit to manuscript** creates one task-only commit on the current manuscript branch; **Apply to workspace** leaves accepted edits uncommitted. Both update the manuscript, including tasks previously saved to task branches, while preserving unrelated staged and unstaged edits. Conflicts are resolved automatically by AI before PDF review, retaining the save action and commit message; AI asks the author only when the intended content is unclear. When a final passage includes earlier uncommitted edits, preview and confirm **Commit together** instead of receiving a Git error. Worktree details are collapsed under **Git details**.
+
 ## [0.8.0] - 2026-11-01 — AI Review and PDF Notes
 
 Papilot 0.8.0 adds AI reviews on task copies of your paper, with concise suggestions beside the relevant PDF passages. Keep selected suggestions on the main manuscript, write private reading notes, and decide which notes to send to an agent. This release also adds reference checks, more agents and a reorganized Settings interface.
@@ -29,7 +49,7 @@ Papilot 0.8.0 adds AI reviews on task copies of your paper, with concise suggest
 
 ### Changed
 
-- **Tasks stay available until you archive them.** Leaving a finished task or restarting Papilot keeps it in the task list, including AI reviews and conversations without manuscript edits. Completed reviews remain accessible after applying or committing their changes.
+- **Tasks stay available until you archive them.** Leaving a finished task or restarting Papilot keeps it in the task list, including AI reviews and conversations without manuscript edits. After applying or committing, the saved status offers **Archive**; it only archives when you click it, and the conversation and review remain available.
 - **Settings organized by purpose.** Appearance, notifications, sharing, updates, skills and runtime setup have dedicated pages. Agent details show availability and setup instructions, LaTeX settings show the detected installation, shortcuts have an interactive keyboard overview, and custom skills can choose their own icons.
 - **Quieter review navigation.** Indirect PDF changes start collapsed, with a preference to expand them. Scrolling and change navigation stay inside the review, and sending a task animates it into the sidebar while keeping the manuscript open.
 

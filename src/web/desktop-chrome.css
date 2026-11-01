@@ -1,0 +1,16 @@
+/* Window controls live in the sidebar; the existing content toolbar stays at
+   the very top. No second brand row or duplicated document title. */
+.desktop-window-drag{position:fixed;top:0;left:0;width:272px;height:46px;z-index:20;-webkit-app-region:drag;user-select:none}
+[data-desktop] .sidebar{position:relative;padding-top:46px}
+[data-desktop] .sidebar-header>.icon-button{position:absolute;top:7px;right:12px;z-index:21;-webkit-app-region:no-drag}
+.sidebar-collapsed .desktop-window-drag{width:92px}
+[data-desktop] .sidebar-collapsed .sidebar-toggle{margin-left:92px}
+[data-desktop] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar){-webkit-app-region:drag}
+[data-desktop] :is(button,a,input,select,textarea,[role="slider"],[role="combobox"]){-webkit-app-region:no-drag}
+.desktop-window-buttons{display:flex;gap:4px;padding:8px 12px;width:max-content}
+.desktop-window-buttons button{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;color:var(--text-2);-webkit-app-region:no-drag}
+.desktop-window-buttons button:hover{background:var(--bg-hover);color:var(--text)}
+.desktop-window-buttons .desktop-window-close:hover{background:var(--red-soft);color:var(--red)}
+.desktop-window-buttons svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.25}
+[data-desktop="linux"] .sidebar-collapsed .desktop-window-drag{width:112px}
+[data-desktop="linux"] .sidebar-collapsed .sidebar-toggle{margin-left:112px}

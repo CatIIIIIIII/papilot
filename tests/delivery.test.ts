@@ -38,7 +38,6 @@ test('isolated acceptance and undo preserve the manuscript; a task commit includ
     assert.equal(disk.repo.text(['log', '-1', '--format=%s', delivered.commit]), 'Explain the method');
     assert.equal(app.review.undoEntry(task.name), null, 'delivered decisions cannot be undone behind the destination');
     assert.deepEqual(app.delivery.deliver(task.name, 'branch', 'Retry'), delivered);
-    assert.throws(() => app.delivery.deliver(task.name, 'workspace'), /original destination/);
     disk.edit(task, METHOD, 'Method sentence 7.', 'Next round sentence.');
     const next = fakeRound(app, task.name);
     decide(app, task.name, next);

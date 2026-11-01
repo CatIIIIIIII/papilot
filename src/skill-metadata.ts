@@ -40,6 +40,6 @@ export function setSkillMetadata(content: string, field: 'name' | 'description' 
   return `${bom}---${newline}${next.join(newline)}${newline}---${closingNewline}${source.slice(header[0].length)}`;
 }
 export function setSkillInstructions(content: string, body: string) {
-  const { bom, source, header, newline } = parts(content);
+  const { bom, header, newline } = parts(content);
   return header ? `${bom}${header[0]}${header[0].endsWith('\n') ? '' : newline}${body}` : `${bom}${body}`;
 }

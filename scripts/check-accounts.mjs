@@ -28,7 +28,7 @@ const papers = ['Thesis', 'Grant'].map(name => {
 });
 
 // No agent can run here, so tasks stay queued and nothing edits the papers.
-const env = { ...process.env, PAPILOT_DATA: path.join(root, 'data'), PAPILOT_PORT: String(port), PAPILOT_ACCOUNT_PORT: String(accountPort), PAPILOT_ACCOUNT_ORIGIN: publicOrigin, PAPILOT_CODEX_BIN: path.join(root, 'no-codex'), PAPILOT_AGY_BIN: path.join(root, 'no-agy'), PAPILOT_KIMI_BIN: path.join(root, 'no-kimi'), PAPILOT_QWEN_BIN: path.join(root, 'no-qwen'), PAPILOT_DSH_BIN: path.join(root, 'no-dsh'), PAPILOT_OPENCODE_BIN: path.join(root, 'no-opencode'), CURSOR_API_KEY: '', ZHIPU_API_KEY: '', ZAI_API_KEY: '', PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_TAILSCALE_LOGIN: '' };
+const env = { ...process.env, PAPILOT_DATA: path.join(root, 'data'), PAPILOT_PORT: String(port), PAPILOT_ACCOUNT_PORT: String(accountPort), PAPILOT_ACCOUNT_ORIGIN: publicOrigin, PAPILOT_CODEX_BIN: path.join(root, 'no-codex'), PAPILOT_AGY_BIN: path.join(root, 'no-agy'), PAPILOT_KIMI_BIN: path.join(root, 'no-kimi'), PAPILOT_COPILOT_BIN: path.join(root, 'no-copilot'), PAPILOT_GROK_BIN: path.join(root, 'no-grok'), PAPILOT_QWEN_BIN: path.join(root, 'no-qwen'), PAPILOT_DSH_BIN: path.join(root, 'no-dsh'), PAPILOT_OPENCODE_BIN: path.join(root, 'no-opencode'), CURSOR_API_KEY: '', ZHIPU_API_KEY: '', ZAI_API_KEY: '', PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_TAILSCALE_LOGIN: '' };
 for (const key of Object.keys(env)) if (key.startsWith('ANTHROPIC_') || key.startsWith('CLAUDE_CODE_')) delete env[key];
 const server = spawn(process.execPath, ['--import', 'tsx', 'src/server/main.ts'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = ''; server.stdout.on('data', chunk => { output += chunk; }); server.stderr.on('data', chunk => { output += chunk; });

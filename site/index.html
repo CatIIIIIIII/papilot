@@ -7,10 +7,11 @@
 <script>
 // The page's languages, in menu order. ?lang= or a saved choice wins; otherwise
 // the first language the browser prefers that the page has, else English.
-const LANGS = { en: 'English', 'zh-CN': '简体中文', 'zh-Hant': '繁體中文' };
+// Traditional Chinese is not Simplified Chinese, so it falls through.
+const LANGS = { en: 'English', 'zh-CN': '简体中文' };
 function supportedLang(tag) {
   tag = String(tag || '').toLowerCase();
-  if (tag.startsWith('zh')) { try { return new Intl.Locale(tag).maximize().script === 'Hant' ? 'zh-Hant' : 'zh-CN'; } catch { return null; } }
+  if (/^zh-(tw|hk|mo|hant)/.test(tag)) return null;
   return Object.keys(LANGS).find(code => tag === code.toLowerCase() || tag.split('-')[0] === code.split('-')[0].toLowerCase()) || null;
 }
 {
@@ -25,7 +26,6 @@ function supportedLang(tag) {
 <link rel="canonical" href="https://papilot.ai/">
 <link rel="alternate" hreflang="en" href="https://papilot.ai/?lang=en">
 <link rel="alternate" hreflang="zh-CN" href="https://papilot.ai/?lang=zh-CN">
-<link rel="alternate" hreflang="zh-Hant" href="https://papilot.ai/?lang=zh-Hant">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Papilot">
 <meta property="og:title" content="Papilot · A Cursor-like workspace for your papers">
@@ -75,6 +75,27 @@ function supportedLang(tag) {
     <h1><span lang="en">A Cursor-like workspace<br> for your papers</span><span lang="zh-CN">像 Cursor 一样<br>改论文</span></h1>
     <p class="lede"><span lang="en">Annotate and review PDFs directly, without ever touching LaTeX.</span><span lang="zh-CN">直接在 PDF 上批注和审阅，完全不用碰 LaTeX。</span></p>
     <div class="hero-actions">
+      <div class="download">
+        <button class="button primary download-button" type="button" id="download-button" aria-haspopup="menu" aria-expanded="false" aria-controls="download-list">
+          <svg class="os-mac" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.33 1.9-3.45 1.99-3.5-1.08-1.59-2.77-1.8-3.37-1.83-1.43-.15-2.8.84-3.53.84-.73 0-1.85-.82-3.04-.8-1.56.02-3 .91-3.81 2.31-1.62 2.82-.42 6.99 1.17 9.27.77 1.12 1.7 2.38 2.91 2.33 1.17-.05 1.61-.75 3.02-.75 1.41 0 1.81.75 3.04.73 1.26-.02 2.05-1.14 2.82-2.26.89-1.3 1.25-2.55 1.27-2.62-.03-.01-2.44-.94-2.47-3.72ZM14.05 5.75c.64-.78 1.08-1.86.96-2.94-.93.04-2.05.62-2.71 1.4-.6.69-1.12 1.79-.98 2.85 1.03.08 2.09-.53 2.73-1.31Z"/></svg>
+          <svg class="os-linux" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>
+          <span class="for-mac"><span lang="en">Download for Mac</span><span lang="zh-CN">下载 Mac 版</span></span>
+          <span class="for-linux"><span lang="en">Download for Linux</span><span lang="zh-CN">下载 Linux 版</span></span>
+          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="download-list" id="download-list" role="menu" aria-labelledby="download-button" hidden>
+          <div class="download-group" data-os="mac" role="group" aria-labelledby="download-mac">
+            <p class="download-label" id="download-mac">macOS</p>
+            <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta"><span lang="en">M-series · .dmg</span><span lang="zh-CN">M 系列 · .dmg</span></span></a>
+            <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
+          </div>
+          <div class="download-group" data-os="linux" role="group" aria-labelledby="download-linux">
+            <p class="download-label" id="download-linux">Linux</p>
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
+          </div>
+        </div>
+      </div>
       <div class="install">
         <code><span class="prompt" aria-hidden="true">$</span> npm install -g papilot</code>
         <button class="copy" type="button" data-copy="npm install -g papilot" aria-label="Copy the install command" data-zh-aria-label="复制安装命令">
@@ -82,13 +103,30 @@ function supportedLang(tag) {
           <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
         </button>
       </div>
-      <a class="button primary" href="#start"><span lang="en">Get started</span><span lang="zh-CN">开始使用</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
-      </a>
     </div>
   </div>
+  <p class="wrap hero-note"><span lang="en">Version {{version}} · Free and open source ·</span><span lang="zh-CN">版本 {{version}} · 免费开源 ·</span> <a href="https://github.com/PapilotAI/papilot/releases/latest"><span lang="en">All downloads</span><span lang="zh-CN">全部下载</span></a></p>
   <div class="wrap">
     <!-- demo:hero -->
+  </div>
+</section>
+
+<section class="logos" aria-labelledby="logos-title">
+  <div class="wrap">
+    <h2 id="logos-title"><span lang="en">Works with the coding agents you already use</span><span lang="zh-CN">支持你已经在用的编程智能体</span></h2>
+    <ul>
+      <li class="agent codex"><i aria-hidden="true"></i>Codex</li>
+      <li class="agent claude"><i aria-hidden="true"></i>Claude</li>
+      <li class="agent cursor"><i aria-hidden="true"></i>Cursor</li>
+      <li class="agent copilot"><i aria-hidden="true"></i>GitHub Copilot</li>
+      <li class="agent grok"><i aria-hidden="true"></i>Grok</li>
+      <li class="agent antigravity"><i aria-hidden="true"></i>Antigravity</li>
+      <li class="agent kimi"><i aria-hidden="true"></i>Kimi</li>
+      <li class="agent glm"><i aria-hidden="true"></i>GLM</li>
+      <li class="agent deepseek"><i aria-hidden="true"></i>DeepSeek</li>
+      <li class="agent qwen"><i aria-hidden="true"></i>Qwen</li>
+      <li class="agent opencode"><i aria-hidden="true"></i>OpenCode</li>
+    </ul>
   </div>
 </section>
 
@@ -204,50 +242,65 @@ function supportedLang(tag) {
     </header>
     <div class="agents">
       <div class="agent-card">
-        <h3><span class="agent codex">Codex</span></h3>
+        <h3 class="agent codex"><i aria-hidden="true"></i>Codex</h3>
         <p><span lang="en">Runs through the Codex app server, in its workspace sandbox. Papilot uses your <code>codex</code> if you have one, or installs it on first start.</span><span lang="zh-CN">通过 Codex app server 在其工作区沙箱中运行。已装有 <code>codex</code> 就直接用，没有则在首次启动时自动安装。</span></p>
         <p class="sign-in"><span lang="en">Sign in once with <code>papilot codex login</code></span><span lang="zh-CN">用 <code>papilot codex login</code> 登录一次</span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent claude">Claude</span></h3>
+        <h3 class="agent claude"><i aria-hidden="true"></i>Claude</h3>
         <p><span lang="en">With Claude Code installed, runs <code>claude -p</code> on your own login, your Claude plan or a key, in Claude Code's sandbox. Without it, Papilot uses the Claude Agent SDK with an API key.</span><span lang="zh-CN">装了 Claude Code 时，用你自己的登录（Claude 订阅或密钥）运行 <code>claude -p</code>，在 Claude Code 的沙箱中工作；没装时通过 Claude Agent SDK 运行，需要 API 密钥。</span></p>
         <p class="sign-in"><span lang="en">Install Claude Code and run <code>claude auth login</code>, or start <code>papilot</code> with <code>ANTHROPIC_API_KEY</code> set</span><span lang="zh-CN">安装 Claude Code 并运行 <code>claude auth login</code>，或设置好 <code>ANTHROPIC_API_KEY</code> 再启动 <code>papilot</code></span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent cursor">Cursor</span></h3>
+        <h3 class="agent cursor"><i aria-hidden="true"></i>Cursor</h3>
         <p><span lang="en">Runs a local agent through the Cursor SDK, downloaded the first time, in Cursor's sandbox. The SDK does not use the Cursor app or CLI login.</span><span lang="zh-CN">通过 Cursor SDK 在本机运行，首次使用时下载，并在 Cursor 的沙箱中工作。该 SDK 不使用 Cursor 应用或 CLI 的登录。</span></p>
         <p class="sign-in"><span lang="en">Start <code>papilot</code> with <code>CURSOR_API_KEY</code> set</span><span lang="zh-CN">设置好 <code>CURSOR_API_KEY</code> 再启动 <code>papilot</code></span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent kimi">Kimi Code</span></h3>
+        <h3 class="agent copilot"><i aria-hidden="true"></i>GitHub Copilot</h3>
+        <p><span lang="en">Runs <code>copilot --acp --stdio</code> in Agent mode with allow-all turned off, so tools come to you for approval. Sessions resume after reconnecting.</span><span lang="zh-CN">以 Agent 模式运行 <code>copilot --acp --stdio</code>，并关闭 allow-all，工具操作都交给你审批；重新连接后可继续会话。</span></p>
+        <p class="sign-in"><span lang="en">Install the CLI with <code>npm install -g @github/copilot</code> and run <code>copilot login</code></span><span lang="zh-CN">用 <code>npm install -g @github/copilot</code> 安装 CLI，再运行 <code>copilot login</code></span></p>
+      </div>
+      <div class="agent-card">
+        <h3 class="agent grok"><i aria-hidden="true"></i>Grok</h3>
+        <p><span lang="en">Runs Grok Build through its official ACP interface with automatic approvals turned off. Replies and tool activity stream into the task.</span><span lang="zh-CN">通过 Grok Build 官方的 ACP 接口运行，并关闭自动审批；回复和工具操作实时显示在任务中。</span></p>
+        <p class="sign-in"><span lang="en">Install the <a href="https://x.ai/cli">Grok CLI</a> and run <code>grok login</code>, or set <code>XAI_API_KEY</code></span><span lang="zh-CN">安装 <a href="https://x.ai/cli">Grok CLI</a> 并运行 <code>grok login</code>，或设置 <code>XAI_API_KEY</code></span></p>
+      </div>
+      <div class="agent-card">
+        <h3 class="agent antigravity"><i aria-hidden="true"></i>Antigravity</h3>
+        <p><span lang="en">Runs <code>agy -p</code>, one process per turn, editing files only. If your region needs it, set <code>PAPILOT_AGY_PROXY</code>.</span><span lang="zh-CN">运行 <code>agy -p</code>，每轮一个进程，只编辑文件。所在地区需要代理时，设置 <code>PAPILOT_AGY_PROXY</code>。</span></p>
+        <p class="sign-in"><span lang="en">Install Antigravity and sign in to <code>agy</code></span><span lang="zh-CN">安装 Antigravity 并登录 <code>agy</code></span></p>
+      </div>
+      <div class="agent-card">
+        <h3 class="agent kimi"><i aria-hidden="true"></i>Kimi Code</h3>
         <p><span lang="en">Choose Kimi in Papilot to select a model, stream replies, attach images and approve tools. Conversations resume after a restart. Set <code>PAPILOT_KIMI_BIN</code> if the CLI is not on your server's PATH.</span><span lang="zh-CN">在 Papilot 中选择 Kimi，即可选择模型、接收流式回复、附带图片和审批工具操作。重启后可继续会话；服务找不到 CLI 时，设置 <code>PAPILOT_KIMI_BIN</code>。</span></p>
         <p class="sign-in"><span lang="en">Install <a href="https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started">Kimi Code CLI</a> and run <code>kimi login</code></span><span lang="zh-CN">安装 <a href="https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started">Kimi Code CLI</a>，运行 <code>kimi login</code></span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent glm">GLM</span></h3>
+        <h3 class="agent glm"><i aria-hidden="true"></i>GLM</h3>
         <p><span lang="en">Runs Claude Code on Zhipu's Anthropic-compatible endpoint, as Zhipu documents for GLM Coding Plan, with the GLM models in the menu.</span><span lang="zh-CN">按智谱为 GLM Coding Plan 给出的方式，让 Claude Code 连接智谱的 Anthropic 兼容接口，菜单中列出 GLM 模型。</span></p>
         <p class="sign-in"><span lang="en">Start <code>papilot</code> with <code>ZHIPU_API_KEY</code> (or <code>ZAI_API_KEY</code>) set</span><span lang="zh-CN">设置好 <code>ZHIPU_API_KEY</code>（或 <code>ZAI_API_KEY</code>）再启动 <code>papilot</code></span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent deepseek">DeepSeek</span></h3>
+        <h3 class="agent deepseek"><i aria-hidden="true"></i>DeepSeek</h3>
         <p><span lang="en">Runs <code>dsh acp</code> in its workspace sandbox. Anything outside the paper's worktree comes to you for approval.</span><span lang="zh-CN">通过 <code>dsh acp</code> 在其工作区沙箱中运行；论文工作树以外的操作会交给你审批。</span></p>
         <p class="sign-in"><span lang="en">Install <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> and set up a model in <code>dsh</code></span><span lang="zh-CN">安装 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>，并在 <code>dsh</code> 中配置好模型</span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent qwen">Qwen Code</span></h3>
+        <h3 class="agent qwen"><i aria-hidden="true"></i>Qwen Code</h3>
         <p><span lang="en">Runs <code>qwen --acp</code> in Auto Edit mode: edits go ahead, and commands come to you for approval.</span><span lang="zh-CN">以自动编辑模式运行 <code>qwen --acp</code>：改文件直接进行，运行命令需要你审批。</span></p>
         <p class="sign-in"><span lang="en">Install <a href="https://github.com/QwenLM/qwen-code">Qwen Code</a> and sign in by running <code>qwen</code></span><span lang="zh-CN">安装 <a href="https://github.com/QwenLM/qwen-code">Qwen Code</a>，运行 <code>qwen</code> 登录</span></p>
       </div>
       <div class="agent-card">
-        <h3><span class="agent opencode">OpenCode</span></h3>
+        <h3 class="agent opencode"><i aria-hidden="true"></i>OpenCode</h3>
         <p><span lang="en">Runs <code>opencode acp</code> with your providers and models. Commands and anything outside the worktree come to you for approval.</span><span lang="zh-CN">用你配置的服务商和模型运行 <code>opencode acp</code>；运行命令和工作树以外的操作需要你审批。</span></p>
         <p class="sign-in"><span lang="en">Install <a href="https://opencode.ai">OpenCode</a> and connect a provider with <code>opencode auth login</code></span><span lang="zh-CN">安装 <a href="https://opencode.ai">OpenCode</a>，用 <code>opencode auth login</code> 连接模型服务商</span></p>
       </div>
-      <div class="agent-card">
-        <h3><span class="agent antigravity">Antigravity</span></h3>
-        <p><span lang="en">Runs <code>agy -p</code>, one process per turn, editing files only. If your region needs it, set <code>PAPILOT_AGY_PROXY</code>.</span><span lang="zh-CN">运行 <code>agy -p</code>，每轮一个进程，只编辑文件。所在地区需要代理时，设置 <code>PAPILOT_AGY_PROXY</code>。</span></p>
-        <p class="sign-in"><span lang="en">Install Antigravity and sign in to <code>agy</code></span><span lang="zh-CN">安装 Antigravity 并登录 <code>agy</code></span></p>
-      </div>
+      <a class="agent-card agent-guide" href="https://github.com/PapilotAI/papilot/blob/main/docs/guide.md#agents">
+        <h3><span lang="en">Setting up an agent</span><span lang="zh-CN">配置智能体</span></h3>
+        <p><span lang="en">Requirements, models, permissions and environment variables for every agent are in the guide.</span><span lang="zh-CN">每个智能体的安装要求、模型、权限和环境变量，都写在指南里。</span></p>
+        <p class="sign-in"><span lang="en">Read the agent guide</span><span lang="zh-CN">阅读智能体指南（英文）</span> →</p>
+      </a>
     </div>
   </div>
 </section>
@@ -257,12 +310,12 @@ function supportedLang(tag) {
     <div class="start-text">
       <header class="section-head">
         <p class="eyebrow"><span lang="en">Quick start</span><span lang="zh-CN">快速开始</span></p>
-        <h2><span lang="en">Up and running in two commands</span><span lang="zh-CN">两条命令就能跑起来</span></h2>
+        <h2><span lang="en">Up and running in a minute</span><span lang="zh-CN">一分钟就能上手</span></h2>
       </header>
       <ol class="steps">
-        <li><span class="num">01</span><div><span lang="en"><strong>Install</strong> with npm. You need Node.js 22.22+, Git and a full TeX distribution (<a href="https://www.tug.org/mactex/">MacTeX</a> or <a href="https://www.tug.org/texlive/">TeX Live</a>).</span><span lang="zh-CN"><strong>用 npm 安装。</strong>需要 Node.js 22.22+、Git 和完整的 TeX 发行版（<a href="https://www.tug.org/mactex/">MacTeX</a> 或 <a href="https://www.tug.org/texlive/">TeX Live</a>）。</span></div></li>
-        <li><span class="num">02</span><div><span lang="en"><strong>Run the demo</strong> and open <code>127.0.0.1:7274</code>. It adds a 26-page LaTeX paper about Papilot itself, full of equations, to revise.</span><span lang="zh-CN"><strong>运行 demo</strong>，打开 <code>127.0.0.1:7274</code>。它会添加一篇讲 Papilot 本身的 26 页 LaTeX 论文供你修改，满是公式。</span></div></li>
-        <li><span class="num">03</span><div><span lang="en"><strong>Add your paper.</strong> Run <code>papilot</code> and choose <b>Add paper</b> for any LaTeX project in a Git repository.</span><span lang="zh-CN"><strong>添加你的论文。</strong>运行 <code>papilot</code>，选择 <b>Add paper</b>，即可添加任何放在 Git 仓库里的 LaTeX 项目。</span></div></li>
+        <li><span class="num">01</span><div><span lang="en"><strong>Install</strong> the desktop app for macOS or Linux, or the CLI with npm (Node.js 22.22+). Either way you need Git and a full TeX distribution (<a href="https://www.tug.org/mactex/">MacTeX</a> or <a href="https://www.tug.org/texlive/">TeX Live</a>).</span><span lang="zh-CN"><strong>安装。</strong>下载 macOS 或 Linux 桌面版，或用 npm 安装命令行版（需要 Node.js 22.22+）。两种方式都需要 Git 和完整的 TeX 发行版（<a href="https://www.tug.org/mactex/">MacTeX</a> 或 <a href="https://www.tug.org/texlive/">TeX Live</a>）。</span></div></li>
+        <li><span class="num">02</span><div><span lang="en"><strong>Open the example paper.</strong> The desktop app shows a 26-page LaTeX paper about Papilot itself on first launch. With the CLI, run the demo and open <code>127.0.0.1:7274</code>.</span><span lang="zh-CN"><strong>打开示例论文。</strong>桌面版首次启动就会打开一篇讲 Papilot 本身的 26 页 LaTeX 论文；命令行版运行 demo，再打开 <code>127.0.0.1:7274</code>。</span></div></li>
+        <li><span class="num">03</span><div><span lang="en"><strong>Add your paper.</strong> Choose <b>Add paper</b>, then pick or drag in a LaTeX folder, or import a ZIP from Overleaf.</span><span lang="zh-CN"><strong>添加你的论文。</strong>选择<b>添加论文</b>，选择或拖入 LaTeX 文件夹，也可以导入 Overleaf 的 ZIP。</span></div></li>
       </ol>
     </div>
     <div class="terminal">
@@ -300,8 +353,9 @@ function supportedLang(tag) {
     <a class="brand" href="./"><img class="brand-mark" src="assets/logo.svg" alt="" width="22" height="22">Papilot</a>
     <nav aria-label="Links" data-zh-aria-label="链接">
       <a href="https://github.com/cu1ch3n/papilot">GitHub</a>
+      <a href="https://github.com/PapilotAI/papilot/releases/latest"><span lang="en">Downloads</span><span lang="zh-CN">下载</span></a>
       <a href="https://www.npmjs.com/package/papilot">npm</a>
-      <a href="https://github.com/cu1ch3n/papilot#readme" data-zh-href="https://github.com/cu1ch3n/papilot/blob/main/README.zh-CN.md" data-hant-href="https://github.com/cu1ch3n/papilot/blob/main/README.zh-Hant.md">README</a>
+      <a href="https://github.com/cu1ch3n/papilot#readme" data-zh-href="https://github.com/cu1ch3n/papilot/blob/main/README.zh-CN.md">README</a>
       <a href="https://github.com/cu1ch3n/papilot/blob/main/docs/guide.md"><span lang="en">Guide</span><span lang="zh-CN">指南</span></a>
     </nav>
     <p>MIT © 2026 PapilotAI</p>
@@ -320,7 +374,7 @@ for (const button of document.querySelectorAll('[data-copy]')) {
 // Each language sits in its own lang="…" spans, and the stylesheet shows the
 // one matching <html lang>. Attributes can't hold two languages, so their
 // Chinese waits in data-zh-* until it is chosen.
-const titles = { en: document.title, 'zh-CN': 'Papilot · 像 Cursor 一样改论文', 'zh-Hant': document.querySelector('title').dataset.hantTitle };
+const titles = { en: document.title, 'zh-CN': 'Papilot · 像 Cursor 一样改论文' };
 const menu = document.querySelector('.lang-menu'), menuButton = document.getElementById('lang-button'), list = document.getElementById('lang-list');
 function setLanguage(lang) {
   document.documentElement.lang = lang;
@@ -328,7 +382,7 @@ function setLanguage(lang) {
   for (const name of ['alt', 'aria-label', 'title', 'href', 'content']) {
     for (const element of document.querySelectorAll(`[data-zh-${name}]`)) {
       if (!element.hasAttribute(`data-en-${name}`)) element.setAttribute(`data-en-${name}`, element.getAttribute(name));
-      element.setAttribute(name, element.getAttribute(`data-${lang === 'zh-Hant' ? 'hant' : lang === 'zh-CN' ? 'zh' : 'en'}-${name}`) || element.getAttribute(`data-en-${name}`));
+      element.setAttribute(name, element.getAttribute(`data-${lang === 'zh-CN' ? 'zh' : 'en'}-${name}`));
     }
   }
   for (const item of list.children) item.setAttribute('aria-checked', String(item.dataset.setLang === lang));
@@ -365,6 +419,37 @@ list.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => { if (!menu.contains(event.target)) closeMenu(); });
 setLanguage(document.documentElement.lang);
 menu.hidden = false;
+
+// The download menu leads with this computer's system, and on a Mac whose
+// browser reports an Intel processor, with the Intel build.
+const download = document.querySelector('.download'), downloadButton = document.getElementById('download-button'), downloads = document.getElementById('download-list');
+const linux = /Linux|X11/.test(navigator.userAgent) && !/Android|CrOS/.test(navigator.userAgent);
+download.classList.add(linux ? 'linux' : 'mac');
+if (linux) downloads.prepend(downloads.querySelector('[data-os=linux]'));
+navigator.userAgentData?.getHighEntropyValues?.(['architecture']).then(({ architecture }) => {
+  const mac = downloads.querySelector('[data-os=mac]');
+  if (architecture === 'x86' && /Mac/.test(navigator.platform)) mac.insertBefore(mac.querySelector('[data-arch=x86]'), mac.querySelector('[data-arch=arm]'));
+}).catch(() => {});
+const downloadItems = () => [...downloads.querySelectorAll('[role=menuitem]')];
+function openDownloads() {
+  downloads.hidden = false; downloadButton.setAttribute('aria-expanded', 'true');
+  downloadItems()[0].focus();
+}
+function closeDownloads(focus) {
+  if (downloads.hidden) return;
+  downloads.hidden = true; downloadButton.setAttribute('aria-expanded', 'false');
+  if (focus) downloadButton.focus();
+}
+downloadButton.addEventListener('click', () => downloads.hidden ? openDownloads() : closeDownloads());
+downloadButton.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); openDownloads(); } });
+downloads.addEventListener('keydown', event => {
+  const items = downloadItems(), at = items.indexOf(document.activeElement);
+  if (event.key === 'Escape') { event.preventDefault(); closeDownloads(true); }
+  else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(at + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+  else if (event.key === 'Tab') closeDownloads();
+});
+downloads.addEventListener('click', () => closeDownloads());
+document.addEventListener('pointerdown', event => { if (!download.contains(event.target)) closeDownloads(); });
 
 const topbar = document.querySelector('.topbar');
 const edge = () => topbar.classList.toggle('scrolled', scrollY > 8);

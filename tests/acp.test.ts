@@ -125,6 +125,23 @@ test('Kimi resumes persisted IDs after restart and ignores replayed history', { 
   } finally { f.agent.close(); }
 });
 
+test('Kimi changes model and effort on the same session for the next turn', { timeout: 5000 }, async () => {
+  const f = fixture();
+  try {
+    await f.agent.start(); const id = await thread(f.agent);
+    await run(f.agent, id, { effort: 'high' });
+    await run(f.agent, id, { effort: 'low' });
+    await run(f.agent, id);
+    assert.equal(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'thinking').at(-1).params.value, 'high', 'model default clears the previous low override');
+    const before = f.calls.length;
+    assert.equal((await run(f.agent, id, { model: 'kimi/k2', effort: 'low' })).status, 'completed');
+    const calls = f.calls.slice(before);
+    assert.deepEqual(calls.filter(call => call.method === 'session/set_config_option').map(call => [call.params.sessionId, call.params.configId, call.params.value]), [[id, 'model', 'kimi/k2'], [id, 'thinking', 'low']]);
+    assert.equal(calls.find(call => call.method === 'session/prompt').params.prompt[0].text, 'Fix it.');
+    assert.ok(!calls.some(call => ['session/new', 'session/load'].includes(call.method)));
+  } finally { f.agent.close(); }
+});
+
 test('Kimi forwards approvals and only selects one-time grants or denials', { timeout: 5000 }, async () => {
   for (const decision of ['accept', 'decline', 'cancel']) {
     const f = fixture((m, rpc) => {
@@ -244,7 +261,8 @@ for (const [answer, optionId] of [['Model', 'model'], ['Skip', 'skip']]) {
 
 // A fake ACP agent for any profile: initialize, session/new with the given
 // session result, and prompts answered by onPrompt.
-function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES], session: any, onPrompt: (message: any, rpc: ReturnType<typeof peer>) => void) {
+function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES], session: any, onPrompt: (message: any, rpc: ReturnType<typeof peer>) => void,
+  capabilities = { sessionCapabilities: { resume: {}, close: {} } } as any, authMethods: string[] = [], authError = false) {
   const calls: any[] = [], launches: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
   let serial = 0, rpc!: ReturnType<typeof peer>;
   const launch = (_binary: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
@@ -253,8 +271,9 @@ function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES],
       calls.push(message);
       if (!message.method) return;
       const { id, method, params } = message;
-      if (method === 'initialize') rpc.reply(id, { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {}, close: {} } } });
-      else if (method === 'session/new' || method === 'session/resume') rpc.reply(id, { sessionId: params.sessionId || `session-${++serial}`, ...structuredClone(session) });
+      if (method === 'initialize') rpc.reply(id, { protocolVersion: 1, agentCapabilities: capabilities, authMethods: authMethods.map(id => ({ id })) });
+      else if (method === 'authenticate' && authError) rpc.send({ id, error: { code: -32000, message: 'Authentication required' } });
+      else if (method === 'session/new' || method === 'session/resume' || method === 'session/load') rpc.reply(id, { sessionId: params.sessionId || `session-${++serial}`, ...structuredClone(session) });
       else if (method === 'session/prompt') onPrompt(message, rpc);
       else if (method === 'session/set_config_option') rpc.reply(id, { configOptions: session.configOptions?.map((option: any) => option.id === params.configId ? { ...option, currentValue: params.value } : option) });
       else if (id !== undefined) rpc.reply(id, {});
@@ -267,6 +286,96 @@ function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES],
   agent.on('request', message => requests.push(message));
   return { agent, calls, launches, notifications, requests, rpc: () => rpc };
 }
+
+// Copilot CLI 1.0.105 advertises URI mode IDs and a separate allow_all option.
+// An empty catalog is valid (observed with a working local BYOK provider).
+const copilotSession = {
+  modes: { currentModeId: 'https://agentclientprotocol.com/protocol/session-modes#autopilot', availableModes: ['agent', 'plan', 'autopilot'].map(mode => ({ id: `https://agentclientprotocol.com/protocol/session-modes#${mode}` })) },
+  configOptions: [{ id: 'allow_all', category: 'permissions', currentValue: 'on', options: [{ value: 'on', name: 'On' }, { value: 'off', name: 'Off' }] }],
+};
+const copilotCapabilities = { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { close: {} } };
+
+test('Copilot pins agent mode and manual approvals on new and resumed sessions, with CLI-owned models', { timeout: 5000 }, async () => {
+  const session = { ...copilotSession, configOptions: [...copilotSession.configOptions,
+    { id: 'model', category: 'model', currentValue: 'model-a', options: [{ value: 'model-a', name: 'Model A' }, { value: 'model-b', name: 'Model B' }] },
+    { id: 'reasoning_effort', category: 'thought_level', currentValue: 'high', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }] },
+  ] };
+  const f = profileFixture(ACP_PROFILES.copilot, session, (m, rpc) => {
+    rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done.' } });
+    rpc.reply(m.id, { stopReason: 'end_turn' });
+  }, copilotCapabilities);
+  const previous = { COPILOT_ALLOW_ALL: process.env.COPILOT_ALLOW_ALL, COPILOT_ASSISTED_APPROVAL: process.env.COPILOT_ASSISTED_APPROVAL };
+  Object.assign(process.env, { COPILOT_ALLOW_ALL: 'true', COPILOT_ASSISTED_APPROVAL: 'true' });
+  try {
+    await f.agent.start();
+    assert.deepEqual(f.launches[0].args, ['--acp', '--stdio', '--no-auto-update']);
+    assert.equal(f.launches[0].env.COPILOT_ALLOW_ALL, 'false');
+    assert.equal(f.launches[0].env.COPILOT_ASSISTED_APPROVAL, 'false');
+    assert.equal(f.calls.some(call => call.method === 'session/prompt'), false);
+    assert.ok(f.calls.some(call => call.method === 'session/close'));
+    const models = (await f.agent.request('model/list')).data;
+    assert.deepEqual(models.map((model: any) => [model.model, model.isDefault]), [['model-a', true], ['model-b', false]]);
+    assert.deepEqual(models[0].supportedReasoningEfforts, [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }]);
+    const { thread } = await f.agent.request('thread/start', { cwd: '/paper', model: 'model-a', developerInstructions: 'Only edit this paper.' });
+    assert.equal((await run(f.agent, thread.id, { effort: 'low' })).status, 'completed');
+    f.agent.close(); await f.agent.start();
+    await f.agent.request('thread/resume', { threadId: thread.id, cwd: '/paper', model: 'model-b' });
+    assert.equal((await run(f.agent, thread.id)).status, 'completed');
+    assert.ok(f.calls.some(call => call.method === 'session/load' && call.params.sessionId === thread.id));
+    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_mode').map(call => call.params.modeId), Array(2).fill('https://agentclientprotocol.com/protocol/session-modes#agent'));
+    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'allow_all').map(call => call.params.value), ['off', 'off']);
+    assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'reasoning_effort' && call.params.value === 'low'));
+    assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'model' && call.params.value === 'model-b'));
+    assert.equal(f.calls.filter(call => call.method === 'session/prompt').at(-1).params.prompt[0].text, 'Fix it.');
+  } finally {
+    f.agent.close();
+    for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+});
+
+test('Copilot works without a model catalog, forwards approvals and images, and cancels pending permissions', { timeout: 5000 }, async () => {
+  const f = profileFixture(ACP_PROFILES.copilot, copilotSession, (m, rpc) => {
+    rpc.send({ id: `permission-${m.id}`, method: 'session/request_permission', params: { sessionId: m.params.sessionId,
+      toolCall: { toolCallId: 'command', kind: 'execute', title: 'Build the paper', rawInput: { command: 'latexmk main.tex' } },
+      options: [{ optionId: 'once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'always', name: 'Always allow', kind: 'allow_always' }, { optionId: 'no', name: 'Deny', kind: 'reject_once' }] } });
+  }, copilotCapabilities);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-copilot-image-'));
+  const file = path.join(dir, 'image.png');
+  fs.writeFileSync(file, Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'));
+  try {
+    await f.agent.start();
+    assert.deepEqual((await f.agent.request('model/list')).data, []);
+    const { thread } = await f.agent.request('thread/start', { cwd: '/paper' });
+    for (const decision of ['accept', 'decline', 'cancel']) {
+      const done = completion(f.agent), requested = new Promise<any>(resolve => f.agent.once('request', resolve));
+      const { turn } = await f.agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Build.' }, { type: 'localImage', path: file }] });
+      const request = await requested;
+      assert.equal(request.method, 'item/commandExecution/requestApproval');
+      assert.equal(request.params.command, 'latexmk main.tex');
+      const prompt = f.calls.filter(call => call.method === 'session/prompt').at(-1);
+      assert.equal(prompt.params.prompt[1].mimeType, 'image/png');
+      if (decision === 'cancel') await f.agent.request('turn/interrupt', { turnId: turn.id });
+      else f.agent.respond(request.id, { decision });
+      await tick();
+      assert.deepEqual(f.calls.find(call => call.id === `permission-${prompt.id}` && !call.method).result.outcome,
+        decision === 'cancel' ? { outcome: 'cancelled' } : { outcome: 'selected', optionId: decision === 'accept' ? 'once' : 'no' });
+      f.rpc().update(thread.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done.' } });
+      f.rpc().reply(prompt.id, { stopReason: decision === 'cancel' ? 'cancelled' : 'end_turn' });
+      assert.equal((await done).status, decision === 'cancel' ? 'interrupted' : 'completed');
+    }
+    assert.ok(f.calls.some(call => call.method === 'session/cancel'));
+    assert.ok(f.notifications.some(n => n.method === 'serverRequest/resolved'));
+  } finally { f.agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Copilot refuses versions without a way to disable automatic approvals', { timeout: 5000 }, async () => {
+  const f = profileFixture(ACP_PROFILES.copilot, { ...copilotSession, configOptions: [] }, () => {}, copilotCapabilities);
+  try {
+    await assert.rejects(f.agent.start(), /required allow_all setting.*copilot login/);
+    assert.equal(f.agent.ready, false);
+    assert.equal(f.calls.some(call => call.method === 'session/prompt'), false);
+  } finally { f.agent.close(); }
+});
 
 test('OpenCode is set to its build mode option and asked to request approval before commands', { timeout: 5000 }, async () => {
   const session = { configOptions: [
@@ -383,4 +492,95 @@ test('empty and whitespace-only text chunks never become empty messages', { time
     const messages = f.notifications.filter(n => n.method === 'item/completed' && n.params.item.type === 'agentMessage').map(n => n.params.item.text);
     assert.deepEqual(messages, [' Done.']);
   } finally { f.agent.close(); }
+});
+
+// Grok Build 1.0.70 advertises no session modes. Its permission defaults
+// are overridden through session metadata, including load/resume requests.
+const grokSession = {
+  configOptions: [
+    { id: 'model', category: 'model', currentValue: 'grok-test', options: [{ value: 'grok-test', name: 'Grok test' }] },
+    { id: 'reasoning_effort', category: 'thought_level', currentValue: 'high', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }] },
+  ],
+};
+const grokCapabilities = { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { resume: {}, close: {} } };
+
+for (const methods of [['grok.com', 'cached_token'], ['grok.com', 'cached_token', 'xai.api_key'], ['xai.api_key']]) {
+  test(`Grok authenticates with available local credentials (${methods.join(', ')}) and restores manual permissions`, { timeout: 5000 }, async () => {
+    const f = profileFixture(ACP_PROFILES.grok, grokSession, (m, rpc) => {
+      rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done.' } });
+      rpc.reply(m.id, { stopReason: 'end_turn' });
+    }, grokCapabilities, methods);
+    try {
+      await f.agent.start();
+      assert.deepEqual(f.launches[0].args, ['--no-auto-update', 'agent', '--no-leader', 'stdio']);
+      assert.deepEqual(f.calls.find(call => call.method === 'authenticate').params, { methodId: methods.includes('xai.api_key') ? 'xai.api_key' : 'cached_token', _meta: { headless: true } });
+      assert.ok(f.calls.findIndex(call => call.method === 'authenticate') < f.calls.findIndex(call => call.method === 'session/new'));
+      assert.equal(f.calls.some(call => call.method === 'session/prompt'), false, 'discovery must not generate');
+      const models = (await f.agent.request('model/list')).data;
+      assert.equal(models[0].model, 'grok-test');
+      assert.deepEqual(models[0].supportedReasoningEfforts, [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }]);
+      const { thread } = await f.agent.request('thread/start', { cwd: '/paper', model: 'grok-test', developerInstructions: 'Only edit this paper.' });
+      assert.equal((await run(f.agent, thread.id, { effort: 'low' })).status, 'completed');
+      f.agent.close(); await f.agent.start();
+      await f.agent.request('thread/resume', { threadId: thread.id, cwd: '/paper' });
+      assert.equal((await run(f.agent, thread.id)).status, 'completed');
+      assert.equal(f.calls.filter(call => call.method === 'authenticate').length, 2);
+      assert.ok(f.calls.some(call => call.method === 'session/resume' && call.params.sessionId === thread.id));
+      for (const call of f.calls.filter(call => ['session/new', 'session/resume'].includes(call.method))) {
+        assert.deepEqual(call.params._meta, { yoloMode: false, autoMode: false });
+      }
+      assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'reasoning_effort' && call.params.value === 'low'));
+    } finally { f.agent.close(); }
+  });
+}
+
+test('Grok rejects missing or failed authentication before creating any session', { timeout: 5000 }, async () => {
+  for (const [methods, failure] of [[['grok.com', 'oidc'], false], [[], false], [['cached_token'], true]] as [string[], boolean][]) {
+    const f = profileFixture(ACP_PROFILES.grok, grokSession, () => {}, grokCapabilities, methods, failure);
+    try {
+      await assert.rejects(f.agent.start(), failure ? /Authentication required.*grok login/ : /no saved login.*grok login/);
+      assert.equal(f.agent.ready, false);
+      assert.equal(f.calls.some(call => call.method === 'session/new'), false);
+      if (!failure) assert.equal(f.calls.some(call => call.method === 'authenticate'), false, 'never start browser login');
+    } finally { f.agent.close(); }
+  }
+});
+
+test('Grok forwards file edits and images, denies commands, cancels permissions and falls back to session/load', { timeout: 5000 }, async () => {
+  const f = profileFixture(ACP_PROFILES.grok, {}, (m, rpc) => {
+    const edit = m.params.prompt[0].text.endsWith('Edit.');
+    const tool = { toolCallId: String(m.id), kind: edit ? 'edit' : 'execute', title: edit ? 'Edit main.tex' : 'Run check', rawInput: edit ? { file_path: '/paper/main.tex' } : { command: 'latexmk main.tex' }, status: 'pending' };
+    rpc.update(m.params.sessionId, { sessionUpdate: 'tool_call', ...tool });
+    rpc.send({ id: `permission-${m.id}`, method: 'session/request_permission', params: { sessionId: m.params.sessionId, toolCall: tool,
+      options: [{ optionId: 'always', kind: 'allow_always' }, { optionId: 'once', kind: 'allow_once' }, { optionId: 'no', kind: 'reject_once' }] } });
+  }, { ...grokCapabilities, sessionCapabilities: { close: {} } }, ['xai.api_key']);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-grok-image-'));
+  const file = path.join(dir, 'image.png');
+  fs.writeFileSync(file, Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'));
+  try {
+    await f.agent.start();
+    assert.deepEqual((await f.agent.request('model/list')).data, []);
+    const { thread } = await f.agent.request('thread/start', { cwd: '/paper' });
+    for (const decision of ['accept', 'decline', 'cancel']) {
+      const done = completion(f.agent), requested = new Promise<any>(resolve => f.agent.once('request', resolve));
+      const { turn } = await f.agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: decision === 'accept' ? 'Edit.' : 'Build.' }, { type: 'localImage', path: file }] });
+      const request = await requested;
+      assert.equal(request.method, decision === 'accept' ? 'item/fileChange/requestApproval' : 'item/commandExecution/requestApproval');
+      const prompt = f.calls.filter(call => call.method === 'session/prompt').at(-1);
+      assert.equal(prompt.params.prompt[1].mimeType, 'image/png');
+      if (decision === 'cancel') await f.agent.request('turn/interrupt', { turnId: turn.id });
+      else f.agent.respond(request.id, { decision });
+      await tick();
+      assert.deepEqual(f.calls.find(call => call.id === `permission-${prompt.id}` && !call.method).result.outcome,
+        decision === 'cancel' ? { outcome: 'cancelled' } : { outcome: 'selected', optionId: decision === 'accept' ? 'once' : 'no' });
+      f.rpc().update(thread.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done.' } });
+      f.rpc().reply(prompt.id, { stopReason: decision === 'cancel' ? 'cancelled' : 'end_turn' });
+      assert.equal((await done).status, decision === 'cancel' ? 'interrupted' : 'completed');
+    }
+    assert.ok(f.notifications.some(n => n.method === 'serverRequest/resolved'));
+    assert.ok(f.notifications.some(n => n.params.item?.type === 'fileChange'));
+    f.agent.close(); await f.agent.start();
+    await f.agent.request('thread/resume', { threadId: thread.id, cwd: '/paper' });
+    assert.deepEqual(f.calls.find(call => call.method === 'session/load').params._meta, { yoloMode: false, autoMode: false });
+  } finally { f.agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

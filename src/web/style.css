@@ -234,7 +234,9 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .pdf-modes>button:focus-visible{position:relative;outline-offset:1px}
 @container (max-width:620px){.pdf-modes>button{width:32px;padding:0}.pdf-modes>button>span{display:none}}
 .review-lead{min-height:44px;display:flex;align-items:center;gap:4px;padding-left:8px;flex-shrink:0}
-.manuscript-lead{display:flex;align-items:center;justify-content:space-between;height:46px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
+/* Before the first PDF exists, use the same toolbar sizing and responsive
+   modes as the viewer. Only the section spacer grows, never the icon gaps. */
+.manuscript-lead{container-type:inline-size}
 .review-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:24px;text-align:center;color:var(--text-2);font-size:14px;line-height:1.6;overflow:auto;background:var(--canvas)}
 .review-loading p{max-width:340px}
 .review-placeholder{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px;overflow:auto;text-align:center;color:var(--text-2)}

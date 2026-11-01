@@ -4,13 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium } from '../vendor/latex-review/node_modules/playwright/index.mjs';
+import { chromium, webkit } from '../vendor/latex-review/node_modules/playwright/index.mjs';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('_site') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const origin = `http://127.0.0.1:${server.server.address().port}`;
-const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
+const browser = process.env.PAPILOT_BROWSER_ENGINE === 'webkit'
+  ? await webkit.launch({ headless: true })
+  : await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
 const errors = [], requests = [];
 fs.mkdirSync('test-results/site', { recursive: true });
 try {
@@ -93,10 +95,10 @@ try {
   // toolbar, scaled uniformly. No mobile mini-layout or internal scrollbars.
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
-    for (const [lang, name] of [['en', 'English'], ['zh-CN', '简体中文'], ['zh-Hant', '繁體中文']]) {
+    for (const lang of ['EN', '中文']) {
       await page.locator('#lang-button').click();
-      await page.getByRole('menuitemradio', { name, exact: true }).click();
-      assert.equal(await page.evaluate(() => document.documentElement.lang), lang);
+      await page.getByRole('menuitemradio', { name: lang === 'EN' ? 'English' : '简体中文', exact: true }).click();
+      assert.equal(await page.evaluate(() => document.documentElement.lang), lang === 'EN' ? 'en' : 'zh-CN');
       await show(hero);
       const geometry = await hero.evaluate(el => {
         const panel = el.querySelector('[data-scene]:not([hidden])');
@@ -110,13 +112,35 @@ try {
       assert.ok(Math.abs(geometry.ratio - 1000 / 740) < 0.01);
       assert.ok(Math.abs(geometry.pane - 0.34) < 0.002);
       assert.ok(Math.abs(geometry.toolbar - 0.046) < 0.002);
+      // The demo controls must scale and center together, including at phone
+      // widths where a text glyph's line box used to exceed its checkbox.
+      for (const kind of ['annotate', 'review', 'read', 'commit']) {
+        const root = page.locator(`#demo-${kind}`);
+        const controls = await root.evaluate(el => [...el.querySelectorAll('.page-nav,.file-check,.note-check')].map(control => {
+          const box = control.getBoundingClientRect();
+          const glyph = control.querySelector('svg')?.getBoundingClientRect();
+          return { name: control.className, width: box.width, height: box.height, glyph: glyph && {
+            width: glyph.width, height: glyph.height,
+            dx: glyph.x + glyph.width / 2 - box.x - box.width / 2,
+            dy: glyph.y + glyph.height / 2 - box.y - box.height / 2,
+          } };
+        }));
+        for (const control of controls) {
+          const label = `${kind} ${control.name} at ${width}px (${lang})`;
+          assert.ok(control.glyph?.width > 0 && control.glyph?.height > 0, `${label}: visible vector icon`);
+          assert.ok(Math.abs(control.glyph.dx) < 0.1 && Math.abs(control.glyph.dy) < 0.1, `${label}: centered icon`);
+          assert.ok(control.glyph.width < control.width && control.glyph.height < control.height, `${label}: icon fits inside control`);
+          if (control.name.includes('check')) assert.ok(Math.abs(control.width - control.height) < 0.1, `${label}: square checkbox`);
+        }
+      }
       const scrollports = await page.evaluate(() => [...document.querySelectorAll('.ui-demo, .ui-demo *')].filter(el => {
         const s = getComputedStyle(el);
         return /^(auto|scroll)$/.test(s.overflowX) || /^(auto|scroll)$/.test(s.overflowY);
       }).map(el => el.className));
       assert.deepEqual(scrollports, []);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang}.png` });
+      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang === 'EN' ? 'en' : 'zh'}.png` });
+      if (width === 390) await page.locator('#demo-commit').screenshot({ animations: 'disabled', path: `test-results/site/commit-mobile-${lang === 'EN' ? 'en' : 'zh'}.png` });
     }
   }
   // Reduced motion removes animation, while the film still advances without
@@ -135,7 +159,7 @@ try {
   await staticPage.locator('#demo-hero').screenshot({ animations: 'disabled', path: 'test-results/site/no-js-mobile.png' });
   await noJs.close();
   // The browser's first supported language is shown; a saved choice wins.
-  for (const [locale, expected] of [['zh-CN', 'zh-CN'], ['zh-Hans', 'zh-CN'], ['zh-Hant', 'zh-Hant'], ['fr-FR', 'en'], ['en-GB', 'en']]) {
+  for (const [locale, expected] of [['zh-CN', 'zh-CN'], ['zh-SG', 'zh-CN'], ['zh-TW', 'en'], ['fr-FR', 'en'], ['en-GB', 'en']]) {
     const context = await browser.newContext({ locale });
     const visitor = await context.newPage();
     await visitor.goto(origin);

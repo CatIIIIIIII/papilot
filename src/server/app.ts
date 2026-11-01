@@ -255,12 +255,20 @@ export async function buildApp(options: AppOptions) {
     return serialGit(task.projectId, () => workspace.commitTask(task.id, string(b.message, 'Commit message', 5000), b.push === true));
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/apply', task, request => {
-    const task = store.task(request.params.id);
-    return serialGit(task.projectId, () => workspace.deliverTask(task.id, 'workspace'));
+    const task = store.task(request.params.id), b = (request.body || {}) as any;
+    if (b.mode !== undefined && b.mode !== 'workspace' && b.mode !== 'commit') throw new Error('Invalid save action.');
+    return serialGit(task.projectId, () => workspace.applyTask(task.id, b.keepCurrent === true, b.mode === 'commit' ? { message: string(b.message, 'Commit message', 5000), ...(b.confirmation ? { confirmation: string(b.confirmation, 'Commit confirmation', 100) } : {}) } : undefined));
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/commit-message', task, request => {
     const task = store.task(request.params.id);
     return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: task.agent, fresh: (request.body as any)?.fresh === true });
+  });
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/model', task, request => {
+    const b = (request.body || {}) as Record<string, unknown>;
+    if (Object.keys(b).some(key => !['model', 'effort', 'serviceTier'].includes(key))) throw new Error('Only the model and its settings can be changed.');
+    if (b.model !== undefined && (typeof b.model !== 'string' || b.model.length > 200)) throw new Error('Invalid model.');
+    if (b.effort !== undefined && b.effort !== '' && !effort(b.effort)) throw new Error('Invalid reasoning effort.');
+    return workspace.updateTaskModel(request.params.id, { ...(b.model !== undefined ? { model: b.model as string } : {}), ...(b.effort !== undefined ? { effort: b.effort as string } : {}), ...(b.serviceTier !== undefined ? { serviceTier: string(b.serviceTier, 'Service tier', 64) } : {}) });
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/rename', task, request => workspace.renameTask(request.params.id, string((request.body as any).title, 'Task title', 120)));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/title', task, request => workspace.requestTaskTitle(request.params.id));
@@ -518,7 +526,6 @@ export async function buildApp(options: AppOptions) {
             if (task) {
               store.updateTask(task.id, { error: null });
               await workspace.refresh(task.id);
-              void workspace.prepareCommitMessage(task.id);
             }
           }
           return rewriteReviewJson(value, prefix);

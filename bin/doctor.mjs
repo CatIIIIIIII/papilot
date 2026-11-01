@@ -38,7 +38,7 @@ function executable(command, env = process.env) {
 function agentExecutable(command) {
   if (command.includes('/') || command.includes('\\')) return executable(command);
   const home = process.env.HOME || os.homedir();
-  const dirs = ['.local/bin', '.claude/local', '.kimi-code/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)).concat('/opt/homebrew/bin', '/usr/local/bin');
+  const dirs = ['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)).concat('/opt/homebrew/bin', '/usr/local/bin');
   return executable(command) || executable(command, { PATH: dirs.join(path.delimiter) });
 }
 function command(file, args, options = {}) {
@@ -178,15 +178,17 @@ export async function doctor(args) {
     return process.env[variable] ? `${variable} does not resolve to a runnable executable in Papilot's environment.`
       : `${command} was not found on the PATH or in the standard agent folders available to Papilot. It may be installed for a different user or shell.`;
   }
-  async function acpCheck(id, name, bin, help, install, update) {
+  async function acpCheck(id, name, bin, help, install, update, supported = /\bACP\b|Agent Client Protocol/i) {
     const file = agentExecutable(process.env[bin.env] || bin.name);
     if (!file) { check(`agent.${id}`, false, 'info', missingAgent(bin.name, bin.env), `${install}. If already installed, correct ${bin.env} or the server PATH, then restart Papilot.`); return false; }
     const result = await command(file, help);
-    const ready = result.ok && /\bACP\b|Agent Client Protocol/i.test(result.stdout + '\n' + result.stderr);
+    const ready = result.ok && supported.test(result.stdout + '\n' + result.stderr);
     check(`agent.${id}`, ready, 'warn', `${file}: ${ready ? 'ACP command available; login and generation were not tested' : result.reason || 'ACP command unavailable'}.`, `${update} Set ${bin.env} if needed.`);
     return ready;
   }
   const kimiCheck = () => acpCheck('kimi', 'Kimi CLI', { env: 'PAPILOT_KIMI_BIN', name: 'kimi' }, ['acp', '--help'], 'Install Kimi Code CLI and run kimi login', 'Update Kimi Code CLI and run kimi login.');
+  const copilotCheck = () => acpCheck('copilot', 'GitHub Copilot CLI', { env: 'PAPILOT_COPILOT_BIN', name: 'copilot' }, ['--help'], 'Install GitHub Copilot CLI with npm install -g @github/copilot and run copilot login', 'Update GitHub Copilot CLI and run copilot login.');
+  const grokCheck = () => acpCheck('grok', 'Grok Build CLI', { env: 'PAPILOT_GROK_BIN', name: 'grok' }, ['--no-auto-update', 'agent', '--no-leader', 'stdio', '--help'], 'Install Grok Build CLI from https://x.ai/cli and run grok login or configure XAI_API_KEY', 'Update Grok Build CLI and run grok login or configure XAI_API_KEY.', /Usage:\s+grok agent stdio\b/i);
   const qwenCheck = () => acpCheck('qwen', 'Qwen Code', { env: 'PAPILOT_QWEN_BIN', name: 'qwen' }, ['--help'], 'Install Qwen Code and sign in by running qwen once', 'Update Qwen Code and sign in by running qwen once.');
   const deepseekCheck = () => acpCheck('deepseek', 'DeepSeek Harness (dsh)', { env: 'PAPILOT_DSH_BIN', name: 'dsh' }, ['acp', '--help'], 'Install DeepSeek Harness with npm install -g @deepseek-ai/dsh and set up a model in dsh', 'Update DeepSeek Harness and set up a model in dsh.');
   const opencodeCheck = () => acpCheck('opencode', 'OpenCode', { env: 'PAPILOT_OPENCODE_BIN', name: 'opencode' }, ['acp', '--help'], 'Install OpenCode and connect a provider with opencode auth login', 'Update OpenCode and connect a provider with opencode auth login.');
@@ -203,7 +205,7 @@ export async function doctor(args) {
     check('agent.glm', Boolean(configured && sdk), configured ? 'warn' : 'info', !configured ? 'ZHIPU_API_KEY or ZAI_API_KEY is not set, so Papilot does not offer GLM.' : sdk ? `GLM key configured for ${process.env.ZHIPU_API_KEY ? 'open.bigmodel.cn' : 'api.z.ai'} (not validated).` : 'GLM key configured; the Claude Agent SDK that runs GLM is installed on first use.', !configured ? 'Start Papilot with ZHIPU_API_KEY (open.bigmodel.cn) or ZAI_API_KEY (api.z.ai) set to your GLM Coding Plan or API key.' : 'Start papilot and choose GLM once to install the Claude Agent SDK.');
     return configured;
   }
-  const agents = await Promise.all([codexCheck(), claudeCheck(), cursorCheck(), agyCheck(), kimiCheck(), glmCheck(), deepseekCheck(), qwenCheck(), opencodeCheck()]);
+  const agents = await Promise.all([codexCheck(), claudeCheck(), cursorCheck(), copilotCheck(), grokCheck(), agyCheck(), kimiCheck(), glmCheck(), deepseekCheck(), qwenCheck(), opencodeCheck()]);
   check('agents', agents.some(Boolean), 'warn', agents.some(Boolean) ? 'At least one agent passed its configuration check; live editing was not tested.' : 'No agent passed its configuration check. PDF reading can still be used with a working TeX installation.', 'Configure one agent before starting editing tasks.');
 
   if (repo) {
@@ -279,7 +281,7 @@ export async function doctor(args) {
     }
   }
   // Keep reports stable even though independent probes finish in any order.
-  const order = ['node', 'dependencies', 'frontend', 'review-engine', 'data', 'git', 'latexmk', 'synctex', 'tex-engines', 'agent.codex', 'agent.claude', 'agent.cursor', 'agent.antigravity', 'agent.kimi', 'agent.glm', 'agent.deepseek', 'agent.qwen', 'agent.opencode', 'agents', 'project', 'project.git', 'project.head', 'project.main', 'project.engine', 'project.worktrees', 'remote', 'server', 'service', 'service.tools', 'service.data'];
+  const order = ['node', 'dependencies', 'frontend', 'review-engine', 'data', 'git', 'latexmk', 'synctex', 'tex-engines', 'agent.codex', 'agent.claude', 'agent.cursor', 'agent.copilot', 'agent.grok', 'agent.antigravity', 'agent.kimi', 'agent.glm', 'agent.deepseek', 'agent.qwen', 'agent.opencode', 'agents', 'project', 'project.git', 'project.head', 'project.main', 'project.engine', 'project.worktrees', 'remote', 'server', 'service', 'service.tools', 'service.data'];
   checks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   const report = { name: 'Papilot', version: pkg.version, ok: !checks.some(item => !item.ok && item.severity === 'error'), checks };
   if (json) console.log(JSON.stringify(report, null, 2));
