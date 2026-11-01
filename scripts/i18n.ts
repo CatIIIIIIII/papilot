@@ -114,7 +114,14 @@ async function main() {
       let batch = selected.slice(start, start + batchSize), feedback = '';
       for (let attempt = 0; batch.length && attempt < 3; attempt++) {
         console.log(`Translating ${batch.length} messages with ${values.model} (${completed}/${selected.length} saved${attempt ? `, retry ${attempt}` : ''})…`);
-        const response = await translateWithAgy(translationPrompt(batch, locale, config) + feedback, batch.length, values.model);
+        let response;
+        try { response = await translateWithAgy(translationPrompt(batch, locale, config) + feedback, batch.length, values.model); }
+        catch (error) {
+          if (!(error as Error).message.startsWith('Invalid translation JSON:') || attempt === 2) throw error;
+          console.warn((error as Error).message);
+          feedback = '\nThe last response was not valid JSON. Return exactly one valid JSON object, without surrounding text or extra objects.';
+          continue;
+        }
         let validated;
         try { validated = validateResponse(batch, response); }
         catch (error) { feedback = `\nThe last response was invalid: ${(error as Error).message} Return exactly one entry per input ID.`; if (attempt === 2) throw error; continue; }
@@ -122,6 +129,7 @@ async function main() {
           const issue = scopeValidation(scope, source, text);
           if (issue) { validated.accepted.delete(source); validated.errors.set(source, issue); }
         }
+        for (const [source, issue] of validated.errors) console.warn(`Rejected ${JSON.stringify(source.slice(0, 160))}: ${issue}`);
         for (const message of batch) {
           const text = validated.accepted.get(message.source);
           if (text === undefined) continue;

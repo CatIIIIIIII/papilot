@@ -16,6 +16,9 @@
       "scopeInstructions": {
         "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
         "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "<strong>Add your paper.</strong> Choose <b>Add paper</b>, then pick or drag in a LaTeX folder, or import a ZIP from Overleaf.": "Editorial feedback: use 你 rather than 您 consistently with the rest of the Simplified Chinese homepage. Keep the heading and instructions natural and concise."
       }
     },
     "zh-Hant": {
@@ -54,7 +57,10 @@
         "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
       },
       "messageInstructions": {
-        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase 組版済みの変更前後として返され is awkward and obscures the comparison. Explain naturally that the user sees a comparison of the typeset pages before and after each change and can accept or reject it. Preserve the full meaning, product names and professional tone."
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase 組版済みの変更前後として返され is awkward and obscures the comparison. Explain naturally that the user sees a comparison of the typeset pages before and after each change and can accept or reject it. Preserve the full meaning, product names and professional tone.",
+        "Install Claude Code and run <code>claude auth login</code>, or start <code>papilot</code> with <code>ANTHROPIC_API_KEY</code> set": "Editorial feedback: avoid the awkward repeated を construction. Use natural Japanese word order, describing the environment variable setting before starting the command where appropriate. Inline code fragments may move within the sentence, but preserve their contents exactly and retain all instructions.",
+        "Start <code>papilot</code> with <code>CURSOR_API_KEY</code> set": "Editorial feedback: avoid the awkward repeated を construction. Use natural Japanese word order, describing the environment variable setting before starting the command where appropriate. Inline code fragments may move within the sentence, but preserve their contents exactly and retain all instructions.",
+        "Start <code>papilot</code> with <code>ZHIPU_API_KEY</code> (or <code>ZAI_API_KEY</code>) set": "Editorial feedback: avoid the awkward repeated を construction. Use natural Japanese word order, describing the environment variable setting before starting the command where appropriate. Inline code fragments may move within the sentence, but preserve their contents exactly and retain all instructions."
       }
     },
     "ko": {
@@ -91,6 +97,9 @@
       "scopeInstructions": {
         "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
         "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: avoid the unnatural phrase das LaTeX. Refer naturally to the LaTeX source (LaTeX-Quelltext) and explain that each change is shown as a typeset before-and-after comparison. Keep the professional Sie register and preserve all meaning and product names."
       }
     },
     "fr": {
@@ -127,6 +136,9 @@
       "scopeInstructions": {
         "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
         "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase that each change comes back as a before-and-after sounds unnatural. Explain directly and idiomatically that the agent edits the LaTeX source and the user sees a comparison of typeset pages before and after each change, then accepts or rejects it. Preserve the full meaning, product names, and the register used in the rest of the homepage."
       }
     },
     "pt": {
@@ -145,6 +157,9 @@
       "scopeInstructions": {
         "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
         "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase that each change comes back as a before-and-after sounds unnatural. Explain directly and idiomatically that the agent edits the LaTeX source and the user sees a comparison of typeset pages before and after each change, then accepts or rejects it. Preserve the full meaning, product names, and the register used in the rest of the homepage."
       }
     },
     "it": {
@@ -163,6 +178,9 @@
       "scopeInstructions": {
         "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
         "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase that each change comes back as a before-and-after sounds unnatural. Explain directly and idiomatically that the agent edits the LaTeX source and the user sees a comparison of typeset pages before and after each change, then accepts or rejects it. Preserve the full meaning, product names, and the register used in the rest of the homepage."
       }
     },
     "sv": {

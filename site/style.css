@@ -250,3 +250,6 @@ html:is([lang=zh-CN],[lang=zh-Hant],[lang=ja],[lang=ko]) .hero h1{line-height:1.
 .lang-list{max-height:calc(100dvh - 90px);overflow-y:auto;z-index:30}
 .lang-list>a:hover{text-decoration:none}
 .no-js-languages{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 16px;padding:16px}
+
+/* Respect Japanese line-start restrictions in the display headline. */
+html[lang=ja] .hero h1{overflow-wrap:normal;line-break:strict}

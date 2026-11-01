@@ -141,6 +141,11 @@ try {
       }).map(el => el.className));
       assert.deepEqual(scrollports, []);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      if (width === 1440) {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s', lang);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+      }
       if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang}.png` });
       if (width === 390) await page.locator('#demo-commit').screenshot({ animations: 'disabled', path: `test-results/site/commit-mobile-${lang}.png` });
     }
@@ -216,7 +221,7 @@ try {
       }
       await page.screenshot({ animations: 'disabled', path: `test-results/site/${locale}-${width}-download.png` });
       await page.keyboard.press('Escape');
-      await page.locator('#agents').screenshot({ animations: 'disabled', path: `test-results/site/${locale}-${width}-agents.png` });
+      await page.locator('#agents').screenshot({ animations: 'disabled', style: '.topbar{visibility:hidden!important}', path: `test-results/site/${locale}-${width}-agents.png` });
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await show(hero);
       assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s');

@@ -30,7 +30,7 @@ export function scopeValidation(scope: Scope, source: string, translated: string
     const code = (text: string) => scope === 'site'
       ? [...text.matchAll(/<code[^>]*>([\s\S]*?)<\/code>/g)].map(match => match[1])
       : [...text.matchAll(/(?<!`)`([^`\n]+)`(?!`)/g)].map(match => match[1]);
-    if (JSON.stringify(code(source)) !== JSON.stringify(code(translated))) return 'Inline code changed';
+    if (JSON.stringify(code(source).sort()) !== JSON.stringify(code(translated).sort())) return 'Inline code changed';
     for (const name of ['Papilot', 'Codex', 'Claude', 'Cursor', 'GitHub Copilot', 'Grok', 'Antigravity', 'Kimi', 'GLM', 'DeepSeek', 'Qwen', 'OpenCode', 'LaTeX', 'SyncTeX', 'Git']) {
       const count = (text: string) => (text.match(new RegExp(`(?<![A-Za-z])${name}(?![A-Za-z])`, 'g')) || []).length;
       if (count(source) !== count(translated)) return `Product name changed: ${name}`;

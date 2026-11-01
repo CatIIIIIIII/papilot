@@ -1,4 +1,4 @@
-import { parse, serialize, serializeOuter, parseFragment } from 'parse5';
+import { parse, serialize, parseFragment } from 'parse5';
 
 function visit(node, fn) {
   fn(node);

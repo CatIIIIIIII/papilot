@@ -27,6 +27,7 @@ export async function translateWithAgy(prompt: string, count: number, model: str
     ], { cwd, env, timeout: 315_000, maxBuffer: 4 * 1024 * 1024 });
     return decodeAgyResponse(stdout);
   } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(`Invalid translation JSON: ${error.message}`);
     const failure = error as Error & { stdout?: string; stderr?: string };
     let detail = failure.stderr?.trim().split('\n').find(line => line.startsWith('error:')) || failure.message.split('\n')[0];
     if (failure.stdout) {

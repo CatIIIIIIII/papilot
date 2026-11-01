@@ -29,7 +29,7 @@ const names = JSON.parse(fs.readFileSync(path.join(root, 'i18n/languages.json'),
 const locales = ['en', ...Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'i18n/config.json'), 'utf8')).locales)];
 if (JSON.stringify(Object.keys(names)) !== JSON.stringify(locales)) throw new Error('Website languages must match the App configuration.');
 const urlFor = locale => site + (locale === 'en' ? '' : `${locale}/`);
-const ogLocales = { en: 'en_US', 'zh-CN': 'zh_CN', 'zh-Hant': 'zh_TW', ja: 'ja_JP', ko: 'ko_KR', de: 'de_DE', fr: 'fr_FR', es: 'es_ES', pt: 'pt_PT', it: 'it_IT', sv: 'sv_SE' };
+const ogLocales = { en: 'en_US', 'zh-CN': 'zh_CN', 'zh-Hant': 'zh_TW', ja: 'ja_JP', ko: 'ko_KR', de: 'de_DE', fr: 'fr_FR', es: 'es_ES', pt: 'pt_BR', it: 'it_IT', sv: 'sv_SE' };
 const alternates = locales.map(locale => `<link rel="alternate" hreflang="${locale}" href="${urlFor(locale)}">`).join('\n') + `\n<link rel="alternate" hreflang="x-default" href="${site}">`;
 const expanded = source.replace(/<!-- demo:(\w+) -->/g, (_, kind) => renderDemo(kind));
 for (const locale of locales) {
