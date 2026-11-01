@@ -399,6 +399,7 @@ kbd {
   mix-blend-mode: multiply;
 }
 .side::after {
+  content: attr(aria-label);
   position: absolute;
   top: 4px;
   right: 8px;
@@ -409,19 +410,8 @@ kbd {
   opacity: 0.9;
   pointer-events: none;
 }
-.side.before::after {
-  content: "before";
-}
 .side.after::after {
-  content: "after";
   color: var(--after-edge);
-}
-/* :where keeps the original weight, so later rules still hide the labels. */
-:where(:lang(zh-CN)) .side.before::after {
-  content: "修改前";
-}
-:where(:lang(zh-CN)) .side.after::after {
-  content: "修改后";
 }
 .side.after.identical::after,
 .change[data-resolved] .side::after {

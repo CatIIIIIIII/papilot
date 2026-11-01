@@ -1,28 +1,26 @@
 import { useSyncExternalStore } from 'react';
 import { browserStorage } from './storage.ts';
-import { zhCN } from './zh-CN.ts';
+import { LANGUAGES, supportedLanguage, singularCount, interpolateMessage, type Language } from '../../vendor/latex-review/src/locales.ts';
+import { messages, errorMessages } from './locales/index.ts';
+export { LANGUAGES, type Language };
 
-// The interface reads in English or Simplified Chinese. The English text is
+// The interface uses English source messages and generated locale catalogs. The English text is
 // the message key, so a string without a translation still reads correctly.
 // Text the agent receives (prompts, note locations) stays in English.
-export type Language = 'en' | 'zh-CN';
 export type LanguageChoice = Language | 'system';
-export const LANGUAGES: { id: Language; name: string }[] = [{ id: 'en', name: 'English' }, { id: 'zh-CN', name: '简体中文' }];
 const key = 'papilot:language';
-const messages: Record<Language, Record<string, string>> = { en: {}, 'zh-CN': zhCN };
 
 // The first browser language Papilot speaks wins; outside a browser (tests) it is English.
 export function browserLanguage(languages: readonly string[] = typeof window === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language]): Language {
   for (const tag of languages) {
-    const lower = tag.toLowerCase();
-    if (lower.startsWith('zh')) return 'zh-CN';
-    if (lower.startsWith('en')) return 'en';
+    const supported = supportedLanguage(tag);
+    if (supported) return supported;
   }
   return 'en';
 }
 function savedChoice(): LanguageChoice {
   const value = browserStorage.getItem(key);
-  return value === 'en' || value === 'zh-CN' ? value : 'system';
+  return supportedLanguage(value) || 'system';
 }
 
 let state = { choice: savedChoice(), language: 'en' as Language };
@@ -45,17 +43,20 @@ export function setLanguage(choice: LanguageChoice) {
 }
 export const language = () => state.language;
 // Dates and numbers follow the interface language.
-export const locale = () => state.language === 'zh-CN' ? 'zh-CN' : 'en-US';
+export const locale = () => state.language;
 export function useLanguage() {
   return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => state);
 }
 
 // t('Delete {name}?', { name }) fills {placeholders} after translating.
 export function t(text: string, values?: Record<string, string | number>) {
-  const template = messages[state.language][text] ?? text;
-  return values ? template.replace(/\{(\w+)\}/g, (match, name: string) => name in values ? String(values[name]) : match) : template;
+  const template = Object.hasOwn(messages[state.language], text) ? messages[state.language][text] : text;
+  return interpolateMessage(template, state.language, values);
 }
-// English picks between one and other by count; {n} is the count.
+export function errorText(text: string) {
+  return Object.hasOwn(errorMessages[state.language], text) ? errorMessages[state.language][text] : t(text);
+}
+// Select the count form using the active locale; {n} is the count.
 export function tn(count: number, one: string, other: string, values?: Record<string, string | number>) {
-  return t(count === 1 ? one : other, { n: count, ...values });
+  return t(singularCount(state.language, count) ? one : other, { n: count, ...values });
 }

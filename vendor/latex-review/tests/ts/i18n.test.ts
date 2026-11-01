@@ -1,6 +1,8 @@
 import { it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { zhCN } from "../../src/web/zh-CN.ts";
+import { messages } from "../../src/web/locales/index.ts";
+import { LANGUAGES } from "../../src/locales.ts";
 import { STATUS } from "../../src/web/overview.tsx";
 import { STATE } from "../../src/web/model.ts";
 import { pageLanguage } from "../../src/web/i18n.ts";
@@ -41,8 +43,21 @@ it("translates every viewer string into Simplified Chinese", () => {
 });
 
 it("reads the language from the page address only", () => {
-  expect(pageLanguage("?task=a&lang=zh-CN")).toBe("zh-CN");
-  expect(pageLanguage("?lang=zh")).toBe("zh-CN");
+  expect(pageLanguage("?task=a&lang=zh-CN")).toBe("zh-Hans");
+  expect(pageLanguage("?lang=zh")).toBe("zh-Hans");
   expect(pageLanguage("?task=a")).toBe("en");
-  expect(pageLanguage("?lang=fr")).toBe("en");
+  expect(pageLanguage("?lang=fr")).toBe("fr");
+  expect(pageLanguage("?lang=zh-Hant")).toBe("zh-Hant");
+  expect(pageLanguage("?lang=zh-Hans")).toBe("zh-Hans");
+  for (const { id } of LANGUAGES) expect(pageLanguage(`?lang=${id}`)).toBe(id);
+});
+
+it("translates every review message into every supported language with intact placeholders", () => {
+  const all = keys();
+  for (const { id } of LANGUAGES) {
+    if (id === 'en') continue;
+    const dictionary = messages[id];
+    expect(all.filter(key => !Object.hasOwn(dictionary, key)), id).toEqual([]);
+    for (const key of all) expect(placeholders(dictionary[key]), `${id}: ${key}`).toEqual(placeholders(key));
+  }
 });

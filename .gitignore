@@ -9,3 +9,4 @@ vendor/latex-review/node_modules
 vendor/latex-review/dist/
 vendor/latex-review/.cache/
 test-results/
+i18n/state/*.lock

@@ -1,0 +1,144 @@
+{
+  "locales": {
+    "zh-CN": {
+      "name": "Simplified Chinese",
+      "instructions": "Use concise, natural Simplified Chinese UI wording. Put spaces around Latin words and numbers when appropriate.",
+      "glossary": {
+        "paper": "论文",
+        "manuscript": "论文原稿",
+        "review": "审阅",
+        "note": "批注",
+        "task": "任务",
+        "agent": "智能体",
+        "worktree": "工作树",
+        "skill": "技能"
+      }
+    },
+    "zh-Hant": {
+      "name": "Traditional Chinese",
+      "instructions": "Use natural Traditional Chinese wording. Keep UI labels concise. Put spaces around Latin words and numbers when appropriate.",
+      "glossary": {
+        "paper": "論文",
+        "manuscript": "論文原稿",
+        "review": "審閱",
+        "note": "註解",
+        "task": "任務",
+        "agent": "智慧代理",
+        "worktree": "工作樹",
+        "skill": "技能"
+      }
+    },
+    "ja": {
+      "name": "Japanese",
+      "instructions": "Use natural, concise Japanese suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "論文",
+        "manuscript": "原稿",
+        "review": "レビュー",
+        "note": "注釈",
+        "task": "タスク",
+        "agent": "エージェント",
+        "worktree": "作業ツリー",
+        "skill": "スキル"
+      }
+    },
+    "ko": {
+      "name": "Korean",
+      "instructions": "Use natural, concise Korean suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "논문",
+        "manuscript": "원고",
+        "review": "검토",
+        "note": "주석",
+        "task": "작업",
+        "agent": "에이전트",
+        "worktree": "작업 트리",
+        "skill": "스킬"
+      }
+    },
+    "de": {
+      "name": "German",
+      "instructions": "Use natural, concise German suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "Artikel",
+        "manuscript": "Manuskript",
+        "review": "Überprüfung",
+        "note": "Anmerkung",
+        "task": "Aufgabe",
+        "agent": "Agent",
+        "worktree": "Arbeitsbaum",
+        "skill": "Skill"
+      }
+    },
+    "fr": {
+      "name": "French",
+      "instructions": "Use natural, concise French suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "article",
+        "manuscript": "manuscrit",
+        "review": "révision",
+        "note": "annotation",
+        "task": "tâche",
+        "agent": "agent",
+        "worktree": "arbre de travail",
+        "skill": "compétence"
+      }
+    },
+    "es": {
+      "name": "Spanish",
+      "instructions": "Use natural, concise Spanish suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "artículo",
+        "manuscript": "manuscrito",
+        "review": "revisión",
+        "note": "anotación",
+        "task": "tarea",
+        "agent": "agente",
+        "worktree": "árbol de trabajo",
+        "skill": "habilidad"
+      }
+    },
+    "pt": {
+      "name": "Portuguese",
+      "instructions": "Use natural, concise Portuguese suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "artigo",
+        "manuscript": "manuscrito",
+        "review": "revisão",
+        "note": "anotação",
+        "task": "tarefa",
+        "agent": "agente",
+        "worktree": "árvore de trabalho",
+        "skill": "habilidade"
+      }
+    },
+    "it": {
+      "name": "Italian",
+      "instructions": "Use natural, concise Italian suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "articolo",
+        "manuscript": "manoscritto",
+        "review": "revisione",
+        "note": "annotazione",
+        "task": "attività",
+        "agent": "agente",
+        "worktree": "albero di lavoro",
+        "skill": "abilità"
+      }
+    },
+    "sv": {
+      "name": "Swedish",
+      "instructions": "Use natural, concise Swedish suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "artikel",
+        "manuscript": "manuskript",
+        "review": "granskning",
+        "note": "anteckning",
+        "task": "uppgift",
+        "agent": "agent",
+        "worktree": "arbetskatalog",
+        "skill": "färdighet"
+      }
+    }
+  }
+}

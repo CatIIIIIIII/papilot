@@ -16,7 +16,7 @@ type Load = <T>(route: string, body?: unknown) => Promise<T>;
 const online = () => browserStorage.getItem('latex-review:references') !== 'off';
 const SOURCE: Record<string, string> = { doi: 'doi.org', crossref: 'Crossref', dblp: 'DBLP', arxiv: 'arXiv' };
 const fieldName = (field: string) => ({ title: t('Title'), author: t('Authors'), year: t('Year'), doi: 'DOI', arxiv: 'arXiv' } as Record<string, string>)[field] || field;
-const gap = () => (language() === 'zh-CN' ? '' : ' ');
+const gap = () => (language().startsWith('zh') ? '' : ' ');
 const where = (place: { file: string; line: number; section?: string | null }) => `${place.section ? place.section + ' · ' : ''}${place.file}:${place.line}`;
 const value = (entry: BibliographyEntry, name: string) => { const field = entry.fields.find(f => f.name === name); return field ? field.resolved ?? field.value : ''; };
 // Titles and names as they read, without TeX's braces.
