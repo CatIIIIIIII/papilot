@@ -93,10 +93,10 @@ try {
   // toolbar, scaled uniformly. No mobile mini-layout or internal scrollbars.
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
-    for (const lang of ['EN', '中文']) {
+    for (const [lang, name] of [['en', 'English'], ['zh-CN', '简体中文'], ['zh-Hant', '繁體中文']]) {
       await page.locator('#lang-button').click();
-      await page.getByRole('menuitemradio', { name: lang === 'EN' ? 'English' : '简体中文', exact: true }).click();
-      assert.equal(await page.evaluate(() => document.documentElement.lang), lang === 'EN' ? 'en' : 'zh-CN');
+      await page.getByRole('menuitemradio', { name, exact: true }).click();
+      assert.equal(await page.evaluate(() => document.documentElement.lang), lang);
       await show(hero);
       const geometry = await hero.evaluate(el => {
         const panel = el.querySelector('[data-scene]:not([hidden])');
@@ -116,7 +116,7 @@ try {
       }).map(el => el.className));
       assert.deepEqual(scrollports, []);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang === 'EN' ? 'en' : 'zh'}.png` });
+      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang}.png` });
     }
   }
   // Reduced motion removes animation, while the film still advances without
@@ -135,7 +135,7 @@ try {
   await staticPage.locator('#demo-hero').screenshot({ animations: 'disabled', path: 'test-results/site/no-js-mobile.png' });
   await noJs.close();
   // The browser's first supported language is shown; a saved choice wins.
-  for (const [locale, expected] of [['zh-CN', 'zh-CN'], ['zh-SG', 'zh-CN'], ['zh-TW', 'en'], ['fr-FR', 'en'], ['en-GB', 'en']]) {
+  for (const [locale, expected] of [['zh-CN', 'zh-CN'], ['zh-Hans', 'zh-CN'], ['zh-Hant', 'zh-Hant'], ['fr-FR', 'en'], ['en-GB', 'en']]) {
     const context = await browser.newContext({ locale });
     const visitor = await context.newPage();
     await visitor.goto(origin);

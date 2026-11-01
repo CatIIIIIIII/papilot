@@ -9,7 +9,7 @@
 
 <p><b>A Cursor-like workspace for your papers: annotate and review PDFs directly without ever touching LaTeX.</b></p>
 
-<p>English · <a href="README.zh-CN.md">简体中文</a></p>
+<p>English · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-Hant.md">繁體中文</a></p>
 
 [![CI](https://github.com/cu1ch3n/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cu1ch3n/papilot/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)

@@ -1,9 +1,10 @@
 // Builds the static landing page with native, progressively enhanced UI demos.
-// Only Node is needed: the sample manuscript is HTML + MathML, not a PDF/video.
+// The sample manuscript is HTML + MathML, rendered without a browser or TeX.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderDemo } from '../site/demo-templates.mjs';
+import { translatedSite } from './site-i18n.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 // The build empties this folder first, so it takes no folder argument that
@@ -22,8 +23,9 @@ const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // could meet a stylesheet or script cached from the previous release. Their
 // URLs carry a hash of their content instead.
 const version = name => crypto.createHash('sha256').update(fs.readFileSync(path.join(out, name))).digest('hex').slice(0, 10);
-fs.writeFileSync(path.join(out, 'index.html'), source
-  .replace(/<!-- demo:(\w+) -->/g, (_, kind) => renderDemo(kind))
+const translations = JSON.parse(fs.readFileSync(path.join(root, 'site/locales/zh-Hant.json'), 'utf8'));
+fs.writeFileSync(path.join(out, 'index.html'), translatedSite(source
+  .replace(/<!-- demo:(\w+) -->/g, (_, kind) => renderDemo(kind)), translations)
   .replace(/(\s(?:href|src)=")(style\.css|demos\.css|demos\.js)"/g, (_, attr, name) => `${attr}${name}?v=${version(name)}"`));
 copy('public', ['favicon.png', 'apple-touch-icon.png']);
 copy('docs/assets', ['logo.svg', 'social-preview.png'], 'assets');

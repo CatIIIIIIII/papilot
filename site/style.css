@@ -45,9 +45,9 @@ p code,li code{font-size:.94em;padding:1px 6px;border-radius:6px;background:var(
 
 /* Both languages are in the page; <html lang> picks the one shown. CJK headings
    fall back to Songti and need no tightening. */
-html[lang=en] [lang=zh-CN]:not([role=menuitemradio]),html[lang=zh-CN] [lang=en]:not([role=menuitemradio]){display:none!important}
-html[lang=zh-CN] :is(h1,h2,h3,.brand){letter-spacing:0}
-html[lang=zh-CN] .hero h1{line-height:1.16}
+html[lang=en] :is([lang=zh-CN],[lang=zh-Hant]):not([role=menuitemradio]),html[lang=zh-CN] :is([lang=en],[lang=zh-Hant]):not([role=menuitemradio]),html[lang=zh-Hant] :is([lang=en],[lang=zh-CN]):not([role=menuitemradio]){display:none!important}
+html[lang^=zh] :is(h1,h2,h3,.brand){letter-spacing:0}
+html[lang^=zh] .hero h1{line-height:1.16}
 
 /* Buttons and other controls are pills. */
 .button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border:1px solid transparent;border-radius:999px;font-size:15px;font-weight:500;white-space:nowrap;text-decoration:none;transition:background-color .15s,border-color .15s,color .15s}

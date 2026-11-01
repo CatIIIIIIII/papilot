@@ -9,7 +9,7 @@
 
 <p><b>像 Cursor 一样改论文：直接在 PDF 上批注和审阅，完全不用碰 LaTeX。</b></p>
 
-<p><a href="README.md">English</a> · 简体中文</p>
+<p><a href="README.md">English</a> · 简体中文 · <a href="README.zh-Hant.md">繁體中文</a></p>
 
 [![CI](https://github.com/cu1ch3n/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cu1ch3n/papilot/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)
