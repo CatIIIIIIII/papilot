@@ -1944,6 +1944,11 @@
     "textHash": "099a1ce31af6ed1eb5b67588a615c978bca5e93f86ceb9570d9053af1b5fde1b",
     "model": "gemini-4-argon-medium"
   },
+  "Installer version": {
+    "revision": "1c8e436661bf7094228a08cb9330ed088aabc6c473ce1ae903e61211b0738126",
+    "textHash": "9e9c7e85e326898453ed4b5cfa597ef613ebf2937bf376658d3a958410f974d0",
+    "model": "gemini-4-argon-medium"
+  },
   "Instructions": {
     "revision": "3ab4d8a1034dc59fe6981b2e0f32a6240f07be2fb4c2c33c62e9ecdf9caffce8",
     "textHash": "509d1f6e5b3a92c371d65774e806b29d5d01309bd202f3cff4e2e59092c9e13c",
@@ -4409,6 +4414,11 @@
     "textHash": "e858b9b32b90c898c1dbd946dfc4c23724a9f04c76d312760e68137fb2915a0e",
     "model": "gemini-4-argon-medium"
   },
+  "The updated version did not start, so Papilot is using the version included with the app. Retry the update or download the latest desktop app.": {
+    "revision": "31ed85aebe5cbf9e7b4ae0409287988b4a91b07a73b5540e11cc82e081ade1c2",
+    "textHash": "f38beea017aee429aa14c85fad3a8350f1b23b7c5d4686565d154da877eef6a9",
+    "model": "gemini-4-argon-medium"
+  },
   "Their name, as others will see it": {
     "revision": "d7b3f7cf36dad8d4935e044730703c2dcc4c258fd48e2abc5b5844854adf27bd",
     "textHash": "ab8131784a070106b0044cbc35a8afaaaa05af8be765ce17d76c7768a5372c73",
@@ -4542,6 +4552,11 @@
   "This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.": {
     "revision": "ff8f31e22319877aebb656a31ca41d6bc4e11cdf985521494efc4de74dc02ae8",
     "textHash": "3d388676a488867facff3086375ce66471f7c51114daab65ffc26d57b7119e0f",
+    "model": "gemini-4-argon-medium"
+  },
+  "This version needs the latest desktop app. Download it from GitHub Releases.": {
+    "revision": "83fc6bb1210b01c28043cb97b2862cdd2f731f228ec48330247beeca9e9b8b28",
+    "textHash": "1be265acf513894227f092bae15056e747b90ec3bfc59bc2b8b5a614eb8848ea",
     "model": "gemini-4-argon-medium"
   },
   "This worktree’s HEAD is outside the displayed history.": {
