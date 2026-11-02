@@ -429,11 +429,6 @@
     "textHash": "3d54da9c8367da7740f82b88e3ab58480c3bd791dfebff3ce00fa87f5102d410",
     "model": "gemini-4-argon-high"
   },
-  "M-series · .dmg": {
-    "revision": "297b4249cc2d0b4a5dd23cb47e827e85b82793588c21c3294034ecfeaf7b8b38",
-    "textHash": "929126bf3bb91361dc75285ad3efeebd10aa6f58bb5cb3c38899b311850e5123",
-    "model": "gemini-4-argon-high"
-  },
   "Manuscript": {
     "revision": "a1b2325dad6e2a758ce6175c14833abe6000eb97ca325e57ef81015c3028d132",
     "textHash": "799a32d4de2c6ba1989c39819c9a362f486c20644365dff66c224f57b0362348",

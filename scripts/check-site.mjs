@@ -93,7 +93,7 @@ try {
   await page.clock.runFor(10000);
   assert.deepEqual(await state(hero), beforeOffscreen);
 
-  // Every viewport retains the native 1000:740 frame, 660:340 panes and 46px
+  // Every viewport retains the native 1000:700 window, 660:340 panes and 46px
   // toolbar, scaled uniformly. No mobile mini-layout or internal scrollbars.
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -111,7 +111,7 @@ try {
           toolbar: panel.querySelector('.workspace-toolbar').getBoundingClientRect().height / w,
         };
       });
-      assert.ok(Math.abs(geometry.ratio - 1000 / 740) < 0.01);
+      assert.ok(Math.abs(geometry.ratio - 1000 / 700) < 0.01);
       assert.ok(Math.abs(geometry.pane - 0.34) < 0.002);
       assert.ok(Math.abs(geometry.toolbar - 0.046) < 0.002);
       // The demo controls must scale and center together, including at phone
