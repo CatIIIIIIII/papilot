@@ -4,7 +4,8 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import { Fixture, fakeRound, METHOD } from "./helpers.ts";
 import { createServer, App } from "../../src/server.ts";
 import { Builder } from "../../src/core/build.ts";
-import { sleep } from "../../src/core/files.ts";
+import { acquireLock, sleep, writeJson } from "../../src/core/files.ts";
+import { connect, serverHome } from "../../src/client.ts";
 let f: Fixture, app: App, server: ReturnType<typeof createServer>;
 beforeEach(() => {
   f = new Fixture();
@@ -159,4 +160,46 @@ it("waits for cache cleanup before starting newly queued builds", async () => {
   finish();
   await cleaning;
   await app.publisher.join();
+});
+
+it("replays build requests across lost responses and server restarts without new jobs", async () => {
+  app.tasks.create("a");
+  app.tasks.create("b");
+  vi.spyOn(app.publisher, "pruneCache").mockResolvedValue();
+  let finish!: () => void;
+  const publish = vi.spyOn(app.publisher, "publish").mockImplementation(async () => {
+    await new Promise<void>(resolve => { finish = resolve; });
+    return { outcome: "empty" };
+  });
+  const first = app.publisher.submit("a", "request-a");
+  // Distinct requests can share a queued build; both keys must remain replayable.
+  expect(app.publisher.submit("a", "request-b").id).toBe(first.id);
+  await sleep(10);
+  expect(app.publisher.submit("a", "request-a").status).toBe("running");
+  finish();
+  await app.publisher.join();
+  const restarted = f.app();
+  expect(restarted.publisher.submit("a", "request-a").id).toBe(first.id);
+  expect(restarted.publisher.submit("a", "request-b").id).toBe(first.id);
+  expect(restarted.publisher.submit("a", "request-a").status).toBe("done");
+  expect(() => restarted.publisher.submit("b", "request-a")).toThrow(/another task/);
+  expect(app.store.all("SELECT * FROM jobs")).toHaveLength(1);
+  expect(publish).toHaveBeenCalledTimes(1);
+  const response = await server.inject({ method: "POST", url: "/api/tasks/a/publish", headers: headers(), payload: { requestId: "request-a" } });
+  expect(response.json().job).toBe(first.id);
+  const invalid = await server.inject({ method: "POST", url: "/api/tasks/a/publish", headers: headers(), payload: { requestId: "../invalid" } });
+  expect(invalid.statusCode).toBe(400);
+});
+
+it("read-only reconnection does not wait for the startup lock or upgrade a running server", async () => {
+  const url = await server.listen({ host: "127.0.0.1", port: 0 });
+  app.url = url;
+  const home = serverHome(f.root);
+  writeJson(path.join(home, "connection.json"), { url, pid: process.pid });
+  const release = await acquireLock(path.join(home, "start.lock"));
+  try {
+    const result = await Promise.race([connect(f.root, false), sleep(1000).then(() => "blocked")]);
+    expect(result).not.toBe("blocked");
+    expect(result).toMatchObject({ url, token: app.csrf });
+  } finally { await release(); }
 });

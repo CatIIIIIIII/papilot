@@ -331,11 +331,12 @@ export function createServer(app: App) {
         );
       },
     );
-    server.post<{ Params: { name: string } }>(
+    server.post<{ Params: { name: string }; Body: { requestId?: string } }>(
       "/api/tasks/:name/publish",
+      { schema: { body: { ...objectSchema, properties: { requestId: { type: "string", pattern: "^[a-zA-Z0-9-]{1,80}$" } } } } },
       (request) => {
         app.delivery.assertReady(request.params.name);
-        const job = app.publisher.submit(request.params.name);
+        const job = app.publisher.submit(request.params.name, request.body?.requestId);
         return { job: job.id, status: job.status };
       },
     );

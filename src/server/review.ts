@@ -4,12 +4,17 @@ import { ENGINE } from './paths.ts';
 import type { Task } from '../shared.ts';
 
 export interface ReviewClient { url: string; token: string; get<T = any>(route: string): Promise<T>; post<T = any>(route: string, body?: unknown, timeout?: number): Promise<T> }
-let modulePromise: Promise<{ connect: (root: string) => Promise<ReviewClient> }> | null = null;
-export function reviewClient(root: string): Promise<ReviewClient> {
+let modulePromise: Promise<{ connect: (root: string, start?: boolean) => Promise<ReviewClient | null> }> | null = null;
+export function reviewClient(root: string, reuse = false): Promise<ReviewClient> {
   modulePromise ??= import(pathToFileURL(path.join(ENGINE, 'src/client.ts')).href);
-  return modulePromise!.then(module => module.connect(root));
+  // Polling an existing job must not replace a healthy server of another version.
+  return modulePromise!.then(async module => (reuse && await module.connect(root, false)) || (await module.connect(root))!);
 }
 export const taskRoute = (name: string) => `/api/tasks/${encodeURIComponent(name)}`;
+export function reviewConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return ['AbortError', 'TimeoutError'].includes(error.name) || /fetch failed|ECONNREFUSED|ECONNRESET|socket hang up|The review server failed to start/.test(error.message);
+}
 
 export function confirmedReviewResponse(status: number, value: unknown, task: string): boolean {
   if (!value || typeof value !== 'object') return false;

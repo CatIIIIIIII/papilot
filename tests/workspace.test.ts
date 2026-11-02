@@ -261,6 +261,136 @@ test('comments remain available during an active turn while file decisions are b
   } finally { f.close(); }
 });
 
+test('a lost publish response retries the same persisted request and links its result', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let submissions = 0;
+  const f = fixture(async (_method, route, body) => {
+    if (route.endsWith('/publish')) {
+      assert.equal((body as any).requestId, f.store.task(f.task.id).pendingBuild?.requestId);
+      if (++submissions === 1) throw new TypeError('fetch failed');
+      return { job: 'recovered' };
+    }
+    if (route.includes('/jobs/')) return { status: 'done', round: 2 };
+    return { ...summary, round: 2 };
+  });
+  try {
+    f.store.saveRun({ id: 'run', taskId: f.task.id, requestKey: 'request', prompt: '', status: 'completed', createdAt: 1, finishedAt: 2, reviewRound: 0 });
+    const publishing = f.workspace.publish(f.task.id);
+    await tick();
+    assert.equal(f.store.task(f.task.id).status, 'building');
+    t.mock.timers.tick(1500);
+    await publishing;
+    const writes = f.calls.filter(call => call.route.endsWith('/publish'));
+    assert.equal(writes.length, 2);
+    assert.deepEqual(writes[0].body, writes[1].body);
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.store.task(f.task.id).pendingBuild, null);
+    assert.equal(f.store.runByKey('request')?.reviewRound, 2);
+  } finally { f.close(); }
+});
+
+test('an extended connection outage preserves the job and Check status recovers without publishing again', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let online = false;
+  const f = fixture(async (_method, route) => {
+    if (route.endsWith('/publish')) return { job: 'existing' };
+    if (route.includes('/jobs/')) {
+      if (!online) throw new TypeError('fetch failed');
+      return { status: 'done', round: 1 };
+    }
+    return summary;
+  });
+  try {
+    const publishing = f.workspace.publish(f.task.id);
+    for (const delay of [1500, 3000, 6000]) { await tick(); t.mock.timers.tick(delay); }
+    await publishing;
+    assert.equal(f.store.task(f.task.id).status, 'uncertain');
+    assert.equal(f.store.task(f.task.id).pendingBuild?.job, 'existing');
+    assert.match(f.store.task(f.task.id).error!, /Check status/);
+    assert.throws(() => f.workspace.publish(f.task.id), /busy/);
+    online = true;
+    await f.workspace.reconcile(f.task.id);
+    await tick();
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.calls.filter(call => call.route.endsWith('/publish')).length, 1);
+    assert.equal(f.codex.calls.length, 0);
+  } finally { f.close(); }
+});
+
+test('restart recovery resumes a saved job, preserves original run links, and reserves the worktree', async () => {
+  const gate = deferred<{ status: string; round: number }>();
+  const f = fixture(async (_method, route) => route.includes('/jobs/') ? gate.promise : summary);
+  try {
+    f.store.saveRun({ id: 'old', taskId: f.task.id, requestKey: 'old', prompt: '', status: 'completed', createdAt: 1, finishedAt: 2, reviewRound: 0 });
+    f.store.updateTask(f.task.id, { status: 'building', pendingBuild: { requestId: 'saved', job: 'existing', runs: ['old'], sendBack: false, restarts: 0 } });
+    f.store.recover();
+    const recovering = f.workspace.resumeBuild(f.task.id);
+    await tick();
+    assert.equal(await f.workspace.resumeBuild(f.task.id), false);
+    await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => {}));
+    gate.resolve({ status: 'done', round: 3 });
+    assert.equal(await recovering, true);
+    assert.equal(f.store.runByKey('old')?.reviewRound, 3);
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.calls.some(call => call.method === 'POST'), false);
+  } finally { gate.resolve({ status: 'done', round: 3 }); f.close(); }
+});
+
+test('legacy fetch-failed tasks recover their completed PDF round without rerunning the agent', async () => {
+  const f = fixture();
+  try {
+    f.store.updateTask(f.task.id, { status: 'failed', error: 'fetch failed', review: { ...summary, round: null, job: { id: 'existing', status: 'running', phase: 'render' } } });
+    assert.equal(await f.workspace.resumeBuild(f.task.id), true);
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.store.task(f.task.id).review?.round, 1);
+    assert.equal(f.calls.some(call => call.method === 'POST'), false);
+    assert.equal(f.codex.calls.length, 0);
+  } finally { f.close(); }
+});
+
+test('shutdown during polling leaves a durable job that a new workspace resumes', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-build-recovery-'));
+  const file = path.join(folder, 'state.sqlite');
+  const gate = deferred<{ status: string }>();
+  const f = fixture(async (_method, route) => route.includes('/jobs/') ? gate.promise : route.endsWith('/publish') ? { job: 'durable-job' } : summary, { file });
+  const publishing = f.workspace.publish(f.task.id);
+  await tick();
+  f.workspace.close();
+  gate.resolve({ status: 'done' });
+  await publishing;
+  f.store.close();
+  const store = new Store(file);
+  const review: ReviewClient = { url: 'http://unused', token: '', get: async <T>(route: string) => (route.includes('/jobs/') ? { status: 'done' } : summary) as T, post: async () => { throw new Error('Must not republish'); } };
+  const workspace = new Workspace(store, new FakeCodex() as unknown as Codex, 2, async () => review);
+  try {
+    store.recover();
+    assert.equal(store.task(f.task.id).pendingBuild?.job, 'durable-job');
+    await workspace.resumeBuild(f.task.id);
+    assert.equal(store.task(f.task.id).status, 'reviewing');
+    assert.equal(store.task(f.task.id).pendingBuild, null);
+  } finally { workspace.close(); store.close(); fs.rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('a service-restart failure rebuilds only once; compiler errors never trigger a connection retry', async () => {
+  for (const error of ['The review server restarted during the build.', 'The comparison baseline could not be compiled.']) {
+    let submits = 0;
+    const f = fixture(async (_method, route) => {
+      if (route.endsWith('/publish')) return { job: `job-${++submits}` };
+      if (route.includes('/jobs/')) return { status: 'failed', error };
+      return summary;
+    });
+    try {
+      await f.workspace.publish(f.task.id);
+      assert.equal(submits, error.includes('restarted') ? 2 : 1);
+      assert.equal(f.store.task(f.task.id).status, 'failed');
+      assert.equal(f.store.task(f.task.id).pendingBuild, null);
+      assert.equal(f.store.task(f.task.id).error, error);
+      const writes = f.calls.filter(call => call.route.endsWith('/publish'));
+      if (writes.length === 2) assert.notDeepEqual(writes[0].body, writes[1].body);
+    } finally { f.close(); }
+  }
+});
+
 test('canceling queued feedback leaves it available for the next submission', async () => {
   const f = fixture();
   try {

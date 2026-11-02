@@ -12,7 +12,7 @@ import { Codex, RpcResponseError } from './codex.ts';
 import { AGENT_NAMES, AntigravityAgent, ClaudeAgent, GlmAgent, type AgentRuntime } from './agents.ts';
 import { ACP_PROFILES, AcpAgent } from './acp.ts';
 import { CursorAgent } from './cursor.ts';
-import { reviewClient, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
+import { reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
 import { findSkill, type SkillFile } from './skills.ts';
@@ -668,6 +668,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
   async reconcile(taskId: string) {
     const task = this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('Retry deletion to confirm this task was removed.');
+    if (task.pendingBuild && !task.pendingReview) { void this.resumeBuild(taskId); return this.store.task(taskId); }
     if (task.status !== 'uncertain') return task;
     if (task.pendingReview) return this.reconcileReview(task);
     const run = this.active.get(taskId) || this.store.runs().find(r => r.id === task.pendingRunId && r.taskId === taskId);
@@ -752,40 +753,100 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     if (this.reviewWrites.has(taskId)) throw new Error('Wait for the current review action before building a review.');
     if (this.publishing.has(taskId) || (!automatic && (BUSY.has(task.status) || task.status === 'queued'))) throw new Error('This task is busy. Wait for it to finish or pause it first.');
     this.publishing.add(taskId);
-    this.store.updateTask(taskId, { status: 'building', error: null });
-    return this.buildReview(task, Boolean(after && !after.requestKey.startsWith(BUILD_FIX)), after?.id).finally(() => { this.publishing.delete(taskId); this.schedule(); });
+    const runs = this.store.runs().filter(run => run.taskId === taskId && run.status === 'completed' && (run.reviewRound === 0 || (run.reviewRound === undefined && run.id === after?.id))).map(run => run.id);
+    this.store.updateTask(taskId, { status: 'building', error: null, pendingBuild: { requestId: randomUUID(), runs, sendBack: Boolean(after && !after.requestKey.startsWith(BUILD_FIX)), restarts: 0 } });
+    return this.buildReview(task).finally(() => { this.publishing.delete(taskId); this.schedule(); });
   }
-  private async buildReview(task: Task, sendBack: boolean, after?: string) {
+  // Resume a persisted job, including jobs saved by versions before pendingBuild.
+  async resumeBuild(taskId: string) {
+    const task = this.store.task(taskId);
+    if (this.closing || this.publishing.has(taskId) || task.mode === 'review' || task.pendingReview || this.active.has(taskId)
+      || !['building', 'failed', 'interrupted', 'uncertain'].includes(task.status)) return false;
+    let pending = task.pendingBuild;
+    if (!pending) {
+      const job = task.review?.job;
+      if (!job?.id || !['running', 'queued'].includes(job.status)
+        || (task.status !== 'building' && !/fetch failed|server restarted during the PDF build/i.test(task.error || ''))) return false;
+      pending = { requestId: randomUUID(), job: job.id, runs: this.store.runs().filter(run => run.taskId === taskId && run.status === 'completed' && run.reviewRound === 0).map(run => run.id), sendBack: false, restarts: 0 };
+    }
+    this.publishing.add(taskId);
+    this.store.updateTask(taskId, { status: 'building', error: null, pendingBuild: pending });
+    try { await this.buildReview(task, true); }
+    finally { this.publishing.delete(taskId); this.schedule(); }
+    return true;
+  }
+  private async buildReview(task: Task, resume = false) {
     const taskId = task.id;
-    const unlinked = this.store.runs().filter(run => run.taskId === taskId && run.status === 'completed' && (run.reviewRound === 0 || (run.reviewRound === undefined && run.id === after))).map(run => run.id);
+    let pending = this.store.task(taskId).pendingBuild!;
+    let client: ReviewClient | undefined;
+    let reuse = resume;
+    // Only connection failures are retried. Every submission has a persisted key,
+    // so losing its response cannot submit a second build.
+    const request = async <T>(work: (client: ReviewClient) => Promise<T>, submitting = false): Promise<T> => {
+      for (let attempt = 0; ; attempt++) {
+        if (this.closing) throw new Error();
+        try {
+          client ??= await this.connectReview(this.store.project(task.projectId).path, reuse);
+          const value = await work(client);
+          if (this.closing) throw new Error();
+          return value;
+        } catch (error) {
+          if (this.closing || !reviewConnectionError(error) || attempt >= 3) throw error;
+          console.warn('PDF comparison connection interrupted:', task.name, pending.job || pending.requestId, error);
+          client = undefined; reuse = !submitting;
+          await delay(1500 * 2 ** attempt);
+        }
+      }
+    };
     try {
-      const client = await this.connectReview(this.store.project(task.projectId).path);
-      const job = await client.post(`${taskRoute(task.name)}/publish`, {});
       for (;;) {
         if (this.closing) return;
-        const current = await client.get(`/api/jobs/${job.job}`);
-        const summary = await client.get(taskRoute(task.name));
-        this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, job: current } });
+        if (!pending.job) {
+          // New writes require our engine version, which understands request IDs.
+          // Read-only recovery may have connected to an older installed engine.
+          client = undefined; reuse = false;
+          const job = await request(client => client.post<{ job: string }>(`${taskRoute(task.name)}/publish`, { requestId: pending.requestId }), true);
+          pending = { ...pending, job: job.job };
+          this.store.updateTask(taskId, { pendingBuild: pending });
+        }
+        const current = await request(client => client.get(`/api/jobs/${pending.job}`));
+        const summary = await request(client => client.get(taskRoute(task.name)));
+        this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, job: { ...current, id: pending.job } } });
         if (current.status === 'done' || current.status === 'completed' || current.status === 'succeeded') {
           // Freeze the result round for these instructions. Later follow-ups
           // have their own results and cannot silently replace these links.
-          for (const run of this.store.runs().filter(run => unlinked.includes(run.id))) this.store.saveRun({ ...run, reviewRound: current.outcome === 'empty' || current.outcome === 'unchanged' ? null : current.round ?? summary.round ?? null });
+          this.store.transaction(() => {
+            for (const run of this.store.runs().filter(run => pending.runs.includes(run.id))) this.store.saveRun({ ...run, reviewRound: current.outcome === 'empty' || current.outcome === 'unchanged' ? null : current.round ?? summary.round ?? null });
+            this.store.updateTask(taskId, { status: this.store.runs().some(r => r.taskId === taskId && r.status === 'queued') ? 'queued' : 'reviewing', error: null, pendingBuild: null });
+          });
           break;
         }
         if (current.status === 'failed') {
+          if (current.error === 'The review server restarted during the build.' && pending.restarts < 1) {
+            pending = { ...pending, job: undefined, requestId: randomUUID(), restarts: pending.restarts + 1 };
+            this.store.updateTask(taskId, { pendingBuild: pending });
+            continue;
+          }
           const failure: BuildFailure = { error: current.error || 'PDF build failed.', details: current.details || [], ...(current.log ? { log: current.log } : {}) };
           // Instructions the author queued meanwhile go first; the build after them sends any error that remains.
-          if (sendBack && FIXABLE.test(failure.error) && await this.enqueue(taskId, '', BUILD_FIX + job.job, false, { build: failure }).then(() => true, () => false)) {
-            this.store.updateTask(taskId, { status: 'queued', error: null });
+          if (pending.sendBack && FIXABLE.test(failure.error) && await this.enqueue(taskId, '', BUILD_FIX + pending.job, false, { build: failure }).then(() => true, () => false)) {
+            this.store.updateTask(taskId, { status: 'queued', error: null, pendingBuild: null });
             return;
           }
           throw new Error([failure.error, ...failure.details].join('\n'));
         }
         await delay(1500);
       }
-      this.store.updateTask(taskId, { status: this.store.runs().some(r => r.taskId === taskId && r.status === 'queued') ? 'queued' : 'reviewing', error: null });
       await this.refresh(taskId);
-    } catch (e) { this.store.updateTask(taskId, { status: 'failed', error: errorText(e) }); }
+    } catch (e) {
+      if (this.closing) return;
+      if (reviewConnectionError(e)) {
+        console.warn('PDF comparison recovery pending:', task.name, pending.job || pending.requestId, e);
+        this.store.updateTask(taskId, { status: 'uncertain', pendingBuild: pending,
+          error: 'The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.' });
+      }
+      else this.store.updateTask(taskId, { status: 'failed', pendingBuild: null, error: errorText(e) });
+    }
   }
   private finishAiReview(task: Task, run: Run, turnId: string) {
     try {

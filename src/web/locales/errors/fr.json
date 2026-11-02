@@ -236,5 +236,6 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Attendez la fin de la tâche et des actions de révision avant de choisir une destination.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Attendez la fin de la compilation du PDF de cet article avant de modifier son chemin d’accès ou de le supprimer.",
   "ZIP links and special files are not supported.": "Les liens et fichiers spéciaux dans les archives ZIP ne sont pas pris en charge.",
-  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot."
+  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot.",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "Le service de comparaison PDF est inaccessible. Vos modifications sont enregistrées. Sélectionnez « Vérifier le statut » pour récupérer la compilation existante."
 }

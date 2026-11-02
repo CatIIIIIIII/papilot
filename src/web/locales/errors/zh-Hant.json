@@ -236,5 +236,6 @@
   "Wait for the task and review actions to finish before choosing a destination.": "選擇目標位置前，請先等待任務與審閱動作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "請等待此論文的 PDF 建置完成後，再變更其路徑或將其移除。",
   "ZIP links and special files are not supported.": "不支援 ZIP 連結與特殊檔案。",
-  "npm is unavailable to Papilot.": "Papilot 無法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 無法使用 npm。",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "暫時無法連線至 PDF 比較服務。修改已儲存，請選擇「檢查狀態」恢復原來的建置。"
 }

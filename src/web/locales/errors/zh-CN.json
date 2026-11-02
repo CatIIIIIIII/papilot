@@ -166,6 +166,7 @@
   "The server restarted before a review action was confirmed. Select Check status before continuing.": "服务器在确认审阅操作前重启。继续操作前请选择“检查状态”。",
   "The server restarted during deletion. Retry deletion to confirm cleanup.": "服务器在删除期间重启。请重试删除以确认清理完成。",
   "The server restarted during the PDF build. Check the review and rebuild it if needed.": "服务器在构建 PDF 期间重启。请检查审阅并在需要时重新构建。",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "暂时无法连接 PDF 对比服务。修改已保存，请选择“检查状态”恢复原来的构建。",
   "The task was paused before these instructions were queued. Your draft has been kept.": "在这些指令加入队列前，任务已暂停。您的草稿已保留。",
   "The update download timed out.": "更新下载超时。",
   "The update restart helper did not start.": "更新重启助手未能启动。",

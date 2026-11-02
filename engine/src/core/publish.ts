@@ -199,8 +199,22 @@ export class Publisher {
       }),
     );
   }
-  submit(name: string) {
+  submit(name: string, requestId?: string) {
     this.app.tasks.get(name);
+    return this.app.store.transaction(() => this.enqueue(name, requestId));
+  }
+  private enqueue(name: string, requestId?: string) {
+    if (requestId) {
+      const existing = this.app.store.one<Job>("SELECT jobs.* FROM jobs JOIN build_requests ON jobs.id=build_requests.job WHERE build_requests.id=?", requestId);
+      if (existing) {
+        if (existing.task !== name) throw new Error("This build request belongs to another task.");
+        return existing;
+      }
+    }
+    const remember = (job: Job) => {
+      if (requestId) this.app.store.execute("INSERT INTO build_requests(id,task,job) VALUES(?,?,?)", requestId, name, job.id);
+      return job;
+    };
     if (this.stopping)
       throw new Error(
         "The review server is stopping. Publish again after it restarts.",
@@ -208,7 +222,7 @@ export class Publisher {
     const current = this.pending.get(name);
     if (current) {
       const job = this.job(current);
-      if (job.status === "queued") return job;
+      if (job.status === "queued") return remember(job);
     }
     const id = randomBytes(8).toString("hex");
     this.app.store.execute(
@@ -220,7 +234,7 @@ export class Publisher {
     this.pending.set(name, id);
     if (!this.running.has(name)) this.queue.push(id);
     queueMicrotask(() => this.drain());
-    return this.job(id);
+    return remember(this.job(id));
   }
   job(id: string) {
     const job = this.app.store.one<Job>("SELECT * FROM jobs WHERE id=?", id);

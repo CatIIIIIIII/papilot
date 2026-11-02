@@ -157,6 +157,15 @@ export async function connect(
   // Match the canonical repository path reported by the server (e.g. macOS /var).
   root = fs.realpathSync(root);
   const home = serverHome(root);
+  // A reader neither starts nor upgrades the server. Do not wait behind an
+  // upgrader holding start.lock while the job we need to inspect is building.
+  if (!start) {
+    const last = readJson<{ port: number } | null>(path.join(home, "last.json"), null);
+    const info = readJson<Connection | null>(path.join(home, "connection.json"), null)
+      ?? (last ? { url: `http://127.0.0.1:${last.port}`, port: last.port, pid: 0 } : null);
+    const answer = await probe(root, info);
+    return answer ? new Client(info!.url, answer.csrf) : null;
+  }
   return withLock(path.join(home, "start.lock"), async () => {
     const last = readJson<{ port: number } | null>(
       path.join(home, "last.json"),
@@ -171,12 +180,10 @@ export async function connect(
     let answer = await probe(root, info);
     if (
       answer &&
-      (!start ||
-        (answer.version === codeVersion() &&
-          answer.environment === environmentVersion()))
+      answer.version === codeVersion() &&
+      answer.environment === environmentVersion()
     )
       return new Client(info!.url, answer.csrf);
-    if (!start) return null;
     if (answer && info) {
       const deadline = Date.now() + 900000;
       while (answer?.busy && Date.now() < deadline) {
