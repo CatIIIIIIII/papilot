@@ -57,6 +57,7 @@ import { AgentConnectionNotice, AgentPicker } from './agent-picker.tsx';
 import { taskEffort } from './task-effort.ts';
 import { TaskModelPicker } from './task-model-picker.tsx';
 import { TaskFlight, type TaskFlightData } from './task-flight.tsx';
+import { returnNotes } from './note-flight.ts';
 import { UsageSummary } from './usage.tsx';
 import { useNoteUndo } from './use-note-undo.ts';
 import { NoteResultsProvider, NoteResultLinks, useNoteResults } from './note-results.tsx';
@@ -667,11 +668,11 @@ function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, co
   </li>;
   return <section ref={list} className="notes-panel" aria-label={t('PDF notes')}>
     <div className="draft-notes-head">
-      {ownNotes.length > 0 && <div className="note-selection-head"><button type="button" className="note-select-all" aria-label={t('Select all notes for this task')} aria-pressed={ownSelected === ownNotes.length ? true : ownSelected ? 'mixed' : false} disabled={selectionLocked} onClick={() => actions.selection.set(ownNotes.map(note => note.id), ownSelected !== ownNotes.length)}>{ownSelected === ownNotes.length ? t('Clear selection') : t('Add all to task')}</button></div>}
       <div className="note-entry-actions">
         <button type="button" className="button ghost compact" disabled={!currentKey || locked || Boolean(editing)} onClick={() => onAnnotate(true)}><Icon name="region" size={14}/>{t('Region note')}</button>
         <span className="note-entry-hint">{t('or select text to annotate')}</span>
       </div>
+      {ownNotes.length > 0 && <button type="button" className="note-select-all" aria-label={t('Select all notes for this task')} aria-pressed={ownSelected === ownNotes.length ? true : ownSelected ? 'mixed' : false} disabled={selectionLocked} onClick={() => actions.selection.set(ownNotes.map(note => note.id), ownSelected !== ownNotes.length)}>{ownSelected === ownNotes.length ? t('Clear selection') : t('Add all to task')}</button>}
     </div>
     <p className="note-selection-hint">{t('Notes stay here unless you add them to a task.')}</p>
     {currentKey && notes.some(note => note.key !== currentKey) && <p className="note-placement-summary" role="status">{t('Some note positions need confirmation. Their original text and comments are kept.')}</p>}
@@ -696,14 +697,20 @@ function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, co
 
 // The composer receives only attachments the author explicitly chose in the PDF.
 function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]; currentKey?: string; actions: NoteActions; onShow: (note: Annotation) => void }) {
+  const panel = useRef<HTMLElement>(null);
   const chosen = notes.filter(note => actions.selection.has(note.id));
   if (!chosen.length) return null;
+  // Notes listed in My notes fly back there; placed AI suggestions stay on the page.
+  const putBack = (list: Annotation[]) => {
+    returnNotes(list.filter(note => !note.aiReview || note.key !== currentKey).flatMap(note => panel.current?.querySelector<HTMLElement>(`[data-note="${CSS.escape(note.id)}"]`) || []));
+    actions.selection.set(list.map(note => note.id), false);
+  };
   const reference = (note: Annotation, index: number) => <li key={note.id} data-note={note.id} className="task-note-reference">
-    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span><button type="button" className="icon-button" aria-label={note.aiReview ? t('Remove suggestion {n} from task', { n: index + 1 }) : t('Remove note {n} from task', { n: index + 1 })} disabled={actions.sending} onClick={() => actions.selection.set([note.id], false)}><Icon name="close" size={13}/></button></div>
+    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span><button type="button" className="icon-button" aria-label={note.aiReview ? t('Remove suggestion {n} from task', { n: index + 1 }) : t('Remove note {n} from task', { n: index + 1 })} disabled={actions.sending} onClick={() => putBack([note])}><Icon name="close" size={13}/></button></div>
     <NoteQuote text={note.quote}/>{note.comment && <p className="task-note-comment">{note.comment}</p>}{note.key !== currentKey && <NotePlacementWarning/>}
   </li>;
-  return <section className="task-notes-panel" aria-label={t('Notes in this task')}>
-    <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={actions.sending} onClick={() => actions.selection.set(chosen.map(note => note.id), false)}>{t('Clear selection')}</button></div>
+  return <section ref={panel} className="task-notes-panel" aria-label={t('Notes in this task')}>
+    <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={actions.sending} onClick={() => putBack(chosen)}>{t('Clear selection')}</button></div>
     {noteGroups(notes).map(({ group, entries }) => {
       const selected = entries.filter(({ note }) => actions.selection.has(note.id));
       return selected.length > 0 && <GroupCard key={group} group={group} count={selected.length}>
@@ -768,7 +775,7 @@ function ManuscriptView({ project, data, error, view, setView, region, setRegion
     load={() => api<ManuscriptProblems>(`/projects/${project.id}/manuscript/problems`, undefined, undefined, 60000)}
     onJump={problem => { if (problem.page === undefined || !problem.rect) return; if (phone()) setView('pdf'); const { page, rect } = problem; requestAnimationFrame(() => pdf.current?.showPlace(page, rect)); }}
     onFix={onFixProblems && (list => { onFixProblems(fixRequest(list)); setView('task'); setCollapsed(false); })}/>;
-  const pdfTools = <>{tools}{problemsButton}<button type="button" className={'icon-button' + (readingNotes ? ' active' : '')} aria-label={t('My notes')} title={t('My notes')} aria-pressed={readingNotes} onClick={() => { if (readingNotes) void closeReadingNotes(); else { setActive(''); setReadingNotes(true); } }}><Icon name="notes" size={16}/></button>{!hidden && !sideBySide && openPdf}{hidden && togglePanel}</>;
+  const pdfTools = <>{tools}{problemsButton}<button type="button" data-notes-home="library" className={'icon-button' + (readingNotes ? ' active' : '')} aria-label={t('My notes')} title={t('My notes')} aria-pressed={readingNotes} onClick={() => { if (readingNotes) void closeReadingNotes(); else { setActive(''); setReadingNotes(true); } }}><Icon name="notes" size={16}/></button>{!hidden && !sideBySide && openPdf}{hidden && togglePanel}</>;
   const switcher = <>{navigation}<ModeSwitch mode={mode} onMode={async value => { if (await closeReadingNotes()) setMode(value); }}/></>;
   const staged = Array.isArray(git?.files) && !git.merging ? git.files.filter(file => file.staged).map(file => file.path) : [];
   const reloadGit = () => void api<GitStatus>(`/projects/${project.id}/git`).then(onGit, () => undefined);
@@ -1474,7 +1481,7 @@ function App() {
   const manuscriptNavigation = manuscriptOpen && project && <>
     {manuscriptTools}
     <div className="view-selector" role="group" aria-label={t('Manuscript view')}>
-          <button aria-label="PDF" aria-pressed={manuscriptView === 'pdf'} onClick={() => setManuscriptView('pdf')}><Icon name="pdf" size={16}/><span>PDF</span></button>
+          <button aria-label="PDF" data-notes-home="pdf" aria-pressed={manuscriptView === 'pdf'} onClick={() => setManuscriptView('pdf')}><Icon name="pdf" size={16}/><span>PDF</span></button>
           <button aria-label={t('New task')} aria-pressed={manuscriptView === 'task'} onClick={() => { setManuscriptView('task'); setRegion(false); }}><Icon name="compose" size={16}/><span>{t('New task')}</span>{noteSelection.selected.length > 0 && <b className="view-count" aria-hidden="true">{noteSelection.selected.length}</b>}</button>
           <button aria-label={t('Contents')} aria-pressed={manuscriptView === 'contents'} onClick={() => { setManuscriptView('contents'); setRegion(false); }}><Icon name="list" size={16}/><span>{t('Contents')}</span></button>
           <button aria-label={projectGit?.files?.length ? t('Git, {n} changed', { n: projectGit.files.length }) : 'Git'} aria-pressed={manuscriptView === 'git'} onClick={() => { setManuscriptView('git'); setRegion(false); }}><Icon name="diff" size={16}/><span>Git</span>{projectGit?.files?.length ? <b className="view-count" aria-hidden="true">{projectGit.files.length}</b> : null}</button>

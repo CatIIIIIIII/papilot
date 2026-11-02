@@ -24,10 +24,16 @@
 .pdf-suggestion-undo button{color:var(--accent);text-decoration:underline;margin-left:8px}
 @media(pointer:coarse){.pdf-note-card .icon-button{width:36px;height:36px}.pdf-suggestion-navigation{gap:0;margin-left:0}.pdf-suggestion-navigation .icon-button{width:32px}.pdf-suggestion-navigation>span{min-width:24px}.pdf-personal-note .pdf-note-text,.pdf-note-input{font-size:16px}}
 
-.pdf-note-card.pdf-note-inline{position:relative;z-index:auto;width:100%;padding:12px;box-shadow:none;border-radius:12px}
+.pdf-note-card.pdf-note-inline{--note-tool:24px;position:relative;z-index:auto;width:100%;gap:4px;padding:8px 10px;box-shadow:none;border-radius:10px}
 .pdf-note-inline:hover,.note-list>li.active>.pdf-note-inline{border-color:var(--line-strong)}
 .note-list>li.stale>.pdf-note-inline{background:var(--bg-subtle)}
-.pdf-note-inline .note-head{margin-bottom:6px}
+/* In the library, delete and add-to-task share the location row instead of taking a row of their own. */
+.pdf-note-inline .note-head{min-height:var(--note-tool);margin-bottom:0;padding-right:calc(var(--note-tool) * 2 + 6px)}
+.pdf-note-inline .pdf-note-tools{position:absolute;top:8px;right:8px;gap:2px}
+.pdf-note-inline .pdf-note-tools .icon-button{width:var(--note-tool);height:var(--note-tool)}
+.pdf-note-inline .pdf-note-origin{display:none}
+@media(pointer:fine){.pdf-note-inline .pdf-suggestion-body p,.pdf-note-inline .pdf-note-input{font-size:13px;line-height:1.5}}
+@media(pointer:coarse){.pdf-note-card.pdf-note-inline{--note-tool:36px}}
 .pdf-note-attach{display:inline-flex;align-items:center;justify-content:center;flex:none;width:26px;height:26px;border-radius:8px;color:var(--text-3)}
 .pdf-note-attach:hover:not(:disabled){color:var(--text);background:var(--bg-hover)}
 @media(pointer:coarse){.pdf-note-attach{width:36px;height:36px}}
