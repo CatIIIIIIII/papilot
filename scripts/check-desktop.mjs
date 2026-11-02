@@ -50,7 +50,8 @@ try {
   assert.equal(await page.locator('.desktop-window-drag').evaluate(element => getComputedStyle(element).getPropertyValue('-webkit-app-region')), 'drag');
   assert.equal(await page.evaluate(() => window.papilotDesktop?.platform), process.platform);
   await expect(page.locator('.pdf-toolbar')).toBeVisible();
-  assert.equal((await page.locator('.pdf-toolbar').boundingBox()).y, 0, 'The content toolbar reaches the top of the window');
+  // The toolbar can re-render while the paper loads, so read its box until it settles.
+  await expect.poll(async () => (await page.locator('.pdf-toolbar').boundingBox())?.y, { message: 'The content toolbar reaches the top of the window' }).toBe(0);
   await page.getByRole('button', { name: /^(Hide task list|隐藏任务列表)$/ }).click();
   const restoreSidebar = page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ });
   await expect(restoreSidebar).toBeVisible();
