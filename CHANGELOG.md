@@ -4,9 +4,15 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-02
+
+Papilot 0.8.2 opens local paper folders in place, compiles as fast as latexmk, updates the desktop app in place and speaks eleven languages.
+
 ### Added
 
 - **Desktop updates in place.** Like Obsidian, the desktop app now installs newer Papilot releases itself instead of sending you to GitHub Releases. It downloads the release, checks that it starts, and restarts on it when tasks and PDF builds are idle; if it does not start, the previous version and database are restored. A new installer is needed only when a release changes what the app itself provides, and the update notice says so. Settings → Updates shows the installer version next to the running version.
+- **Eleven interface languages.** The workspace, the review viewer and error messages read in English, Simplified Chinese, Traditional Chinese, Japanese, Korean, German, French, Spanish, Portuguese, Italian and Swedish. Papilot follows the browser's first supported language until you choose one in **Settings → Language**, and dates and numbers follow it. The website and README are available in the same languages. Prompts and note locations sent to agents stay in English.
+- **Change the model during a task.** The model, reasoning effort and fast mode can be changed between turns of a task. Changes apply to the next turn; a turn already running keeps its settings.
 
 ### Changed
 
@@ -200,7 +206,10 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/cu1ch3n/papilot/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/PapilotAI/papilot/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/PapilotAI/papilot/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/PapilotAI/papilot/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/cu1ch3n/papilot/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/cu1ch3n/papilot/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/cu1ch3n/papilot/compare/v0.4.0...v0.5.0
