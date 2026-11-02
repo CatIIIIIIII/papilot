@@ -1,4 +1,4 @@
-.ui-demo{--u:.1cqw;container-type:inline-size;position:relative;width:100%;aspect-ratio:1000/740;min-width:0;overflow:clip;border:1px solid #e3e3e3;border-radius:16px;background:white;box-shadow:var(--float)}
+.ui-demo{--u:.1cqw;container-type:inline-size;position:relative;width:100%;aspect-ratio:1000/700;min-width:0;overflow:clip;border:1px solid #e3e3e3;border-radius:16px;background:white;box-shadow:var(--float)}
 /* Native desktop dimensions below are scaled uniformly by --u (1/1000 of
    the frame width). No responsive reflow, scroll containers or input controls. */
 .demo-visual{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;font:calc(var(--u) * 13)/1.5 var(--sans);color:#525252;background:#fff}
@@ -8,12 +8,13 @@
 .demo-visual .icon-copy{display:inline-flex;align-items:center;gap:calc(var(--u) * 4)}
 .demo-visual .icon-copy svg{width:calc(var(--u) * 12);height:calc(var(--u) * 12)}
 .demo-visual .muted{color:#8a8a8a}
-.app-windowbar{height:calc(var(--u) * 40);display:flex;align-items:center;position:relative;background:#fafbfc;border-bottom:calc(var(--u) * 1) solid #e8e8e8;padding:0 calc(var(--u) * 16)}
-.window-lights{display:flex;gap:calc(var(--u) * 9)}
-.window-lights i{width:calc(var(--u) * 12);height:calc(var(--u) * 12);border-radius:50%;background:#ff5f57}
+/* macOS window controls drawn over the toolbar, where the hidden-title-bar
+   Electron window puts them (measured: 12px lights at x 19/39/59, y 18). */
+.window-lights{position:absolute;z-index:1;top:calc(var(--u) * 18);left:calc(var(--u) * 19);display:flex;gap:calc(var(--u) * 8)}
+.window-lights i{width:calc(var(--u) * 12);height:calc(var(--u) * 12);border-radius:50%;background:#ff5f57;box-shadow:inset 0 0 0 calc(var(--u) * .5) #0000001f}
 .window-lights i:nth-child(2){background:#febc2e}
 .window-lights i:nth-child(3){background:#28c840}
-.window-address{position:absolute;left:40%;width:20%;padding:calc(var(--u) * 3) 0;text-align:center;background:#f0f1f4;border-radius:calc(var(--u) * 8);font-size:calc(var(--u) * 12);color:#6b7280}
+.paper-toolbar .sidebar-toggle{margin-left:calc(var(--u) * 92)}
 .demo-stage,.demo-panel{height:calc(var(--u) * 700)}
 .workspace-toolbar{height:calc(var(--u) * 46);display:grid;grid-template-columns:calc(var(--u) * 660) calc(var(--u) * 340);border-bottom:calc(var(--u) * 1) solid #e8e8e8;background:white}
 .paper-toolbar,.side-toolbar{display:flex;align-items:center;gap:calc(var(--u) * 6);padding:0 calc(var(--u) * 8);min-width:0}
