@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { run } from "../core/process.ts";
 import { argument, buildOutline } from "../core/outline.ts";
+import { SynctexIndex } from "./synctex.ts";
 import { listFiles } from "../core/files.ts";
 import { PdfDocument, type PdfPage, type OutlineEntry } from "./pdf.ts";
 import type {
@@ -47,6 +47,7 @@ export class Build {
   }
   close() {
     this.document.close();
+    this.locator.close();
   }
 }
 export function sourceRange(
@@ -135,29 +136,34 @@ export class Margins {
       : [(this.header ?? 36) + 4, (this.footer ?? page.height - 36) - 4];
   }
 }
+// The CLI prints six decimals with printf, which rounds an exact half to
+// even where toFixed rounds it up; matching it keeps every crop the same as
+// with `synctex view`.
+export function printed(value: number) {
+  const exact = Math.abs(value).toFixed(30),
+    cut = exact.indexOf(".") + 7,
+    kept = exact.slice(0, cut);
+  const magnitude =
+    /^50*$/.test(exact.slice(cut)) && Number(kept.at(-1)) % 2 === 0
+      ? Number(kept)
+      : Number(Math.abs(value).toFixed(6));
+  return value < 0 ? -magnitude : magnitude;
+}
 export class Locator {
   cache = new Map<string, Box[]>();
+  private index: SynctexIndex | null = null;
   constructor(public build: Build) {}
   lookup(file: string, line: number): Box[] {
     const key = `${file}:${line}`;
     if (this.cache.has(key)) return this.cache.get(key)!;
-    const result = run(
-        "synctex",
-        ["view", "-i", `${line}:0:${file}`, "-o", this.build.info.pdf],
-        { check: false },
-      ).stdout.toString(),
-      records: Box[] = [],
+    this.index ??= new SynctexIndex(this.build.info.pdf);
+    const records: Box[] = [],
       shipped = new Set<number>(),
       margins = this.build.margins;
-    for (const block of result.split(/^Page:/m).slice(1)) {
-      const fields = Object.fromEntries(
-          [...block.matchAll(/^(x|y|h|v|W|H):([\d.+-]+)/gm)].map((m) => [
-            m[1],
-            Number(m[2]),
-          ]),
-        ),
-        page = Number(block.split("\n")[0]) - 1,
-        { y, v, H: height } = fields;
+    for (const result of this.index.view(file, line)) {
+      const [number, , y, h, v, W, height] = result.map(printed),
+        page = number - 1,
+        fields = { h, W };
       if (
         ![page, y, v, height].every(Number.isFinite) ||
         y < v - height - 4 ||
@@ -181,6 +187,10 @@ export class Locator {
     const filtered = records.filter((r) => !shipped.has(r[0]));
     this.cache.set(key, filtered);
     return filtered;
+  }
+  close() {
+    this.index?.close();
+    this.index = null;
   }
   boxes(name: string, start: number, end: number) {
     const file = this.build.path(name);
