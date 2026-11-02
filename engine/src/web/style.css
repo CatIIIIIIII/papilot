@@ -247,16 +247,31 @@ kbd {
   border-color: var(--line);
 }
 
-/* Full paper or changes only: a pair of the bar's ghost buttons. */
+/* Full paper or changes only, as one segmented control (a host such as
+   Papilot shows its own instead). */
 .view-switch {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: repeat(2, 1fr);
   flex: none;
   gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--head);
+}
+.view-switch .ghost {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+.view-switch .ghost:hover {
+  text-decoration: none;
+  border-color: transparent;
 }
 .view-switch .ghost.active {
   color: var(--ink);
-  border-color: var(--line);
-  background: var(--head);
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 1px var(--line);
 }
 
 /* Document */

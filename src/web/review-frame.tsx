@@ -12,6 +12,7 @@ import { ReviewNoteConnections } from './review-note-connections.tsx';
 import { SHORTCUT_EVENT, useShortcuts } from './shortcuts.ts';
 import { installReviewScroll } from './review-scroll.ts';
 import { EFFECTS_EVENT, useExpandedEffects } from './effect-preferences.ts';
+import { saveReviewView, useReviewView, VIEW_EVENT, type ReviewView } from './review-view.ts';
 
 // The viewer reads the interface language from its address.
 export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `/review/${task.projectId}/?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
@@ -187,6 +188,8 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
       .side,.context{overflow-x:clip}
     }
     /* History shares the PDF tools' size. Shortcut settings live in Papilot. */
+    /* Papilot shows the full paper switch with its own controls. */
+    .view-switch{display:none}
     .bar .ghost.history{display:inline-flex;align-items:center;justify-content:center;width:var(--papilot-button-size,30px);height:var(--papilot-button-size,30px);min-height:0;padding:0;font-size:0}
     .bar .history::before{content:"";width:16px;height:16px;background:currentColor;-webkit-mask:var(--icon-history) center/contain no-repeat;mask:var(--icon-history) center/contain no-repeat}
     /* Reserve the outer tools' row when there is too little room. Keep
@@ -229,9 +232,18 @@ function cropMargins(doc: Document) {
 // completion is the next step shown in the viewer's card once every change is decided.
 // Without a task the frame shows the paper's uncommitted changes (changesOf),
 // and the viewer's own waiting message shows while they are compared.
+// Whole paper or changed sections, in the same control as PDF and Changes.
+function ReviewViewSwitch({ view, onView }: { view: ReviewView; onView: (view: ReviewView) => void }) {
+  return <div className="pdf-modes" role="group" aria-label={t('Review view')}>
+    <button type="button" aria-label={t('Full paper')} title={t('Full paper')} aria-pressed={view === 'paper'} onClick={() => onView('paper')}><Icon name="book" size={15}/><span>{t('Full paper')}</span></button>
+    <button type="button" aria-label={t('Changes only')} title={t('Changes only')} aria-pressed={view === 'changes'} onClick={() => onView('changes')}><Icon name="compress" size={15}/><span>{t('Changes only')}</span></button>
+  </div>;
+}
+
 export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNotes, onDecided }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onSendNotes?: (message: { text: string; requestKey: string; notes?: NoteSummary[] }) => Promise<void>; onDecided?: () => void }) {
   const shortcuts = useShortcuts();
   const expandedEffects = useExpandedEffects();
+  const view = useReviewView(), [fullPaper, setFullPaper] = useState(false);
   const noteLinks = useNoteResults(), linksRef = useRef(noteLinks); linksRef.current = noteLinks;
   // Current changes open in the usual review; only older results need history.
   const linkedRound = task ? noteLinks?.focus?.change.round : undefined;
@@ -259,6 +271,18 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNo
   useEffect(() => {
     document?.defaultView?.dispatchEvent(new CustomEvent(EFFECTS_EVENT, { detail: expandedEffects }));
   }, [document, expandedEffects]);
+  useEffect(() => {
+    document?.defaultView?.dispatchEvent(new CustomEvent(VIEW_EVENT, { detail: view }));
+  }, [document, view]);
+  // The review marks when its round can be shown in the whole paper.
+  useEffect(() => {
+    if (!document) { setFullPaper(false); return; }
+    const root = document.documentElement, update = () => setFullPaper(root.dataset.fullPaper === 'available');
+    update();
+    const watcher = new MutationObserver(update);
+    watcher.observe(root, { attributes: true, attributeFilter: ['data-full-paper'] });
+    return () => watcher.disconnect();
+  }, [document]);
   useEffect(() => {
     const view = document?.defaultView;
     if (!view) return;
@@ -392,7 +416,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNo
     {task && ready && <ReviewNoteConnections doc={document} round={linkedRound || task.review?.round || 0}/>}
     <div ref={hostBar} className="review-host-bar">
       {lead && <div ref={leading} className="review-lead">{lead}</div>}
-      <div ref={toolbar} className="review-tools">{task && onSendNotes && <ReviewNotes doc={ready ? document : null} task={task} onSend={onSendNotes}/>}{tools}</div>
+      <div ref={toolbar} className="review-tools">{fullPaper && <ReviewViewSwitch view={view} onView={saveReviewView}/>}{task && onSendNotes && <ReviewNotes doc={ready ? document : null} task={task} onSend={onSendNotes}/>}{tools}</div>
     </div>
     {slot && completion ? createPortal(completion, slot) : null}
     {document && slot && completion && completionOffscreen ? createPortal(<div className="review-complete-jump">

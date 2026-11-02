@@ -24,6 +24,7 @@ import { placeable, type PlacedChange } from "./paper.ts";
 // pdf.js loads only when the full paper is shown.
 const FullPaper = lazy(() => import("./FullPaper.tsx").then((module) => ({ default: module.FullPaper })));
 import { EFFECTS_EVENT, EFFECTS_STORAGE, readExpandedEffects } from "./effect-preferences.ts";
+import { readView, VIEW_EVENT, VIEW_STORAGE, type ReviewView } from "./view-preferences.ts";
 import { STATUS } from "./overview.tsx";
 import { language, locale, t, tn, withLanguage } from "./i18n.ts";
 import {
@@ -173,9 +174,14 @@ export function ReviewApp({
     snapshot = useRef({ state, detail, busy, composer, current });
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   // The whole paper with the changes in place, or the changed sections only.
-  const [view, setView] = useState<"paper" | "changes">(() =>
-    readStorage<string>("latex-review:view", "paper") === "changes" ? "changes" : "paper",
-  );
+  const [view, setView] = useState<ReviewView>(readView);
+  useEffect(() => {
+    const chosen = (event: Event) => setView((event as CustomEvent).detail === "changes" ? "changes" : "paper");
+    const stored = (event: StorageEvent) => { if (event.key === VIEW_STORAGE || event.key === null) setView(readView()); };
+    window.addEventListener(VIEW_EVENT, chosen);
+    window.addEventListener("storage", stored);
+    return () => { window.removeEventListener(VIEW_EVENT, chosen); window.removeEventListener("storage", stored); };
+  }, []);
   const [expandedEffects, setExpandedEffects] = useState(readExpandedEffects);
   // Per-edit disclosure is temporary and scoped to its round. Changing the
   // global preference resets those overrides without reloading the review.
@@ -1115,15 +1121,29 @@ export function ReviewApp({
   }
   const fullPaper = Boolean(detail?.pdf) && placeable(placed),
     paperView = fullPaper && view === "paper";
-  function chooseView(next: "paper" | "changes") {
-    setView(next);
-    store("latex-review:view", next);
-    // Keep the selected change in view across the switch.
+  // A host shows its own switch while the whole paper can be shown.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (fullPaper) root.dataset.fullPaper = "available";
+    else delete root.dataset.fullPaper;
+  }, [fullPaper]);
+  // Keep the selected change in view when the view changes, from here or the host.
+  const shownView = useRef(paperView);
+  useEffect(() => {
+    if (shownView.current === paperView) return;
+    shownView.current = paperView;
     requestAnimationFrame(() => {
-      const index = snapshot.current.current;
-      const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${index}"]`);
+      const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${snapshot.current.current}"]`);
       if (article) reveal(article);
     });
+  }, [paperView]);
+  function chooseView(next: ReviewView) {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE, next);
+    } catch {
+      /* The choice lasts for this page. */
+    }
   }
   let index = 0;
   return (
