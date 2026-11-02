@@ -4,7 +4,7 @@ import net from 'node:net';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
-import { devRevision, readJson, stableVersion } from '../../bin/installation.mjs';
+import { devRevision, newerVersion, readJson, stableVersion } from '../../bin/installation.mjs';
 
 export const DEV_REPOSITORY = 'https://github.com/PapilotAI/papilot.git';
 const git = async (args: string[], cwd: string) => (await promisify(execFile)('git', args, { cwd, timeout: 120000, maxBuffer: 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })).stdout.trim();
@@ -17,6 +17,19 @@ export function npmCli(env = process.env, executable = process.execPath) {
     try { const real = fs.realpathSync(candidate); if (real.endsWith('npm-cli.js')) return real; } catch { /* next installation */ }
   }
   throw new Error('npm is unavailable to Papilot.');
+}
+// A desktop installer runs a newer release when it provides the shell level the
+// release declares and its bundled Node meets the release's engine range.
+export const NEEDS_INSTALLER = 'This version needs the latest desktop app. Download it from GitHub Releases.';
+export function desktopSupports(pkg: any, shell: number, node = process.versions.node) {
+  if (!Number.isInteger(pkg?.desktopShell) || pkg.desktopShell < 1 || pkg.desktopShell > shell) return false;
+  // npm's --engine-strict checks other range forms during installation.
+  const minimum = typeof pkg.engines?.node === 'string' ? /^\s*>=\s*v?(\d+\.\d+\.\d+)\s*$/.exec(pkg.engines.node)?.[1] : undefined;
+  return !minimum || !newerVersion(minimum, node);
+}
+// The installer's Codex serves releases that test the same or an older one.
+export function codexVersion(bin: string | undefined) {
+  try { return readJson(path.join(path.dirname(fs.realpathSync(bin!)), '../package.json'))?.version || null; } catch { return null; }
 }
 export const loaderFor = (root: string) => createRequire(path.join(root, 'package.json')).resolve('tsx/esm');
 export function runInstall(args: string[], cwd: string, log: number, timeout = 600000) {
@@ -102,7 +115,7 @@ async function installDev(data: string, version: string) {
   } catch (error) { fs.rmSync(stage, { recursive: true, force: true }); throw error; }
   finally { fs.closeSync(log); }
 }
-export async function installRelease(data: string, version: string) {
+export async function installRelease(data: string, version: string, desktop?: { shell: number; codex?: string }) {
   if (devRevision(version)) return installDev(data, version);
   if (!stableVersion(version)) throw new Error('Invalid release version.');
   const releases = path.join(data, 'updates/releases'); fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
@@ -116,7 +129,14 @@ export async function installRelease(data: string, version: string) {
     for (const file of ['dist/index.html', 'src/server/start.ts', 'src/server/main.ts', 'bin/papilot.mjs', 'vendor/latex-review/package-lock.json']) {
       if (!fs.existsSync(path.join(root, file))) throw new Error('The downloaded release is incomplete.');
     }
+    if (desktop && !desktopSupports(pkg, desktop.shell)) throw new Error(NEEDS_INSTALLER);
     await runInstall(['ci', '--prefix', path.join(root, 'vendor/latex-review'), ...flags], stage, log);
+    // Like the CLI's first run, Codex installs with its own scripts. The app
+    // finds it beside the release.
+    const tested = pkg.devDependencies?.['@openai/codex'], bundled = desktop && codexVersion(desktop.codex);
+    if (desktop && stableVersion(tested) && (!bundled || newerVersion(tested, bundled))) {
+      await runInstall(['install', '--prefix', path.join(stage, 'codex'), '--registry=https://registry.npmjs.org', '--no-audit', '--no-fund', `@openai/codex@${tested}`], stage, log);
+    }
     await probeInstallation(root, version, stage, log);
     return root;
   } catch (error) { fs.rmSync(stage, { recursive: true, force: true }); throw error; }

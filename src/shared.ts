@@ -9,7 +9,10 @@ export const MAX_ATTACHMENT_TOTAL = 100 * 1024 * 1024;
 export interface Attachment { id: string; projectId: string; name: string; size: number; mime: string }
 export type UpdateChannel = 'stable' | 'dev';
 export interface UpdateStatus {
+  // Present when the update must be downloaded as a new desktop app.
   downloadUrl?: string;
+  // The desktop app's own Papilot version; newer releases run on top of it.
+  installerVersion?: string;
   channel?: UpdateChannel;
   currentVersion: string; latestVersion: string | null;
   phase: 'idle' | 'checking' | 'available' | 'installing' | 'waiting' | 'restarting' | 'updated' | 'failed';

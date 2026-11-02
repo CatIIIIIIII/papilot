@@ -57,6 +57,7 @@
   "engines": {
     "node": ">=22.22.0"
   },
+  "desktopShell": 1,
   "scripts": {
     "dev": "tsx watch src/server/main.ts",
     "start": "tsx src/server/main.ts",

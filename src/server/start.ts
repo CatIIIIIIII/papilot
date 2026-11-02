@@ -10,6 +10,7 @@ import { Manuscripts } from './manuscript.ts';
 import { Changes } from './changes.ts';
 import { buildApp, gitQueue } from './app.ts';
 import { Updates } from './updates.ts';
+import { installRelease } from './update-install.ts';
 import { readJson } from '../../bin/installation.mjs';
 import { desktopDemo } from './desktop-demo.ts';
 
@@ -21,8 +22,14 @@ const accounts = new Accounts(store, ACCOUNT_ORIGIN || null);
 const manuscripts = new Manuscripts(), changes = new Changes();
 const desktop = process.env.PAPILOT_DESKTOP === '1';
 if (desktop) await desktopDemo(ROOT, DATA, store, workspace, manuscripts).catch(error => console.error('Could not prepare the demo paper:', error));
+// A packaged desktop app installs newer releases and restarts them itself.
+const shell = desktop && process.send ? Number(process.env.PAPILOT_DESKTOP_SHELL) || 0 : 0, downloadUrl = 'https://github.com/PapilotAI/papilot/releases/latest';
 const updates = new Updates({ root: ROOT, data: DATA, version: VERSION, port: PORT,
-  ...(desktop ? { supported: false, downloadUrl: 'https://github.com/PapilotAI/papilot/releases/latest' } : {}),
+  ...(shell ? {
+    desktop: { shell, installer: process.env.PAPILOT_DESKTOP_INSTALLER || VERSION, downloadUrl },
+    install: (data: string, version: string) => installRelease(data, version, { shell, codex: process.env.PAPILOT_DESKTOP_CODEX }),
+    restart: async (root: string, version: string) => { process.send!({ type: 'papilot:activate', root, version }); },
+  } : desktop ? { supported: false, downloadUrl } : {}),
   busy: () => workspace.busyForUpdate || manuscripts.busyForUpdate || changes.busyForUpdate, shutdown: () => shutdown() });
 const activation = readJson(path.join(DATA, 'updates/active.json'));
 const updateInstance = typeof activation?.root === 'string' && fs.existsSync(activation.root) && fs.realpathSync(activation.root) === fs.realpathSync(ROOT) ? activation.id : undefined;
