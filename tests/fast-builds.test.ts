@@ -164,12 +164,12 @@ test('a delivery preview is exactly what applying the task writes, with pending 
     assert.match(all['paper/main.tex'].toString(), /Pending introduction/);
     const decide = (action: string, units: any[]) => app.review.decide(task.name, { id: crypto.randomUUID(), round: round.number, action, changes: units.map(unit => unit.id) });
     const rejected = round.units.find((unit: any) => unit.new_text.includes('Rejected'));
-    decide('reject', [rejected]);
+    await decide('reject', [rejected]);
     const preview = await app.delivery.preview(task.name);
     assert.doesNotMatch(preview[METHOD].toString(), /Rejected sentence/);
-    decide('accept', round.units.filter((unit: any) => unit !== rejected));
+    await decide('accept', round.units.filter((unit: any) => unit !== rejected));
     assert.deepEqual(await app.delivery.preview(task.name), preview, 'accepting what was pending changes nothing');
-    app.delivery.deliver(task.name, 'workspace');
+    await app.delivery.deliver(task.name, 'workspace');
     for (const [file, data] of Object.entries(preview)) assert.equal(disk.read(file), (data as Buffer).toString());
   } finally { await disk.close(); }
 });
@@ -271,5 +271,31 @@ test('the review engine creates tasks while it answers requests, and concurrent 
     const named = app.tasks.createAsync('named', 'Named', [], ['paper'], true);
     await assert.rejects(app.tasks.createAsync('named', 'Named', [], ['paper'], true), /being created/);
     assert.equal((await named).name, 'named');
+  } finally { await disk.close(); }
+});
+
+test('decisions and commits let the review engine answer meanwhile, and concurrent ones never interleave', async () => {
+  const disk = new Fixture(), app = disk.app();
+  try {
+    const task = app.tasks.create('concurrent', 'Review', [], ['paper'], true);
+    disk.edit(task, METHOD, 'Method sentence 2.', 'First accepted sentence.');
+    disk.edit(task, METHOD, 'Detail sentence 2.', 'Second accepted sentence.');
+    const round = fakeRound(app, task.name);
+    // While a decision runs Git, other work gets turns.
+    let turned = false;
+    setImmediate(() => { turned = true; });
+    const decisions = round.units.map((unit: any) => app.review.decide(task.name, { id: crypto.randomUUID(), round: round.number, action: 'accept', changes: [unit.id] }));
+    await Promise.all(decisions);
+    assert.ok(turned, 'the event loop turned during the decisions');
+    // Both took effect: neither overwrote the other's accepted text.
+    const accepted = disk.repo.blob(app.tasks.get(task.name).accepted, METHOD)!.toString();
+    assert.match(accepted, /First accepted sentence[\s\S]*Second accepted sentence/);
+    turned = false;
+    setImmediate(() => { turned = true; });
+    const [first, second] = await Promise.all([app.delivery.apply(task.name, false, 'commit', 'Both sentences'), app.delivery.apply(task.name, false, 'commit', 'Both sentences')]);
+    assert.ok(turned, 'the event loop turned during the commit');
+    assert.equal(first.delivery?.commit, second.delivery?.commit, 'the second request finds the first one done');
+    assert.equal(disk.repo.text(['log', '-1', '--format=%s']), 'Both sentences');
+    assert.equal(disk.repo.text(['rev-list', '--count', 'HEAD~1..HEAD']), '1');
   } finally { await disk.close(); }
 });

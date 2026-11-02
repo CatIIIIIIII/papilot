@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { ROOT, codeVersion } from "../runtime.ts";
 import { Builder, BuildError } from "./build.ts";
-import { diffUnits, scopeViolations, withUnits } from "./changes.ts";
+import { diffUnitsAsync, scopeViolationsAsync, withUnits } from "./changes.ts";
 import { isFigure } from "./config.ts";
 import { now, readJson, writeJson } from "./files.ts";
 import { runAsync } from "./process.ts";
@@ -351,15 +351,16 @@ export class Publisher {
         "Run `finish --force`, then start a new task.",
       );
     this.phase(job, "snapshot");
-    const after = await app.tasks.snapshotAsync(task);
-    task = app.tasks.get(name);
-    const before = task.accepted,
-      latest = app.review.latestRound(name),
-      decided = app.review.lastChange(name),
-      violations = scopeViolations(app.repo, task.base, after, task.scope);
+    // The worktree and the decisions are read together, between writes.
+    const { after, before, latest, decided } = await app.exclusive(async () => {
+      const after = await app.tasks.snapshotAsync(task);
+      task = app.tasks.get(name);
+      return { after, before: task.accepted, latest: app.review.latestRound(name), decided: app.review.lastChange(name) };
+    });
+    const violations = await scopeViolationsAsync(app.repo, task.base, after, task.scope);
     const reconciliation = app.reconciliation.get(name);
     if (reconciliation) {
-      for (const file of app.repo.changedFiles(task.base, after))
+      for (const file of await app.repo.changedFilesAsync(task.base, after))
         if (!reconciliation.files.includes(file) && !violations.includes(file)) violations.push(file);
     }
     if (violations.length)
@@ -388,7 +389,7 @@ export class Publisher {
       };
     const files = await app.repo.changedFilesAsync(before, after);
     if (!files.length) return { outcome: "empty", round: null, changes: 0 };
-    const units = diffUnits(app.repo, before, after, (f) =>
+    const units = await diffUnitsAsync(app.repo, before, after, (f) =>
       isFigure(project, f),
     );
     this.phase(job, "build");
@@ -443,20 +444,23 @@ export class Publisher {
             seed,
           ),
       );
-      if (app.review.lastChange(name) !== decided) throw new Stale();
-      fs.rmSync(final, { recursive: true, force: true });
-      fs.renameSync(output, final);
-      app.store.execute(
-        "INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)",
-        name,
-        number,
-        before,
-        after,
-        JSON.stringify(units),
-        JSON.stringify(summary),
-        now(),
-      );
-      app.repo.updateRef(`refs/latex-review/${name}/round-${number}`, after);
+      // No decision may come between this check and the new round.
+      await app.exclusive(async () => {
+        if (app.review.lastChange(name) !== decided) throw new Stale();
+        await fs.promises.rm(final, { recursive: true, force: true });
+        await fs.promises.rename(output, final);
+        app.store.execute(
+          "INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)",
+          name,
+          number,
+          before,
+          after,
+          JSON.stringify(units),
+          JSON.stringify(summary),
+          now(),
+        );
+        await app.repo.updateRefAsync(`refs/latex-review/${name}/round-${number}`, after);
+      });
     } finally {
       fs.rmSync(output, { recursive: true, force: true });
     }

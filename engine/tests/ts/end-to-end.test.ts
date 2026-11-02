@@ -157,7 +157,7 @@ it.skipIf(!tex)(
       expect(detail.units.some((u) => u.kind === "figure")).toBe(true);
       expect(detail.units.some((u) => u.visual === "identical")).toBe(true);
       expect(detail.units.every((u) => u.visual !== "unmapped")).toBe(true);
-      const state = app.review.decide(task.name, {
+      const state = await app.review.decide(task.name, {
         action: "accept",
         round: 1,
         changes: detail.units.map((u) => u.id),
@@ -166,7 +166,7 @@ it.skipIf(!tex)(
         Object.values(state.decisions).every((d) => d === "accepted"),
       ).toBe(true);
       expect(app.review.summary(task.name).state).toBe("done");
-      app.review.undo(task.name, state.undo!.id);
+      await app.review.undo(task.name, state.undo!.id);
       expect(app.review.summary(task.name).state).toBe("reviewing");
     } finally {
       await app.close();
@@ -228,7 +228,7 @@ it.skipIf(!tex)(
           const result = await original.apply(this, args);
           if (!decided) {
             decided = true;
-            app.review.decide(task.name, {
+            await app.review.decide(task.name, {
               action: "accept",
               round: 1,
               changes: ["c001"],

@@ -231,6 +231,34 @@ export class Repo {
   updateRef(ref: string, value: string) {
     this.run(["update-ref", ref, value]);
   }
+  revAsync(name: string) {
+    return this.textAsync(["rev-parse", "--verify", "--quiet", name + "^{commit}"]);
+  }
+  async blobAsync(rev: string, file: string) {
+    return (await this.blobsAsync(rev, [file]))[file];
+  }
+  async modeAsync(rev: string, file: string) {
+    return (await this.textAsync(["ls-tree", rev, "--", file])).split(/\s+/)[0] || null;
+  }
+  hashObjectAsync(data: Buffer) {
+    return this.textAsync(["hash-object", "-w", "--stdin"], { input: data });
+  }
+  commitTreeAsync(tree: string, parent: string | null, message: string) {
+    return this.textAsync(
+      ["commit-tree", "--no-gpg-sign", tree, ...(parent ? ["-p", parent] : []), "-m", message],
+      { env: { ...process.env, ...IDENTITY } },
+    );
+  }
+  async commitWithAsync(parent: string, contents: Record<string, Buffer | null>, message: string) {
+    return this.commitTreeAsync(await this.treeWithAsync(parent, contents), parent, message);
+  }
+  async updateRefAsync(ref: string, value: string) {
+    await this.runAsync(["update-ref", ref, value]);
+  }
+  async deleteRefsAsync(prefix: string) {
+    const refs = (await this.textAsync(["for-each-ref", "--format=%(refname)", prefix])).split("\n").filter(Boolean);
+    if (refs.length) await this.runAsync(["update-ref", "--stdin"], { input: refs.map((r) => `delete ${r}\n`).join("") });
+  }
   deleteRefs(prefix: string) {
     const refs = this.text(["for-each-ref", "--format=%(refname)", prefix])
       .split("\n")

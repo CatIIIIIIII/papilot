@@ -52,9 +52,23 @@ export class App {
     this.confirmations = new Confirmations(
       path.join(this.state, "references-confirmed.json"),
     );
-    this.review.recover();
-    this.delivery.recover();
-    this.reconciliation.recover();
+    // Writes interrupted by a restart are finished first, before any other.
+    this.ready = this.exclusive(async () => {
+      await this.review.recover();
+      await this.delivery.recover();
+      await this.reconciliation.recover();
+    });
+  }
+  /** Settles once writes interrupted by a restart are finished. */
+  ready: Promise<void>;
+  private writing: Promise<unknown> = Promise.resolve();
+  /** Runs `work` after every write that started before it. Decisions,
+   *  deliveries and task changes run Git without blocking the server, so this
+   *  keeps them from interleaving, as when they ran in one piece. */
+  exclusive<T>(work: () => T | Promise<T>): Promise<T> {
+    const result = this.writing.then(() => work());
+    this.writing = result.then(() => undefined, () => undefined);
+    return result;
   }
   get project() {
     const config = path.join(this.root, CONFIG_NAME),
@@ -509,6 +523,8 @@ async function run(root: string, port: number, idle: number, owner?: Owner) {
     server = createServer(app);
   let timer: NodeJS.Timeout | undefined;
   try {
+    // Requests see the state that interrupted writes leave once finished.
+    await app.ready.catch(() => undefined);
     try {
       await server.listen({ host: "127.0.0.1", port });
     } catch (error) {

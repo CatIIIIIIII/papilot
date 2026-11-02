@@ -46,6 +46,12 @@ export function taskMarker(folder: string): [string, string | null] {
     );
   return marker ? [marker.root, marker.task] : [repo.toplevel(), null];
 }
+export async function revisionReaderAsync(repo: Repo, rev: string, folder: string) {
+  const files = (await repo.runAsync(["ls-tree", "-r", "-z", "--name-only", rev, ...(folder ? ["--", folder] : [])]))
+      .toString().split("\0").filter((p) => p.endsWith(".tex")),
+    blobs = await repo.blobsAsync(rev, files);
+  return (file: string) => blobs[file]?.toString() ?? null;
+}
 export function revisionReader(repo: Repo, rev: string, folder: string) {
   const files = repo.files(rev, folder).filter((p) => p.endsWith(".tex")),
     blobs = repo.blobs(rev, files);
@@ -89,7 +95,7 @@ export class Tasks {
     const reserved = this.reserve(name, title, sections, files);
     if ("existing" in reserved) return reserved.existing;
     const base = this.app.repo.snapshot([this.app.project.source_dir, ...reserved.paths], GENERATED);
-    const scope = this.scopeOf(base, sections, reserved.paths);
+    const scope = this.scopeOf(sections.length ? revisionReader(this.app.repo, base, this.app.project.doc_dir) : null, sections, reserved.paths);
     fs.mkdirSync(path.dirname(reserved.worktree), { recursive: true });
     this.app.repo.run(["worktree", "add", "--detach", reserved.worktree, base]);
     return this.record(reserved, base, scope, deferred);
@@ -107,8 +113,10 @@ export class Tasks {
     if ("existing" in reserved) return reserved.existing;
     this.creating.add(reserved.name);
     try {
-      const base = await this.app.repo.snapshotAsync([this.app.project.source_dir, ...reserved.paths], GENERATED);
-      const scope = this.scopeOf(base, sections, reserved.paths);
+      // The manuscript is read between writes, which may be changing it; the
+      // much longer checkout of the worktree is not.
+      const base = await this.app.exclusive(() => this.app.repo.snapshotAsync([this.app.project.source_dir, ...reserved.paths], GENERATED));
+      const scope = this.scopeOf(sections.length ? await revisionReaderAsync(this.app.repo, base, this.app.project.doc_dir) : null, sections, reserved.paths);
       await fs.promises.mkdir(path.dirname(reserved.worktree), { recursive: true });
       await this.app.repo.runAsync(["worktree", "add", "--detach", reserved.worktree, base]);
       return this.record(reserved, base, scope, deferred);
@@ -168,18 +176,15 @@ export class Tasks {
       );
     return { name, title, worktree, paths: files.map(cleanPath) };
   }
-  private scopeOf(base: string, sections: string[], paths: string[]): Scope {
+  private scopeOf(read: ((file: string) => string | null) | null, sections: string[], paths: string[]): Scope {
     const project = this.app.project;
-    if (!sections.length)
+    if (!sections.length || !read)
       return {
         sections: [],
         ranges: null,
         paths: paths.length ? paths : [project.source_dir],
       };
-    const outline = buildOutline(
-      revisionReader(this.app.repo, base, project.doc_dir),
-      project.main,
-    );
+    const outline = buildOutline(read, project.main);
     const [ranges, chosen] = selectedRanges(
       outline.nodes,
       resolveSections(outline.nodes, sections),
@@ -243,7 +248,14 @@ export class Tasks {
         JSON.stringify([...task.scope.paths].sort())
     );
   }
+  /** Closes the task and removes its worktree, after every other write of
+   *  the review engine; removing a large worktree takes a while. */
   async finish(name: string, force = false) {
+    const result = await this.app.exclusive(() => this.finishNow(name, force));
+    await this.app.publisher.pruneCache();
+    return result;
+  }
+  private async finishNow(name: string, force: boolean) {
     this.app.delivery.assertReady(name);
     const app = this.app,
       task = this.get(name);
@@ -258,7 +270,7 @@ export class Tasks {
         `${counts.pending} pending and ${counts.commented} commented changes`,
       );
     const leftover = fs.existsSync(task.worktree)
-      ? app.repo.changedFiles(task.accepted, this.snapshot(task))
+      ? await app.repo.changedFilesAsync(task.accepted, await this.snapshotAsync(task))
       : [];
     if (leftover.length)
       problems.push(
@@ -269,17 +281,16 @@ export class Tasks {
         `The task still has ${problems.join("; ")}. Publish and finish the review first, or use --force to discard them.`,
       );
     if (fs.existsSync(task.worktree))
-      app.repo.run(["worktree", "remove", "--force", task.worktree]);
-    app.repo.run(["worktree", "prune"], { check: false });
-    app.repo.deleteRefs(`refs/latex-review/${name}/`);
-    fs.rmSync(path.join(app.state, "rounds", name), {
+      await app.repo.runAsync(["worktree", "remove", "--force", task.worktree]);
+    await app.repo.runAsync(["worktree", "prune"], { check: false });
+    await app.repo.deleteRefsAsync(`refs/latex-review/${name}/`);
+    await fs.promises.rm(path.join(app.state, "rounds", name), {
       recursive: true,
       force: true,
     });
     app.store.execute("UPDATE tasks SET closed=? WHERE name=?", now(), name);
-    await app.publisher.pruneCache();
     return {
-      changed: app.repo.changedFiles(task.base, task.accepted),
+      changed: await app.repo.changedFilesAsync(task.base, task.accepted),
       discarded: counts,
     };
   }
