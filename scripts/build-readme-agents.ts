@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readmeLinks } from './i18n/scopes.ts';
 import { AGENT_IDS, AGENT_NAMES } from '../src/shared.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -56,9 +57,9 @@ const panel = `<!-- BEGIN AGENT ICONS -->
   </a>
 </p>
 <!-- END AGENT ICONS -->`;
-for (const file of ['README.md', 'README.zh-CN.md']) {
+for (const file of ['README.md', ...fs.readdirSync(path.join(root, 'docs/readme')).map(name => `docs/readme/${name}`)]) {
   const target = path.join(root, file);
   const markdown = fs.readFileSync(target, 'utf8');
-  const updated = markdown.replace(/<!-- BEGIN AGENT ICONS -->[\s\S]*?<!-- END AGENT ICONS -->/, panel);
+  const updated = markdown.replace(/<!-- BEGIN AGENT ICONS -->[\s\S]*?<!-- END AGENT ICONS -->/, readmeLinks(panel, path.posix.dirname(file)));
   if (updated !== markdown) fs.writeFileSync(target, updated);
 }

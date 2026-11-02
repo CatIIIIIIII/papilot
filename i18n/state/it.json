@@ -1944,11 +1944,6 @@
     "textHash": "2929eb51b943be7afa70811a79024edfe0f154a2e965db4c51ff1842aecd057d",
     "model": "gemini-4-argon-medium"
   },
-  "Installer version": {
-    "revision": "a6d1b8f777c7e13d3b195d5e36db209afbc5d8106fc41d76213683c4e560177e",
-    "textHash": "228bd43e2c2f996dcc7b1f59c6e791a81714c987b94fd92c0e555d9dbdba4282",
-    "model": "gemini-4-argon-medium"
-  },
   "Instructions": {
     "revision": "49712f7da9121e98630504fb1377420055ca5b6b54ff6d8a1cab6bb7ef218b42",
     "textHash": "135596b0c0e5823f5bb8c70f459237acb12b8f92554b0fb51d51a5c1b5e826dc",

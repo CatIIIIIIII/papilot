@@ -9,7 +9,7 @@
 
 <p><a href="https://papilot.ai">Website</a> · <a href="docs/guide.md">Documentation</a></p>
 
-<p data-language-switcher><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-Hant.md">繁體中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.pt.md">Português</a> · <a href="README.it.md">Italiano</a> · <a href="README.sv.md">Svenska</a></p>
+<p data-language-switcher><a href="README.md">English</a> · <a href="docs/readme/README.zh-CN.md">简体中文</a> · <a href="docs/readme/README.zh-Hant.md">繁體中文</a> · <a href="docs/readme/README.ja.md">日本語</a> · <a href="docs/readme/README.ko.md">한국어</a> · <a href="docs/readme/README.de.md">Deutsch</a> · <a href="docs/readme/README.fr.md">Français</a> · <a href="docs/readme/README.es.md">Español</a> · <a href="docs/readme/README.pt.md">Português</a> · <a href="docs/readme/README.it.md">Italiano</a> · <a href="docs/readme/README.sv.md">Svenska</a></p>
 
 [![CI](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)
@@ -93,7 +93,7 @@ Open **Settings → Runtime → Agents** to check status, models, and setup inst
 
 - **Documentation:** Read the [User Guide](docs/guide.md) for workspace workflows, configuration, [in-app updates](docs/guide.md#updates), [remote access with Tailscale](docs/guide.md#remote-access-with-tailscale), and [passkey sharing for collaborators](docs/guide.md#collaborators).
 - **Design and history:** Explore [`examples/papilot-paper`](examples/papilot-paper) for the formal design paper and proofs, and check the [Changelog](CHANGELOG.md) for release notes.
-- **Community and support:** Ask questions in [Discussions](https://github.com/PapilotAI/papilot/discussions), report bugs in [Issues](https://github.com/PapilotAI/papilot/issues), or read [CONTRIBUTING.md](CONTRIBUTING.md) to contribute.
+- **Community and support:** Ask questions in [Discussions](https://github.com/PapilotAI/papilot/discussions), report bugs in [Issues](https://github.com/PapilotAI/papilot/issues), or read [CONTRIBUTING.md](.github/CONTRIBUTING.md) to contribute.
 
 ---
 

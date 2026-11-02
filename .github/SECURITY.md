@@ -2,11 +2,11 @@
 
 ## Supported versions
 
-Security fixes go into the latest release on npm. Update with `npm install -g papilot@latest`.
+Security fixes go into the latest web and desktop releases. Update the web server with `npm install -g papilot@latest`; update the desktop app using the matching installer from [GitHub Releases](https://github.com/PapilotAI/papilot/releases).
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through [GitHub's vulnerability reporting](https://github.com/cu1ch3n/papilot/security/advisories/new) rather than in a public issue. Include the Papilot version, how Papilot was reached (on the same computer, over Tailscale or through an SSH tunnel) and the steps to reproduce. You should hear back within a week.
+Please report vulnerabilities privately through [GitHub's vulnerability reporting](https://github.com/PapilotAI/papilot/security/advisories/new) rather than in a public issue. Include the Papilot version, how Papilot was reached (on the same computer, over Tailscale or through an SSH tunnel) and the steps to reproduce. You should hear back within a week.
 
 ## What Papilot protects
 

@@ -3,16 +3,16 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { devRevision, newerVersion, readJson, stableVersion, writeJson } from '../../bin/installation.mjs';
-import { desktopSupports, installRelease, loaderFor, NEEDS_INSTALLER, npmCli } from './update-install.ts';
+import { installRelease, loaderFor, npmCli } from './update-install.ts';
 import type { UpdateChannel, UpdateStatus } from '../shared.ts';
 
 const activePhases = new Set(['installing', 'waiting', 'restarting']);
 export const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-async function releaseInfo(url: string, fetcher: typeof fetch) {
+async function releaseInfo(url: string, fetcher: typeof fetch, limit = 256000) {
   const response = await fetcher(url, { signal: AbortSignal.timeout(10000), redirect: 'error', headers: { Accept: 'application/json', 'User-Agent': 'Papilot' } });
   if (!response.ok) throw new Error('Could not check for updates.');
   const text = await response.text();
-  if (text.length > 256000) throw new Error('Invalid release information.');
+  if (text.length > limit) throw new Error('Invalid release information.');
   return JSON.parse(text);
 }
 // The package.json of the newest release on a channel.
@@ -30,14 +30,29 @@ export async function latestManifest(channel: UpdateChannel = 'stable', fetcher 
   return pkg;
 }
 export const latestRelease = async (channel: UpdateChannel = 'stable', fetcher = fetch) => (await latestManifest(channel, fetcher)).version as string;
+export const DESKTOP_RELEASES = 'https://github.com/PapilotAI/papilot/releases';
+// npm can be published before desktop builds finish. Only advertise releases
+// with an uploaded installer for this OS and CPU, and link to that exact release.
+export async function latestDesktopRelease(platform = process.platform, arch = process.arch, fetcher = fetch) {
+  const releases = await releaseInfo('https://api.github.com/repos/PapilotAI/papilot/releases?per_page=100', fetcher, 4 * 1024 * 1024);
+  if (!Array.isArray(releases)) throw new Error('Invalid release information.');
+  let latest: { version: string; downloadUrl: string } | null = null;
+  for (const release of releases) {
+    const version = typeof release.tag_name === 'string' ? release.tag_name.replace(/^v/, '') : '';
+    if (release.draft !== false || release.prerelease !== false || !stableVersion(version) || !Array.isArray(release.assets)) continue;
+    const names = platform === 'darwin' && ['arm64', 'x64'].includes(arch) ? [`Papilot-${version}-mac-${arch}.dmg`, `Papilot-${version}-mac-${arch}.zip`]
+      : platform === 'linux' && ['arm64', 'x64'].includes(arch) ? [`Papilot-${version}-linux-${arch === 'x64' ? 'x86_64' : arch}.AppImage`, `Papilot-${version}-linux-${arch === 'x64' ? 'amd64' : arch}.deb`] : [];
+    if (!release.assets.some((asset: any) => asset.state === 'uploaded' && asset.size > 0 && names.includes(asset.name))) continue;
+    if (!latest || newerVersion(version, latest.version)) latest = { version, downloadUrl: `${DESKTOP_RELEASES}/tag/${release.tag_name}` };
+  }
+  return latest;
+}
 const validTarget = (version: unknown, channel: UpdateChannel): version is string => channel === 'dev' ? Boolean(devRevision(version)) : stableVersion(version);
 const available = (next: string, current: string, channel: UpdateChannel) => validTarget(next, channel)
   && (channel === 'dev' || devRevision(current) ? next !== current : newerVersion(next, current));
 interface Options {
-  // Desktop builds that cannot install releases link to this download page.
-  downloadUrl?: string;
-  // A desktop installer that runs newer releases from npm (see desktop/runtime.ts).
-  desktop?: { shell: number; installer: string; downloadUrl: string };
+  desktop?: boolean;
+  latestDesktop?: () => Promise<{ version: string; downloadUrl: string } | null>;
   root: string; data: string; version: string; port: number;
   busy: () => boolean; shutdown: () => void;
   latest?: (channel: UpdateChannel) => Promise<string | Record<string, any>>; install?: (data: string, version: string) => Promise<string>;
@@ -55,32 +70,28 @@ export class Updates {
   private file: string;
   private lock: string;
   private channel: UpdateChannel;
-  // The latest release needs a newer desktop installer.
-  private needsInstaller = false;
+  private downloadUrl = DESKTOP_RELEASES;
   constructor(private options: Options) {
-    this.file = path.join(options.data, 'updates/status.json'); this.lock = path.join(options.data, 'updates/install.lock');
+    this.file = path.join(options.data, options.desktop ? 'updates/desktop/status.json' : 'updates/status.json'); this.lock = path.join(options.data, 'updates/install.lock');
     const preference = readJson(path.join(options.data, 'updates/channel.json'))?.channel;
-    this.channel = options.downloadUrl || options.desktop ? 'stable' : preference === 'dev' || preference === 'stable' ? preference : devRevision(options.version) ? 'dev' : 'stable';
-    let supported = options.supported ?? true;
-    if (options.supported === undefined) try { npmCli(); } catch { supported = false; }
+    this.channel = options.desktop ? 'stable' : preference === 'dev' || preference === 'stable' ? preference : devRevision(options.version) ? 'dev' : 'stable';
+    let supported = options.desktop ? false : options.supported ?? true;
+    if (!options.desktop && options.supported === undefined) try { npmCli(); } catch { supported = false; }
     this.state = { currentVersion: options.version, latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: supported };
-    const saved = readJson(this.file);
+    const saved = options.desktop ? null : readJson(this.file);
     if (saved && ['failed', 'updated', 'installing', 'waiting', 'restarting'].includes(saved.phase)) this.state = { ...this.state, ...saved, currentVersion: options.version, canUpdate: supported };
     if (saved && activePhases.has(saved.phase) && !alive(saved.pid)) this.change({ phase: 'failed', checkedAt: Date.now(), error: 'The update was interrupted. Your current installation is still available; retry the update.' });
   }
   snapshot(): UpdateStatus {
-    if (this.options.downloadUrl) return { currentVersion: this.options.version, latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: false, channel: 'stable', downloadUrl: this.options.downloadUrl };
     const saved = readJson(this.file);
     if (saved && activePhases.has(this.state.phase) && ['updated', 'failed'].includes(saved.phase)) this.state = { ...this.state, ...saved, currentVersion: this.options.version };
     const { currentVersion, latestVersion, phase, checkedAt, error, canUpdate } = this.state, desktop = this.options.desktop;
-    if (desktop) return { currentVersion, latestVersion, phase, checkedAt, error, channel: this.channel, installerVersion: desktop.installer,
-      ...(this.needsInstaller ? { canUpdate: false, downloadUrl: desktop.downloadUrl } : { canUpdate }) };
+    if (desktop) return { currentVersion, latestVersion, phase, checkedAt, error, channel: 'stable', canUpdate: false, downloadUrl: this.downloadUrl };
     return { currentVersion, latestVersion, phase, checkedAt, error, canUpdate, channel: this.channel };
   }
   get restarting() { return this.snapshot().phase === 'restarting'; }
   enter() { this.inFlight++; let released = false; return () => { if (!released) { released = true; this.inFlight--; } }; }
   start() {
-    if (this.options.downloadUrl) return;
     if (this.state.phase !== 'failed') void this.check();
     this.timer = setInterval(() => {
       if (this.state.phase === 'waiting') void this.activate();
@@ -93,7 +104,7 @@ export class Updates {
     writeJson(this.file, { ...this.state, pid: process.pid });
   }
   setChannel(channel: unknown) {
-    if (this.options.downloadUrl || this.options.desktop) throw new Error('Download desktop updates from GitHub Releases.');
+    if (this.options.desktop) throw new Error('Download desktop updates from GitHub Releases.');
     if (channel !== 'stable' && channel !== 'dev') throw new Error('Choose a valid update channel.');
     if (activePhases.has(this.state.phase)) throw new Error('Wait for the current update to finish before changing channels.');
     if (channel === this.channel) return this.check();
@@ -104,17 +115,25 @@ export class Updates {
     return this.check();
   }
   check(): Promise<UpdateStatus> {
-    if (this.options.downloadUrl) return Promise.resolve(this.snapshot());
     if (this.checking) return this.checking;
     if (activePhases.has(this.state.phase)) return Promise.resolve(this.snapshot());
     this.change({ phase: 'checking' });
     const channel = this.channel;
-    const checking = (this.options.latest || latestManifest)(channel).then(found => {
-      const manifest = typeof found === 'string' ? { version: found } : found, version = manifest?.version;
+    const discovery = this.options.desktop ? (this.options.latestDesktop || latestDesktopRelease)() : (this.options.latest || latestManifest)(channel);
+    const checking = discovery.then(found => {
+      const manifest = typeof found === 'string' ? { version: found } : found;
+      if (!manifest && this.options.desktop) {
+        if (!this.closed && this.checking === checking) {
+          this.downloadUrl = DESKTOP_RELEASES;
+          this.change({ latestVersion: null, checkedAt: Date.now(), error: null, phase: 'idle' });
+        }
+        return this.snapshot();
+      }
+      const version = manifest?.version;
       if (!validTarget(version, channel)) throw new Error('Invalid release version.');
       if (!this.closed && this.checking === checking && !activePhases.has(this.state.phase)) {
         const newer = available(version, this.options.version, channel);
-        this.needsInstaller = Boolean(this.options.desktop && newer && !desktopSupports(manifest, this.options.desktop.shell));
+        if (this.options.desktop) this.downloadUrl = manifest!.downloadUrl;
         this.change({ latestVersion: version, checkedAt: Date.now(), error: null, phase: newer ? 'available' : 'idle' });
       }
       return this.snapshot();
@@ -126,9 +145,8 @@ export class Updates {
     return this.checking;
   }
   install(version: unknown) {
-    if (this.options.downloadUrl) throw new Error('Download desktop updates from GitHub Releases.');
+    if (this.options.desktop) throw new Error('Download desktop updates from GitHub Releases.');
     if (activePhases.has(this.state.phase)) return this.snapshot();
-    if (this.needsInstaller) throw new Error(NEEDS_INSTALLER);
     if (!this.state.canUpdate) throw new Error('npm is unavailable to Papilot.');
     if (!validTarget(version, this.channel) || version !== this.state.latestVersion || !available(version, this.options.version, this.channel)) throw new Error('Check for a newer release before updating.');
     fs.mkdirSync(path.dirname(this.lock), { recursive: true, mode: 0o700 });

@@ -58,13 +58,13 @@ test('the Git panel stages whole files and commits only what is staged', async (
 test('the PDF comparison stages, reverts and restores single changes', { skip: !hasTeX && 'needs latexmk' }, async () => {
   const { root, git, commit } = repository();
   const state = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-changes-state-'));
+  const changes = new Changes(state);
   const paragraphs = (edits: Record<number, string>) => `\\documentclass{article}\n\\begin{document}\n${Array.from({ length: 24 }, (_, i) => `${edits[i] ?? `Paragraph ${i} of the paper.`}\n\n`).join('')}\\end{document}\n`;
   try {
     fs.writeFileSync(path.join(root, 'main.tex'), paragraphs({}));
     git('add', '.'); commit('Initial');
     fs.writeFileSync(path.join(root, 'main.tex'), paragraphs({ 2: 'Paragraph 2, now longer.', 20: 'A new paragraph 20.' }));
     fs.writeFileSync(path.join(root, 'main.aux'), 'build output');
-    const changes = new Changes(state);
     let page: any;
     for (let tries = 0; tries < 240; tries++) {
       page = await changes.state('p', root, 'token');
@@ -92,5 +92,11 @@ test('the PDF comparison stages, reverts and restores single changes', { skip: !
 
     page = await changes.act('p', root, 'token', 'unstage', page.latest, [late.id]);
     assert.equal(git('diff', '--cached'), '');
-  } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(state, { recursive: true, force: true }); }
+  } finally {
+    // Revert/undo can schedule another comparison. Let its build release the
+    // repository lock before deleting the fixture, or it retries a missing path.
+    for (let tries = 0; changes.busyForUpdate && tries < 240; tries++) await new Promise(resolve => setTimeout(resolve, 500));
+    assert.equal(changes.busyForUpdate, false, 'Background comparisons must finish before removing the paper');
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(state, { recursive: true, force: true });
+  }
 });

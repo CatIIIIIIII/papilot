@@ -4,17 +4,17 @@ Thanks for helping. Papilot is young, so every bug report, idea and pull request
 
 ## Ways to help
 
-- **Try it and tell us what broke.** Open an [issue](https://github.com/cu1ch3n/papilot/issues/new/choose) with your Papilot version (`papilot --version`), your OS, Node.js and TeX distribution, and the steps to reproduce.
-- **Share ideas and questions** in [Discussions](https://github.com/cu1ch3n/papilot/discussions), including how you use Papilot on your own papers.
-- **Pick up an issue.** Issues labelled [good first issue](https://github.com/cu1ch3n/papilot/labels/good%20first%20issue) are small and well described; [help wanted](https://github.com/cu1ch3n/papilot/labels/help%20wanted) ones are larger.
-- **Improve the docs**: the [README](README.md), its [Chinese version](README.zh-CN.md) and the [guide](docs/guide.md).
+- **Try it and tell us what broke.** Open an [issue](https://github.com/PapilotAI/papilot/issues/new/choose) with your Papilot version (`papilot --version`), your OS, Node.js and TeX distribution, and the steps to reproduce.
+- **Share ideas and questions** in [Discussions](https://github.com/PapilotAI/papilot/discussions), including how you use Papilot on your own papers.
+- **Pick up an issue.** Issues labelled [good first issue](https://github.com/PapilotAI/papilot/labels/good%20first%20issue) are small and well described; [help wanted](https://github.com/PapilotAI/papilot/labels/help%20wanted) ones are larger.
+- **Improve the docs**: the [README](../README.md), its [Chinese version](../docs/readme/README.zh-CN.md) and the [guide](../docs/guide.md).
 
 ## Set up
 
 You need Node.js 22.22+, Git and a full TeX distribution. An agent is only needed to run real tasks; the tests never start one.
 
 ```sh
-git clone https://github.com/cu1ch3n/papilot && cd papilot
+git clone https://github.com/PapilotAI/papilot && cd papilot
 npm ci
 npm run setup:review   # install and build the review engine
 npm run build
@@ -41,6 +41,10 @@ Open `http://127.0.0.1:7276`. For the latest committed development version witho
 | `src/server` | The Fastify server, the agent adapters (Codex, Claude, Cursor, GLM, Antigravity, and Copilot, Grok, Kimi, DeepSeek, Qwen and OpenCode through ACP), tasks, Git and the PDF build |
 | `src/web` | The React interface and the PDF viewer |
 | `src/shared.ts` | Types shared by the server and the interface |
+| `desktop/` | Electron app, native assets, packaging and desktop runtime |
+| `docs/` | User guide, performance notes, requirements, images and translated READMEs in `docs/readme/` |
+| `i18n/` | Translation configuration, source catalogs and translation state |
+| `.github/` | Workflows, contribution guide, security policy and community files |
 | `engine/` | The review engine that builds and compares the PDFs, with its own tests |
 | `bin/papilot.mjs` | The `papilot` command installed by npm |
 | `examples/papilot-paper` | The example paper used by `papilot demo` |
@@ -62,4 +66,4 @@ Changes to the review engine also need `npm test` in `engine/`.
 - Write commit messages as a short imperative summary, with a body that explains why.
 - Attach screenshots for interface changes.
 
-By contributing, you agree that your work is released under the [MIT License](LICENSE). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+By contributing, you agree that your work is released under the [MIT License](../LICENSE). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).

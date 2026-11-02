@@ -3,10 +3,6 @@ name: Desktop
 on:
   workflow_dispatch:
   workflow_call:
-    inputs:
-      release_tag:
-        type: string
-        default: ''
   push:
     branches: [main, codex/electron-desktop]
     paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
@@ -17,16 +13,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-${{ github.ref }}-${{ inputs.release_tag || 'check' }}
-  cancel-in-progress: ${{ !inputs.release_tag }}
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   build:
     name: ${{ matrix.platform }} ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -93,12 +87,3 @@ jobs:
           path: test-results/desktop*.png
           if-no-files-found: ignore
           retention-days: 7
-      - name: Attach installers to the version release
-        if: inputs.release_tag != '' && inputs.release_tag != null
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        shell: bash
-        run: |
-          shopt -s nullglob
-          gh release upload "$RELEASE_TAG" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb --clobber

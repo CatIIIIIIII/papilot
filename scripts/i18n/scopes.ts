@@ -49,6 +49,14 @@ export function scopeValidation(scope: Scope, source: string, translated: string
   return null;
 }
 
+// Catalogs keep root-relative destinations identical to the English source.
+// Rebase only the generated document, so moving it never requires translation.
+export function readmeLinks(text: string, directory: string) {
+  const rebase = (url: string) => /^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url) ? url : path.posix.relative(directory, url);
+  return text.replace(/(\]\()([^)]+)(\))|(\b(?:href|src|srcset)=")([^"]+)(")/g,
+    (_match, before, url, after, htmlBefore, htmlUrl, htmlAfter) => before ? before + rebase(url) + after : htmlBefore + rebase(htmlUrl) + htmlAfter);
+}
+
 export function renderReadme(root: string, translations: Record<string, string>, locale = 'zh-Hant') {
   const source = scopeCatalog(root, 'readme').messages[0].source;
   let result = translations[source];
@@ -58,5 +66,7 @@ export function renderReadme(root: string, translations: Record<string, string>,
   const headings = [...source.matchAll(/^## (.+)$/gm)].map(match => match[1].toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/ /g, '-'));
   let index = 0;
   result = result.replace(/^## /gm, () => `<a id="${headings[index++]}"></a>\n\n## `);
-  fs.writeFileSync(path.join(root, `README.${locale}.md`), result);
+  const directory = 'docs/readme';
+  fs.mkdirSync(path.join(root, directory), { recursive: true });
+  fs.writeFileSync(path.join(root, directory, `README.${locale}.md`), readmeLinks(result, directory));
 }

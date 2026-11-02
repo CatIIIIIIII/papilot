@@ -446,7 +446,7 @@ try {
   await page.locator('dialog[open]').getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: /关于 Papilot/ }).click();
   assert.equal(await page.getByRole('link', { name: /更新日志/ }).getAttribute('href'), 'https://github.com/PapilotAI/papilot/blob/main/CHANGELOG.md');
-  assert.equal(await page.getByRole('link', { name: /参与贡献/ }).getAttribute('href'), 'https://github.com/PapilotAI/papilot/blob/main/CONTRIBUTING.md');
+  assert.equal(await page.getByRole('link', { name: /参与贡献/ }).getAttribute('href'), 'https://github.com/PapilotAI/papilot/blob/main/.github/CONTRIBUTING.md');
   await page.screenshot({ path: 'test-results/settings-about-links-mobile.png' });
   await page.locator('dialog[open]').getByRole('button', { name: '设置', exact: true }).click();
   await settingsDialog.getByRole('button', { name: '外观', exact: true }).click();

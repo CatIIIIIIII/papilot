@@ -97,9 +97,6 @@ export function UpdateNotice({ api, version }: { api: UpdateApi; version: string
   </>;
 }
 
-// Desktop apps run newer releases on top of the version they were installed with.
-const installedWith = (status: UpdateStatus) => status.installerVersion && status.installerVersion !== status.currentVersion
-  && <p className="update-current-version"><span>{t('Installer version')}</span><code title={status.installerVersion}>{versionLabel(status.installerVersion)}</code></p>;
 export function UpdateSettings({ api }: { api: UpdateApi }) {
   const { status, setStatus } = useUpdates(api);
   const [sending, setSending] = useState(false), [error, setError] = useState('');
@@ -110,13 +107,6 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
     finally { setSending(false); }
   }
   if (!status) return <div className="update-settings settings-page"><section className="settings-card update-summary update-loading"><p role="status">{t('Reading update status…')}</p><button className="button secondary" disabled={sending} onClick={() => void send('/updates/check')}>{t('Check for updates')}</button>{error && <p className="inline-error" role="alert">{updateError(error)}</p>}</section></div>;
-  if (status.downloadUrl) return <div className="update-settings settings-page"><section className="settings-card update-summary">
-    <div className="update-product-row"><div className="update-product"><span className="update-product-mark"><img src={logo} width="34" height="34" alt=""/></span><div><h3>Papilot</h3><p className="update-current-version">{t('Current version')} <code>{versionLabel(status.currentVersion)}</code></p>
-      {installedWith(status)}
-      {status.latestVersion && status.latestVersion !== status.currentVersion && <p className="update-current-version"><span>{t('Latest version')}</span><code title={status.latestVersion}>{versionLabel(status.latestVersion)}</code></p>}</div></div>
-      <a className="button secondary" href={status.downloadUrl} target="_blank" rel="noreferrer">{t('Download desktop updates')}</a></div>
-    <p className="update-settings-notice">{t('Download the latest desktop app for your system from GitHub Releases. Your papers and settings stay in place.')}</p>
-  </section></div>;
   const busy = working(status), available = status.latestVersion && status.latestVersion !== status.currentVersion && status.phase !== 'idle' && status.phase !== 'checking';
   const checking = status.phase === 'checking';
   const message = error || status.error;
@@ -132,7 +122,7 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
       <div className="update-product-row">
         <div className="update-product">
           <span className="update-product-mark"><img src={logo} width="34" height="34" alt=""/></span>
-          <div><h3>Papilot</h3><p className="update-current-version"><span>{t('Current version')}</span><code title={status.currentVersion}>{versionLabel(status.currentVersion)}</code></p>{installedWith(status)}</div>
+          <div><h3>Papilot</h3><p className="update-current-version"><span>{t('Current version')}</span><code title={status.currentVersion}>{versionLabel(status.currentVersion)}</code></p></div>
         </div>
         <button className="button secondary update-check" disabled={sending || busy || checking} onClick={() => void send('/updates/check')}><Icon name="refresh" size={14}/>{t('Check for updates')}</button>
       </div>
@@ -146,16 +136,18 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
           : status.phase === 'restarting' ? t('Restarting Papilot. This page will reconnect automatically; your drafts are kept.')
           : checking ? null
           : status.phase === 'failed' ? t('The update did not finish. Your current version is still available. You can retry here.')
-          : available ? t('Install the new version and restart automatically when tasks are idle. Your papers, tasks and settings stay in place.')
+          : available ? status.downloadUrl ? t('Download the latest desktop app for your system from GitHub Releases. Your papers and settings stay in place.') : t('Install the new version and restart automatically when tasks are idle. Your papers, tasks and settings stay in place.')
           : status.latestVersion ? t('You are using the latest version on this channel.') : t('Check for updates to see the latest version.')}</p>}
         {message && <p className="update-status-error" role="alert">{message === 'Could not check for updates. Try again when connected.' ? t('Check your connection and try again.') : updateError(message)}</p>}
         {status.latestVersion && status.latestVersion !== status.currentVersion && <div className="update-release">
           <p id="update-latest-version"><span>{t('Latest version')}</span><code title={status.latestVersion}>{versionLabel(status.latestVersion)}</code></p>
-          {available && !busy && <button className="button primary" aria-describedby="update-latest-version" disabled={sending || !status.canUpdate} onClick={() => void send('/updates/install', { version: status.latestVersion })}><Icon name="arrowUp" size={15}/>{status.phase === 'failed' ? t('Retry update') : t('Update now')}</button>}
+          {available && !busy && (status.downloadUrl ? <a className="button primary" href={status.downloadUrl} target="_blank" rel="noreferrer">{t('Download desktop updates')}</a>
+            : <button className="button primary" aria-describedby="update-latest-version" disabled={sending || !status.canUpdate} onClick={() => void send('/updates/install', { version: status.latestVersion })}><Icon name="arrowUp" size={15}/>{status.phase === 'failed' ? t('Retry update') : t('Update now')}</button>)}
         </div>}
       </div>
-      {!status.canUpdate && <p className="update-settings-notice"><Icon name="info" size={15}/><span>{t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</span></p>}
-      {!status.installerVersion && <div className="update-channel">
+      {status.downloadUrl && !available && <a className="button secondary" href={status.downloadUrl} target="_blank" rel="noreferrer">{t('Download desktop updates')}</a>}
+      {!status.canUpdate && !status.downloadUrl && <p className="update-settings-notice"><Icon name="info" size={15}/><span>{t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</span></p>}
+      {!status.downloadUrl && <div className="update-channel">
         <div className="update-channel-copy"><h4>{t('Update channel')}</h4><p>{status.channel === 'dev' ? t('Early updates from GitHub main. May be less stable.') : t('Published releases, recommended for everyday use.')}</p></div>
         <ChipSelect label={t('Update channel')} icon={status.channel === 'dev' ? 'branch' : undefined} value={status.channel || 'stable'} disabled={sending || busy} onChange={channel => void send('/updates/channel', { channel })} options={[{ value: 'stable', label: t('Stable') }, { value: 'dev', label: t('Dev (GitHub main)') }]}/>
       </div>}

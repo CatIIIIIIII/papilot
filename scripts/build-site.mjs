@@ -45,7 +45,7 @@ for (const locale of locales) {
     .replace('<body>', `<body><noscript><nav class="no-js-languages">${locales.map(code => `<a lang="${code}" href="${code === 'en' ? '/' : `/${code}/`}">${names[code]}</a>`).join('')}</nav></noscript>`)
     .replace(/(\s(?:href|src)=")(style\.css|demos\.css|demos\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
     .replace(/(\s(?:href|src)=")((?:assets|fonts)\/[^" ]+|favicon.png|apple-touch-icon.png)"/g, '$1/$2"');
-  if (locale !== 'en') html = html.replace('https://github.com/cu1ch3n/papilot#readme', `https://github.com/cu1ch3n/papilot/blob/main/README.${locale}.md`);
+  if (locale !== 'en') html = html.replace('https://github.com/cu1ch3n/papilot#readme', `https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.${locale}.md`);
   // Explicit URLs always win. Only the root restores a saved choice; browser
   // language never redirects visitors or crawlers. Old ?lang links still work.
   html = html.replace('<!-- language-preference -->', `<script>

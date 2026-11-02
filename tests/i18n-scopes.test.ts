@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { scopeCatalog, scopeDirectory, scopeValidation, type Scope } from '../scripts/i18n/scopes.ts';
+import { renderReadme, scopeCatalog, scopeDirectory, scopeValidation, type Scope } from '../scripts/i18n/scopes.ts';
 import { LANGUAGES } from '../engine/src/locales.ts';
 import { readLegacyChinese } from '../scripts/i18n/catalog.ts';
 import { validateTranslation } from '../scripts/i18n/translate.ts';
@@ -39,8 +41,22 @@ test('public languages match the App exactly', () => {
   assert.deepEqual(Object.keys(names), LANGUAGES.map(({ id }) => id === 'zh-Hans' ? 'zh-CN' : id));
 });
 for (const locale of locales) test(`README ${locale} retains its local anchors, code, and destinations`, () => {
-  const markdown = fs.readFileSync(`${root}/README.${locale}.md`, 'utf8');
+  const markdown = fs.readFileSync(`${root}/docs/readme/README.${locale}.md`, 'utf8');
   const anchors = [...markdown.matchAll(/\]\(#([^)]+)\)/g)].map(match => match[1]);
   for (const anchor of anchors) assert.ok(markdown.includes(`id="${anchor}"`), anchor);
-  assert.match(markdown, /href="README.md">English/);
+  assert.match(markdown, /href="\.\.\/\.\.\/README.md">English/);
+  for (const match of markdown.matchAll(/\]\(([^)]+)\)|\b(?:href|src|srcset)="([^"]+)"/g)) {
+    const link = match[1] || match[2];
+    if (/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(link)) continue;
+    assert.ok(fs.existsSync(path.resolve(root, 'docs/readme', link.split('#')[0])), link);
+  }
+});
+test('README regeneration writes translations under docs and leaves the root entry in place', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-readme-'));
+  try {
+    fs.copyFileSync(path.join(root, 'README.md'), path.join(directory, 'README.md'));
+    renderReadme(directory, JSON.parse(fs.readFileSync(path.join(root, 'i18n/readme/zh-CN.json'), 'utf8')), 'zh-CN');
+    assert.deepEqual(fs.readdirSync(directory).sort(), ['README.md', 'docs']);
+    assert.equal(fs.readFileSync(path.join(directory, 'docs/readme/README.zh-CN.md'), 'utf8'), fs.readFileSync(path.join(root, 'docs/readme/README.zh-CN.md'), 'utf8'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

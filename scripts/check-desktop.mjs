@@ -70,10 +70,9 @@ try {
   assert.ok(fs.existsSync(path.join(data, 'papilot.sqlite')), 'The bundled Node runtime can open SQLite');
   const rejected = await fetch(`${origin}/api/state`, { headers: { Origin: 'https://example.com' } });
   assert.equal(rejected.status, 403, 'The ephemeral port still enforces origin checks');
-  // Packaged apps install newer releases themselves; development builds link to downloads.
+  // Both packaged and development desktop apps use installer downloads.
   const status = await (await fetch(`${origin}/api/updates`)).json();
-  if (packaged) assert.deepEqual([status.canUpdate, status.downloadUrl, status.installerVersion], [true, undefined, version]);
-  else assert.deepEqual([status.canUpdate, status.downloadUrl], [false, 'https://github.com/PapilotAI/papilot/releases/latest']);
+  assert.deepEqual([status.canUpdate, status.downloadUrl], [false, 'https://github.com/PapilotAI/papilot/releases']);
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   const windowOptions = await application.evaluate(({ BrowserWindow }) => {
     const preferences = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();
@@ -121,8 +120,8 @@ try {
   const settings = page.getByRole('button', { name: /^(Settings|设置)$/ });
   await settings.click();
   await page.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
-  if (packaged) await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();
-  else await expect(page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ })).toBeVisible();
   assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), 0);
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-${packaged ? 'packaged' : 'dev'}.png` });
@@ -151,16 +150,14 @@ try {
     } else await application.close();
     application = null;
   } finally { await new Promise(resolve => occupied.close(resolve)); }
-  if (packaged) {
-    // An installed newer release runs on this app, laid out as npm installs it.
-    const server = path.join(resources, 'server'), next = '999.0.0';
+  {
+    // Legacy npm releases must never replace the desktop bundle, even on restart.
+    const next = '999.0.0';
     const root = path.join(data, `updates/releases/${next}-smoke/node_modules/papilot`), active = path.join(data, 'updates/active.json');
     fs.mkdirSync(root, { recursive: true });
-    for (const name of fs.readdirSync(server)) {
-      if (name === 'node_modules' || name === 'engine') fs.symlinkSync(path.join(server, name), path.join(root, name));
-      else if (name !== 'package.json') fs.cpSync(path.join(server, name), path.join(root, name), { recursive: true });
-    }
-    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(server, 'package.json'), 'utf8')), version: next }));
+    fs.mkdirSync(path.join(root, 'src/server'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src/server/start.ts'), 'process.exit(3);\n');
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'papilot', version: next, desktopShell: 1 }));
     fs.writeFileSync(active, JSON.stringify({ root, version: next, id: 'smoke', phase: 'active' }));
     const opened = async () => {
       application = await launch();
@@ -169,16 +166,11 @@ try {
       const address = new URL(window.url()).origin;
       return { health: await (await fetch(`${address}/api/health`)).json(), status: await (await fetch(`${address}/api/updates`)).json() };
     };
-    let run = await opened();
-    assert.equal(run.health.version, next, 'The app runs the installed release');
-    assert.deepEqual([run.status.currentVersion, run.status.installerVersion], [next, version]);
-    await application.close(); application = null;
-    // A release that cannot start falls back to the version in the app.
-    fs.writeFileSync(path.join(root, 'src/server/start.ts'), 'process.exit(3);\n');
-    run = await opened();
-    assert.equal(run.health.version, version);
-    assert.equal(run.status.phase, 'failed');
-    assert.equal(fs.existsSync(active), false);
+    const run = await opened();
+    assert.equal(run.health.version, version, 'The app always runs its bundled server');
+    assert.equal(run.status.currentVersion, version);
+    assert.equal(run.status.canUpdate, false);
+    assert.equal(fs.existsSync(active), true, 'Legacy records are ignored without deleting shared data');
     await application.close(); application = null;
   }
   console.log(`Desktop smoke passed (${packaged ? 'packaged app' : 'development'}, ${health.version}).`);

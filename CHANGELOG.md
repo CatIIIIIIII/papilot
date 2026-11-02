@@ -4,6 +4,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-02 — Separate Desktop and Web Updates
+
 ### Added
 
 - **Review changes in the whole paper.** The review opens on the full paper: the new PDF's pages, with each change shown in place as before, old lines above new, and accepted, rejected or commented on with the same controls. **Changes only** in the review toolbar switches back to the changed sections. Pages are drawn only near where you read, so a 300-page thesis scrolls like a short paper. Reviews rendered by earlier releases open in the whole paper too.
@@ -12,6 +14,11 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 ### Changed
 
 - **PDF comparisons of long papers in seconds.** Placing each change in the PDF used to parse the paper's whole SyncTeX file once per source line, which on a 324-page thesis meant 2,910 parses and six and a half minutes. The file is now read once per build and every lookup answered from its index, so the same comparison takes about 11 seconds, with identical results.
+- **A tidier repository.** Translated READMEs live in `docs/readme/`, community policies in `.github/`, and requirements in `docs/`. Documentation links, the website and translation generators follow the new locations.
+
+### Fixed
+
+- **Separate desktop and web updates.** Desktop checks only published GitHub releases with an uploaded installer for the current OS and CPU, and links to that exact release. It always runs its bundled server, ignores legacy npm activation records, and keeps its update status separate from the web server. Existing desktop installers are directed to a new installer instead of installing future web packages. The web server retains its npm Stable and GitHub Dev channels, startup checks, idle restart and rollback.
 
 ## [0.8.2] - 2026-11-02
 

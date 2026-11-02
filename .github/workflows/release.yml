@@ -15,7 +15,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  desktop:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop.yml
+    secrets: inherit
+
   release:
+    # Publish only after every native installer has built and passed its smoke test.
+    needs: desktop
     runs-on: ubuntu-latest
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
@@ -51,6 +59,20 @@ jobs:
       - run: npm run setup:review
       - run: npm run typecheck
       - run: npm test
+      - run: npm run i18n -- check
+      - run: npm run i18n:check-app
+      - name: Download tested desktop installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Papilot-*
+          merge-multiple: true
+          path: release/desktop
+      - name: Require every tested desktop installer
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for suffix in mac-arm64.dmg mac-arm64.zip mac-x64.dmg mac-x64.zip linux-x86_64.AppImage linux-amd64.deb; do
+            test -s "release/desktop/Papilot-$version-$suffix"
+          done
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@11
       # A rerun after a later step failed finds the version already published.
@@ -71,11 +93,10 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --title "$(cat "$RUNNER_TEMP/title.txt")" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag --latest
           fi
 
-  desktop:
-    needs: release
-    permissions:
-      contents: write
-    uses: ./.github/workflows/desktop.yml
-    with:
-      release_tag: ${{ github.ref_name }}
-    secrets: inherit
+      - name: Attach tested desktop installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb --clobber

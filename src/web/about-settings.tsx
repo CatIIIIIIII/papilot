@@ -27,7 +27,7 @@ export function AboutSettings({ onLicenses }: { onLicenses: () => void }) {
       <SettingsLink href={info.issues} icon="chat" title={t('Feedback & issues')} detail={t('Report a bug or suggest an improvement.')}/>
       <SettingsLink href={`${info.repository}/blob/main/docs/guide.md`} icon="paper" title={t('User guide')} detail={t('Get started and make Papilot your own.')}/>
       <SettingsLink href={`${info.repository}/blob/main/CHANGELOG.md`} icon="restore" title={t('Changelog')} detail={t('See what changed in each release.')}/>
-      <SettingsLink href={`${info.repository}/blob/main/CONTRIBUTING.md`} icon="people" title={t('Contribute')} detail={t('Help improve Papilot with code, docs, and ideas.')}/>
+      <SettingsLink href={`${info.repository}/blob/main/.github/CONTRIBUTING.md`} icon="people" title={t('Contribute')} detail={t('Help improve Papilot with code, docs, and ideas.')}/>
     </section>
     <section>
     <h3 className="settings-section-title">{t('Licenses & acknowledgments')}</h3>

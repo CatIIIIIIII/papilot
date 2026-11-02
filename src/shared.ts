@@ -11,8 +11,6 @@ export type UpdateChannel = 'stable' | 'dev';
 export interface UpdateStatus {
   // Present when the update must be downloaded as a new desktop app.
   downloadUrl?: string;
-  // The desktop app's own Papilot version; newer releases run on top of it.
-  installerVersion?: string;
   channel?: UpdateChannel;
   currentVersion: string; latestVersion: string | null;
   phase: 'idle' | 'checking' | 'available' | 'installing' | 'waiting' | 'restarting' | 'updated' | 'failed';

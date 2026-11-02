@@ -6,76 +6,80 @@ import os from 'node:os';
 import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 import { activeInstallation, devRevision, newerVersion, readJson, releaseVersion, stableVersion, writeJson } from '../bin/installation.mjs';
-import { latestRelease, Updates } from '../src/server/updates.ts';
-import { codexVersion, desktopSupports, DEV_REPOSITORY, health, loaderFor, NEEDS_INSTALLER, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
+import { DESKTOP_RELEASES, latestDesktopRelease, latestRelease, Updates } from '../src/server/updates.ts';
+import { DEV_REPOSITORY, health, installRelease, loaderFor, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
 import { restartRelease } from '../src/server/update-worker.ts';
 
 const temporary = () => fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-update-test-'));
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 const revision = 'a'.repeat(40), devVersion = `0.7.0-dev.${revision}`;
 function fixture(overrides: Record<string, any> = {}) {
-  const data = temporary();
+  const data = overrides.data || temporary();
   const updates = new Updates({ root: process.cwd(), data, version: '0.6.0', port: 1, supported: true, latest: async () => '0.7.0', busy: () => false, shutdown() {}, ...overrides });
   return { data, updates, close() { updates.close(); fs.rmSync(data, { recursive: true, force: true }); } };
 }
-test('desktop updates cannot install npm releases or switch to a dev checkout', async () => {
-  let checked = false, installed = false;
-  const downloadUrl = 'https://github.com/PapilotAI/papilot/releases/latest';
-  const f = fixture({ downloadUrl, latest: async () => { checked = true; return '0.7.0'; }, install: async () => { installed = true; return '/tmp/unwanted'; } });
+test('desktop discovery requires a published installer for this OS and architecture', async () => {
+  const release = (version: string, names: string[], extra = {}) => ({ tag_name: `v${version}`, draft: false, prerelease: false,
+    assets: names.map(name => ({ name: `Papilot-${version}-${name}`, state: 'uploaded', size: 1024 })), ...extra });
+  const releases = [
+    release('1.5.0', ['mac-arm64.dmg'], { draft: true }),
+    release('1.4.0', ['mac-arm64.dmg'], { prerelease: true }),
+    release('1.3.0', []), // npm published, desktop jobs still running
+    release('1.2.0', ['mac-x64.zip', 'linux-x86_64.AppImage', 'linux-amd64.deb']),
+    release('1.1.0', ['mac-arm64.dmg', 'linux-arm64.deb']),
+    release('1.0.0', ['mac-arm64.dmg']),
+    release('9.0.0', ['mac-arm64.dmg'], { assets: [{ name: 'Papilot-9.0.0-mac-arm64.dmg', state: 'new', size: 0 }] }),
+    release('../unsafe', ['mac-arm64.dmg']),
+  ];
+  const urls: string[] = [];
+  const fetcher: typeof fetch = async url => { urls.push(String(url)); return new Response(JSON.stringify(releases)); };
+  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', fetcher), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` });
+  for (const [platform, arch, expected] of [['darwin', 'x64', '1.2.0'], ['linux', 'x64', '1.2.0'], ['linux', 'arm64', '1.1.0']] as const) {
+    assert.equal((await latestDesktopRelease(platform, arch, fetcher))?.version, expected);
+  }
+  assert.equal(await latestDesktopRelease('win32', 'x64', fetcher), null);
+  assert.equal(await latestDesktopRelease('darwin', 'arm64', async () => new Response('[]')), null);
+  await assert.rejects(latestDesktopRelease('darwin', 'arm64', async () => new Response('{}')), /Invalid release/);
+  await assert.rejects(latestDesktopRelease('darwin', 'arm64', async () => new Response('', { status: 503 })), /Could not check/);
+  assert.ok(urls.every(url => url === 'https://api.github.com/repos/PapilotAI/papilot/releases?per_page=100'));
+});
+test('desktop checks use their own source and state, and never install npm or dev releases', async () => {
+  const data = temporary(), downloadUrl = `${DESKTOP_RELEASES}/tag/v0.7.0`;
+  const saved = { currentVersion: devVersion, latestVersion: devVersion, phase: 'restarting', pid: process.pid };
+  writeJson(path.join(data, 'updates/status.json'), saved);
+  writeJson(path.join(data, 'updates/channel.json'), { channel: 'dev' });
+  writeJson(path.join(data, 'updates/install.lock'), { pid: process.pid });
+  let failure = false, found: { version: string; downloadUrl: string } | null = { version: '0.7.0', downloadUrl };
+  const f = fixture({ data, desktop: true, latest: async () => { throw new Error('must not check npm'); },
+    latestDesktop: async () => { if (failure) throw new Error('offline'); return found; },
+    install: async () => { assert.fail('must not install'); } });
   try {
-    f.updates.start();
-    const status = await f.updates.check();
-    assert.equal(status.downloadUrl, downloadUrl);
-    assert.equal(status.canUpdate, false);
-    assert.equal(status.phase, 'idle');
+    assert.equal(f.updates.snapshot().phase, 'idle');
+    let status = await f.updates.check();
+    assert.equal(status.downloadUrl, downloadUrl); assert.equal(status.phase, 'available');
+    assert.equal(status.canUpdate, false); assert.equal(status.channel, 'stable');
     assert.throws(() => f.updates.setChannel('dev'), /desktop updates/);
     assert.throws(() => f.updates.install('0.7.0'), /desktop updates/);
-    assert.equal(checked, false); assert.equal(installed, false);
-  } finally { f.close(); }
+    assert.throws(() => f.updates.install(devVersion), /desktop updates/);
+    assert.deepEqual(readJson(path.join(data, 'updates/status.json')), saved);
+    assert.equal(readJson(path.join(data, 'updates/channel.json')).channel, 'dev');
+    assert.equal(readJson(path.join(data, 'updates/install.lock')).pid, process.pid);
+    failure = true; status = await f.updates.check();
+    assert.match(status.error!, /Could not check/); assert.equal(status.downloadUrl, downloadUrl);
+    failure = false; found = { version: '0.6.0', downloadUrl }; status = await f.updates.check();
+    assert.equal(status.phase, 'idle'); assert.equal(status.error, null);
+    found = { version: '0.5.0', downloadUrl }; status = await f.updates.check();
+    assert.equal(status.phase, 'idle', 'Never offer a desktop downgrade');
+    found = null; status = await f.updates.check();
+    assert.equal(status.latestVersion, null); assert.equal(status.downloadUrl, DESKTOP_RELEASES);
+  } finally { f.close(); fs.rmSync(data, { recursive: true, force: true }); }
 });
-test('desktop installers update to releases they can run and ask for a new installer otherwise', async () => {
-  const downloadUrl = 'https://github.com/PapilotAI/papilot/releases/latest', desktop = { shell: 1, installer: '0.6.0', downloadUrl };
-  let manifest: Record<string, any> = { name: 'papilot', version: '0.7.0', desktopShell: 1, engines: { node: '>=22.22.0' } };
-  const installed: string[] = [], restarted: string[] = [];
-  const f = fixture({ desktop, latest: async () => manifest, install: async (_data: string, version: string) => { installed.push(version); return '/releases/0.7.0'; }, restart: async (root: string) => { restarted.push(root); } });
+test('the installer rejects desktop calls before installing either stable or dev packages', async () => {
+  const previous = process.env.PAPILOT_DESKTOP;
+  process.env.PAPILOT_DESKTOP = '1';
   try {
-    let status = await f.updates.check();
-    assert.equal(status.phase, 'available'); assert.equal(status.canUpdate, true);
-    assert.equal(status.downloadUrl, undefined); assert.equal(status.installerVersion, '0.6.0'); assert.equal(status.channel, 'stable');
-    assert.throws(() => f.updates.setChannel('dev'), /desktop updates/);
-    for (const next of [{ ...manifest, desktopShell: 2 }, { ...manifest, engines: { node: '>=99.0.0' } }, { name: 'papilot', version: '0.7.0' }]) {
-      manifest = next;
-      status = await f.updates.check();
-      assert.equal(status.phase, 'available'); assert.equal(status.canUpdate, false); assert.equal(status.downloadUrl, downloadUrl, JSON.stringify(next));
-      assert.throws(() => f.updates.install('0.7.0'), new RegExp(NEEDS_INSTALLER.slice(0, 20)));
-    }
-    manifest = { name: 'papilot', version: '0.6.0' };
-    status = await f.updates.check();
-    assert.equal(status.phase, 'idle'); assert.equal(status.downloadUrl, undefined, 'The running version never asks for an installer');
-    manifest = { name: 'papilot', version: '0.7.0', desktopShell: 1 };
-    await f.updates.check();
-    f.updates.install('0.7.0');
-    for (let i = 0; i < 20 && !restarted.length; i++) await tick();
-    assert.deepEqual(installed, ['0.7.0']); assert.deepEqual(restarted, ['/releases/0.7.0']);
-  } finally { f.close(); }
-});
-test('desktop compatibility follows the shell level and the bundled Node', () => {
-  assert.ok(desktopSupports({ desktopShell: 1 }, 1));
-  assert.ok(desktopSupports({ desktopShell: 1, engines: { node: '>=22.22.0' } }, 2, '22.22.0'));
-  assert.equal(desktopSupports({ desktopShell: 2 }, 1), false);
-  assert.equal(desktopSupports({ desktopShell: 0 }, 1), false);
-  assert.equal(desktopSupports({ desktopShell: '1' }, 1), false);
-  assert.equal(desktopSupports({}, 1), false, 'Releases from before desktop updates cannot be activated by the app');
-  assert.equal(desktopSupports({ desktopShell: 1, engines: { node: '>=24.1.0' } }, 1, '22.22.0'), false);
-  assert.ok(desktopSupports({ desktopShell: 1, engines: { node: '^22 || >=24' } }, 1, '22.22.0'), 'npm checks other ranges while installing');
-  const folder = temporary(), bin = path.join(folder, 'node_modules/.bin/codex'), pkg = path.join(folder, 'node_modules/@openai/codex');
-  try {
-    fs.mkdirSync(path.join(pkg, 'bin'), { recursive: true }); fs.mkdirSync(path.dirname(bin));
-    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ version: '0.164.0' })); fs.writeFileSync(path.join(pkg, 'bin/codex.js'), '');
-    fs.symlinkSync('../@openai/codex/bin/codex.js', bin);
-    assert.equal(codexVersion(bin), '0.164.0');
-    assert.equal(codexVersion(path.join(folder, 'missing')), null);
-  } finally { fs.rmSync(folder, { recursive: true, force: true }); }
+    for (const version of ['0.7.0', devVersion]) await assert.rejects(installRelease('/unused', version), /desktop updates/);
+  } finally { if (previous === undefined) delete process.env.PAPILOT_DESKTOP; else process.env.PAPILOT_DESKTOP = previous; }
 });
 test('release comparisons reject unsafe targets and never downgrade', () => {
   for (const version of ['latest', '../1.0.0', '1.2.3;whoami', '1.2.3-beta.1', '01.2.3', '1.2']) assert.equal(stableVersion(version), false, version);
