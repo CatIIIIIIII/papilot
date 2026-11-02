@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Repo, cleanPath, within } from "./git.ts";
+import { Repo, cleanPath, gitDirOf, within } from "./git.ts";
 export const CONFIG_NAME = ".latex-review.json";
 export const ENGINES = ["pdflatex", "xelatex", "lualatex"] as const;
 type Engine = (typeof ENGINES)[number];
@@ -244,7 +244,7 @@ export function loadProject(root: string): Project {
     throw new Error('"build_workers" must be an integer between 1 and 8.');
   return {
     root,
-    state: path.join(new Repo(root).gitDir(), "latex-review"),
+    state: path.join(gitDirOf(root), "latex-review"),
     main,
     doc_dir,
     engine: engine as Engine,

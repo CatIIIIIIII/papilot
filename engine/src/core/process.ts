@@ -60,7 +60,11 @@ export function stopAll() {
   stopped = true;
   for (const child of running) {
     try {
-      if (child.pid) process.kill(-child.pid, "SIGTERM");
+      if (child.pid) {
+        process.kill(-child.pid, "SIGTERM");
+        // A paused background build receives the signal once it continues.
+        process.kill(-child.pid, "SIGCONT");
+      }
     } catch {
       child.kill();
     }

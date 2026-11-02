@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { ENGINE } from './paths.ts';
+import { ENGINE, ROOT } from './paths.ts';
 import type { Annotation, BuildProblem, BuildProgress, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
 import { notesInstructions } from '../notes.ts';
 import { ignorePattern } from '../commit.ts';
@@ -297,13 +297,13 @@ async function pageSizes(mupdf: any, pdf: string) {
 }
 
 async function engine() {
-  const [{ Builder }, { Repo }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
+  const [{ Builder }, { Repo, gitBinary }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
     import(pathToFileURL(path.join(ENGINE, 'src/core/build.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/core/git.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/render/pdf.ts')).href),
   ]);
-  return { Builder, Repo, loadProject, mupdf, PdfDocument, containsCenter, walkText };
+  return { Builder, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
 }
 
 // `synctex edit` maps a PDF position (big points from the top-left corner) to
@@ -429,6 +429,25 @@ export class Manuscripts extends EventEmitter {
   private speculation = new Map<string, { running: boolean; wanted?: { root: string; files: Record<string, Buffer | null> } }>();
   // Every open event stream listens for builds.
   constructor() { super(); this.setMaxListeners(0); }
+  /** Stops every compiler this process started, also paused ones, so that
+   *  nothing keeps running after Papilot quits. */
+  async stop() {
+    const { stopAll } = await import(pathToFileURL(path.join(ENGINE, 'src/core/process.ts')).href);
+    stopAll();
+  }
+  /** Loads the PDF engine and reads Papilot's example paper with it once,
+   *  before the server answers requests: compiling its WebAssembly and
+   *  setting up color conversion take a few hundred milliseconds the first
+   *  time, which would otherwise hold up the first PDF someone opens. */
+  async warm() {
+    try {
+      const { PdfDocument, gitBinary } = await engine(), sample = path.join(ROOT, 'examples/papilot-paper/preview/main.pdf');
+      gitBinary();
+      if (!fs.existsSync(sample)) return;
+      const document = new PdfDocument(sample);
+      try { document.page(0); } finally { document.close(); }
+    } catch { /* The first build pays for it instead. */ }
+  }
   get busyForUpdate() { return [...this.builds.values()].some(build => build.status === 'building'); }
   busyForProject(id: string) { return this.builds.get(id)?.status === 'building'; }
   forgetProject(id: string) { this.builds.delete(id); this.stale.delete(id); this.speculation.delete(id); }
@@ -652,14 +671,21 @@ export class Manuscripts extends EventEmitter {
     if (!placed) {
       placed = (async () => {
         const { PdfDocument } = await engine();
-        const document = new PdfDocument(pdf), pages = new Map<number, ReturnType<typeof document.page>>();
+        // Most problems need only a page's size; its text, which takes up to
+        // a hundred milliseconds to read on a busy page, is read when a
+        // missing reference or citation is searched for on it.
+        const document = new PdfDocument(pdf), pages = new Map<number, { destroy(): void; getBounds(): number[]; search(needle: string, options: object): number[][][] }>();
         try {
           return sortProblems(await locateProblems(problems, pdf, page => {
             if (!Number.isInteger(page) || page < 0 || page >= document.length) return null;
-            if (!pages.has(page)) pages.set(page, document.page(page));
-            return pages.get(page)!;
+            if (!pages.has(page)) pages.set(page, document.raw.loadPage(page));
+            const raw = pages.get(page)!, bounds = raw.getBounds();
+            return {
+              bounds, width: bounds[2] - bounds[0], height: bounds[3] - bounds[1],
+              search: (needle: string) => raw.search(needle, {}).flat().map(q => [Math.min(q[0], q[2], q[4], q[6]), Math.min(q[1], q[3], q[5], q[7]), Math.max(q[0], q[2], q[4], q[6]), Math.max(q[1], q[3], q[5], q[7])]),
+            };
           }));
-        } finally { for (const page of pages.values()) page.close(); document.close(); }
+        } finally { for (const page of pages.values()) page.destroy(); document.close(); }
       })();
       placed.catch(() => this.located.delete(problems));
       this.located.set(problems, placed);

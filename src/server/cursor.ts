@@ -68,6 +68,7 @@ export class CursorAgent extends Adapter {
     try { this.ids = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { /* None yet. */ }
   }
   detect() { return this.configured(); }
+  async preload() { if (packageFile('@cursor/sdk')) await this.load(); }
   async start() {
     if (this.ready) return;
     const sdk = await this.load();

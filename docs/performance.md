@@ -24,7 +24,11 @@ Builds have a priority: the manuscript the author is looking at first, then revi
 
 ## Event loops
 
-Neither server waits for Git, the file system or a compiler on its event loop while it builds: snapshots, exports, cloning LaTeX state, rewriting SyncTeX paths, reading logs and writing results all run asynchronously, so the PDF view, the review page and the task list keep answering. The review engine's snapshots of a task's worktree also start from a saved index (`latex-review/snapshot-index` in that worktree's Git directory) with `read-tree -m`, which keeps each file's size and modification time, instead of a fresh index that made Git rehash every tracked file twice per snapshot.
+Neither server waits for Git, the file system or a compiler on its event loop while it builds or changes a review: snapshots, exports, cloning LaTeX state, rewriting SyncTeX paths, reading logs and writing results all run asynchronously, so the PDF view, the review page and the task list keep answering. The review engine's snapshots of a task's worktree also start from a saved index (`latex-review/snapshot-index` in that worktree's Git directory) with `read-tree -m`, which keeps each file's size and modification time, instead of a fresh index that made Git rehash every tracked file twice per snapshot.
+
+Accepting, rejecting and undoing changes, applying or committing a task, preparing a merge review and finishing a task run Git asynchronously as well (accepting took ten Git commands in a row, committing thirty-five). They used to be atomic because they never yielded; the engine now runs every write through one queue (`App.exclusive`), publishing takes its turn for the snapshot it compares and for recording the new round, and writes interrupted by a restart finish before the server listens.
+
+Before the server listens it also loads what would otherwise stall the first requests: the agent SDKs already installed (evaluating the Cursor SDK takes about 300 ms) and the PDF engine, run once on the example paper to compile its WebAssembly and set up color conversion. Placing compilation problems reads a page's text only to search it for a missing reference or citation; every other problem needs only the page's size. When Papilot quits it stops the compilers it started, paused ones included.
 
 ## Measurements
 
@@ -72,9 +76,21 @@ End to end with `scripts/profile-commit.ts` on a copy of the paper: a deferred t
 | First new pages when nothing was predicted | 113 s, the whole build | 55.2 s, the first pass |
 | Review engine's slowest answer while a task is created | 4.1 s | 35 ms |
 | Review engine's slowest answer while a round is published | 2.4 s | 16–35 ms |
-| Review engine's slowest answer while the task is committed | 0.33 s | 0.25–0.28 s |
+| Review engine's slowest answer while the task is committed | 0.33 s | under 60 ms (it was 0.25–0.28 s until accepting and committing ran Git asynchronously too) |
 
 Before, the manuscript started compiling when its view next asked, and "before" here assumes it was open the whole time. A 30 s review gives the prediction a 45 s head start on a 90–110 s build; the commit then promotes it, and the waiting view takes over its passes.
+
+#### Through a running server
+
+The same flow through two Papilot servers, the previous version and this one, each started on its own data folder with the agent SDKs installed, driven only through the HTTP routes the web app uses: publish the task's round, accept it on the review page after 60 s, commit it 15 s later, then open the manuscript as the app does. Meanwhile `/api/state`, which the app polls, and the review engine's `/api/info` were asked every 100 ms how long they take to answer, and a 2 ms timer preloaded into the server recorded every gap in its event loop over 50 ms. Four runs each, alternated, at a load average of 6–9 on 2026-11-03, the event-loop timer in the last two; the manuscript's build after the commit took two passes every time.
+
+| | Before | Now |
+|---|---|---|
+| New pages after the commit | 95.0–99.6 s | 2.6–2.7 s |
+| The whole PDF after the commit | 95.0–99.6 s | 21.6–26.7 s |
+| Gaps in Papilot's event loop over 50 ms, publish to PDF | 4–5, up to 276 ms | 0–1, at most 80 ms |
+| Review engine's slowest answer while the round is published | 2,408–2,736 ms | 10–84 ms |
+| Review engine's slowest answer while the task is committed | 193–284 ms | 5–58 ms |
 
 Papilot's own event loop, measured as the longest gap between ticks of a 2 ms timer while the manuscript compiles an edit of the paper (one pass, 47–49 s): 106 ms before, with seven gaps over 50 ms, and 34 ms now, with none. Placing a text note from an earlier version on the new PDF searches every page's text; on the 324-page paper that held the event loop for 1,076 ms after every build, and now for at most 42 ms at a time.
 

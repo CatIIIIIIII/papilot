@@ -161,6 +161,16 @@ export class Workspace extends EventEmitter {
     this.emit('change');
   }
   snapshot(): Snapshot { return { version: VERSION, projects: this.store.projects(), tasks: this.store.tasks(), requests: [...this.requests.values()].map(({ rpcId: _, agent: __, ...r }) => r), runtime: this.runtime, runtimes: this.runtimes }; }
+  /** Loads the SDKs of the agents this host has before the server answers
+   *  requests. Evaluating one blocks for up to a few hundred milliseconds,
+   *  which would otherwise hold up whatever the app asked for while the
+   *  agents connect. SDKs not installed yet are fetched when first used. */
+  async preload() {
+    await Promise.all(AGENTS.map(async id => {
+      const agent = this.agents[id];
+      try { if (agent.preload && (!agent.detect || agent.detect())) await agent.preload(); } catch { /* Connecting reports it. */ }
+    }));
+  }
   async connect() {
     if (this.connecting) return this.connecting;
     this.connecting = Promise.all(AGENTS.map(id => this.connectAgent(id))).then(() => { this.emit('change'); this.schedule(); }).finally(() => { this.connecting = null; });

@@ -27,6 +27,18 @@ export function gitBinary() {
   }
   return binary;
 }
+// A repository's Git directory, looked up once: every build and connection
+// asks for it, and each lookup would run Git. It is looked up again if the
+// directory disappears, as when a repository is moved.
+const gitDirs = new Map<string, string>();
+export function gitDirOf(root: string) {
+  let dir = gitDirs.get(root);
+  if (!dir || !fs.existsSync(dir)) {
+    dir = new Repo(root).gitDir();
+    gitDirs.set(root, dir);
+  }
+  return dir;
+}
 export const within = (file: string, scopes: readonly string[]) =>
   scopes.some(
     (scope) =>

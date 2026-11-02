@@ -39,6 +39,9 @@ const localListener = { kind: 'local' as const, port: PORT, publicOrigin: PUBLIC
 const apps = [await buildApp({ ...shared, listener: localListener })];
 if (ACCOUNT_ORIGIN) apps.push(await buildApp({ ...shared, listener: { kind: 'account', origin: ACCOUNT_ORIGIN, hsts: accountHsts(ACCOUNT_ORIGIN, PUBLIC_ORIGIN) } }));
 
+// Agent SDKs and the PDF engine load before the first request, not in the
+// middle of one.
+if (!process.env.PAPILOT_UPDATE_PROBE) await Promise.race([Promise.all([workspace.preload(), manuscripts.warm()]), new Promise(resolve => setTimeout(resolve, 5000).unref())]);
 const localUrl = await apps[0].listen({ host: '127.0.0.1', port: PORT }).catch(error => {
   if (!desktop || error.code !== 'EADDRINUSE') throw error;
   return apps[0].listen({ host: '127.0.0.1', port: 0 });
@@ -62,7 +65,7 @@ for (const task of store.tasks()) {
 setInterval(() => accounts.purge(), 3600000).unref();
 let shuttingDown = false;
 function shutdown() {
-  if (shuttingDown) return; shuttingDown = true; updates.close(); workspace.close();
+  if (shuttingDown) return; shuttingDown = true; updates.close(); workspace.close(); void manuscripts.stop().catch(() => undefined);
   void Promise.all(apps.map(app => app.close())).finally(() => { store.close(); process.exit(0); });
   setTimeout(() => process.exit(0), 2500).unref();
 }

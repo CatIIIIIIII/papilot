@@ -24,6 +24,8 @@ export interface AgentRuntime extends EventEmitter {
   // Whether the agent is present on this host (its CLI, SDK credentials or
   // key), checked without starting it. Agents that are not found are hidden.
   detect?(): boolean;
+  /** Loads an SDK this host already has, without starting the agent. */
+  preload?(): Promise<void>;
   start(): Promise<void>;
   request(method: string, params: any, timeout?: number): Promise<any>;
   respond(id: string | number, result: unknown): void;
@@ -192,6 +194,7 @@ export class ClaudeAgent extends Adapter {
     private findCli: () => string | null = () => findExecutable(process.env.PAPILOT_CLAUDE_BIN || 'claude'),
     private launch: Launch = (command, args, options) => spawn(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] })) { super(); }
   detect() { return Boolean(this.findCli()) || claudeConfigured(); }
+  async preload() { if (packageFile('@anthropic-ai/claude-agent-sdk')) await this.load(); }
   // The environment Claude Code runs with; undefined keeps Papilot's own.
   protected environment(): Record<string, string> | undefined { return undefined; }
   async start() {
