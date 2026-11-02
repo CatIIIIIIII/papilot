@@ -6,7 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
-- **Quitting the desktop app leaves nothing running.** After ⌘Q, the review server of each paper you had worked on kept running for up to 12 hours, so macOS listed Papilot under background activity. The desktop app now owns the review servers it starts, and they stop with it, even if it crashes. A PDF build that was still running is retried when you next open Papilot. Process lists now show it as "Papilot review server" followed by the paper's folder, instead of `node … engine/src/cli.ts serve`. Closing the window still keeps the app open, as on any Mac app.
+- **Quitting the desktop app leaves nothing running.** After ⌘Q, the review server of each paper you had worked on kept running for up to 12 hours, so macOS listed Papilot under background activity. The desktop app now owns the review servers it starts, and they stop with it, even if it crashes. A PDF build that was still running is retried when you next open Papilot. In `ps` it is now called "Papilot review server" instead of `node`. Closing the window still keeps the app open, as on any Mac app.
 
 ## [0.8.6] - 2026-11-02
 
