@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AntigravityAgent, ClaudeAgent, GlmAgent, findExecutable, glmEndpoint, groupModels } from '../src/server/agents.ts';
-import { CursorAgent, type CursorSdk } from '../src/server/cursor.ts';
+import { CursorAgent, helpersBesideSdk, type CursorSdk } from '../src/server/cursor.ts';
 
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 const events = (agent: EventEmitter) => { const seen: { method: string; params: any }[] = []; agent.on('notification', message => seen.push(message)); return seen; };
@@ -320,6 +320,30 @@ test('Cursor runs a sandboxed local SDK agent, streams items and resumes its age
     await assert.rejects(restarted.request('account/rateLimits/read'), /does not report usage/);
     restarted.close();
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a Cursor run starts with the SDK finding its sandbox helper beside itself', async () => {
+  // The SDK searches for cursorsandbox above the running script; a copy
+  // fetched into the data folder is only found from its own file.
+  const script = process.argv[1], seen: string[] = [];
+  let release = () => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const fake = fakeCursor(() => { seen.push(process.argv[1]); return []; });
+  const sdk = helpersBesideSdk(fake.sdk, '/data/agents/node_modules/@cursor/sdk/dist/cjs/index.js');
+  const agent = await sdk.Agent.create({ local: { cwd: '/work', settingSources: ['project'], sandboxOptions: { enabled: true } } });
+  assert.equal(process.argv[1], script, 'Creating an agent leaves the script alone');
+  const first = agent.send('One.'), second = agent.send('Two.');
+  await Promise.all([first, second]);
+  assert.deepEqual(seen, ['/data/agents/node_modules/@cursor/sdk/dist/cjs/index.js', '/data/agents/node_modules/@cursor/sdk/dist/cjs/index.js']);
+  assert.equal(process.argv[1], script, 'The script is restored once runs have started');
+  const failing = helpersBesideSdk({ ...fake.sdk, Agent: { ...fake.sdk.Agent, async create() { return { agentId: 'x', close() {}, async send() { await held; throw new Error('sandboxing is not supported'); } }; } } }, '/sdk/index.js');
+  const broken = await failing.Agent.create({ local: { cwd: '/work', settingSources: ['project'], sandboxOptions: { enabled: true } } });
+  const attempt = broken.send('Go.');
+  assert.equal(process.argv[1], '/sdk/index.js');
+  release();
+  await assert.rejects(attempt, /not supported/);
+  assert.equal(process.argv[1], script, 'A failed start restores the script too');
+  assert.equal((await sdk.Agent.resume('agent-1', {})).agentId, 'agent-1');
 });
 
 test('pausing a Cursor turn cancels its run, and a failed run reports its error', async () => {

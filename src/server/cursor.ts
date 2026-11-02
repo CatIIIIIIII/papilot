@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Adapter, loadPackage, toolItem, type Item, type Thread, type Turn } from './agents.ts';
+import { Adapter, loadPackage, packageFile, toolItem, type Item, type Thread, type Turn } from './agents.ts';
 import { imageType } from './attachments.ts';
 import { DATA } from './paths.ts';
 
@@ -27,8 +27,27 @@ export function cursorConfigured(env: NodeJS.ProcessEnv = process.env) {
 let cursor: Promise<CursorSdk> | null = null;
 export function loadCursor() {
   cursor ??= loadPackage('@cursor/sdk', CURSOR_SDK_VERSION, 'the Cursor SDK for Cursor tasks', () => { if (!cursorConfigured()) throw new Error(CURSOR_KEY); })
+    .then(sdk => { const file = packageFile('@cursor/sdk'); return file ? helpersBesideSdk(sdk, file) : sdk; })
     .catch(error => { cursor = null; throw error; });
   return cursor;
+}
+
+// The SDK looks for its platform helpers (the cursorsandbox binary, rg and the
+// shell parser) in node_modules folders above the running script, not beside
+// itself, and loads them as a run starts. The copy Papilot fetches on first
+// use sits in the data folder, outside that search, so every sandboxed run
+// failed as "not supported in this environment". While a run starts, the
+// search begins at the SDK's own file.
+let starting = 0, script: string | undefined;
+export function helpersBesideSdk(sdk: CursorSdk, file: string): CursorSdk {
+  const fromSdk = async <T>(start: () => Promise<T>) => {
+    if (starting++ === 0) { script = process.argv[1]; process.argv[1] = file; }
+    try { return await start(); } finally { if (--starting === 0) process.argv[1] = script as string; }
+  };
+  const wrap = (agent: CursorAgentHandle): CursorAgentHandle => ({
+    agentId: agent.agentId, close: () => agent.close(), send: (message, options) => fromSdk(() => agent.send(message, options)),
+  });
+  return { Cursor: sdk.Cursor, Agent: { create: async options => wrap(await sdk.Agent.create(options)), resume: async (id, options) => wrap(await sdk.Agent.resume(id, options)) } };
 }
 
 // Effort is a model parameter in Cursor's catalog.

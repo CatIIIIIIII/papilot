@@ -126,10 +126,11 @@ export function claudeConfigured(env: NodeJS.ProcessEnv = process.env) {
 // Agent SDKs carry large native parts, so an installed Papilot fetches one
 // into the data folder the first time its agent can be used. ready() runs
 // before the download and throws when the agent is not configured.
+const PACKAGES = path.join(DATA, 'agents');
 export async function loadPackage(name: string, version: string, label: string, ready: () => void = () => {}): Promise<any> {
   try { return await import(name); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ERR_MODULE_NOT_FOUND') throw error; }
-  const prefix = path.join(DATA, 'agents'), resolve = () => createRequire(path.join(prefix, 'package.json')).resolve(name);
+  const prefix = PACKAGES, resolve = () => createRequire(path.join(prefix, 'package.json')).resolve(name);
   let entry: string;
   try { entry = resolve(); } catch {
     ready();
@@ -138,6 +139,14 @@ export async function loadPackage(name: string, version: string, label: string, 
     entry = resolve();
   }
   return import(pathToFileURL(entry).href);
+}
+// The file a package loaded from: Papilot's own dependencies, or the copy
+// fetched on first use.
+export function packageFile(name: string) {
+  for (const from of [import.meta.url, path.join(PACKAGES, 'package.json')]) {
+    try { return createRequire(from).resolve(name); } catch { /* Not installed there. */ }
+  }
+  return null;
 }
 
 let claude: Promise<typeof import('@anthropic-ai/claude-agent-sdk')['query']> | null = null;
