@@ -214,12 +214,10 @@ try {
     const files = Object.fromEntries(['desktop.json', built.layer.name].map(name => [name, fs.readFileSync(path.join(output, name))]));
     let source = '';
     const github = http.createServer((request, response) => {
-      const route = new URL(request.url, 'http://localhost').pathname, send = value => response.end(JSON.stringify(value));
-      if (route === '/repos/PapilotAI/papilot/releases/tags/desktop-dev') return send({ tag_name: 'desktop-dev', draft: false, prerelease: true,
-        assets: Object.entries(files).map(([name, bytes]) => ({ name, state: 'uploaded', size: bytes.length, browser_download_url: `${source}/download/${name}` })) });
-      if (route === '/repos/PapilotAI/papilot/releases') return send([]);
-      const file = files[route.replace(/^\/download\//, '')];
-      if (file) response.end(file); else response.writeHead(404).end();
+      // Release downloads only: no stable release, and this dev build.
+      const route = new URL(request.url, 'http://localhost').pathname;
+      const file = files[route.replace(/^\/PapilotAI\/papilot\/releases\/download\/desktop-dev\//, '')];
+      if (file && route.startsWith('/PapilotAI/papilot/releases/download/desktop-dev/')) response.end(file); else response.writeHead(404).end();
     });
     await new Promise(resolve => github.listen(0, '127.0.0.1', resolve));
     source = `http://127.0.0.1:${github.address().port}`;

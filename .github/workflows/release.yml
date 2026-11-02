@@ -103,7 +103,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          # The layer and its manifest go first, so apps that see the new
-          # installers can already update in place.
-          gh release upload "$GITHUB_REF_NAME" release/desktop/papilot-app-*.tgz release/desktop/desktop.json --clobber
-          gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb --clobber
+          # Apps discover a release by its desktop.json, so it goes last: by
+          # then the installers and the update layer it names are uploaded.
+          gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb release/desktop/papilot-app-*.tgz --clobber
+          gh release upload "$GITHUB_REF_NAME" release/desktop/desktop.json --clobber

@@ -19,31 +19,6 @@ function fixture(overrides: Record<string, any> = {}) {
   const updates = new Updates({ root: process.cwd(), data, version: '0.6.0', port: 1, supported: true, latest: async () => '0.7.0', busy: () => false, shutdown() {}, ...overrides });
   return { data, updates, close() { updates.close(); fs.rmSync(data, { recursive: true, force: true }); } };
 }
-test('desktop discovery requires a published installer for this OS and architecture', async () => {
-  const release = (version: string, names: string[], extra = {}) => ({ tag_name: `v${version}`, draft: false, prerelease: false,
-    assets: names.map(name => ({ name: `Papilot-${version}-${name}`, state: 'uploaded', size: 1024 })), ...extra });
-  const releases = [
-    release('1.5.0', ['mac-arm64.dmg'], { draft: true }),
-    release('1.4.0', ['mac-arm64.dmg'], { prerelease: true }),
-    release('1.3.0', []), // npm published, desktop jobs still running
-    release('1.2.0', ['mac-x64.zip', 'linux-x86_64.AppImage', 'linux-amd64.deb']),
-    release('1.1.0', ['mac-arm64.dmg', 'linux-arm64.deb']),
-    release('1.0.0', ['mac-arm64.dmg']),
-    release('9.0.0', ['mac-arm64.dmg'], { assets: [{ name: 'Papilot-9.0.0-mac-arm64.dmg', state: 'new', size: 0 }] }),
-    release('../unsafe', ['mac-arm64.dmg']),
-  ];
-  const urls: string[] = [];
-  const fetcher: typeof fetch = async url => { urls.push(String(url)); return new Response(JSON.stringify(releases)); };
-  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', fetcher), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` });
-  for (const [platform, arch, expected] of [['darwin', 'x64', '1.2.0'], ['linux', 'x64', '1.2.0'], ['linux', 'arm64', '1.1.0']] as const) {
-    assert.equal((await latestDesktopRelease(platform, arch, fetcher))?.version, expected);
-  }
-  assert.equal(await latestDesktopRelease('win32', 'x64', fetcher), null);
-  assert.equal(await latestDesktopRelease('darwin', 'arm64', async () => new Response('[]')), null);
-  await assert.rejects(latestDesktopRelease('darwin', 'arm64', async () => new Response('{}')), /Invalid release/);
-  await assert.rejects(latestDesktopRelease('darwin', 'arm64', async () => new Response('', { status: 503 })), /Could not check/);
-  assert.ok(urls.every(url => url === 'https://api.github.com/repos/PapilotAI/papilot/releases?per_page=100'));
-});
 test('the development desktop app checks its own source and only links to installers', async () => {
   const data = temporary(), downloadUrl = `${DESKTOP_RELEASES}/tag/v0.7.0`;
   const saved = { currentVersion: devVersion, latestVersion: devVersion, phase: 'restarting', pid: process.pid };
@@ -76,55 +51,52 @@ test('the development desktop app checks its own source and only links to instal
   } finally { f.close(); fs.rmSync(data, { recursive: true, force: true }); }
 });
 const fingerprint = 'f'.repeat(64), sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-// GitHub's API lists the assets; their download URLs redirect to its download host.
-function githubFixture(releases: any[], files: Record<string, Buffer | string>) {
+// Release downloads redirect from github.com to GitHub's download host; the
+// REST API, with its per-IP limit, is never used.
+function githubFixture(files: Record<string, Buffer | string>) {
   const requests: string[] = [];
   const fetcher: typeof fetch = async (input, init) => {
     const url = String(input); requests.push(url);
-    if (url === 'https://api.github.com/repos/PapilotAI/papilot/releases?per_page=100') return new Response(JSON.stringify(releases.filter(release => !release.prerelease)));
-    if (url === `https://api.github.com/repos/PapilotAI/papilot/releases/tags/${DESKTOP_DEV_TAG}`) {
-      const dev = releases.find(release => release.tag_name === DESKTOP_DEV_TAG);
-      return dev ? new Response(JSON.stringify(dev)) : new Response('{"message":"Not Found"}', { status: 404 });
-    }
+    assert.equal(init?.redirect, 'manual'); assert.ok(!url.startsWith('https://api.github.com'));
+    const latest = /^https:\/\/github\.com\/PapilotAI\/papilot\/releases\/latest\/download\/(.+)$/.exec(url);
+    const stable = Object.keys(files).filter(name => /^v[\d.]+\//.test(name)).sort().pop()?.split('/')[0];
+    if (latest) return stable ? new Response(null, { status: 302, headers: { Location: `https://github.com/PapilotAI/papilot/releases/download/${stable}/${latest[1]}` } }) : new Response('Not Found', { status: 404 });
     const download = /^https:\/\/github\.com\/PapilotAI\/papilot\/releases\/download\/(.+)$/.exec(url);
-    if (download) { assert.equal(init?.redirect, 'manual'); return new Response(null, { status: 302, headers: { Location: `https://release-assets.githubusercontent.com/${download[1]}` } }); }
+    if (download) return download[1] in files ? new Response(null, { status: 302, headers: { Location: `https://release-assets.githubusercontent.com/${download[1]}` } }) : new Response('Not Found', { status: 404 });
     const file = /^https:\/\/release-assets\.githubusercontent\.com\/(.+)$/.exec(url)?.[1];
     if (file && file in files) { const body = files[file]; return new Response(typeof body === 'string' ? body : new Uint8Array(body)); }
     return new Response('missing', { status: 404 });
   };
   return { fetcher, requests };
 }
-const asset = (tag: string, name: string, size = 1024) => ({ name, state: 'uploaded', size, browser_download_url: `https://github.com/PapilotAI/papilot/releases/download/${tag}/${name}` });
-function desktopRelease(tag: string, version: string, manifest: Record<string, any> | null, extra: Record<string, any> = {}) {
+function desktopRelease(tag: string, version: string, manifest: Record<string, any> = {}) {
   const layer = Buffer.from(`layer ${version}`), name = `papilot-app-${version}.tgz`;
-  const written = manifest && { format: 1, version, fingerprint, layer: { name, size: layer.length, sha256: sha256(layer) }, ...manifest };
-  const files = written ? { [`${tag}/desktop.json`]: JSON.stringify(written), [`${tag}/${name}`]: layer } : {};
-  const assets = [asset(tag, `Papilot-${version.split('-')[0]}-mac-arm64.dmg`), ...(written ? [asset(tag, 'desktop.json', 300), asset(tag, name, layer.length)] : [])];
-  return { release: { tag_name: tag, draft: false, prerelease: tag === DESKTOP_DEV_TAG, assets, ...extra }, files, layer: { url: `https://github.com/PapilotAI/papilot/releases/download/${tag}/${name}`, size: layer.length, sha256: sha256(layer) } };
+  const written = { format: 1, version, fingerprint, layer: { name, size: layer.length, sha256: sha256(layer) }, ...manifest };
+  return { files: { [`${tag}/desktop.json`]: JSON.stringify(written), [`${tag}/${name}`]: layer },
+    layer: { url: `https://github.com/PapilotAI/papilot/releases/download/${tag}/${name}`, size: layer.length, sha256: sha256(layer) } };
 }
-test('desktop discovery offers the update layer only to the shell it was built for', async () => {
-  const stable = desktopRelease('v1.1.0', '1.1.0', {}), older = desktopRelease('v1.0.0', '1.0.0', null);
-  const dev = desktopRelease(DESKTOP_DEV_TAG, devVersion, {});
-  const github = githubFixture([stable.release, older.release, dev.release], { ...stable.files, ...dev.files });
-  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'stable', fingerprint),
-    { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0`, layer: stable.layer });
-  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'stable', 'e'.repeat(64)),
-    { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` }, 'Another shell needs the installer');
-  github.requests.length = 0;
-  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` });
-  assert.equal(github.requests.length, 1, 'The development app reads no manifest');
-  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'dev', fingerprint),
-    { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}`, layer: dev.layer });
-  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'dev', 'e'.repeat(64)),
-    { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}` });
-  // Manifests that do not describe this exact release and layer are ignored.
-  for (const manifest of [{ format: 2 }, { version: '1.0.9' }, { layer: { name: 'papilot-app-1.1.0.tgz', size: 1, sha256: 'a'.repeat(64) } }, { layer: { name: 'other.tgz', size: 13, sha256: 'a'.repeat(64) } }]) {
-    const changed = desktopRelease('v1.1.0', '1.1.0', manifest);
-    assert.equal((await latestDesktopRelease('darwin', 'arm64', githubFixture([changed.release], changed.files).fetcher, 'stable', fingerprint))?.layer, undefined, JSON.stringify(manifest));
+test('desktop discovery reads release downloads and offers the update layer only to the shell it was built for', async () => {
+  const stable = desktopRelease('v1.1.0', '1.1.0'), dev = desktopRelease(DESKTOP_DEV_TAG, devVersion);
+  const github = githubFixture({ ...stable.files, ...dev.files });
+  assert.deepEqual(await latestDesktopRelease(github.fetcher, 'stable', fingerprint), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0`, layer: stable.layer });
+  assert.deepEqual(await latestDesktopRelease(github.fetcher, 'stable', 'e'.repeat(64)), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` }, 'Another shell needs the installer');
+  assert.deepEqual(await latestDesktopRelease(github.fetcher), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` }, 'The development app gets no layer');
+  assert.deepEqual(await latestDesktopRelease(github.fetcher, 'dev', fingerprint), { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}`, layer: dev.layer });
+  assert.deepEqual(await latestDesktopRelease(github.fetcher, 'dev', 'e'.repeat(64)), { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}` });
+  assert.ok(github.requests.includes('https://github.com/PapilotAI/papilot/releases/latest/download/desktop.json'));
+  // A release without a manifest yet (or before the first nightly build) offers nothing.
+  assert.equal(await latestDesktopRelease(githubFixture(stable.files).fetcher, 'dev', fingerprint), null);
+  assert.equal(await latestDesktopRelease(githubFixture({}).fetcher, 'stable', fingerprint), null);
+  // A layer that does not describe a safe, complete file is ignored.
+  for (const manifest of [{ fingerprint: 'e'.repeat(64) }, { layer: { name: '../papilot-app-1.1.0.tgz', size: 13, sha256: 'a'.repeat(64) } }, { layer: { name: 'papilot-app-1.1.0.tgz', size: 0, sha256: 'a'.repeat(64) } }, { layer: { name: 'papilot-app-1.1.0.tgz', size: 13, sha256: 'xyz' } }]) {
+    assert.equal((await latestDesktopRelease(githubFixture(desktopRelease('v1.1.0', '1.1.0', manifest).files).fetcher, 'stable', fingerprint))?.layer, undefined, JSON.stringify(manifest));
   }
-  assert.equal(await latestDesktopRelease('darwin', 'arm64', githubFixture([stable.release], stable.files).fetcher, 'dev', fingerprint), null, 'No main build has been published yet');
-  const unsafe = desktopRelease(DESKTOP_DEV_TAG, '1.2.0', {});
-  await assert.rejects(latestDesktopRelease('darwin', 'arm64', githubFixture([unsafe.release], unsafe.files).fetcher, 'dev', fingerprint), /Invalid release/);
+  for (const [tag, version, channel] of [['v1.1.0', devVersion, 'stable'], [DESKTOP_DEV_TAG, '1.2.0', 'dev']] as const) {
+    await assert.rejects(latestDesktopRelease(githubFixture(desktopRelease(tag, version).files).fetcher, channel, fingerprint), /Invalid release/);
+  }
+  await assert.rejects(latestDesktopRelease(githubFixture(desktopRelease('v1.1.0', '1.1.0', { format: 2 }).files).fetcher, 'stable', fingerprint), /Invalid release/, 'A newer manifest format needs a newer app');
+  await assert.rejects(latestDesktopRelease(async () => new Response('', { status: 503 }), 'stable', fingerprint), /Could not check/);
+  await assert.rejects(latestDesktopRelease(async () => { throw new TypeError('fetch failed'); }, 'dev', fingerprint), /Could not check/);
   // Downloads follow redirects only over HTTPS to GitHub's hosts.
   const redirect = (location: string): typeof fetch => async () => new Response(null, { status: 302, headers: { Location: location } });
   for (const location of ['http://release-assets.githubusercontent.com/x', 'https://example.com/x', 'https://githubusercontent.com.example.com/x']) {

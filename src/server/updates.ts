@@ -8,9 +8,8 @@ import type { UpdateChannel, UpdateStatus } from '../shared.ts';
 
 const activePhases = new Set(['installing', 'waiting', 'restarting']);
 export const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-async function releaseInfo(url: string, fetcher: typeof fetch, limit = 256000, missing?: null) {
+async function releaseInfo(url: string, fetcher: typeof fetch, limit = 256000) {
   const response = await fetcher(url, { signal: AbortSignal.timeout(10000), redirect: 'error', headers: { Accept: 'application/json', 'User-Agent': 'Papilot' } });
-  if (response.status === 404 && missing === null) return null;
   if (!response.ok) throw new Error('Could not check for updates.');
   const text = await response.text();
   if (text.length > limit) throw new Error('Invalid release information.');
@@ -34,53 +33,29 @@ export const latestRelease = async (channel: UpdateChannel = 'stable', fetcher =
 export const DESKTOP_RELEASES = 'https://github.com/PapilotAI/papilot/releases';
 // Nightly builds of main replace the assets of this one prerelease.
 export const DESKTOP_DEV_TAG = 'desktop-dev';
-const DESKTOP_API = 'https://api.github.com/repos/PapilotAI/papilot';
-// The smoke test serves releases locally.
-const desktopApi = () => process.env.PAPILOT_DESKTOP_UPDATE_SOURCE ? process.env.PAPILOT_DESKTOP_UPDATE_SOURCE.replace(/\/+$/, '') + '/repos/PapilotAI/papilot' : DESKTOP_API;
+// Release downloads, not the rate-limited REST API. The smoke test serves
+// them locally.
+const desktopDownloads = () => (process.env.PAPILOT_DESKTOP_UPDATE_SOURCE ? process.env.PAPILOT_DESKTOP_UPDATE_SOURCE.replace(/\/+$/, '') + '/PapilotAI/papilot/releases' : DESKTOP_RELEASES);
 export interface DesktopRelease { version: string; downloadUrl: string; layer?: DesktopLayer }
-const asset = (release: any, name: unknown) => release.assets.find((asset: any) => asset.name === name && asset.state === 'uploaded' && asset.size > 0 && typeof asset.browser_download_url === 'string');
-// desktop.json (written by scripts/desktop-layer.mjs) names the release's
-// version, its update layer and the installer shell that layer runs on.
-async function desktopManifest(release: any, fetcher: typeof fetch) {
-  const listed = asset(release, 'desktop.json');
-  if (!listed) return null;
-  try { return JSON.parse((await download(listed.browser_download_url, fetcher, 64 * 1024)).toString('utf8')); }
-  catch { throw new Error('Could not check for updates.'); }
-}
-function desktopLayer(release: any, manifest: any, version: string, fingerprint: string): DesktopLayer | undefined {
-  const layer = manifest?.layer, file = layer && asset(release, layer.name);
-  if (!fingerprint || manifest?.format !== 1 || manifest.version !== version || manifest.fingerprint !== fingerprint || !file || file.size !== layer.size || !/^[a-f0-9]{64}$/.test(layer.sha256)) return undefined;
-  return { url: file.browser_download_url, size: layer.size, sha256: layer.sha256 };
-}
-// Stable: npm can be published before desktop builds finish. Only advertise
-// releases with an uploaded installer for this OS and CPU, and link to that
-// exact release. Dev: the latest nightly build of main. Either includes the update layer
-// when it was built for this installer's shell (fingerprint).
-export async function latestDesktopRelease(platform = process.platform, arch = process.arch, fetcher = fetch, channel: UpdateChannel = 'stable', fingerprint = ''): Promise<DesktopRelease | null> {
-  if (channel === 'dev') {
-    const release = await releaseInfo(`${desktopApi()}/releases/tags/${DESKTOP_DEV_TAG}`, fetcher, 4 * 1024 * 1024, null);
-    if (!release) return null;
-    if (!Array.isArray(release.assets) || release.draft !== false) throw new Error('Invalid release information.');
-    const manifest = await desktopManifest(release, fetcher);
-    if (!manifest) return null;
-    if (!devRevision(manifest.version)) throw new Error('Invalid release information.');
-    const layer = desktopLayer(release, manifest, manifest.version, fingerprint);
-    return { version: manifest.version, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}`, ...(layer ? { layer } : {}) };
-  }
-  const releases = await releaseInfo(`${desktopApi()}/releases?per_page=100`, fetcher, 4 * 1024 * 1024);
-  if (!Array.isArray(releases)) throw new Error('Invalid release information.');
-  let latest: { version: string; downloadUrl: string; release: any } | null = null;
-  for (const release of releases) {
-    const version = typeof release.tag_name === 'string' ? release.tag_name.replace(/^v/, '') : '';
-    if (release.draft !== false || release.prerelease !== false || !stableVersion(version) || !Array.isArray(release.assets)) continue;
-    const names = platform === 'darwin' && ['arm64', 'x64'].includes(arch) ? [`Papilot-${version}-mac-${arch}.dmg`, `Papilot-${version}-mac-${arch}.zip`]
-      : platform === 'linux' && ['arm64', 'x64'].includes(arch) ? [`Papilot-${version}-linux-${arch === 'x64' ? 'x86_64' : arch}.AppImage`, `Papilot-${version}-linux-${arch === 'x64' ? 'amd64' : arch}.deb`] : [];
-    if (!release.assets.some((asset: any) => asset.state === 'uploaded' && asset.size > 0 && names.includes(asset.name))) continue;
-    if (!latest || newerVersion(version, latest.version)) latest = { version, downloadUrl: `${DESKTOP_RELEASES}/tag/${release.tag_name}`, release };
-  }
-  if (!latest) return null;
-  const layer = fingerprint ? desktopLayer(latest.release, await desktopManifest(latest.release, fetcher), latest.version, fingerprint) : undefined;
-  return { version: latest.version, downloadUrl: latest.downloadUrl, ...(layer ? { layer } : {}) };
+// desktop.json (written by scripts/desktop-layer.mjs, uploaded after every
+// other asset of its release) names the version, its update layer and the
+// installer shell that layer runs on. Stable: the latest release. Dev: the
+// latest nightly build of main. The layer is offered only to that shell.
+export async function latestDesktopRelease(fetcher = fetch, channel: UpdateChannel = 'stable', fingerprint = ''): Promise<DesktopRelease | null> {
+  const folder = channel === 'dev' ? `download/${DESKTOP_DEV_TAG}` : 'latest/download';
+  let manifest: any;
+  try {
+    const bytes = await download(`${desktopDownloads()}/${folder}/desktop.json`, fetcher, 64 * 1024, true);
+    if (!bytes) return null;
+    manifest = JSON.parse(bytes.toString('utf8'));
+  } catch { throw new Error('Could not check for updates.'); }
+  const version = manifest?.version;
+  if (manifest?.format !== 1 || (channel === 'dev' ? !devRevision(version) : !stableVersion(version))) throw new Error('Invalid release information.');
+  const tag = channel === 'dev' ? DESKTOP_DEV_TAG : `v${version}`, layer = manifest.layer;
+  const usable = fingerprint && manifest.fingerprint === fingerprint && typeof layer?.name === 'string' && /^papilot-app-[\w.-]+\.tgz$/.test(layer.name)
+    && Number.isSafeInteger(layer.size) && layer.size > 0 && /^[a-f0-9]{64}$/.test(layer.sha256);
+  return { version, downloadUrl: `${DESKTOP_RELEASES}/tag/${tag}`,
+    ...(usable ? { layer: { url: `${desktopDownloads()}/download/${tag}/${layer.name}`, size: layer.size, sha256: layer.sha256 } } : {}) };
 }
 const validTarget = (version: unknown, channel: UpdateChannel): version is string => channel === 'dev' ? Boolean(devRevision(version)) : stableVersion(version);
 const available = (next: string, current: string, channel: UpdateChannel) => validTarget(next, channel)
@@ -197,7 +172,7 @@ export class Updates {
     return this.checking;
   }
   private desktopRelease(channel: UpdateChannel) {
-    return (this.options.latestDesktop || (channel => latestDesktopRelease(process.platform, process.arch, fetch, channel, this.options.bundle?.fingerprint)))(channel);
+    return (this.options.latestDesktop || (channel => latestDesktopRelease(fetch, channel, this.options.bundle?.fingerprint)))(channel);
   }
   // A retry after a restart finds the release again; the check that offered it
   // happened in the previous process.

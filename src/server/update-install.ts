@@ -106,7 +106,10 @@ async function installDev(data: string, version: string) {
 const INSTALL_FAILED = 'The new version could not be installed. Check the connection and available disk space, then retry.';
 // Release assets redirect from github.com to GitHub's download hosts. Each hop
 // stays on HTTPS and on those hosts (or on the smoke test's local source).
-export async function download(url: string, fetcher: typeof fetch, limit: number) {
+// With missing, a file that does not exist resolves to null.
+export async function download(url: string, fetcher: typeof fetch, limit: number, missing: true): Promise<Buffer | null>;
+export async function download(url: string, fetcher: typeof fetch, limit: number): Promise<Buffer>;
+export async function download(url: string, fetcher: typeof fetch, limit: number, missing = false): Promise<Buffer | null> {
   const source = process.env.PAPILOT_DESKTOP_UPDATE_SOURCE ? new URL(process.env.PAPILOT_DESKTOP_UPDATE_SOURCE).origin : null;
   const trusted = (address: URL) => address.origin === source
     || address.protocol === 'https:' && (address.hostname === 'github.com' || address.hostname.endsWith('.githubusercontent.com'));
@@ -116,6 +119,7 @@ export async function download(url: string, fetcher: typeof fetch, limit: number
     const response = await fetcher(address.href, { signal: AbortSignal.timeout(300000), redirect: 'manual', headers: { Accept: 'application/octet-stream', 'User-Agent': 'Papilot' } });
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) { address = new URL(location, address); continue; }
+    if (missing && response.status === 404) return null;
     if (!response.ok || Number(response.headers.get('content-length') || 0) > limit) throw new Error(INSTALL_FAILED);
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length > limit) throw new Error(INSTALL_FAILED);
