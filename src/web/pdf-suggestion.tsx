@@ -118,12 +118,15 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
     if (element) { element.style.height = '0'; element.style.height = `${element.scrollHeight}px`; }
   }, [draft]);
   usePdfNotePosition(card, note.rect, note.aiReview ? 330 : 280, !inline);
+  // Enter in the popover sends, like the arrow; a note already in the chat
+  // just saves, and the library keeps Enter for saving edits in place.
+  const enterAction = !inline && !destination && !selected ? 'quote' : 'keep';
   useLayoutEffect(() => { if (!inline && (!input.current || input.current.disabled)) card.current?.focus({ preventScroll: true }); }, [inline, note.id]);
 
   return <section ref={card} className={'pdf-note-card ' + (ai ? 'pdf-suggestion' : 'pdf-personal-note') + (inline ? ' pdf-note-inline' : '')} role={inline ? 'group' : 'dialog'} aria-modal={inline ? undefined : false} aria-label={ai ? t('AI suggestion {n}', { n: number }) : t('PDF note {n}', { n: number })} tabIndex={inline ? undefined : -1}>
     {header}
     <div className="pdf-note-content"><div className="pdf-suggestion-body">{editing ?
-      <textarea ref={input} className="pdf-note-input" aria-label={t('Edit note {n}', { n: number })} placeholder={t('Write a note…')} value={draft} rows={1} maxLength={4000} readOnly={busy} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); void save(); } }}/>
+      <textarea ref={input} className="pdf-note-input" aria-label={t('Edit note {n}', { n: number })} placeholder={t('Write a note…')} value={draft} rows={1} maxLength={4000} readOnly={busy} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); void save(enterAction); } }}/>
       : ai ? <p>{note.comment}</p> : <p ref={text} className="pdf-note-text note-edit-trigger" role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy} aria-label={t('Edit note {n}: {comment}', { n: number, comment: note.comment })} title={t('Edit note')} onClick={() => {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed && text.current?.contains(selection.anchorNode)) return;

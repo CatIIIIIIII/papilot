@@ -919,9 +919,19 @@ try {
   await notesPanel.getByRole('alert').waitFor();
   assert.equal(await editingNote.inputValue(), 'Only these words, please.');
   failNoteEdit = false;
+  // Enter sends, like the arrow: the edit is saved and quoted in the chat.
   await editingNote.press('Enter');
   await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).waitFor();
   assert.deepEqual(annotations[0], { ...anchor, comment: 'Only these words, please.' });
+  await expect(page.getByRole('region', { name: 'Notes in this task' })).toContainText('Only these words, please.');
+  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  // Editing a note that is already in the chat saves it and keeps it there.
+  await notesPanel.getByText('Only these words, please.', { exact: true }).click();
+  await editingNote.press('Enter');
+  await expect(editingNote).toHaveCount(0);
+  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true }).click();
+  await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).waitFor();
   await page.getByRole('button', { name: 'My notes', exact: true }).click();
@@ -957,6 +967,7 @@ try {
   await noteBox.fill('Shorten this sentence.');
   await noteBox.press('Enter');
   await expect(notesPanel).toContainText('Shorten this sentence.');
+  await expect(page.getByRole('region', { name: 'Notes in this task' })).toContainText('Shorten this sentence.');
   assert.equal(annotations[0].page, 0);
   assert.equal(annotations[0].key, 'fixture');
   assert.equal(annotations[0].quote, 'Fixture sentence about');
@@ -966,6 +977,7 @@ try {
   await notesPanel.getByRole('button', { name: 'Delete note 1' }).click();
   await page.getByRole('button', { name: 'Note 1: Shorten this sentence.', exact: true }).waitFor({ state: 'hidden' });
   assert.equal(annotations.length, 0);
+  await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   // The arrow works immediately on a new note: save and quote in one click.
   noteBox = await selectText();
   await noteBox.fill('Quote this new note.');

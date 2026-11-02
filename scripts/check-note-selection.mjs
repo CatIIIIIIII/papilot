@@ -122,6 +122,10 @@ try {
   await mobileEditor.fill('Revise n1.');
   await mobileEditor.press('ControlOrMeta+Enter');
   await expect(personalCard.getByText('Revise n1.', { exact: true })).toBeVisible();
+  const quoteMobile = personalCard.getByRole('button', { name: 'Include note 1 in this task', exact: true });
+  await expect(quoteMobile).toHaveAttribute('aria-pressed', 'true');
+  await quoteMobile.click();
+  await expect(quoteMobile).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   const cardBox = await personalCard.boundingBox(), pdfBox = await page.locator('.pdf-container').boundingBox();
   assert.ok(cardBox.x >= pdfBox.x && cardBox.x + cardBox.width <= pdfBox.x + pdfBox.width + 1);
