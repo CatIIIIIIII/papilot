@@ -7,6 +7,9 @@
 [data-desktop] .sidebar-collapsed .sidebar-toggle{margin-left:92px}
 [data-desktop] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar){-webkit-app-region:drag}
 [data-desktop] :is(button,a,input,select,textarea,[role="slider"],[role="combobox"]){-webkit-app-region:no-drag}
+/* app-region inherits, so a popover or dialog opened from a toolbar would be a
+   drag handle too. On macOS that stops every click reaching the window. */
+[data-desktop] :is([popover],dialog){-webkit-app-region:no-drag}
 .desktop-window-buttons{display:flex;gap:4px;padding:8px 12px;width:max-content}
 .desktop-window-buttons button{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;color:var(--text-2);-webkit-app-region:no-drag}
 .desktop-window-buttons button:hover{background:var(--bg-hover);color:var(--text)}

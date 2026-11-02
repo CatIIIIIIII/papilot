@@ -23,9 +23,10 @@ const bibtex = { kind: 'error', severity: 'error', message: 'LaTeX failed to com
 const state = { build: { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]], current: true, problems: { errors: 0, warnings: 2, minor: 2 } }, problems: { status: 'ready', key: 'pdf', problems: warnings, log: true } };
 let problemReads = 0;
 
-async function open(options) {
+async function open(options, { desktop = false } = {}) {
   const page = await browser.newPage({ locale: 'en-US', colorScheme: 'light', viewport: { width: 1440, height: 900 }, ...options });
   await page.addInitScript(() => localStorage.setItem('papilot:task', ''));
+  if (desktop) await page.addInitScript(() => { window.papilotDesktop = { platform: 'darwin', minimize() {}, maximize() {}, close() {} }; });
   const errors = []; page.on('pageerror', failure => errors.push(failure.message));
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
@@ -123,6 +124,18 @@ try {
   assert.deepEqual(errors, []);
   await page.close();
 
+  // In the desktop app the PDF toolbar is a window drag region, and app-region
+  // inherits. Popovers opened from it must opt out: on macOS a drag-region
+  // popover stops every click reaching the window, so it can never be closed.
+  const desktop = await open(undefined, { desktop: true });
+  await desktop.page.locator('.pdf-toolbar .problems-button').click();
+  await expect(desktop.page.locator('.problems-panel li').first()).toBeVisible();
+  const regions = await desktop.page.evaluate(() => [...document.querySelectorAll('.pdf-toolbar :is([popover],dialog)')].map(element => [element.className, getComputedStyle(element).getPropertyValue('-webkit-app-region')]));
+  assert.ok(regions.length >= 2, `The toolbar has its popovers: ${JSON.stringify(regions)}`);
+  assert.ok(regions.every(([, region]) => region === 'no-drag'), `Toolbar popovers are not drag handles: ${JSON.stringify(regions)}`);
+  assert.deepEqual(desktop.errors, []);
+  await desktop.page.close();
+
   // On a phone the list is a sheet along the bottom, inside the screen.
   state.build = { ...state.build, status: 'ready', current: true, error: undefined, problems: { errors: 0, warnings: 2, minor: 2 } };
   state.problems = { status: 'ready', key: 'pdf', problems: warnings, log: true };
@@ -136,5 +149,5 @@ try {
   assert.equal(await phone.page.evaluate(() => document.documentElement.scrollWidth), 390, 'No horizontal scrolling');
   await sheet.screenshot({ path: 'test-results/build-problems-mobile.png' });
   assert.deepEqual(phone.errors, []);
-  console.log('PASS: Compilation problems stay behind a quiet counted icon, list on demand, jump to their place, fill a fix request, report failures in one line, and fit a phone');
+  console.log('PASS: Compilation problems stay behind a quiet counted icon, list on demand, jump to their place, fill a fix request, report failures in one line, close in the desktop app, and fit a phone');
 } finally { await browser.close(); await server.close(); }
