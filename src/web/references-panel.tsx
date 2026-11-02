@@ -3,6 +3,7 @@ import type { BibliographyEntry, BibliographyReport, ReferenceCheck } from '../s
 import { Icon } from './icons.tsx';
 import { language, t, tn } from './i18n.ts';
 import { browserStorage } from './storage.ts';
+import { readPlace, savePlace, useScrollPlace } from './places.ts';
 import './references-panel.css';
 
 // The References panel checks the paper's whole bibliography as it is on
@@ -104,9 +105,16 @@ const stateLabel = (status: string) => ({ verified: t('Verified'), mismatch: t('
 /** How many problems the tab shows: those an author should act on. */
 export const problemCount = (report: BibliographyReport | null) => report ? items(report).filter(item => !item.soft).length : 0;
 
-export function ReferencesPanel({ data, onInvestigate }: { data: Bibliography; onInvestigate: (text: string) => void }) {
+// place names where the author was, so the check reopens on the same list,
+// entry and scroll position.
+export function ReferencesPanel({ data, onInvestigate, place }: { data: Bibliography; onInvestigate: (text: string) => void; place?: string }) {
   const { report, error, checking } = data;
-  const [filter, setFilter] = useState<'problems' | 'all'>('problems'), [open, setOpen] = useState('');
+  const [view, setView] = useState<{ filter: 'problems' | 'all'; open: string }>(() => (place && readPlace<{ filter: 'problems' | 'all'; open: string }>(place + ':view')) || { filter: 'problems', open: '' });
+  const { filter, open } = view;
+  const show = (next: Partial<typeof view>) => setView(current => { const value = { ...current, ...next }; if (place) savePlace(place + ':view', value); return value; });
+  const setFilter = (value: 'problems' | 'all') => show({ filter: value }), setOpen = (value: string) => show({ open: value });
+  const list = useRef<HTMLDivElement>(null);
+  useScrollPlace(list, place ? place + ':scroll' : null, Boolean(report?.bibs.length));
   // The author's own choices; by default every problem but an uncited entry goes to the agent.
   const [choices, setChoices] = useState<Record<string, boolean>>({});
   const all = useMemo(() => report ? items(report) : [], [report]);
@@ -121,7 +129,7 @@ export function ReferencesPanel({ data, onInvestigate }: { data: Bibliography; o
   const shown = filter === 'problems' ? null : report.entries;
   // The agent finds out what happened; the author decides what to change.
   const investigate = () => onInvestigate([t('Find out what happened with these bibliography problems and report back. Do not edit any file. For each, check whether the work exists and what its published record says (authors, title, year, venue, DOI), find where the entry or citation came from in the Git history of the .bib and .tex files, and say what you would suggest. Mark which findings you confirmed in a source and which are guesses.'), ...chosen.map(item => '- ' + item.fix)].join('\n'));
-  return <div className="references-panel" aria-busy={checking}>
+  return <div ref={list} className="references-panel" aria-busy={checking}>
     <div className="references-summary">
       <p>
         <strong>{tn(report.entries.length, '{n} entry', '{n} entries')}</strong>

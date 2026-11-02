@@ -20,6 +20,7 @@ import type { Attachment } from '../shared.ts';
 import { noteLocation } from './note-location.ts';
 import { ReadRequest, canStreamUpdates } from './refresh.ts';
 import { browserStorage } from './storage.ts';
+import { readPlace, savePlace } from './places.ts';
 import { ModeSwitch, type PdfMode } from './mode-switch.tsx';
 import { ReviewFrame, reviewUrl } from './review-frame.tsx';
 import { AiReviewView } from './ai-review.tsx';
@@ -302,15 +303,27 @@ function Activity({ task, runtime, reconnecting, onReconnect, skills, composer, 
   const [skill, setSkill] = useState<Skill | null>(null);
   useEffect(() => setSkill(current => current ? skills.find(item => item.id === current.id) || null : null), [skills]);
   const scroller = useRef<HTMLDivElement>(null);
-  const shouldFollow = useRef(true);
-  const [following, setFollowing] = useState(true);
+  // A chat the author scrolled back through opens at the same place; one that
+  // was following the latest messages opens at the end, as before.
+  const place = 'chat:' + task.id, back = useRef(readPlace<number>(place));
+  const shouldFollow = useRef(back.current === undefined);
+  const [following, setFollowing] = useState(back.current === undefined);
+  // A hidden chat (the Review tab on a phone) has no size yet; it goes back when shown.
+  const settled = useRef(false); settled.current = !loading && items.length > 0;
+  function goBack() {
+    const box = scroller.current, top = back.current;
+    if (!box || top === undefined || !box.clientHeight) return;
+    box.scrollTop = top;
+    if (Math.abs(box.scrollTop - top) < 2 || settled.current) back.current = undefined;
+  }
+  useLayoutEffect(goBack, [items, requests, loading]);
   const noteResults = useNoteResults();
-  useLayoutEffect(() => { if (noteResults?.selected) { shouldFollow.current = false; setFollowing(false); } }, [noteResults?.selected, noteResults?.reveal]);
-  function latest() { shouldFollow.current = true; setFollowing(true); if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }
+  useLayoutEffect(() => { if (noteResults?.selected) { back.current = undefined; shouldFollow.current = false; setFollowing(false); } }, [noteResults?.selected, noteResults?.reveal]);
+  function latest() { back.current = undefined; shouldFollow.current = true; setFollowing(true); if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }
   useEffect(() => { if (shouldFollow.current) latest(); }, [items, requests]);
   useEffect(() => {
     if (!scroller.current) return;
-    const observer = new ResizeObserver(() => { if (shouldFollow.current) latest(); });
+    const observer = new ResizeObserver(() => { if (back.current !== undefined) goBack(); else if (shouldFollow.current) latest(); });
     observer.observe(scroller.current); return () => observer.disconnect();
   }, []);
   async function submit(source: 'draft' | 'feedback') {
@@ -326,7 +339,7 @@ function Activity({ task, runtime, reconnecting, onReconnect, skills, composer, 
   const hint = task.status === 'deleting' ? t('This task is being deleted') : task.status === 'uncertain' ? t('Check task status before sending') : sendingSource === 'feedback' ? t('Sending feedback…') : sending ? t('Sending…')
     : unsent ? tn(unsent, '{n} review update will be sent with this message', '{n} review updates will be sent with this message') : active ? t('{agent} is working · new instructions run next', { agent: agentName(task) }) : '';
   return <section id="conversation-panel" className="activity-panel" aria-label={t('{agent} conversation', { agent: agentName(task) })}><div className="panel-heading">{lead}{tools && <div className="panel-tools">{tools}</div>}</div>
-    <div className="conversation-history"><div className="messages" ref={scroller} onScroll={() => { if (scroller.current) { const el = scroller.current; shouldFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; setFollowing(shouldFollow.current); } }}><div className="thread">
+    <div className="conversation-history"><div className="messages" ref={scroller} onScroll={() => { if (scroller.current && back.current === undefined) { const el = scroller.current; shouldFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; setFollowing(shouldFollow.current); savePlace(place, shouldFollow.current ? undefined : Math.round(el.scrollTop)); } }}><div className="thread">
       {loading && <p className="muted" role="status">{t('Loading conversation…')}</p>}
       {loadError && <div className="conversation-error" role="alert"><p>{loadError}</p><button className="button secondary compact" onClick={retry}>{t('Retry conversation')}</button></div>}
       {timelineEntries(items.filter(item => item.type !== 'reviewOutput').map(item => task.mode === 'review' && item.type === 'assistant' ? { ...item, text: aiReviewSummary(item.text) } : item)).map(entry => entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agentName(task)} root={task.worktree}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agentName(task)} root={task.worktree}/>)}
@@ -768,7 +781,9 @@ function ManuscriptView({ project, data, error, view, setView, region, setRegion
     requestAnimationFrame(() => panelToggle.current?.focus());
   }}><Icon name={hidden ? 'panelExpand' : 'panelCollapse'} size={18}/></button>;
   const pageTools = <>{tools}{!hidden && !sideBySide && openPdf}{hidden && togglePanel}</>;
-  const [mode, setMode] = useState<PdfMode>('pdf'), [committing, setCommitting] = useState(false);
+  // PDF or Changes stays as the author left it when they come back to the paper.
+  const [mode, showMode] = useState<PdfMode>(() => readPlace('mode:' + project.id) === 'changes' ? 'changes' : 'pdf'), [committing, setCommitting] = useState(false);
+  const setMode = (value: PdfMode) => { showMode(value); savePlace('mode:' + project.id, value); };
   // The last build's problems sit beside Recompile and open only when asked.
   const problems = useRef<ProblemsHandle>(null);
   const problemsButton = <ProblemsButton ref={problems} counts={build?.problems} status={build?.status} pdfKey={build?.key} logUrl={`/api/projects/${project.id}/manuscript/log`}
@@ -815,7 +830,7 @@ function ManuscriptView({ project, data, error, view, setView, region, setRegion
         // The previous PDF stays readable; the details wait in the problem list.
         ? <div className="manuscript-note error brief" role="alert"><span>{t('The latest changes did not compile. This is the last PDF that did.')}</span><button type="button" className="note-link" onClick={() => problems.current?.open()}>{t('Show problems')}</button></div>
         : <div className="manuscript-note error" role="alert"><strong>{t('The manuscript did not compile.')}</strong><pre>{build.error}</pre></div>)}
-      {build?.key ? <Suspense fallback={<div className="review-loading"><p role="status">{t('Opening the PDF…')}</p></div>}><PdfView ref={pdf} url={`/api/projects/${project.id}/manuscript.pdf?key=${build.key}`} words={`/api/projects/${project.id}/manuscript/words?key=${build.key}`} notes={numbered.filter(item => item.note.key === build.key)} active={active} region={region} setRegion={setRegion} group={actions.group} onGroupChange={actions.setGroup} markingDisabled={actions.sending}
+      {build?.key ? <Suspense fallback={<div className="review-loading"><p role="status">{t('Opening the PDF…')}</p></div>}><PdfView ref={pdf} place={'pdf:' + project.id} url={`/api/projects/${project.id}/manuscript.pdf?key=${build.key}`} words={`/api/projects/${project.id}/manuscript/words?key=${build.key}`} notes={numbered.filter(item => item.note.key === build.key)} active={active} region={region} setRegion={setRegion} group={actions.group} onGroupChange={actions.setGroup} markingDisabled={actions.sending}
           noteActions={{ has: actions.selection.has, toggle: note => actions.selection.set([note.id], !actions.selection.has(note.id)), remove: actions.remove, restore: actions.restore, edit: actions.edit, onEditing: actions.onEditing, onBusy: actions.onReviewBusy, disabled: actions.sending }} onDeselect={() => setActive('')}
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
@@ -1578,7 +1593,7 @@ function App() {
       : manuscriptOpen && project ? <ManuscriptView key={project.id + project.path} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }} navigation={!mobile ? sidebarToggle : null} project={project} data={manuscriptData.data} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} openPdf={!mobile ? manuscriptOpenPdf : null} onFixProblems={fixProblems} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
-          <ReferencesPanel data={bibliography} onInvestigate={draftInvestigation}/>
+          <ReferencesPanel key={project.id} place={'references:' + project.id} data={bibliography} onInvestigate={draftInvestigation}/>
         </section>
       : !state ? <div className="home"><div className="home-inner"><div className="home-mark"><span className="spinner"/></div><h1>{t('Opening your workspace')}</h1><p className="home-copy" role="status">{connectionError || t('Connecting to your papers and tasks…')}</p>{connectionError && <button className="button secondary" onClick={() => void refresh(true)}>{t('Retry connection')}</button>}</div></div>
       : !owner ? <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('No papers yet')}</h1><p className="home-copy">{t('No papers have been shared with you yet. Papers appear here as soon as {name} shares them.', { name: viewer?.owner || '' })}</p></div></div>

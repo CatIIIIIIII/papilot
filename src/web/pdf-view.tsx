@@ -11,6 +11,7 @@ import type { Annotation } from '../shared.ts';
 import { ChipSelect } from './chip-select.tsx';
 import { Icon } from './icons.tsx';
 import { browserStorage } from './storage.ts';
+import { readPlace, savePlace } from './places.ts';
 import { mergeLines } from './note-geometry.ts';
 import { touchSelection } from './touch-select.ts';
 import { t } from './i18n.ts';
@@ -133,6 +134,8 @@ export const PdfView = forwardRef<PdfHandle, {
   onOutline: (items: OutlineItem[]) => void; onSection: (index: number) => void;
   lead?: ReactNode;
   tools?: ReactNode;
+  /** Remembers the page and position under this name, and opens there next time. */
+  place?: string;
 }>(function PdfView(props, ref) {
   const latest = useRef(props); latest.current = props;
   const container = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), findInput = useRef<HTMLInputElement>(null);
@@ -278,10 +281,20 @@ export const PdfView = forwardRef<PdfHandle, {
       if (layer.parentElement !== div) div.append(layer);
     };
     bus.on('pagerendered', attach); bus.on('textlayerrendered', attach); bus.on('annotationlayerrendered', attach);
+    // Coming back to this PDF opens it where the author left it, as soon as
+    // its pages have a size (a hidden panel has none yet).
+    const place = latest.current.place;
+    let returning = place ? readPlace<{ page: number; left: number; top: number }>(place) : undefined;
+    const goBack = () => {
+      if (!returning || !box.clientHeight || !viewer.pagesCount) return;
+      const { page, left, top } = returning; returning = undefined;
+      if (page >= 1 && page <= viewer.pagesCount) viewer.scrollPageIntoView({ pageNumber: page, destArray: [null, { name: 'XYZ' }, left, top, null], allowNegativeOffset: true });
+    };
     bus.on('pagesinit', () => {
       const keep = restore.current; restore.current = null;
       viewer.currentScaleValue = keep?.scale || browserStorage.getItem('papilot:pdf-zoom') || 'page-width';
-      if (keep) { box.scrollTop = keep.top; box.scrollLeft = keep.left; }
+      if (keep) { returning = undefined; box.scrollTop = keep.top; box.scrollLeft = keep.left; }
+      else goBack();
     });
     bus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => { setPage(pageNumber); setPageInput(String(pageNumber)); });
     bus.on('scalechanging', ({ scale, presetValue }: { scale: number; presetValue?: string }) => {
@@ -297,14 +310,15 @@ export const PdfView = forwardRef<PdfHandle, {
         if (!viewer.pagesCount || !box.clientWidth || !box.clientHeight) return;
         const scale = viewer.currentScaleValue;
         if (scale === 'page-width' || scale === 'page-fit' || scale === 'page-height' || scale === 'auto') viewer.currentScaleValue = scale;
-        viewer.update();
+        viewer.update(); goBack();
       });
     });
     resize.observe(box);
     // The current section is the last bookmark above a line 40% down the view
     // (PDF units grow upwards); at the end of the document it is the last one.
-    bus.on('updateviewarea', ({ location }: { location?: { pageNumber: number; top: number; scale: number } }) => {
+    bus.on('updateviewarea', ({ location }: { location?: { pageNumber: number; top: number; left: number; scale: number } }) => {
       if (!location) return;
+      if (place && !returning) savePlace(place, { page: location.pageNumber, left: location.left, top: location.top });
       const items = latest.current.outline, reading = location.top - box.clientHeight * 0.4 / (viewer.currentScale * 96 / 72);
       let current = -1;
       items.forEach((item, index) => { if (item.page < location.pageNumber || (item.page === location.pageNumber && (item.top === null || item.top >= reading))) current = index; });

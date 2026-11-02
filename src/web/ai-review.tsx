@@ -23,7 +23,7 @@ export function AiReviewView({ task, api, lead, tools, onCopied }: { task: Task;
   return <div className="ai-review-view">
     {error && <div className="connection-banner" role="alert"><span>{error}</span><button onClick={() => setAttempt(value => value + 1)}>{t('Retry')}</button></div>}
     {data ? <Suspense fallback={<div className="review-loading"><p>{t('Opening the PDF…')}</p></div>}>
-      <PdfView ref={pdf} readOnly url={`/api${base}/pdf?key=${data.key}`} words={`/api${base}/words?key=${data.key}`} notes={data.notes.filter(note => note.key === data.key).map((note, index) => ({ note, number: index + 1 }))} active={active} onSelect={onSelect} onDeselect={() => setActive('')}
+      <PdfView ref={pdf} readOnly place={'pdf:review:' + task.id} url={`/api${base}/pdf?key=${data.key}`} words={`/api${base}/words?key=${data.key}`} notes={data.notes.filter(note => note.key === data.key).map((note, index) => ({ note, number: index + 1 }))} active={active} onSelect={onSelect} onDeselect={() => setActive('')}
         region={false} setRegion={noop} onCreate={async () => {}} outline={outline} section={section} onOutline={setOutline} onSection={setSection}
         lead={lead} tools={<><span className="review-copy-label" title={t('Suggestions stay in this task until you copy them to the manuscript')}>{t('Review copy')}</span>{tools}<a className="icon-button" href={`/api${base}/pdf`} target="_blank" rel="noreferrer" aria-label={t('Open PDF')} title={t('Open PDF')}><Icon name="external" size={16}/></a></>}
         noteActions={{ has: id => Boolean(data.notes.find(note => note.id === id)?.aiReview?.copiedTo), toggle: noop, onEditing: noop, onBusy: noop, disabled: false,

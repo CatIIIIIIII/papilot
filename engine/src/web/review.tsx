@@ -171,7 +171,12 @@ export function ReviewApp({
   const paper = useRef<HTMLElement>(null),
     epoch = useRef(0),
     scrollUntil = useRef(0),
+    // How far into the current change the author had read, restored once
+    // when the review reopens on it in the same view.
+    returning = useRef<{ index: number; offset: number; paper: boolean } | null>(null),
     snapshot = useRef({ state, detail, busy, composer, current });
+  // Where each review was left; a host's uncommitted changes are kept per paper.
+  const placeKey = `latex-review:${changes ? `changes:${location.pathname}` : task}`;
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   // The whole paper with the changes in place, or the changed sections only.
   // A host may fix the view in the address (Papilot's manuscript chooses its
@@ -339,8 +344,9 @@ export function ReviewApp({
   }
   function select(index: number, scroll = true) {
     if (index < 0 || index >= stops.length) return;
+    if (scroll) returning.current = null;
     setCurrent(index);
-    store(`latex-review:${task}`, {
+    store(placeKey, {
       round: detail?.round,
       stop: stops[index].key,
     });
@@ -355,15 +361,34 @@ export function ReviewApp({
       });
     }
   }
-  function reveal(article: HTMLElement, behavior: ScrollBehavior = "instant") {
-    const root = paper.current;
-    if (!root) return;
+  // How far the paper is scrolled past the top of a change; 0 when revealed.
+  function past(article: HTMLElement) {
+    const root = paper.current!;
     // scrollIntoView also scrolls ancestors across the embedding iframe.
     // Navigation belongs to the paper, independently of the host's Chat.
     const padding = parseFloat(getComputedStyle(root).scrollPaddingTop) || 0;
     const margin = parseFloat(getComputedStyle(article).scrollMarginTop) || 0;
-    root.scrollTo({ top: root.scrollTop + article.getBoundingClientRect().top - root.getBoundingClientRect().top - padding - margin, behavior });
+    return root.getBoundingClientRect().top + padding + margin - article.getBoundingClientRect().top;
   }
+  function reveal(article: HTMLElement, behavior: ScrollBehavior = "instant") {
+    const root = paper.current;
+    if (!root) return;
+    const index = Number(article.dataset.stop), back = returning.current;
+    let offset = 0;
+    if (back && back.index === index && back.paper === paperView) { offset = back.offset; returning.current = null; }
+    root.scrollTo({ top: root.scrollTop - past(article) + offset, behavior });
+  }
+  // The place within the current change is kept as the author reads on.
+  function remember(index: number) {
+    const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${index}"]`);
+    if (!article || !stops[index]) return;
+    store(placeKey, { round: detail?.round, stop: stops[index].key, offset: Math.round(past(article)), paper: paperView });
+  }
+  // Reading into the next change makes it current, which resizes its header;
+  // measure the place again once it has, unless a reveal is on its way.
+  useEffect(() => {
+    if (current >= 0 && !returning.current && Date.now() >= scrollUntil.current && paper.current?.scrollTop) remember(current);
+  }, [current]);
   useEffect(() => {
     let cancelled = false,
       timer: ReturnType<typeof setTimeout>;
@@ -401,8 +426,8 @@ export function ReviewApp({
           )
             return;
           const nextStops = buildStops(loaded),
-            saved = readStorage<{ round?: number; stop?: string }>(
-              `latex-review:${task}`,
+            saved = readStorage<{ round?: number; stop?: string; offset?: number; paper?: boolean }>(
+              placeKey,
               {},
             );
           let index =
@@ -416,6 +441,10 @@ export function ReviewApp({
             index = nextPending(nextStops, loadedState.decisions, index);
           if (linkedChange >= 0 && nextStops[linkedChange]) index = linkedChange;
           if (index < 0) index = pinned && nextStops.length ? 0 : -1;
+          returning.current =
+            !previous.detail && index >= 0 && saved.round === target && nextStops[index].key === saved.stop && saved.offset
+              ? { index, offset: saved.offset, paper: Boolean(saved.paper) }
+              : null;
           if (
             previous.detail &&
             loaded.round !== previous.detail.round &&
@@ -676,6 +705,7 @@ export function ReviewApp({
         });
     const index = visibleStop(regions, current, box.top + 60, box.bottom - 100);
     if (index !== current) select(index, false);
+    if (index >= 0) remember(index);
   }
   const actionBar = (index: number) => {
     if (index !== current || !state) return null;

@@ -14,6 +14,7 @@ import { installReviewScroll } from './review-scroll.ts';
 import { EFFECTS_EVENT, useExpandedEffects } from './effect-preferences.ts';
 import { useDefaultReviewView, VIEW_EVENT, type ReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
+import { readPlace, savePlace } from './places.ts';
 
 // The viewer reads the interface language from its address.
 export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `/review/${task.projectId}/?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
@@ -238,11 +239,18 @@ function cropMargins(doc: Document) {
 export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNotes, onDecided }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onSendNotes?: (message: { text: string; requestKey: string; notes?: NoteSummary[] }) => Promise<void>; onDecided?: () => void }) {
   const shortcuts = useShortcuts();
   const expandedEffects = useExpandedEffects();
-  const defaultView = useDefaultReviewView(), [view, setView] = useState<ReviewView>(defaultView), [fullPaper, setFullPaper] = useState(false);
-  // A review opens on the default from Settings, and follows it when it changes.
-  useEffect(() => setView(defaultView), [defaultView]);
+  // A review opens on the default from Settings, or on the view the author
+  // last chose for this task, and follows the default when it changes.
+  const viewPlace = task ? 'review-view:' + task.id : '';
+  const defaultView = useDefaultReviewView(), [view, setView] = useState<ReviewView>(() => (viewPlace && readPlace<ReviewView>(viewPlace)) || defaultView), [fullPaper, setFullPaper] = useState(false);
+  const followed = useRef(defaultView);
+  useEffect(() => {
+    if (followed.current === defaultView) return;
+    followed.current = defaultView; setView(defaultView); if (viewPlace) savePlace(viewPlace, undefined);
+  }, [defaultView, viewPlace]);
+  const chooseView = (value: ReviewView) => { setView(value); if (viewPlace) savePlace(viewPlace, value); };
   // A task's review offers the whole paper as PDF, where the manuscript has its PDF.
-  const modes = task && fullPaper ? <ModeSwitch mode={view === 'paper' ? 'pdf' : 'changes'} onMode={mode => setView(mode === 'pdf' ? 'paper' : 'changes')} changesTitle={t('Changes')}/> : null;
+  const modes = task && fullPaper ? <ModeSwitch mode={view === 'paper' ? 'pdf' : 'changes'} onMode={mode => chooseView(mode === 'pdf' ? 'paper' : 'changes')} changesTitle={t('Changes')}/> : null;
   const noteLinks = useNoteResults(), linksRef = useRef(noteLinks); linksRef.current = noteLinks;
   // Current changes open in the usual review; only older results need history.
   const linkedRound = task ? noteLinks?.focus?.change.round : undefined;
