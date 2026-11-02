@@ -294,6 +294,11 @@
     "textHash": "26c25fb41b444fc06ebc971aa52d06f9faf351feb29678d9547278d00f7b4771",
     "model": "gemini-4-argon-medium"
   },
+  "Finish or abort the merge before discarding changes.": {
+    "revision": "025d737e4aba434ae4da701581a1c710c7dd09a86b434d399f17d3ac7d1d02eb",
+    "textHash": "f33ca502256eb0eb09bd139cfa786e9c38cc35021fb790eb85d583bea16956d4",
+    "model": "gemini-4-argon-medium"
+  },
   "Finish or abort the merge before staging other changes.": {
     "revision": "6d987a64e78dc3c249776075ab3b126548d385209696e99b599d3e6495a08662",
     "textHash": "eea4c303589880717459738743c464a920fc9381d9a3874439278725aa538973",
@@ -357,6 +362,11 @@
   "Invalid file path in upload.": {
     "revision": "391fbdb684effa11bbd72835fee5d3b65bd1fc9980fd09df98fdceb19b152da4",
     "textHash": "4ba20d77b572aa1c8019d058a8fcbc5e55ffc0f8d0b10daa6fe02a1223559f02",
+    "model": "gemini-4-argon-medium"
+  },
+  "Invalid file path.": {
+    "revision": "ef7cf06da471fa4cd76aa6358e94c81b84614a36b94e90725ef40934c044a001",
+    "textHash": "a825e5fc21f38c55b15a92a959a1bae4af9da78242fa4310ae4029ca3e723636",
     "model": "gemini-4-argon-medium"
   },
   "Invalid model.": {

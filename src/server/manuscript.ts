@@ -47,8 +47,9 @@ export function parseStatus(output: string, numstat: string): Omit<GitStatus, 'h
       // A rename or copy is followed by its original path.
       const from = kind === '2' ? fields[++i] : undefined;
       const code = kind === 'u' ? 'U' : xy[1] !== '.' ? xy[1] : xy[0];
-      // X is the index against HEAD, Y the working tree against the index.
-      status.files.push({ path: file, status: code, staged: xy[0] !== '.', unstaged: xy[1] !== '.', lines: lines.get(file), ...(from ? { from } : {}) });
+      // X is the index against HEAD, Y the working tree against the index. The
+      // staged list shows X where it differs, such as a new file edited again.
+      status.files.push({ path: file, status: code, staged: xy[0] !== '.', unstaged: xy[1] !== '.', lines: lines.get(file), ...(from ? { from } : {}), ...(xy[0] !== '.' && xy[0] !== code ? { index: xy[0] } : {}) });
     }
   }
   return status;
@@ -144,6 +145,24 @@ export async function gitStage(root: string, paths: string[], stage: boolean) {
   const names = [...new Set(files.flatMap(item => item.from ? [item.from, item.path] : [item.path]))];
   if (stage) await gitAction(root, ['add', '-A', '--', ...names]);
   else await gitAction(root, status.head ? ['reset', '-q', 'HEAD', '--', ...names] : ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', ...names]);
+  return gitStatus(root);
+}
+
+// Discard what the Changes list shows for these files, as an editor's source
+// control does: a tracked file returns to its staged version, or the last
+// commit, and an untracked file is deleted. Staged changes stay.
+export async function gitDiscard(root: string, paths: string[]) {
+  const status = await gitStatus(root);
+  if (status.merging) throw new Error('Finish or abort the merge before discarding changes.');
+  const files = status.files.filter(item => paths.includes(item.path) && item.unstaged);
+  if (!files.length) throw new Error('Select at least one changed file.');
+  const tracked = files.filter(item => item.status !== '?').map(item => item.path);
+  if (tracked.length) await gitAction(root, ['checkout', '--', ...tracked]);
+  for (const item of files.filter(item => item.status === '?')) {
+    const file = path.resolve(root, item.path);
+    if (!file.startsWith(root + path.sep)) throw new Error('Invalid file path.');
+    fs.rmSync(file, { force: true });
+  }
   return gitStatus(root);
 }
 

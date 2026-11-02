@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **A Git panel like Cursor's.** The panel now has three views that fold away. **Changes** starts with the commit message and **✓ Commit**, whose arrow also offers **Commit and push**, and lists **Staged changes** and **Changes** with each file's status letter. Hovering over a file shows **+** to stage, **−** to unstage, and an undo arrow that discards its unstaged changes after asking. **Commit graph** shows the history in single rows with branch, remote and tag badges and HEAD as an open circle; its header names the branch, how far it is ahead or behind, and fetch, pull and push. **Worktrees** lists the tasks' checkouts. The tick boxes, the build-output banner (now in the **⋯** menu) and the **Git details** section are gone.
+
 ## [0.8.4] - 2026-11-02
 
 Papilot 0.8.4 opens folders in the desktop app the way an editor does, starts reviews on the changed sections and keeps the commit step in view.

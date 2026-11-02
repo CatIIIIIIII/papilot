@@ -70,8 +70,10 @@ test('repository overview reads each worktree, detached tips, refs and merge par
     assert.ok(result.worktrees.find(tree => tree.path === gone)?.prunable);
     assert.deepEqual(result.commits.find(commit => commit.hash === mergeTip)?.parents, [mainTip, branchTip]);
     assert.ok(result.commits.some(commit => commit.hash === detachedTip));
-    assert.deepEqual(result.commits.find(commit => commit.hash === branchTip)?.refs.sort(), ['reviewed', 'revision']);
-    assert.ok(result.commits.find(commit => commit.hash === mainTip)?.refs.includes('origin/main'));
+    const tip = result.commits.find(commit => commit.hash === branchTip);
+    assert.deepEqual([tip?.refs, tip?.tags], [['revision'], ['reviewed']], 'Annotated tags point at the commit, apart from branches');
+    assert.ok(result.commits.find(commit => commit.hash === mainTip)?.remotes?.includes('origin/main'));
+    assert.ok(!result.commits.some(commit => commit.refs.includes('origin/main') || commit.remotes?.some(ref => ref.endsWith('/HEAD') || ref === 'origin')));
     assert.deepEqual(fs.readFileSync(path.join(git(other, 'rev-parse', '--absolute-git-dir'), 'index')), before);
     const linked = await gitOverview(other);
     assert.equal(linked.worktrees[0].path, other);

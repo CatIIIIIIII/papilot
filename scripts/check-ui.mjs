@@ -71,12 +71,12 @@ const overview = () => ({
   commits: [
     { hash: gitState.head.hash, parents: ['aaa1110', 'bbb2222'], subject: gitState.head.subject, author: 'Cui Chen', date: 1720000000000, refs: ['main'] },
     { hash: 'bbb2222', parents: ['aaa0000'], subject: 'Explain the contribution', author: 'Cui Chen', date: 1719990000000, refs: ['review/introduction'] },
-    { hash: 'aaa1110', parents: ['aaa0000'], subject: 'Refine the abstract', author: 'Cui Chen', date: 1719980000000, refs: ['origin/main'] },
+    { hash: 'aaa1110', parents: ['aaa0000'], subject: 'Refine the abstract', author: 'Cui Chen', date: 1719980000000, refs: [], remotes: ['origin/main'] },
     { hash: 'ccc3333', parents: ['aaa0000'], subject: 'Try another proof', author: 'Cui Chen', date: 1719970000000, refs: [] },
     { hash: 'aaa0000', parents: [], subject: 'Initial manuscript', author: 'Cui Chen', date: 1719960000000, refs: [] },
   ], truncated: false,
 });
-const gitCommits = [], gitActions = [], gitIgnores = [], gitMessages = [], gitStages = [];
+const gitCommits = [], gitActions = [], gitIgnores = [], gitMessages = [], gitStages = [], gitDiscards = [];
 const manuscriptBuild = { status: 'ready', key: 'fixture', pages: [[612, 792], [612, 792]], builtAt: 1, current: true };
 let annotations = [];
 const deletedNotes = new Map();
@@ -123,6 +123,11 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/git/stage')) {
     const body = route.request().postDataJSON(); gitStages.push(body);
     for (const file of gitState.files) if (body.paths.includes(file.path)) Object.assign(file, { staged: body.stage, unstaged: !body.stage });
+    return json({ git: gitState });
+  }
+  if (url.pathname.endsWith('/git/discard')) {
+    const body = route.request().postDataJSON(); gitDiscards.push(body);
+    gitState.files = gitState.files.filter(file => !body.paths.includes(file.path));
     return json({ git: gitState });
   }
   if (url.pathname.endsWith('/git/ignore')) {
@@ -1052,22 +1057,29 @@ try {
   await page.getByRole('heading', { name: 'Manuscript', exact: true }).waitFor();
   await page.getByRole('tab', { name: /^Git/ }).click();
   const gitPanel = page.getByRole('region', { name: 'Git status' });
-  await gitPanel.getByText('main.tex', { exact: true }).waitFor();
-  await gitPanel.getByText('notes.md', { exact: true }).waitFor();
-  const gitText = await gitPanel.innerText();
-  assert.match(gitText, /^main\s/);
-  assert.match(await gitPanel.locator('.git-branch').innerText(), /↑1/);
-  assert.equal(await gitPanel.locator('.git-sync').getAttribute('title'), 'Tracking origin/main');
-  assert.match(gitText, /Draft the introduction\s+abc1234/);
-  await gitPanel.getByText('Git details', { exact: true }).click();
+  // Cursor's source control: the commit box, then staged and unstaged lists.
+  const changes = gitPanel.getByRole('region', { name: 'Changes', exact: true });
+  const unstagedList = changes.getByRole('group', { name: 'Changes', exact: true });
+  const stagedList = changes.getByRole('group', { name: 'Staged changes', exact: true });
+  await unstagedList.getByText('main.tex', { exact: true }).waitFor();
+  await unstagedList.getByText('notes.md', { exact: true }).waitFor();
+  assert.equal(await changes.getByRole('textbox', { name: 'Commit message' }).getAttribute('placeholder'), 'Message (↵ to commit on “main”)');
+  assert.equal(await gitPanel.getByRole('checkbox').count(), 0, 'Files are staged with + and −, not checkboxes');
+  const graphPane = gitPanel.getByRole('region', { name: 'Commit graph', exact: true });
+  assert.match(await graphPane.locator('.git-branch').innerText(), /main\s*↑1/);
+  assert.equal(await graphPane.locator('.git-branch').getAttribute('title'), 'Tracking origin/main');
+  await graphPane.locator('.git-graph-row.head').getByText('Draft the introduction', { exact: true }).waitFor();
+  await graphPane.locator('.current-ref').getByText('main', { exact: true }).waitFor();
+  await graphPane.locator('.remote-ref').getByText('origin/main', { exact: true }).waitFor();
   const worktrees = gitPanel.getByRole('region', { name: 'Worktrees', exact: true });
+  await worktrees.locator('.git-pane-toggle').click();
   const proposalTree = worktrees.locator(`[data-task-id="${task.id}"]`);
   await proposalTree.getByText(task.title, { exact: true }).waitFor();
   await proposalTree.locator('.status').filter({ hasText: 'Ready for review' }).waitFor();
   assert.ok((await proposalTree.boundingBox()).height <= 56, 'Worktrees use compact rows');
   assert.equal(await worktrees.locator('.git-worktree').count(), 4);
   await worktrees.getByText('Status unavailable', { exact: true }).waitFor();
-  const graph = gitPanel.getByRole('region', { name: 'Commit graph', exact: true });
+  const graph = graphPane;
   assert.equal(await graph.locator('.git-graph-row').count(), 5);
   await graph.getByRole('button', { name: task.title, exact: true }).waitFor();
   assert.ok((await graph.locator('.git-graph-row').first().boundingBox()).height <= 48, 'Graph rows no longer reserve three lines');
@@ -1102,33 +1114,49 @@ try {
   await graph.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'test-results/git-overview-desktop.png' });
   overviewFailure = true;
-  await worktrees.getByRole('button', { name: 'Refresh worktrees and history' }).click();
-  await worktrees.getByRole('alert').filter({ hasText: 'Showing the last update.' }).waitFor();
+  await graph.getByRole('button', { name: 'Refresh worktrees and history' }).click();
+  await graph.getByRole('alert').filter({ hasText: 'Showing the last update.' }).waitFor();
   assert.equal(await worktrees.locator('.git-worktree').count(), 4, 'A failed refresh keeps the last known worktrees');
   overviewFailure = false;
-  await worktrees.getByRole('button', { name: 'Retry', exact: true }).click();
-  await worktrees.getByRole('alert').waitFor({ state: 'detached' });
-  // Build output goes into .gitignore, one pattern per kind.
-  assert.equal(await gitPanel.getByRole('checkbox', { name: 'Stage main.aux' }).isChecked(), false);
-  await gitPanel.getByText('2 build files', { exact: true }).waitFor();
-  await gitPanel.getByRole('button', { name: 'Add to .gitignore', exact: true }).click();
+  await graph.getByRole('button', { name: 'Retry', exact: true }).click();
+  await graph.getByRole('alert').waitFor({ state: 'detached' });
+  // Build output goes into .gitignore from the Changes menu, one pattern per kind.
+  await unstagedList.getByText('main.aux', { exact: true }).waitFor();
+  await changes.getByRole('button', { name: 'More Git actions', exact: true }).click();
+  const ignoreItem = page.getByRole('menuitem', { name: /^Add to \.gitignore/ });
+  await expect(ignoreItem).toContainText('2 build files');
+  await ignoreItem.click();
   await gitPanel.getByRole('status').filter({ hasText: 'Added 2 patterns to .gitignore.' }).waitFor();
   assert.deepEqual(gitIgnores, [{ paths: ['main.aux', 'main.log'] }]);
   assert.equal(await gitPanel.getByText('main.aux', { exact: true }).count(), 0);
-  assert.equal(await gitPanel.getByLabel('Untracked').first().innerText(), 'U');
+  assert.equal(await unstagedList.getByLabel('Untracked').first().innerText(), 'U');
   // With nothing staged, Commit takes every file as it is on disk.
-  assert.equal(await gitPanel.getByRole('checkbox', { name: 'Stage main.tex' }).isChecked(), false);
-  assert.equal(await gitPanel.getByRole('button', { name: 'Commit all 3 files' }).isDisabled(), true);
-  await gitPanel.getByRole('button', { name: 'main.tex', exact: true }).click();
+  const commitButton = changes.getByRole('button', { name: 'Commit', exact: true });
+  assert.equal(await commitButton.getAttribute('title'), 'Commit all 3 files');
+  assert.equal(await commitButton.isDisabled(), true);
+  await unstagedList.getByRole('button', { name: 'main.tex', exact: true }).click();
   await gitPanel.getByRole('region', { name: 'Changes in main.tex' }).getByText('+New line.', { exact: true }).waitFor();
-  // A ticked file is staged, and Commit then takes only what is staged.
-  await gitPanel.getByRole('checkbox', { name: 'Stage main.tex' }).click();
-  await gitPanel.getByRole('button', { name: 'Commit staged changes in 1 file' }).waitFor();
-  assert.deepEqual(gitStages, [{ paths: ['main.tex'], stage: true }]);
-  assert.equal(await gitPanel.getByRole('checkbox', { name: 'Stage all changes' }).evaluate(box => box.indeterminate), true);
+  // + stages a file and − unstages it; Commit then takes only what is staged.
+  await unstagedList.getByRole('button', { name: 'Stage main.tex', exact: true }).click();
+  await stagedList.getByText('main.tex', { exact: true }).waitFor();
+  await stagedList.getByRole('button', { name: 'Unstage main.tex', exact: true }).click();
+  await expect(stagedList).toHaveCount(0);
+  await unstagedList.getByRole('button', { name: 'Stage main.tex', exact: true }).click();
+  await stagedList.getByText('main.tex', { exact: true }).waitFor();
+  assert.deepEqual(gitStages, [{ paths: ['main.tex'], stage: true }, { paths: ['main.tex'], stage: false }, { paths: ['main.tex'], stage: true }]);
+  assert.equal(await commitButton.getAttribute('title'), 'Commit staged changes in 1 file');
+  // Discarding asks first; Cancel keeps the file.
+  await unstagedList.getByRole('button', { name: 'Discard changes in notes.md', exact: true }).click();
+  const deleteNotes = page.getByRole('dialog', { name: 'Delete notes.md?' });
+  await deleteNotes.getByText('This file is not tracked by Git, so it cannot be recovered.', { exact: true }).waitFor();
+  await page.screenshot({ path: 'test-results/git-discard-dialog.png' });
+  await deleteNotes.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(gitDiscards.length, 0);
+  await unstagedList.getByRole('button', { name: 'notes.md', exact: true }).hover();
+  await gitPanel.screenshot({ path: 'test-results/git-panel-cursor.png' });
   // The chosen agent writes the message for what is staged.
-  const commitMessage = gitPanel.getByRole('textbox', { name: 'Commit message' });
-  await gitPanel.getByRole('button', { name: 'Generate commit message', exact: true }).click();
+  const commitMessage = changes.getByRole('textbox', { name: 'Commit message' });
+  await changes.getByRole('button', { name: 'Generate commit message', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[aria-label="Commit message"]')?.value === 'Tighten the introduction');
   assert.deepEqual(gitMessages.map(body => [body.paths, body.staged]), [[['main.tex'], true]]);
   assert.ok(['codex', 'claude', 'antigravity'].includes(gitMessages[0].agent));
@@ -1137,20 +1165,30 @@ try {
   assert.deepEqual(gitCommits, [{ message: 'Tighten the introduction', staged: true }]);
   assert.deepEqual(gitState.files.map(file => file.path), ['notes.md', '.gitignore'], 'Unstaged files stay for the next commit');
   assert.equal(await commitMessage.inputValue(), '');
-  assert.match(await gitPanel.innerText(), /Tighten the introduction\s+def5678/);
-  await gitPanel.getByRole('button', { name: 'Push', exact: true }).click();
-  await gitPanel.getByRole('status').filter({ hasText: 'Pushed to origin/main.' }).waitFor();
+  await graph.locator('.git-graph-row.head').getByText('Tighten the introduction', { exact: true }).waitFor();
+  // Confirming deletes an untracked file.
+  await unstagedList.getByRole('button', { name: 'Discard changes in .gitignore', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete .gitignore?' }).getByRole('button', { name: 'Delete file', exact: true }).click();
+  await gitPanel.getByRole('status').filter({ hasText: 'Discarded changes in 1 file.' }).waitFor();
+  assert.deepEqual(gitDiscards, [{ paths: ['.gitignore'] }]);
+  // Commit's menu commits and pushes.
+  await commitMessage.fill('Add notes');
+  await changes.getByRole('button', { name: 'More commit actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Commit and push', exact: true }).click();
+  await gitPanel.getByRole('status').filter({ hasText: 'Committed def5678 and pushed.' }).waitFor();
+  assert.deepEqual(gitCommits.at(-1), { message: 'Add notes', paths: ['notes.md'] });
   assert.deepEqual(gitActions, ['push']);
-  assert.equal(await gitPanel.getByRole('button', { name: 'Push', exact: true }).count(), 0);
+  assert.equal(await graph.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true, 'Nothing is left to push');
+  await changes.getByText('No uncommitted changes', { exact: true }).waitFor();
   // A branch and upstream that both moved on merge instead of pulling.
   Object.assign(gitState, { ahead: 1, behind: 2 });
-  await gitPanel.getByRole('button', { name: 'Fetch from the remote', exact: true }).click();
-  await gitPanel.getByRole('button', { name: 'Merge', exact: true }).click();
+  await graph.getByRole('button', { name: 'Fetch from the remote', exact: true }).click();
+  await graph.getByRole('button', { name: 'Merge', exact: true }).click();
   const merge = gitPanel.getByRole('group', { name: 'Merge in progress' });
   await merge.getByText('Merging: 1 file has conflicts', { exact: true }).waitFor();
   assert.equal(await gitPanel.getByLabel('Conflict').innerText(), '!');
   assert.equal(await gitPanel.getByRole('textbox', { name: 'Commit message' }).count(), 0);
-  assert.equal(await gitPanel.getByRole('button', { name: 'Push', exact: true }).count(), 0);
+  assert.equal(await graph.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true);
   await merge.getByRole('button', { name: /^Resolve with / }).click();
   await gitPanel.getByRole('status').filter({ hasText: 'Conflicts resolved. Read the diffs, then commit the merge.' }).waitFor();
   assert.equal(await merge.locator('.git-merge-summary strong').innerText(), 'both');
@@ -1689,7 +1727,8 @@ try {
       await page.waitForFunction(() => document.querySelector('[aria-label="Page number"]').value === '2');
       await page.getByRole('button', { name: 'Git, 2 changed' }).click();
       await page.getByRole('region', { name: 'Git status' }).getByText('main.tex', { exact: true }).waitFor();
-      if (!await page.locator('.git-advanced').evaluate(el => el.open)) await page.getByText('Git details', { exact: true }).click();
+      const treesToggle = page.getByRole('region', { name: 'Worktrees', exact: true }).locator('.git-pane-toggle');
+      if (await treesToggle.getAttribute('aria-expanded') !== 'true') await treesToggle.click();
       await page.getByRole('region', { name: 'Worktrees', exact: true }).locator(`[data-task-id="${task.id}"]`).waitFor();
       await page.getByRole('region', { name: 'Commit graph', exact: true }).scrollIntoViewIfNeeded();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);

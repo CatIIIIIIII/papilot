@@ -49,6 +49,12 @@ const paths: Record<string, React.ReactNode> = {
   minus: <path d="M5 12h14"/>,
   branch: <><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></>,
   commit: <><circle cx="12" cy="12" r="3"/><path d="M3 12h6m6 0h6"/></>,
+  // Source control, after an editor's: discard, a remote branch, fetch, pull and push.
+  undo: <><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></>,
+  cloud: <path d="M17.5 19H7a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.5 11a4 4 0 0 1-2 8Z"/>,
+  fetch: <><circle cx="12" cy="19" r="2.5"/><path d="M12 3v1.5m0 3V9m0 3v1.5M8.5 10.5 12 14l3.5-3.5"/></>,
+  pull: <><circle cx="12" cy="19" r="2.5"/><path d="M12 3v11m-3.5-3.5L12 14l3.5-3.5"/></>,
+  push: <><circle cx="12" cy="19" r="2.5"/><path d="M12 16.5V3M8.5 6.5 12 3l3.5 3.5"/></>,
   notes: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 8h8M8 12h5"/></>,
   pencil: <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>,
   pen: <><path d="M16.8 3.8a2.4 2.4 0 0 1 3.4 3.4L7 20.4 3 21l.6-4Z"/><path d="m15.2 5.4 3.4 3.4M3.6 17 7 20.4"/></>,

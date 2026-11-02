@@ -45,7 +45,7 @@ import { TaskApply } from './task-apply.tsx';
 import { TaskApplyState } from './task-apply-state.ts';
 import { taskSaveStatus } from './task-save-status.ts';
 import { TaskSaved } from './task-saved.tsx';
-import { GitCounts, GitRepository } from './git-overview.tsx';
+import { GitPane, GitRepository, usePane } from './git-overview.tsx';
 import { problemCount, ReferencesPanel, useBibliography } from './references-panel.tsx';
 import { Invite, SignIn } from './sign-in.tsx';
 import { forgetBrowserState, isSignedOut, setSignedOut, useSignedOut } from './session.ts';
@@ -396,32 +396,56 @@ function DiffView({ diff }: { diff: GitDiff }) {
     {(diff.truncated || all.length - start > 3000) && <p className="git-diff-note">{t('The diff is too long to show in full.')}</p>}</>;
 }
 
-// A source-control panel: the branch and its remote, the last commit, and the
-// uncommitted changes with their diffs. A file's checkbox is its place in the
-// Git index: ticked when staged, half when only some of its changes are (the
-// PDF's Changes view stages them one at a time). Commit takes what is staged,
-// or with nothing staged, every file but build output as it is on disk.
-// Fetch, pull (fast-forward only) and push use the host's Git credentials.
+// A source-control panel in the shape of Cursor's. Changes: the commit
+// message, Commit, and the staged and unstaged files, each with a diff and
+// stage, unstage and discard actions. Commit takes what is staged, or with
+// nothing staged, every file but build output as it is on disk. Then the
+// commit graph, whose header fetches, pulls and pushes with the host's Git
+// credentials, and the tasks' worktrees.
+function DiscardDialog({ files, onCancel, onConfirm }: { files: GitFile[]; onCancel: () => void; onConfirm: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current!, opener = document.activeElement as HTMLElement | null;
+    element.showModal(); element.querySelector<HTMLButtonElement>('[data-cancel]')?.focus();
+    return () => { element.close(); if (opener?.isConnected) opener.focus(); };
+  }, []);
+  const one = files.length === 1, untracked = files.filter(file => file.status === '?').length, name = files[0].path.slice(files[0].path.lastIndexOf('/') + 1);
+  const deleting = one && untracked === 1;
+  return <dialog ref={dialog} className="modal-backdrop" aria-labelledby="git-discard-title" onKeyDown={keepDialogFocus} onCancel={event => { event.preventDefault(); onCancel(); }} onClick={event => { if (event.target === event.currentTarget) onCancel(); }}>
+    <section className="modal delete-dialog">
+      <h2 id="git-discard-title">{deleting ? t('Delete {name}?', { name }) : one ? t('Discard changes in {name}?', { name }) : tn(files.length, 'Discard changes in {n} file?', 'Discard changes in {n} files?')}</h2>
+      <p>{deleting ? t('This file is not tracked by Git, so it cannot be recovered.') : untracked ? t('Unstaged changes are lost for good and untracked files are deleted. Staged changes stay.') : t('Unstaged changes are lost for good. Staged changes stay.')}</p>
+      <div className="button-row">
+        <button type="button" data-cancel className="button secondary" onClick={onCancel}>{t('Cancel')}</button>
+        <button type="button" className="button danger" onClick={onConfirm}>{deleting ? t('Delete file') : t('Discard changes')}</button>
+      </div>
+    </section>
+  </dialog>;
+}
+
 function GitPanel({ projectId, git, onStatus, writer, tasks, onOpenTask }: { tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter }) {
   const loadOverview = useCallback((signal: AbortSignal) => api<GitOverview>(`/projects/${projectId}/git/overview`, undefined, signal, 60000), [projectId]);
   const draftKey = `papilot:commit:${projectId}`;
   const [message, setMessage] = useState(() => browserStorage.getItem(draftKey) || '');
   const [busy, setBusy] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [resolution, setResolution] = useState<{ agent: string; summary: string } | null>(null);
+  const [discarding, setDiscarding] = useState<GitFile[] | null>(null);
+  const [changesOpen, toggleChanges] = usePane('changes', true);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // A file can be in both lists, so the open diff is its list and its path.
   const [open, setOpen] = useState(''), [diff, setDiff] = useState<{ path: string; result: GitDiff | null; error: string } | null>(null);
   const files = git?.files || [];
-  const openFile = files.find(file => file.path === open);
+  const openPath = open.slice(open.indexOf(':') + 1), openFile = open ? files.find(file => file.path === openPath) : undefined;
   useEffect(() => {
     if (!openFile) { setDiff(null); return; }
     let live = true;
-    setDiff(current => current?.path === open ? current : { path: open, result: null, error: '' });
-    api<GitDiff>(`/projects/${projectId}/git/diff?path=${encodeURIComponent(open)}`).then(result => { if (live) setDiff({ path: open, result, error: '' }); }, e => { if (live) setDiff({ path: open, result: null, error: e instanceof Error ? e.message : String(e) }); });
+    setDiff(current => current?.path === openPath ? current : { path: openPath, result: null, error: '' });
+    api<GitDiff>(`/projects/${projectId}/git/diff?path=${encodeURIComponent(openPath)}`).then(result => { if (live) setDiff({ path: openPath, result, error: '' }); }, e => { if (live) setDiff({ path: openPath, result: null, error: e instanceof Error ? e.message : String(e) }); });
     return () => { live = false; };
-  }, [projectId, open, openFile?.status, openFile?.lines?.join()]);
+  }, [projectId, openPath, openFile?.status, openFile?.lines?.join()]);
   if (!git || !Array.isArray(git.files)) return <section className="git-panel" aria-label={t('Git status')}><p className="git-clean">{t('Reading Git status…')}</p></section>;
-  const staged = files.filter(file => file.staged), chosen = staged.length ? staged : files.filter(file => !ignorable(file));
+  const staged = files.filter(file => file.staged), unstaged = files.filter(file => file.unstaged), chosen = staged.length ? staged : files.filter(file => !ignorable(file));
   const stage = (paths: string[], on: boolean) => { if (paths.length) void run('stage', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/stage`, { paths, stage: on }), () => ''); };
-  const added = files.reduce((sum, file) => sum + (file.lines?.[0] || 0), 0), removed = files.reduce((sum, file) => sum + (file.lines?.[1] || 0), 0);
   const saveMessage = (value: string) => { setMessage(value); if (value) browserStorage.setItem(draftKey, value); else browserStorage.removeItem(draftKey); };
   async function run<R extends { git: GitStatus }>(action: string, work: () => Promise<R>, done: (result: R) => string) {
     if (busy) return;
@@ -430,10 +454,19 @@ function GitPanel({ projectId, git, onStatus, writer, tasks, onOpenTask }: { tas
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
   }
-  const commit = () => {
+  const merging = git.merging, publish = !git.upstream && git.remote && git.branch;
+  const canPush = Boolean(git.remote && (git.upstream || publish) && !merging);
+  // Commit and push pushes once the commit is made; a failed push leaves the commit.
+  const commit = (push = false) => {
     const text = message.trim();
     if (!text || !chosen.length) return;
-    void run('commit', () => api(`/projects/${projectId}/git/commit`, staged.length ? { message: text, staged: true } : { message: text, paths: chosen.map(file => file.path) }), result => { saveMessage(''); return t('Committed {hash}.', { hash: result.commit ?? '' }); });
+    void run('commit', async () => {
+      const result = await api<{ git: GitStatus; commit: string }>(`/projects/${projectId}/git/commit`, staged.length ? { message: text, staged: true } : { message: text, paths: chosen.map(file => file.path) });
+      saveMessage('');
+      if (!push) return { ...result, pushed: false };
+      onStatus(result.git);
+      return { ...await api<{ git: GitStatus }>(`/projects/${projectId}/git/push`, {}, undefined, 130000), commit: result.commit, pushed: true };
+    }, result => result.pushed ? t('Committed {hash} and pushed.', { hash: result.commit }) : t('Committed {hash}.', { hash: result.commit ?? '' }));
   };
   // Like Cursor's generate button: the chosen agent reads the chosen files' changes.
   // An empty box takes a message already written for them; a full one asks for a new one.
@@ -444,6 +477,8 @@ function GitPanel({ projectId, git, onStatus, writer, tasks, onOpenTask }: { tas
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
   }
+  const discard = (list: GitFile[]) => { setDiscarding(null); void run('discard', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/discard`, { paths: list.map(file => file.path) }), () => tn(list.length, 'Discarded changes in {n} file.', 'Discarded changes in {n} files.')); };
+  const reload = () => void run('reload', async () => ({ git: await api<GitStatus>(`/projects/${projectId}/git`) }), () => '');
   const ignored = files.filter(ignorable), patterns = [...new Set(ignored.map(file => ignorePattern(file.path)))];
   const ignore = () => void run('ignore', () => api(`/projects/${projectId}/git/ignore`, { paths: ignored.map(file => file.path) }), () => tn(patterns.length, 'Added {n} pattern to .gitignore.', 'Added {n} patterns to .gitignore.'));
   const remote = (action: 'fetch' | 'pull' | 'merge' | 'push') => void run(action, () => api<{ git: GitStatus }>(`/projects/${projectId}/git/${action}`, {}, undefined, 130000),
@@ -451,73 +486,107 @@ function GitPanel({ projectId, git, onStatus, writer, tasks, onOpenTask }: { tas
       : action === 'pull' ? t('Pulled the latest commits.')
       : action === 'merge' ? (result.git.merging ? t('The merge stopped at conflicts.') : t('Merged {upstream}.', { upstream: git.upstream ?? '' }))
       : result.git.upstream ? t('Pushed to {upstream}.', { upstream: result.git.upstream }) : t('Pushed to the remote.'));
-  const publish = !git.upstream && git.remote && git.branch;
   // A branch and its upstream that have both moved on are merged; conflicts
   // go to an agent, then the author reads the diffs and commits the merge.
-  const merging = git.merging, diverged = Boolean(git.upstream && git.ahead > 0 && git.behind > 0 && !merging);
+  const diverged = Boolean(git.upstream && git.ahead > 0 && git.behind > 0 && !merging);
   const resolve = () => void run('resolve', () => api<{ git: GitStatus; summary: string; remaining: string[]; agent: AgentId }>(`/projects/${projectId}/git/resolve`, { agent: writer.agent, model: writer.model || undefined }, undefined, 620000),
     result => { setResolution({ agent: AGENT_LABELS[result.agent], summary: result.summary }); return result.remaining.length ? tn(result.remaining.length, '{n} file still has conflicts.', '{n} files still have conflicts.') : t('Conflicts resolved. Read the diffs, then commit the merge.'); });
   const finish = () => void run('finish', () => api<{ git: GitStatus; commit: string }>(`/projects/${projectId}/git/finish`, {}), result => { setResolution(null); return t('Committed {hash}.', { hash: result.commit }); });
   const abort = () => void run('abort', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/abort`, {}), () => { setResolution(null); return t('The merge was abandoned.'); });
+  const commitTitle = staged.length ? tn(staged.length, 'Commit staged changes in 1 file', 'Commit staged changes in {n} files') : chosen.length === files.length ? tn(files.length, 'Commit 1 file', 'Commit all {n} files') : t('Commit {chosen} of {n} files', { chosen: chosen.length, n: files.length });
+  const commitDisabled = Boolean(busy) || !message.trim() || !chosen.length;
+  const placeholder = busy === 'message' ? t('{agent} is writing a commit message…', { agent: AGENT_LABELS[writer.agent] })
+    : git.branch && !touch() ? t('Message ({key} to commit on “{branch}”)', { key: '↵', branch: git.branch }) : t('Commit message');
+  // One row per file and list. The staged list shows the index's status.
+  const row = (file: GitFile, list: 'staged' | 'changes') => {
+    const status = file.status === 'U' && merging && !merging.conflicts.includes(file.path) ? 'M' : list === 'staged' ? file.index || file.status : file.status;
+    const slash = file.path.lastIndexOf('/'), code = status === '?' ? 'U' : status === 'U' ? '!' : status, key = list + ':' + file.path, expanded = open === key;
+    return <li key={key} className={expanded ? 'open' : undefined}>
+      <div className="git-row">
+        <button type="button" className="git-file" aria-expanded={expanded} title={`${gitNames()[status] || status}: ${file.from ? `${file.from} → ` : ''}${file.path}`} onClick={() => setOpen(expanded ? '' : key)}>
+          <Icon name="paper" size={14}/><span className="git-name">{file.path.slice(slash + 1)}</span>{slash > 0 && <span className="git-dir">{file.path.slice(0, slash)}</span>}
+        </button>
+        {!merging && <span className="git-row-actions">
+          {list === 'changes' && <button type="button" className="icon-button" aria-label={t('Discard changes in {path}', { path: file.path })} title={t('Discard changes')} disabled={Boolean(busy)} onClick={() => setDiscarding([file])}><Icon name="undo" size={14}/></button>}
+          {list === 'changes'
+            ? <button type="button" className="icon-button" aria-label={t('Stage {path}', { path: file.path })} title={t('Stage changes')} disabled={Boolean(busy)} onClick={() => stage([file.path], true)}><Icon name="plus" size={14}/></button>
+            : <button type="button" className="icon-button" aria-label={t('Unstage {path}', { path: file.path })} title={t('Unstage changes')} disabled={Boolean(busy)} onClick={() => stage([file.path], false)}><Icon name="minus" size={14}/></button>}
+        </span>}
+        <span className={'git-code s-' + (status === '?' ? 'u' : status === 'U' ? 'conflict' : status.toLowerCase())} aria-label={gitNames()[status] || status}>{code}</span>
+      </div>
+      {expanded && <div className="git-diff-wrap" aria-label={t('Changes in {path}', { path: file.path })} role="region">
+        {diff?.path === file.path && diff.result ? <DiffView diff={diff.result}/> : diff?.error ? <p className="inline-error">{diff.error}</p> : <p className="git-diff-note">{t('Loading the diff…')}</p>}
+      </div>}
+    </li>;
+  };
+  const group = (list: 'staged' | 'changes', items: GitFile[]) => {
+    const name = list === 'staged' ? t('Staged changes') : t('Changes'), shut = collapsed[list];
+    return <div className="git-group" role="group" aria-label={name}>
+      <div className="git-group-header">
+        <button type="button" className="git-group-toggle" aria-expanded={!shut} onClick={() => setCollapsed(current => ({ ...current, [list]: !shut }))}><Icon name={shut ? 'chevronRight' : 'chevronDown'} size={12}/><span>{name}</span></button>
+        {!merging && <span className="git-row-actions">
+          {list === 'changes' && <button type="button" className="icon-button" aria-label={t('Discard all changes')} title={t('Discard all changes')} disabled={Boolean(busy)} onClick={() => setDiscarding(items)}><Icon name="undo" size={14}/></button>}
+          {list === 'changes'
+            ? <button type="button" className="icon-button" aria-label={t('Stage all changes')} title={t('Stage all changes')} disabled={Boolean(busy)} onClick={() => stage(items.filter(file => !ignorable(file)).map(file => file.path), true)}><Icon name="plus" size={14}/></button>
+            : <button type="button" className="icon-button" aria-label={t('Unstage all changes')} title={t('Unstage all changes')} disabled={Boolean(busy)} onClick={() => stage(items.map(file => file.path), false)}><Icon name="minus" size={14}/></button>}
+        </span>}
+        <span className="git-count">{items.length}</span>
+      </div>
+      {!shut && <ul className="git-files">{items.map(file => row(file, list))}</ul>}
+    </div>;
+  };
+  const sync = git.upstream && (git.ahead > 0 || git.behind > 0) ? <span className="git-sync">{git.ahead > 0 && <span>↑{git.ahead}</span>}{git.behind > 0 && <span>↓{git.behind}</span>}</span> : null;
+  const remoteActions = <>
+    {git.branch ? <span className="git-branch" title={git.upstream ? `${t('Tracking')} ${git.upstream}` : t('No upstream branch')}><Icon name="branch" size={13}/><code>{git.branch}</code>{sync}</span> : <span className="git-branch"><code>{t('detached HEAD')}</code></span>}
+    {git.remote && <>
+      <button type="button" className="icon-button" aria-label={t('Fetch from the remote')} title={t('Fetch from the remote')} disabled={Boolean(busy)} onClick={() => remote('fetch')}>{busy === 'fetch' ? <span className="spinner"/> : <Icon name="fetch" size={15}/>}</button>
+      {git.upstream && <button type="button" className="icon-button" aria-label={diverged ? t('Merge') : t('Pull')} title={diverged ? t('{branch} and {upstream} have both changed. Merge brings in the remote commits.', { branch: git.branch ?? '', upstream: git.upstream }) : t('Pull')} disabled={Boolean(busy) || Boolean(merging) || !git.behind} onClick={() => remote(diverged ? 'merge' : 'pull')}>{busy === 'pull' || busy === 'merge' ? <span className="spinner"/> : <Icon name="pull" size={15}/>}</button>}
+      {(git.upstream || publish) && <button type="button" className="icon-button" aria-label={git.upstream ? t('Push') : t('Publish branch')} title={git.upstream ? t('Push') : t('Publish branch')} disabled={Boolean(busy) || Boolean(merging) || Boolean(git.upstream && !git.ahead)} onClick={() => remote('push')}>{busy === 'push' ? <span className="spinner"/> : <Icon name="push" size={15}/>}</button>}
+    </>}
+  </>;
   return <section className="git-panel" aria-label={t('Git status')} aria-busy={Boolean(busy)}>
-    <div className="git-current" role="group" aria-label={t('Current worktree')}>
-    <div className="git-branch"><div className="git-current-info">
-      <span className="git-current-ref" title={git.branch || t('detached HEAD')}><Icon name="branch" size={14}/><code>{git.branch || t('detached HEAD')}</code></span>
-      <GitCounts status={git}/>
-      {git.upstream ? <span className="git-sync" title={`${t('Tracking')} ${git.upstream}`}>{git.ahead || git.behind ? <>{git.ahead > 0 && <span>↑{git.ahead}</span>}{git.behind > 0 && <span>↓{git.behind}</span>}</> : t('up to date')}</span> : <span className="git-no-upstream">{t('No upstream branch')}</span>}
-      </div>
-      {git.remote && <span className="git-remote">
-        {!merging && git.upstream && git.behind > 0 && (diverged
-          ? <button type="button" className="button secondary compact" title={t('{branch} and {upstream} have both changed. Merge brings in the remote commits.', { branch: git.branch ?? '', upstream: git.upstream })} disabled={Boolean(busy)} onClick={() => remote('merge')}>{busy === 'merge' ? t('Merging…') : t('Merge')}</button>
-          : <button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => remote('pull')}>{busy === 'pull' ? t('Pulling…') : t('Pull')}</button>)}
-        {!merging && (git.upstream ? git.ahead > 0 : publish) && <button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={() => remote('push')}>{busy === 'push' ? t('Pushing…') : git.upstream ? t('Push') : t('Publish branch')}</button>}
-        <button type="button" className="icon-button" aria-label={t('Fetch from the remote')} title={t('Fetch from the remote')} disabled={Boolean(busy)} onClick={() => remote('fetch')}>{busy === 'fetch' ? <span className="spinner"/> : <Icon name="refresh" size={15}/>}</button>
-      </span>}
-    </div>
-    {git.head && <div className="git-commit" title={`${git.head.subject}\n${git.head.hash} · ${new Date(git.head.date).toLocaleString(locale())}`}><Icon name="commit" size={14}/><span className="git-commit-subject">{git.head.subject}</span><code>{git.head.hash}</code><span className="git-commit-time">{agoText(git.head.date)}</span></div>}
-    </div>
-    {error && <p className="inline-error git-message" role="alert">{error}</p>}
-    {notice && !error && <p className="git-message git-notice" role="status"><Icon name="check" size={14}/>{notice}</p>}
-    {merging && <div className={'git-merge' + (merging.conflicts.length ? '' : ' resolved')} role="group" aria-label={t('Merge in progress')}>
-      <p><strong>{merging.conflicts.length ? tn(merging.conflicts.length, 'Merging: {n} file has conflicts', 'Merging: {n} files have conflicts') : t('Merging: no conflicts left')}</strong><span>{merging.message}</span></p>
-      {resolution && <div className="git-merge-summary markdown" aria-label={t('{agent} on the merge', { agent: resolution.agent })}><Markdown text={resolution.summary}/></div>}
-      <div className="button-row">
-        <button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={abort}>{busy === 'abort' ? t('Aborting…') : t('Abort merge')}</button>
-        {merging.conflicts.length
-          ? <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={resolve}>{busy === 'resolve' ? <><span className="spinner"/>{t('{agent} is resolving…', { agent: AGENT_LABELS[writer.agent] })}</> : <><Icon name="spark" size={14}/>{t('Resolve with {agent}', { agent: AGENT_LABELS[writer.agent] })}</>}</button>
-          : <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={finish}>{busy === 'finish' ? t('Committing…') : t('Commit merge')}</button>}
-      </div>
-    </div>}
-    <h3 className="git-section">{files.length > 0 && !merging && <input type="checkbox" aria-label={t('Stage all changes')} title={t('Stage or unstage every change')} disabled={Boolean(busy)} checked={staged.length === files.length && !files.some(file => file.unstaged)} ref={box => { if (box) box.indeterminate = staged.length > 0 && (staged.length < files.length || files.some(file => file.unstaged)); }} onChange={event => stage(event.target.checked ? files.filter(file => !ignorable(file) || file.staged).map(file => file.path) : staged.map(file => file.path), event.target.checked)}/>}<span>{t('Uncommitted changes')}</span>{files.length > 0 && <span className="count">{files.length}</span>}{added || removed ? <span className="git-total"><ins>+{added}</ins> <del>−{removed}</del></span> : null}</h3>
-    {files.length ? <>
-      {ignored.length > 0 && !merging && <div className="git-ignore" title={t('Untracked build output. Add to .gitignore adds:') + '\n' + patterns.join('\n')}><span>{tn(ignored.length, '{n} build file', '{n} build files')}</span><button type="button" className="button ghost compact" disabled={Boolean(busy)} onClick={ignore}>{busy === 'ignore' ? t('Adding…') : t('Add to .gitignore')}</button></div>}
+    <GitPane className="git-changes" title={t('Changes')} open={changesOpen} onToggle={() => toggleChanges()} actions={<>
+      <button type="button" className="icon-button" aria-label={t('Refresh changes')} title={t('Refresh changes')} disabled={Boolean(busy)} onClick={reload}>{busy === 'reload' ? <span className="spinner"/> : <Icon name="refresh" size={14}/>}</button>
+      <ActionMenu label={t('More Git actions')} disabled={Boolean(busy) || Boolean(merging)} actions={[
+        ...(ignored.length ? [{ label: t('Add to .gitignore'), detail: tn(ignored.length, '{n} build file', '{n} build files'), title: t('Untracked build output. Add to .gitignore adds:') + '\n' + patterns.join('\n'), icon: 'archive', select: ignore }] : []),
+        { label: t('Stage all changes'), icon: 'plus', disabled: !unstaged.length, select: () => stage(unstaged.filter(file => !ignorable(file)).map(file => file.path), true) },
+        { label: t('Unstage all changes'), icon: 'minus', disabled: !staged.length, select: () => stage(staged.map(file => file.path), false) },
+        { label: t('Discard all changes'), icon: 'undo', danger: true, disabled: !unstaged.length, select: () => setDiscarding(unstaged) },
+      ]}><Icon name="more" size={15}/></ActionMenu>
+    </>}>
+      {error && <p className="inline-error git-message" role="alert">{error}</p>}
+      {notice && !error && <p className="git-message git-notice" role="status"><Icon name="check" size={14}/>{notice}</p>}
+      {merging && <div className={'git-merge' + (merging.conflicts.length ? '' : ' resolved')} role="group" aria-label={t('Merge in progress')}>
+        <p><strong>{merging.conflicts.length ? tn(merging.conflicts.length, 'Merging: {n} file has conflicts', 'Merging: {n} files have conflicts') : t('Merging: no conflicts left')}</strong><span>{merging.message}</span></p>
+        {resolution && <div className="git-merge-summary markdown" aria-label={t('{agent} on the merge', { agent: resolution.agent })}><Markdown text={resolution.summary}/></div>}
+        <div className="button-row">
+          <button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={abort}>{busy === 'abort' ? t('Aborting…') : t('Abort merge')}</button>
+          {merging.conflicts.length
+            ? <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={resolve}>{busy === 'resolve' ? <><span className="spinner"/>{t('{agent} is resolving…', { agent: AGENT_LABELS[writer.agent] })}</> : <><Icon name="spark" size={14}/>{t('Resolve with {agent}', { agent: AGENT_LABELS[writer.agent] })}</>}</button>
+            : <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={finish}>{busy === 'finish' ? t('Committing…') : t('Commit merge')}</button>}
+        </div>
+      </div>}
       {!merging && <form className="git-commit-form" onSubmit={event => { event.preventDefault(); commit(); }}>
         <div className="git-message-box">
-          <textarea aria-label={t('Commit message')} placeholder={busy === 'message' ? t('{agent} is writing a commit message…', { agent: AGENT_LABELS[writer.agent] }) : t('Commit message')} rows={1} value={message} readOnly={busy === 'commit' || busy === 'message'} onChange={event => saveMessage(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, touch())) { event.preventDefault(); commit(); } }}/>
+          <textarea aria-label={t('Commit message')} placeholder={placeholder} rows={1} value={message} readOnly={busy === 'commit' || busy === 'message'} onChange={event => saveMessage(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, touch())) { event.preventDefault(); commit(); } }}/>
           <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: AGENT_LABELS[writer.agent] })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
         </div>
-        <button className="button primary" disabled={Boolean(busy) || !message.trim() || !chosen.length}>{busy === 'commit' ? t('Committing…') : staged.length ? tn(staged.length, 'Commit staged changes in 1 file', 'Commit staged changes in {n} files') : chosen.length === files.length ? tn(files.length, 'Commit 1 file', 'Commit all {n} files') : t('Commit {chosen} of {n} files', { chosen: chosen.length, n: files.length })}</button>
+        <div className={'git-commit-split' + (canPush ? ' has-menu' : '')}>
+          <button className="button primary git-commit-button" title={commitTitle} disabled={commitDisabled}>{busy === 'commit' ? <span className="spinner"/> : <Icon name="check" size={15}/>}{busy === 'commit' ? t('Committing…') : t('Commit')}</button>
+          {canPush && <ActionMenu label={t('More commit actions')} className="button primary git-commit-more" disabled={commitDisabled} actions={[
+            { label: t('Commit'), icon: 'check', select: () => commit(false) },
+            { label: t('Commit and push'), icon: 'push', select: () => commit(true) },
+          ]}><Icon name="chevronDown" size={14}/></ActionMenu>}
+        </div>
       </form>}
-      <ul className="git-files">{files.map(file => {
-        // A conflicted file shows ! until its markers are gone, then as modified.
-        const status = file.status === 'U' && merging && !merging.conflicts.includes(file.path) ? 'M' : file.status;
-        const slash = file.path.lastIndexOf('/'), code = status === '?' ? 'U' : status === 'U' ? '!' : status, expanded = open === file.path;
-        return <li key={file.path} className={expanded ? 'open' : undefined}>
-          <div className="git-row">
-            {!merging && <input type="checkbox" aria-label={t('Stage {path}', { path: file.path })} title={file.staged ? file.unstaged ? t('Partly staged') : t('Staged') : t('Not staged')} disabled={Boolean(busy)} checked={file.staged && !file.unstaged} ref={box => { if (box) box.indeterminate = file.staged && file.unstaged; }} onChange={event => stage([file.path], event.target.checked)}/>}
-            <button type="button" className="git-file" aria-expanded={expanded} title={`${gitNames()[file.status] || file.status}: ${file.from ? `${file.from} → ` : ''}${file.path}`} onClick={() => setOpen(expanded ? '' : file.path)}>
-              <span className="git-name">{file.path.slice(slash + 1)}</span>{slash > 0 && <span className="git-dir">{file.path.slice(0, slash)}</span>}
-            </button>
-            {file.lines && <span className="git-lines"><ins>+{file.lines[0]}</ins> <del>−{file.lines[1]}</del></span>}
-            <span className={'git-code s-' + (status === '?' ? 'u' : status === 'U' ? 'conflict' : status.toLowerCase())} aria-label={gitNames()[status] || status}>{code}</span>
-          </div>
-          {expanded && <div className="git-diff-wrap" aria-label={t('Changes in {path}', { path: file.path })} role="region">
-            {diff?.path === file.path && diff.result ? <DiffView diff={diff.result}/> : diff?.error ? <p className="inline-error">{diff.error}</p> : <p className="git-diff-note">{t('Loading the diff…')}</p>}
-          </div>}
-        </li>;
-      })}</ul>
-    </> : <p className="git-clean"><Icon name="check" size={15}/>{t('No uncommitted changes')}</p>}
-    <details className="git-advanced"><summary><Icon name="branch" size={14}/><span>{t('Git details')}</span><Icon name="chevronRight" size={13}/></summary><GitRepository git={git} load={loadOverview} tasks={tasks} onOpenTask={onOpenTask} taskStatus={task => <Status task={task}/>}/></details>
+      {merging ? files.length > 0 && group('changes', files) : <>
+        {staged.length > 0 && group('staged', staged)}
+        {unstaged.length > 0 && group('changes', unstaged)}
+      </>}
+      {!files.length && <p className="git-clean">{t('No uncommitted changes')}</p>}
+    </GitPane>
+    <GitRepository git={git} load={loadOverview} tasks={tasks} onOpenTask={onOpenTask} taskStatus={task => <Status task={task}/>} actions={remoteActions}/>
+    {discarding && <DiscardDialog files={discarding} onCancel={() => setDiscarding(null)} onConfirm={() => discard(discarding)}/>}
   </section>;
 }
 

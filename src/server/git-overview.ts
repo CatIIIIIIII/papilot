@@ -50,11 +50,15 @@ export async function gitOverview(root: string, tasks: Pick<Task, 'id' | 'worktr
     }
   }));
   worktrees.sort((a, b) => Number(b.current) - Number(a.current));
-  const refs = new Map<string, string[]>();
-  const refOutput = await git(root, ['for-each-ref', '--format=%(objectname)%00%(refname:short)%00%(*objectname)', 'refs/heads', 'refs/remotes', 'refs/tags']);
+  const refs = new Map<string, { refs: string[]; remotes: string[]; tags: string[] }>();
+  const refOutput = await git(root, ['for-each-ref', '--format=%(objectname)%00%(refname)%00%(refname:short)%00%(*objectname)', 'refs/heads', 'refs/remotes', 'refs/tags']);
   for (const line of refOutput.trim().split('\n').filter(Boolean)) {
-    const [object, name, peeled] = line.split('\0'), hash = peeled || object;
-    refs.set(hash, [...(refs.get(hash) || []), name]);
+    const [object, full, name, peeled] = line.split('\0'), hash = peeled || object;
+    // A remote's HEAD only names its default branch, which is listed anyway.
+    if (full.startsWith('refs/remotes/') && full.endsWith('/HEAD')) continue;
+    const entry = refs.get(hash) || { refs: [], remotes: [], tags: [] };
+    (full.startsWith('refs/heads/') ? entry.refs : full.startsWith('refs/remotes/') ? entry.remotes : entry.tags).push(name);
+    refs.set(hash, entry);
   }
   // Include detached worktree tips, which --branches alone would miss.
   const heads = [...new Set(worktrees.flatMap(tree => tree.head ? [tree.head] : []))];
@@ -63,7 +67,7 @@ export async function gitOverview(root: string, tasks: Pick<Task, 'id' | 'worktr
   const log = await git(root, ['log', '--topo-order', `-${limit + 1}`, '--format=%H%x00%P%x00%s%x00%an%x00%ct', '--branches', '--remotes', '--tags', ...heads, '--']);
   const commits: GitGraphCommit[] = log.trim().split('\n').filter(Boolean).map(line => {
     const [hash, parents, subject, author, date] = line.split('\0');
-    return { hash, parents: parents ? parents.split(' ') : [], subject, author, date: Number(date) * 1000, refs: refs.get(hash) || [] };
+    return { hash, parents: parents ? parents.split(' ') : [], subject, author, date: Number(date) * 1000, refs: [], remotes: [], tags: [], ...refs.get(hash) };
   });
   return { worktrees, commits: commits.slice(0, limit), truncated: commits.length > limit };
 }

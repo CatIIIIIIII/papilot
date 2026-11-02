@@ -12,7 +12,7 @@ import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson,
 import { fullPaperPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
-import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus } from './manuscript.ts';
+import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus } from './manuscript.ts';
 import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
@@ -314,6 +314,11 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/stage', project(), request => {
     const project = store.project(request.params.id), b = request.body as any;
     return serialGit(project.id, async () => ({ git: await gitStage(project.path, paths(b.paths), b.stage !== false) }));
+  });
+  // The Git panel confirms before discarding; this cannot be undone.
+  app.post<{ Params: { id: string } }>('/api/projects/:id/git/discard', project(), request => {
+    const project = store.project(request.params.id), b = request.body as any;
+    return serialGit(project.id, async () => ({ git: await gitDiscard(project.path, paths(b.paths)) }));
   });
   // An agent writes a commit message for the chosen files, or a fresh one
   // instead of the message it already wrote for them; nothing is written.

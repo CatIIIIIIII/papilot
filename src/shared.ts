@@ -113,7 +113,8 @@ export interface Person { id: string; name: string; role: 'owner' | 'member'; jo
 export interface Device { id: string; kind: 'passkey' | 'session'; label: string; createdAt: number; lastUsedAt: number | null }
 export interface People { origin: string | null; people: Person[] }
 // staged: the index has changes to this file; unstaged: the working tree has more.
-export interface GitFile { path: string; status: string; staged: boolean; unstaged: boolean; lines?: [number, number]; from?: string }
+// index is the staged status where it differs from status, which is the working tree's when it has changes.
+export interface GitFile { path: string; status: string; staged: boolean; unstaged: boolean; lines?: [number, number]; from?: string; index?: string }
 // merging is a merge in progress, with the files whose conflict markers remain.
 export interface GitStatus { branch: string | null; upstream: string | null; ahead: number; behind: number; files: GitFile[]; head: { hash: string; subject: string; date: number } | null; remote?: boolean; merging?: { message: string; conflicts: string[] } | null }
 export interface GitDiff { path: string; diff: string; truncated: boolean }
@@ -122,7 +123,8 @@ export interface GitWorktree {
   locked?: string; prunable?: string; status: GitStatus | null; error?: string;
   taskId?: string;
 }
-export interface GitGraphCommit { hash: string; parents: string[]; subject: string; author: string; date: number; refs: string[] }
+// refs are local branches; remote branches and tags are listed apart, as an editor's graph shows them.
+export interface GitGraphCommit { hash: string; parents: string[]; subject: string; author: string; date: number; refs: string[]; remotes?: string[]; tags?: string[] }
 export interface GitOverview { worktrees: GitWorktree[]; commits: GitGraphCommit[]; truncated: boolean }
 // A running compilation, from latexmk's output: its step, the TeX pass, and
 // the pages typeset in that pass against the last known page count.

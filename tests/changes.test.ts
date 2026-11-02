@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Changes, stageLines, stagedLines, unstageLines } from '../src/server/changes.ts';
-import { gitCommit, gitStage, gitStatus } from '../src/server/manuscript.ts';
+import { gitCommit, gitDiscard, gitStage, gitStatus } from '../src/server/manuscript.ts';
 import { opcodes } from '../engine/src/core/diff.ts';
 
 const lines = (...items: string[]) => items.map(item => item + '\n');
@@ -52,6 +52,24 @@ test('the Git panel stages whole files and commits only what is staged', async (
     status = await gitStage(root, ['refs.bib'], true);
     status = await gitStage(root, ['refs.bib'], false);
     assert.equal(status.files[0].staged, false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('discarding a file keeps its staged part and deletes only untracked files', async () => {
+  const { root, git, commit } = repository();
+  try {
+    fs.writeFileSync(path.join(root, 'main.tex'), 'One.\n'); fs.writeFileSync(path.join(root, 'refs.bib'), '% refs\n');
+    git('add', '.'); commit('Initial');
+    fs.writeFileSync(path.join(root, 'main.tex'), 'One, staged.\n'); await gitStage(root, ['main.tex'], true);
+    fs.writeFileSync(path.join(root, 'main.tex'), 'One, staged, then edited.\n');
+    fs.writeFileSync(path.join(root, 'refs.bib'), '% refs, edited\n'); fs.writeFileSync(path.join(root, 'draft.tex'), 'Scratch.\n');
+    await assert.rejects(gitDiscard(root, ['missing.tex']), /Select at least one changed file/);
+    const status = await gitDiscard(root, ['main.tex', 'refs.bib', 'draft.tex']);
+    assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'One, staged.\n', 'The staged version stays');
+    assert.equal(fs.readFileSync(path.join(root, 'refs.bib'), 'utf8'), '% refs\n');
+    assert.equal(fs.existsSync(path.join(root, 'draft.tex')), false);
+    assert.deepEqual(status.files.map(file => [file.path, file.staged, file.unstaged]), [['main.tex', true, false]]);
+    await assert.rejects(gitDiscard(root, ['main.tex']), /Select at least one changed file/, 'Only unstaged changes can be discarded');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
