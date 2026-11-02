@@ -474,6 +474,9 @@ export async function main(argv = process.argv) {
     .action(async (options: { root: string; port: string; idle: string }) => {
       const { serve } = await import("./server.ts");
       await serve(options.root, Number(options.port), Number(options.idle));
+      // The server has released its lock. Work it no longer serves, such as
+      // queued reference checks, must not keep this process running.
+      process.exit(0);
     });
   try {
     await program.parseAsync(argv);

@@ -4,6 +4,7 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import { Fixture, fakeRound, METHOD } from "./helpers.ts";
 import { createServer, App } from "../../src/server.ts";
 import { Builder } from "../../src/core/build.ts";
+import { PublishError } from "../../src/core/publish.ts";
 import { acquireLock, sleep, writeJson } from "../../src/core/files.ts";
 import { connect, serverHome } from "../../src/client.ts";
 let f: Fixture, app: App, server: ReturnType<typeof createServer>;
@@ -189,6 +190,24 @@ it("replays build requests across lost responses and server restarts without new
   expect(response.json().job).toBe(first.id);
   const invalid = await server.inject({ method: "POST", url: "/api/tasks/a/publish", headers: headers(), payload: { requestId: "../invalid" } });
   expect(invalid.statusCode).toBe(400);
+});
+
+it("a build its server stopped is built again after the restart", async () => {
+  app.tasks.create("a");
+  vi.spyOn(app.publisher, "pruneCache").mockResolvedValue();
+  let fail!: (error: Error) => void;
+  vi.spyOn(app.publisher, "publish").mockImplementation(() => new Promise((_, reject) => { fail = reject; }));
+  const job = app.publisher.submit("a", "request-a");
+  await sleep(10);
+  app.publisher.stop();
+  // Stopping kills the compiler, which fails like a broken document would.
+  fail(new PublishError("The revised document could not be compiled.", ["killed"], "Fix it."));
+  await app.publisher.join();
+  expect(app.publisher.job(job.id).status).toBe("running");
+  const restarted = f.app();
+  expect(restarted.publisher.job(job.id).status).toBe("failed");
+  // Papilot rebuilds a job that failed with exactly this error.
+  expect(restarted.publisher.job(job.id).result).toMatchObject({ error: "The review server restarted during the build." });
 });
 
 it("read-only reconnection does not wait for the startup lock or upgrade a running server", async () => {

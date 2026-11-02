@@ -9,7 +9,11 @@ import { pathToFileURL } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { stop } from '../engine/src/client.ts';
 
-const running = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// A zombie has exited; only an init that does not reap orphans keeps it listed.
+const running = (pid: number) => {
+  try { process.kill(pid, 0); } catch { return false; }
+  try { return !execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).trim().startsWith('Z'); } catch { return false; }
+};
 const exited = async (pid: number, seconds = 5) => { for (let i = 0; i < seconds * 10 && running(pid); i++) await sleep(100); return !running(pid); };
 const ps = (field: string, pid: number) => execFileSync('ps', ['-o', `${field}=`, '-p', String(pid)], { encoding: 'utf8' }).trim();
 const module = (file: string) => JSON.stringify(pathToFileURL(path.resolve(file)).href);
@@ -40,7 +44,8 @@ async function client(root: string, clients: ChildProcess[], code: string, optio
   clients.push(child);
   let output = '';
   child.stdout!.on('data', chunk => { output += chunk; });
-  while (!/^\d+\n/.test(output) && child.exitCode === null) await sleep(20);
+  const deadline = Date.now() + 60000;
+  while (!/^\d+\n/.test(output) && child.exitCode === null && child.signalCode === null && Date.now() < deadline) await sleep(20);
   assert.match(output, /^\d+\n/, 'The client printed a PID');
   return { child, pid: Number(output.trim()) };
 }
@@ -62,15 +67,23 @@ test('an owned review server that stops on its own exits while its app keeps run
 }));
 
 test('a review server whose app quits while it starts does not keep running', { timeout: 90000 }, () => withPaper(async (root, clients) => {
-  // The app quits as soon as the server process exists, long before it listens.
+  // The app quits as soon as the server process exists, before it listens.
   const { child, pid: server } = await client(root, clients, `const { connect } = await import(${module('engine/src/client.ts')});
 const { execFileSync } = await import('node:child_process');
+const fs = await import('node:fs');
 void connect(root, true, { owned: true }).catch(() => {});
 for (;;) {
-  try { console.log(execFileSync('pgrep', ['-f', 'serve --root ' + root], { encoding: 'utf8' }).trim().split('\\n')[0]); process.exit(0); } catch {}
+  let pid = '';
+  try { pid = execFileSync('pgrep', ['-f', 'serve --root ' + root], { encoding: 'utf8' }).trim().split('\\n')[0]; } catch {}
+  if (pid) {
+    console.log(pid);
+    // Exit code 3 would mean the server was already listening.
+    process.exit(fs.existsSync(root + '/.git/latex-review/server/connection.json') ? 3 : 0);
+  }
   await new Promise(resolve => setTimeout(resolve, 10));
 }`, { exit: true });
-  if (child.exitCode === null) await once(child, 'exit');
+  if (child.exitCode === null && child.signalCode === null) await once(child, 'exit');
+  assert.equal(child.exitCode, 0, 'The app quit before its server was listening');
   assert.ok(await exited(server, 15), 'The orphaned server exits instead of serving for 12 hours');
 }));
 
