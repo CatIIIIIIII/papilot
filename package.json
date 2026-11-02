@@ -76,7 +76,10 @@
     "desktop:compile": "tsc -p desktop/tsconfig.json",
     "desktop": "npm run setup:review && npm run build && npm run desktop:compile && node scripts/desktop.mjs dev",
     "desktop:build": "npm run setup:review && npm run build && npm run desktop:compile && node scripts/desktop.mjs package",
-    "test:desktop": "node scripts/check-desktop.mjs"
+    "test:desktop": "node scripts/check-desktop.mjs",
+    "i18n": "tsx scripts/i18n.ts",
+    "i18n:check-app": "tsx scripts/i18n/app-locales.ts",
+    "test:locales": "npm run build && npm --prefix vendor/latex-review run build && node --import tsx scripts/check-locales.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^9.2.2",
@@ -110,6 +113,9 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "parse5": "^8.0.1",
+    "@babel/parser": "^8.0.10",
+    "@babel/types": "^8.0.10"
   }
 }

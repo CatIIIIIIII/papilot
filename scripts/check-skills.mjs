@@ -171,7 +171,7 @@ try {
   await draft.fill('/pol'); await draft.press('Enter');
   await draft.fill('Keep all technical terms.');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Settings' }).getByRole('combobox', { name: 'Language' }).selectOption('zh-CN');
+  await page.getByRole('dialog', { name: 'Settings' }).getByRole('combobox', { name: 'Language' }).selectOption('zh-Hans');
   await page.keyboard.press('Escape');
   await expect(page.getByText('已加入任务：2 条', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/merged-task-notes.png' });

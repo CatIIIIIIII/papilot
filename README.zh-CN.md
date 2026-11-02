@@ -5,68 +5,76 @@
   <img src="docs/assets/wordmark-dark.svg#gh-dark-mode-only" width="280" height="88" alt="Papilot">
 </h1>
 
-<p><b>在 PDF 上批注和审阅，让 AI 修改 LaTeX 论文。</b></p>
+<p><b>借助 AI 修订 LaTeX 论文，并在 PDF 上审阅修改。</b></p>
 
-<p><a href="https://papilot.ai">官网</a> · <a href="docs/guide.md">使用指南</a> · <a href="README.md">English</a> · 简体中文</p>
+<p><a href="https://papilot.ai">官网</a> · <a href="docs/guide.md">文档</a></p>
+
+<p data-language-switcher><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-Hant.md">繁體中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.pt.md">Português</a> · <a href="README.it.md">Italiano</a> · <a href="README.sv.md">Svenska</a></p>
 
 [![CI](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2563eb)](LICENSE)
 
-<p><img src="docs/assets/demo.gif" alt="Papilot：在 PDF 上批注一段话，交给智能体修改，并审阅排版后的改动" width="100%"></p>
+<p><img src="docs/assets/demo.gif" alt="Papilot：在 PDF 上标注段落，交给智能体处理，并审阅排版后的修改" width="100%"></p>
 
 </div>
 
-Papilot 是运行在本机的 LaTeX 论文工作台。你在 PDF 上批注，智能体在独立副本中修改源码；改好后先看排版对比，再决定接受哪些改动、保存到哪里。
+Papilot 是一个与 AI 智能体协作撰写和修订 LaTeX 论文的本地工作区。在 PDF 上标注段落和公式，让智能体在独立的源码副本上进行编辑，随后审阅排版后的修改并选择要保留的内容。
 
-macOS、Linux 桌面版与本地构建方法见 [Papilot Desktop](desktop/README.md)。桌面 CI 构建 Apple Silicon、Intel Mac 安装包，以及 Linux x64 的 AppImage、deb 安装包。
+<a id="features"></a>
 
-## 功能
+## 功能特性
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<a href="docs/assets/readme-note.zh-CN.jpg"><img src="docs/assets/readme-note.zh-CN.jpg" alt="PDF 上的同色分组文字批注与公式框选批注"></a>
-<h3>在 PDF 上批注</h3>
-选中句子或框出公式，写下修改要求。相关批注可以按颜色归成一组，一次说明多处修改。
+<a href="docs/assets/readme-note.jpg"><img src="docs/assets/readme-note.jpg" alt="PDF 上按颜色分组的段落批注与框选的公式批注"></a>
+<h3>在 PDF 上添加批注</h3>
+选中句子或框选公式，说明需要修改的内容。按颜色将相关批注分组，即可对多个段落统一下达指令。
 </td>
 <td width="50%" valign="top">
-<a href="docs/assets/readme-review.zh-CN.jpg"><img src="docs/assets/readme-review.zh-CN.jpg" alt="排版页面上的修改前后对比，带接受、拒绝和评论按钮"></a>
-<h3>逐处审阅改动</h3>
-对比修改前后的排版，也能看到公式重编号等连带变化。逐条接受、拒绝或评论，做过的决定可以撤销。
+<a href="docs/assets/readme-review.jpg"><img src="docs/assets/readme-review.jpg" alt="页面上的排版前后对比差异，带有接受、拒绝和评论按钮"></a>
+<h3>审阅每处修改</h3>
+对比修改前后的排版页面，包括公式重新编号等其他位置的变动。对每处编辑执行接受、拒绝或评论操作，并可在审阅过程中随时撤销决定。
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<a href="docs/assets/readme-deliver.zh-CN.jpg"><img src="docs/assets/readme-deliver.zh-CN.jpg" alt="将接受的改动应用到论文"></a>
-<h3>选择保存方式</h3>
-每个新任务在独立副本里改稿。审阅完成后，可以选择 **提交到论文**，将这个任务的改动保存为当前分支上的一个 commit；也可以选择 **应用到工作区**，保留为未提交改动。如果同一段落期间有了其他修改，AI 会自动处理冲突，只有无法确定内容时才询问你。审核合并后的 PDF，再确认保存。需要推送时，在 Git 面板操作。
+<a href="docs/assets/readme-deliver.jpg"><img src="docs/assets/readme-deliver.jpg" alt="将已接受的编辑应用到论文原稿"></a>
+<h3>选择编辑的去向</h3>
+每个新任务都在各自的论文副本上运行。审阅编辑后，选择 **提交到论文原稿** 将此任务保存为当前分支上的一次提交，或选择 **应用到工作区** 使编辑保持未提交状态。如果同一段落在此期间发生了变动，AI 会自动解决冲突，仅在预期内容不明确时向你询问。保存前可先审阅合并后的 PDF，准备就绪后即可从 Git 面板推送。
 </td>
 <td width="50%" valign="top">
-<a href="docs/assets/readme-git.zh-CN.jpg"><img src="docs/assets/readme-git.zh-CN.jpg" alt="Git 面板：已暂存文件、自动生成的提交说明与提交关系图"></a>
-<h3>内置 Git</h3>
-在工作台里暂存、提交、拉取和推送，提交关系图也会显示各任务的工作树。提交说明和合并冲突，可以请智能体帮忙。
+<a href="docs/assets/readme-git.jpg"><img src="docs/assets/readme-git.jpg" alt="包含已暂存文件、生成的提交说明和提交图的 Git 面板"></a>
+<h3>与 Git 配合使用</h3>
+在工作区中暂存和提交文件、拉取及推送更改。智能体可以起草提交说明并协助解决合并冲突；提交图会显示每个任务的工作树。
 </td>
 </tr>
 </table>
 
-- **[技能](docs/guide.md#skills)与[任务附件](docs/guide.md#task-attachments)：** 输入 `/` 选择润色、校对、检查数学等技能，也能在设置里写自己的技能。任务和消息可以附带参考文件与图片。
-- **阅读与界面：** 支持通过 PDF 目录跳转章节与全文搜索，提供浅色/深色主题及中英文界面。
+- **[技能](docs/guide.md#skills)与[附件](docs/guide.md#task-attachments)：** 运行 `/` 技能来润色行文、校对文本或检查数学公式，在设置中定义自定义技能，并向任务和消息添加参考文件或图片附件。
+- **阅读与工作区：** 通过 PDF 目录和全文搜索浏览论文原稿，支持浅色与深色主题以及英文或中文界面。
+
+<a id="quick-start"></a>
 
 ## 快速开始
 
-运行需要 **Node.js 22.22+**、**Git**，以及包含 `latexmk` 和 `synctex` 的完整 **TeX** 发行版（[MacTeX](https://www.tug.org/mactex/) 或 [TeX Live](https://www.tug.org/texlive/)）。修改论文还需要配置至少一个[智能体](#智能体)。
+有关 macOS 和 Linux 桌面应用及本地构建说明，请参阅 [Papilot Desktop](desktop/README.md)。桌面端 CI 会构建 Apple Silicon 和 Intel Mac 安装程序，以及 Linux x64 AppImage 和 deb 软件包。
+
+Papilot 需要 **Node.js 22.22+**、**Git**，以及包含 `latexmk` 和 `synctex` 的完整 **TeX** 发行版（[MacTeX](https://www.tug.org/mactex/) 或 [TeX Live](https://www.tug.org/texlive/)）。修订论文还需要至少配置一个[智能体](#agents)。
 
 ```sh
 npm install -g papilot
 papilot demo
 ```
 
-打开 [http://127.0.0.1:7274](http://127.0.0.1:7274)，在侧栏选择 **稿件** 即可体验内置的示例论文。
+打开 [http://127.0.0.1:7274](http://127.0.0.1:7274)，在侧边栏中选择 **论文原稿**，即可浏览内置的示例论文。
 
-处理自己的论文时，运行 `papilot` 并在论文菜单中选择 **添加论文…**，打开本地 LaTeX 文件夹或拖入 ZIP 压缩包。Papilot 会自动识别主 `.tex` 文件、准备 Git 记录并尝试编译，遇到问题时可在导入界面中选择主文件或尝试修复。
+若要处理你自己的论文原稿，请运行 `papilot` 并选择 **添加论文…** 以打开本地 LaTeX 文件夹或 ZIP 压缩包。Papilot 会查找主 `.tex` 文件，在需要时准备 Git 历史记录，并尝试编译。如果主文件不明确或构建失败，导入对话框会协助你选择文件或修复问题。
 
-在 **设置 → 运行环境** 的 **智能体** 或 **LaTeX** 页面查看配置状态。运行 `papilot doctor` 检查环境，加上 `--repo /path/to/paper` 可一并检查论文（[诊断说明](docs/guide.md#diagnostics)）。
+可在 **设置 → 运行环境** 下的 **智能体** 或 **LaTeX** 中检查配置。运行 `papilot doctor` 进行环境检查，或运行 `papilot doctor --repo /path/to/paper` 一并检查论文原稿（[诊断说明](docs/guide.md#diagnostics)）。
+
+<a id="agents"></a>
 
 ## 智能体
 
@@ -83,15 +91,17 @@ papilot demo
 </p>
 <!-- END AGENT ICONS -->
 
-每个任务都可以选择智能体和模型。Papilot 使用智能体在本机的登录，或你为对应服务配置的 API 凭据，不另行保存密钥。
+你可以为每个任务选择智能体和模型。根据集成方式的不同，Papilot 会使用智能体的本地 CLI 登录状态或你提供的服务商 API 凭据来运行智能体，且不会存储你的密钥。
 
-打开 **设置 → 运行环境 → 智能体** 可查看状态、可用模型与配置说明（例如运行 `papilot codex login` 登录 Codex）。安装或登录智能体后，点击 **重新连接** 刷新状态；修改环境变量后则需重启 `papilot`。各智能体的具体要求与支持范围见[智能体指南](docs/guide.md#agents)。
+打开 **设置 → 运行环境 → 智能体** 查看状态、模型和配置说明（例如 `papilot codex login`）。如果在 Papilot 运行期间安装或登录了智能体，请点击 **重新连接**；如果修改了环境变量，请重启 `papilot`。有关各智能体的要求与功能，请参阅[智能体指南](docs/guide.md#agents)。
+
+<a id="documentation-and-community"></a>
 
 ## 文档与社区
 
-- **使用文档：** 阅读[使用指南](docs/guide.md)了解完整工作流、配置项、[应用内更新](docs/guide.md#updates)、[Tailscale 远程访问](docs/guide.md#remote-access-with-tailscale)以及[邀请协作者](docs/guide.md#collaborators)。
-- **设计与版本：** 在 [`examples/papilot-paper`](examples/papilot-paper) 中查看阐述系统设计与证明的示例论文，在[更新日志](CHANGELOG.md)中查看各版本变更。
-- **社区与支持：** 欢迎在 [Discussions](https://github.com/PapilotAI/papilot/discussions) 交流想法、在 [Issues](https://github.com/PapilotAI/papilot/issues) 反馈问题，或阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 参与贡献。
+- **文档：** 阅读[用户指南](docs/guide.md)，了解工作区流程、配置、[应用内更新](docs/guide.md#updates)、[通过 Tailscale 远程访问](docs/guide.md#remote-access-with-tailscale)以及[面向协作者的通行密钥共享](docs/guide.md#collaborators)。
+- **设计与历史：** 浏览 [`examples/papilot-paper`](examples/papilot-paper) 查看正式的设计论文与证明，并查阅[更新日志](CHANGELOG.md)了解版本说明。
+- **社区与支持：** 在 [Discussions](https://github.com/PapilotAI/papilot/discussions) 中提问，在 [Issues](https://github.com/PapilotAI/papilot/issues) 中报告问题，或阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 参与贡献。
 
 ---
 

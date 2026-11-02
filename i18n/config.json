@@ -1,0 +1,213 @@
+{
+  "locales": {
+    "zh-CN": {
+      "name": "Simplified Chinese",
+      "instructions": "Use concise, natural Simplified Chinese UI wording. Put spaces around Latin words and numbers when appropriate.",
+      "glossary": {
+        "paper": "论文",
+        "manuscript": "论文原稿",
+        "review": "审阅",
+        "note": "批注",
+        "task": "任务",
+        "agent": "智能体",
+        "worktree": "工作树",
+        "skill": "技能"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "<strong>Add your paper.</strong> Choose <b>Add paper</b>, then pick or drag in a LaTeX folder, or import a ZIP from Overleaf.": "Editorial feedback: use 你 rather than 您 consistently with the rest of the Simplified Chinese homepage. Keep the heading and instructions natural and concise."
+      }
+    },
+    "zh-Hant": {
+      "name": "Traditional Chinese",
+      "instructions": "Use natural Traditional Chinese wording. Keep UI labels concise. Put spaces around Latin words and numbers when appropriate.",
+      "glossary": {
+        "paper": "論文",
+        "manuscript": "論文原稿",
+        "review": "審閱",
+        "note": "註解",
+        "task": "任務",
+        "agent": "智慧代理",
+        "worktree": "工作樹",
+        "skill": "技能"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      }
+    },
+    "ja": {
+      "name": "Japanese",
+      "instructions": "Use natural, concise Japanese suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "論文",
+        "manuscript": "原稿",
+        "review": "レビュー",
+        "note": "注釈",
+        "task": "タスク",
+        "agent": "エージェント",
+        "worktree": "作業ツリー",
+        "skill": "スキル"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase 組版済みの変更前後として返され is awkward and obscures the comparison. Explain naturally that the user sees a comparison of the typeset pages before and after each change and can accept or reject it. Preserve the full meaning, product names and professional tone.",
+        "Install Claude Code and run <code>claude auth login</code>, or start <code>papilot</code> with <code>ANTHROPIC_API_KEY</code> set": "Editorial feedback: avoid the awkward repeated を construction. Use natural Japanese word order, describing the environment variable setting before starting the command where appropriate. Inline code fragments may move within the sentence, but preserve their contents exactly and retain all instructions.",
+        "Start <code>papilot</code> with <code>CURSOR_API_KEY</code> set": "Editorial feedback: avoid the awkward repeated を construction. Use natural Japanese word order, describing the environment variable setting before starting the command where appropriate. Inline code fragments may move within the sentence, but preserve their contents exactly and retain all instructions.",
+        "Start <code>papilot</code> with <code>ZHIPU_API_KEY</code> (or <code>ZAI_API_KEY</code>) set": "Editorial feedback: avoid the awkward repeated を construction. Use natural Japanese word order, describing the environment variable setting before starting the command where appropriate. Inline code fragments may move within the sentence, but preserve their contents exactly and retain all instructions."
+      }
+    },
+    "ko": {
+      "name": "Korean",
+      "instructions": "Use natural, concise Korean suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "논문",
+        "manuscript": "원고",
+        "review": "검토",
+        "note": "주석",
+        "task": "작업",
+        "agent": "에이전트",
+        "worktree": "작업 트리",
+        "skill": "스킬"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      }
+    },
+    "de": {
+      "name": "German",
+      "instructions": "Use natural, concise German suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "Artikel",
+        "manuscript": "Manuskript",
+        "review": "Überprüfung",
+        "note": "Anmerkung",
+        "task": "Aufgabe",
+        "agent": "Agent",
+        "worktree": "Arbeitsbaum",
+        "skill": "Skill"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: avoid the unnatural phrase das LaTeX. Refer naturally to the LaTeX source (LaTeX-Quelltext) and explain that each change is shown as a typeset before-and-after comparison. Keep the professional Sie register and preserve all meaning and product names."
+      }
+    },
+    "fr": {
+      "name": "French",
+      "instructions": "Use natural, concise French suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "article",
+        "manuscript": "manuscrit",
+        "review": "révision",
+        "note": "annotation",
+        "task": "tâche",
+        "agent": "agent",
+        "worktree": "arbre de travail",
+        "skill": "compétence"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      }
+    },
+    "es": {
+      "name": "Spanish",
+      "instructions": "Use natural, concise Spanish suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "artículo",
+        "manuscript": "manuscrito",
+        "review": "revisión",
+        "note": "anotación",
+        "task": "tarea",
+        "agent": "agente",
+        "worktree": "árbol de trabajo",
+        "skill": "habilidad"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase that each change comes back as a before-and-after sounds unnatural. Explain directly and idiomatically that the agent edits the LaTeX source and the user sees a comparison of typeset pages before and after each change, then accepts or rejects it. Preserve the full meaning, product names, and the register used in the rest of the homepage."
+      }
+    },
+    "pt": {
+      "name": "Portuguese",
+      "instructions": "Use natural, concise Portuguese suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "artigo",
+        "manuscript": "manuscrito",
+        "review": "revisão",
+        "note": "anotação",
+        "task": "tarefa",
+        "agent": "agente",
+        "worktree": "árvore de trabalho",
+        "skill": "habilidade"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase that each change comes back as a before-and-after sounds unnatural. Explain directly and idiomatically that the agent edits the LaTeX source and the user sees a comparison of typeset pages before and after each change, then accepts or rejects it. Preserve the full meaning, product names, and the register used in the rest of the homepage."
+      }
+    },
+    "it": {
+      "name": "Italian",
+      "instructions": "Use natural, concise Italian suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "articolo",
+        "manuscript": "manoscritto",
+        "review": "revisione",
+        "note": "annotazione",
+        "task": "attività",
+        "agent": "agente",
+        "worktree": "albero di lavoro",
+        "skill": "abilità"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "messageInstructions": {
+        "Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject.": "Editorial feedback: the literal phrase that each change comes back as a before-and-after sounds unnatural. Explain directly and idiomatically that the agent edits the LaTeX source and the user sees a comparison of typeset pages before and after each change, then accepts or rejects it. Preserve the full meaning, product names, and the register used in the rest of the homepage."
+      }
+    },
+    "sv": {
+      "name": "Swedish",
+      "instructions": "Use natural, concise Swedish suitable for an academic writing application. Prefer clear UI wording and consistent terminology. Preserve the singular or plural meaning of count messages; use natural invariant count forms where appropriate. Keep proper names and command identifiers unchanged.",
+      "glossary": {
+        "paper": "artikel",
+        "manuscript": "manuskript",
+        "review": "granskning",
+        "note": "anteckning",
+        "task": "uppgift",
+        "agent": "agent",
+        "worktree": "arbetskatalog",
+        "skill": "färdighet"
+      },
+      "scopeInstructions": {
+        "site": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged.",
+        "readme": " Preserve product names exactly: Papilot, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, LaTeX, SyncTeX, Git, MacTeX, TeX Live, Overleaf. Preserve all code, inline code contents, commands, env vars, URLs, versions and file paths byte-for-byte. Use a professional, natural academic tone. Translate every sentence completely, without summaries or truncation. Language names in the switcher must remain unchanged."
+      },
+      "scopeGlossary": {
+        "site": {
+          "worktree": "arbetsträd"
+        },
+        "readme": {
+          "worktree": "arbetsträd"
+        }
+      }
+    }
+  }
+}

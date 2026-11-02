@@ -1002,7 +1002,7 @@ export function ReviewApp({
           <p className="reference-problem reference-uncited">
             {uncited
               .map((m) => t("Cites {key}, which no bibliography entry defines.", { key: m.key }))
-              .join(language() === "zh-CN" ? "" : " ")}
+              .join(language().startsWith("zh") ? "" : " ")}
           </p>
         )}
         {bib.length > 0 && (

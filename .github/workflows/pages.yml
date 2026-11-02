@@ -9,7 +9,12 @@ on:
       - src/web/fonts/**
       - public/*.png
       - scripts/build-site.mjs
+      - i18n/config.json
+      - i18n/languages.json
+      - src/web/brand-icons/**
+      - scripts/site-i18n.mjs
       - package.json
+      - package-lock.json
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -36,7 +41,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      # Native UI examples are rendered at build time; only Node is needed.
+      - run: npm ci --ignore-scripts
+      # Render the native UI examples and translated markup at build time.
       - run: node scripts/build-site.mjs
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

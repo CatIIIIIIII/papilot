@@ -11,3 +11,4 @@ vendor/latex-review/.cache/
 test-results/
 .desktop/
 release/desktop/
+i18n/state/*.lock

@@ -6,6 +6,8 @@ import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, webkit } from '../vendor/latex-review/node_modules/playwright/index.mjs';
 
+const languages = JSON.parse(fs.readFileSync('i18n/languages.json', 'utf8'));
+const route = locale => locale === 'en' ? '/' : `/${locale}/`;
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('_site') });
 await server.listen({ host: '127.0.0.1', port: 0 });
@@ -95,10 +97,10 @@ try {
   // toolbar, scaled uniformly. No mobile mini-layout or internal scrollbars.
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
-    for (const lang of ['EN', '中文']) {
+    for (const [lang, name] of Object.entries(languages)) {
       await page.locator('#lang-button').click();
-      await page.getByRole('menuitemradio', { name: lang === 'EN' ? 'English' : '简体中文', exact: true }).click();
-      assert.equal(await page.evaluate(() => document.documentElement.lang), lang === 'EN' ? 'en' : 'zh-CN');
+      await Promise.all([page.waitForURL(origin + route(lang)), page.getByRole('menuitemradio', { name, exact: true }).click()]);
+      assert.equal(await page.evaluate(() => document.documentElement.lang), lang);
       await show(hero);
       const geometry = await hero.evaluate(el => {
         const panel = el.querySelector('[data-scene]:not([hidden])');
@@ -139,8 +141,13 @@ try {
       }).map(el => el.className));
       assert.deepEqual(scrollports, []);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang === 'EN' ? 'en' : 'zh'}.png` });
-      if (width === 390) await page.locator('#demo-commit').screenshot({ animations: 'disabled', path: `test-results/site/commit-mobile-${lang === 'EN' ? 'en' : 'zh'}.png` });
+      if (width === 1440) {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s', lang);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+      }
+      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang}.png` });
+      if (width === 390) await page.locator('#demo-commit').screenshot({ animations: 'disabled', path: `test-results/site/commit-mobile-${lang}.png` });
     }
   }
   // Reduced motion removes animation, while the film still advances without
@@ -158,26 +165,71 @@ try {
   assert.equal(await staticPage.locator('.ui-demo button, .ui-demo input').count(), 0);
   await staticPage.locator('#demo-hero').screenshot({ animations: 'disabled', path: 'test-results/site/no-js-mobile.png' });
   await noJs.close();
-  // The browser's first supported language is shown; a saved choice wins.
-  for (const [locale, expected] of [['zh-CN', 'zh-CN'], ['zh-SG', 'zh-CN'], ['zh-TW', 'en'], ['fr-FR', 'en'], ['en-GB', 'en']]) {
-    const context = await browser.newContext({ locale });
-    const visitor = await context.newPage();
-    await visitor.goto(origin);
-    assert.equal(await visitor.evaluate(() => document.documentElement.lang), expected, locale);
-    if (locale === 'zh-CN') {
-      await visitor.locator('#lang-button').click();
-      await visitor.getByRole('menuitemradio', { name: 'English', exact: true }).click();
-      await visitor.reload();
-      assert.equal(await visitor.evaluate(() => document.documentElement.lang), 'en', 'a saved choice wins');
-      await visitor.locator('#lang-button').click();
-      await visitor.keyboard.press('Escape');
-      assert.equal(await visitor.locator('#lang-list').isHidden(), true);
+  // Every URL is already localized without JavaScript, with reciprocal SEO links.
+  const sitemap = fs.readFileSync('_site/sitemap.xml', 'utf8');
+  assert.match(fs.readFileSync('_site/robots.txt', 'utf8'), /Sitemap: https:\/\/papilot.ai\/sitemap.xml/);
+  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length);
+  const staticContext = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  const staticVisitor = await staticContext.newPage();
+  for (const [locale] of Object.entries(languages)) {
+    await staticVisitor.goto(origin + route(locale));
+    const canonical = 'https://papilot.ai' + route(locale);
+    assert.equal(await staticVisitor.locator('html').getAttribute('lang'), locale);
+    assert.equal(await staticVisitor.locator('link[rel=canonical]').getAttribute('href'), canonical);
+    assert.equal(await staticVisitor.locator('meta[property="og:url"]').getAttribute('content'), canonical);
+    assert.equal(await staticVisitor.locator('meta[property="og:title"]').getAttribute('content'), await staticVisitor.title());
+    for (const selector of ['meta[name=description]', 'meta[property="og:description"]', 'meta[property="og:locale"]']) assert.ok(await staticVisitor.locator(selector).getAttribute('content'));
+    for (const alt of [...Object.keys(languages), 'x-default']) {
+      const href = 'https://papilot.ai' + route(alt === 'x-default' ? 'en' : alt);
+      assert.equal(await staticVisitor.locator(`link[hreflang="${alt}"]`).getAttribute('href'), href);
+      assert.equal((sitemap.match(new RegExp(`hreflang="${alt}"`, 'g')) || []).length, Object.keys(languages).length);
+      assert.ok(sitemap.includes(`hreflang="${alt}" href="${href}"`));
     }
-    await context.close();
+    assert.equal(await staticVisitor.locator('#demo-hero .paper-sheet').first().isVisible(), true);
+    assert.deepEqual(await staticVisitor.locator('main [lang]').evaluateAll(nodes => [...new Set(nodes.map(node => node.lang))]), [locale]);
+    assert.equal(await staticVisitor.locator('.no-js-languages a').count(), Object.keys(languages).length);
+  }
+  await staticContext.close();
+  const preferenceContext = await browser.newContext({ locale: 'ja-JP' });
+  const visitor = await preferenceContext.newPage();
+  await visitor.goto(origin);
+  assert.equal(await visitor.locator('html').getAttribute('lang'), 'en', 'browser language does not redirect');
+  await visitor.locator('#lang-button').click();
+  await Promise.all([visitor.waitForURL(origin + '/ja/'), visitor.getByRole('menuitemradio', { name: languages.ja, exact: true }).click()]);
+  await visitor.goto(origin);
+  await visitor.waitForURL(origin + '/ja/');
+  await visitor.goto(origin + '/de/');
+  assert.equal(await visitor.locator('html').getAttribute('lang'), 'de', 'explicit URL wins over saved choice');
+  await visitor.locator('#lang-button').click();
+  await visitor.keyboard.press('Escape');
+  assert.equal(await visitor.locator('#lang-list').isHidden(), true);
+  await preferenceContext.close();
+
+  // Capture the requested layouts and assert buttons, menus and cards fit.
+  for (const locale of ['zh-CN', 'ja', 'de', 'sv']) {
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto(origin + route(locale));
+      await page.evaluate(() => document.fonts.ready);
+      await page.locator('#download-button').click();
+      for (const selector of ['#download-button', '#download-list', '.agent-card']) {
+        const boxes = await page.locator(selector).evaluateAll(nodes => nodes.map(el => ({ width: el.clientWidth, scroll: el.scrollWidth, left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right })));
+        for (const box of boxes) {
+          assert.ok(box.scroll <= box.width + 1, `${locale}/${width}: ${selector} contents fit`);
+          assert.ok(box.left >= 0 && box.right <= width + 1, `${locale}/${width}: ${selector} within viewport`);
+        }
+      }
+      await page.screenshot({ animations: 'disabled', path: `test-results/site/${locale}-${width}-download.png` });
+      await page.keyboard.press('Escape');
+      await page.locator('#agents').screenshot({ animations: 'disabled', style: '.topbar{visibility:hidden!important}', path: `test-results/site/${locale}-${width}-agents.png` });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await show(hero);
+      assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s');
+    }
   }
   assert.deepEqual(errors, []);
   assert.equal(requests.some(url => /\.(mp4|gif|jpe?g)|feature-.*\.png/.test(url)), false);
-  console.log('Site checks passed: automatic complete workflow and feature loops; no controls or inner scrollbars; native desktop proportions at 320/390/768/1440px; EN/中文; reduced motion; no-JS; assets; language from the browser and the menu.');
+  console.log('Site checks passed: automatic complete workflow and feature loops; no controls or inner scrollbars; native desktop proportions at 320/390/768/1440px; all language URLs and SEO; reduced motion; no-JS; assets; saved language; download and card layouts.');
 } finally {
   await browser.close();
   await server.close();

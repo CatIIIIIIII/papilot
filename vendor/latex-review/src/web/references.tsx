@@ -168,7 +168,7 @@ export function risks(
 }
 
 // Chinese sentences follow each other without a space.
-const gap = () => (language() === "zh-CN" ? "" : " ");
+const gap = () => (language().startsWith("zh") ? "" : " ");
 function where(place: ReferenceCitation) {
   return `${place.section ? `${place.section} · ` : ""}${place.file}:${place.line}`;
 }

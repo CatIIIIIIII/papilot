@@ -1,38 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { parseSkill } from '../src/server/skills.ts';
-import { browserLanguage, t, tn } from '../src/web/i18n.ts';
+import { fileURLToPath } from 'node:url';
+import { browserLanguage, errorText, locale, setLanguage, t, tn } from '../src/web/i18n.ts';
 import { zhCN } from '../src/web/zh-CN.ts';
-import { GROUP_NAMES } from '../src/note-groups.ts';
-import { SKILL_ICONS } from '../src/skill-icons.ts';
-
-// Every message the workspace shows: t('…') and both forms of tn(n, '…', '…').
-function messages() {
-  const found = new Set<string>();
-  for (const name of Object.values(GROUP_NAMES)) found.add(name);
-  for (const icon of SKILL_ICONS) found.add(icon.label);
-  const pattern = /\bt\(\s*'((?:[^'\\]|\\.)*)'|\btn\([^,]+,\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'/g;
-  for (const file of fs.readdirSync('src/web')) {
-    if (!/\.tsx?$/.test(file) || file === 'i18n.ts' || file === 'zh-CN.ts') continue;
-    for (const match of fs.readFileSync(`src/web/${file}`, 'utf8').matchAll(pattern)) for (const text of match.slice(1)) if (text !== undefined) found.add(text);
-  }
-  // Built-in skill labels and descriptions arrive as data from the server.
-  for (const file of fs.readdirSync('skills').filter(file => file.endsWith('.md'))) {
-    const skill = parseSkill(fs.readFileSync(`skills/${file}`, 'utf8'), file, 'builtin');
-    if (skill) { found.add(skill.name); found.add(skill.description); }
-  }
-  return found;
-}
-const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
+import generatedZhCN from '../src/web/locales/zh-CN.json';
+import zhHant from '../src/web/locales/zh-Hant.json';
+import { messages, errorMessages } from '../src/web/locales/index.ts';
+import { LANGUAGES } from '../vendor/latex-review/src/locales.ts';
+import { collectCatalog } from '../scripts/i18n/catalog.ts';
+import { placeholders } from '../scripts/i18n/translate.ts';
 
 test('every workspace message has a Simplified Chinese translation with the same placeholders', () => {
-  const all = messages();
+  const all = new Set(collectCatalog(fileURLToPath(new URL('../', import.meta.url))).messages.map(message => message.source));
+  const translations: Record<string, string> = { ...generatedZhCN, ...zhCN };
   assert.ok(all.size > 300);
-  const missing = [...all].filter(text => !(text in zhCN));
+  const missing = [...all].filter(text => !Object.hasOwn(translations, text));
   assert.deepEqual(missing, []);
-  for (const text of all) assert.deepEqual(placeholders(zhCN[text]), placeholders(text), text);
-  const unused = Object.keys(zhCN).filter(text => !all.has(text));
+  for (const text of all) assert.deepEqual(placeholders(translations[text]), placeholders(text), text);
+  const unused = Object.keys(translations).filter(text => !all.has(text));
   assert.deepEqual(unused, [], 'translations no message uses');
 });
 
@@ -43,10 +28,46 @@ test('messages fill placeholders and pick English plurals', () => {
   assert.equal(t('An untranslated message'), 'An untranslated message');
 });
 
+test('every supported language covers the workspace catalog with intact placeholders', () => {
+  const all = collectCatalog(fileURLToPath(new URL('../', import.meta.url))).messages;
+  for (const { id } of LANGUAGES) {
+    if (id === 'en') continue;
+    const translations = messages[id];
+    assert.deepEqual(all.filter(message => !Object.hasOwn(translations, message.source)).map(message => message.source), [], id);
+    for (const message of all) assert.deepEqual(placeholders(translations[message.source]), placeholders(message.source), `${id}: ${message.source}`);
+  }
+});
+
 test('the browser language picks the first one Papilot speaks', () => {
-  assert.equal(browserLanguage(['zh-CN', 'en-US']), 'zh-CN');
-  assert.equal(browserLanguage(['zh-TW']), 'zh-CN');
-  assert.equal(browserLanguage(['ja-JP', 'en-GB', 'zh-CN']), 'en');
-  assert.equal(browserLanguage(['fr-FR']), 'en');
+  assert.equal(browserLanguage(['zh-CN', 'en-US']), 'zh-Hans');
+  assert.equal(browserLanguage(['zh-Hant']), 'zh-Hant');
+  assert.equal(browserLanguage(['zh-Hans']), 'zh-Hans');
+  assert.equal(browserLanguage(['zh_invalid', 'en']), 'en');
+  assert.equal(browserLanguage(['ja-JP', 'en-GB', 'zh-CN']), 'ja');
+  assert.equal(browserLanguage(['fr-FR']), 'fr');
   assert.equal(browserLanguage([]), 'en');
+});
+
+test('all language choices translate settings and product errors and retain an English fallback', () => {
+  try {
+    for (const { id } of LANGUAGES) {
+      setLanguage(id);
+      assert.equal(t('Settings'), id === 'en' ? 'Settings' : messages[id].Settings, id);
+      assert.equal(errorText('Paper name is too long.'), id === 'en' ? 'Paper name is too long.' : errorMessages[id]['Paper name is too long.'], id);
+      assert.equal(t('Unknown text'), 'Unknown text');
+      assert.equal(t('constructor'), 'constructor');
+      assert.equal(locale(), id);
+    }
+  } finally { setLanguage('system'); }
+});
+
+test('Traditional Chinese is used for interface messages, interpolation, dates and known API errors', () => {
+  setLanguage('zh-Hant');
+  try {
+    assert.equal(t('Settings'), zhHant.Settings);
+    assert.equal(t('AI suggestion {n}', { n: 3 }), zhHant['AI suggestion {n}'].replace('{n}', '3'));
+    assert.equal(locale(), 'zh-Hant');
+    assert.notEqual(errorText('Paper name is too long.'), 'Paper name is too long.');
+    assert.equal(errorText('Unknown external diagnostic'), 'Unknown external diagnostic');
+  } finally { setLanguage('system'); }
 });
