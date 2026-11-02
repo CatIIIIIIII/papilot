@@ -473,6 +473,8 @@ export function createServer(app: App) {
 export async function serve(root: string, port = 0, idle = 12 * 3600) {
   root = new Repo(root).toplevel();
   process.chdir(root);
+  // Process lists show this instead of node and its script path.
+  process.title = `Papilot review server ${root}`;
   const home = path.join(new Repo(root).gitDir(), "latex-review/server"),
     release = await acquireLock(path.join(home, "server.lock"), false),
     app = new App(root),
@@ -506,6 +508,13 @@ export async function serve(root: string, port = 0, idle = 12 * 3600) {
     };
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
+    // An owned server stops with the app that started it (see launch in
+    // client.ts), even if a CLI is still waiting on it.
+    if (process.send)
+      process.once("disconnect", () => {
+        shutdown();
+        server.server.closeAllConnections();
+      });
     timer = setInterval(
       () => {
         if (now() - app.activity > idle && !app.publisher.busy()) shutdown();
