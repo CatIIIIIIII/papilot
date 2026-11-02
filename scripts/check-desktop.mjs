@@ -242,7 +242,6 @@ try {
       await expect.poll(() => running(address).catch(() => null), { timeout: 120000, message: 'The app restarts on the downloaded layer' }).toBe(built.version);
       // The page reloads itself on the new version.
       await expect(view.locator('.brand-version').first()).toHaveText(`v${built.version.slice(0, -33)}`, { timeout: 30000 });
-      await view.screenshot({ path: 'test-results/desktop-updated.png' });
       const record = JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/active.json'), 'utf8'));
       assert.equal(record.phase, 'active'); assert.equal(record.installer, version);
       // An AppImage runs from a new mount or extraction on each launch.
