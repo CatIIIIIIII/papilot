@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { run, which } from "./process.ts";
+import { run, startTracked, which } from "./process.ts";
 import { same } from "./files.ts";
 const IDENTITY = {
   GIT_AUTHOR_NAME: "latex-review",
@@ -328,9 +328,9 @@ export class Repo {
     // Keep one Git process and stream each blob to disk. Collecting the entire
     // snapshot with blobs() both duplicates memory and hits spawnSync's buffer
     // limit for ordinary repositories containing PDFs and figures.
-    const child = spawn(gitBinary(), ["cat-file", "--batch"], {
-      cwd: this.root, stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = startTracked(() => spawn(gitBinary(), ["cat-file", "--batch"], {
+      cwd: this.root, detached: true, stdio: ["pipe", "pipe", "pipe"],
+    }));
     let stderr = "", timedOut = false;
     child.stderr.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-65536); });
     child.stdin.on("error", () => { /* Report process failures through finished. */ });

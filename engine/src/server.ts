@@ -470,7 +470,31 @@ export function createServer(app: App) {
   });
   return server;
 }
+interface Owner {
+  left: boolean;
+  stop: () => void;
+}
 export async function serve(root: string, port = 0, idle = 12 * 3600) {
+  // A server started with an IPC channel belongs to the app that started it
+  // (see launch in client.ts) and stops when that app ends, even while it is
+  // still starting. Closing the channel on the way out keeps it from holding
+  // this process open.
+  if (!process.send) return run(root, port, idle);
+  if (!process.connected) return;
+  const owner: Owner = { left: false, stop: () => {} };
+  const left = () => {
+    owner.left = true;
+    owner.stop();
+  };
+  process.once("disconnect", left);
+  try {
+    await run(root, port, idle, owner);
+  } finally {
+    process.off("disconnect", left);
+    if (process.connected) process.disconnect();
+  }
+}
+async function run(root: string, port: number, idle: number, owner?: Owner) {
   root = new Repo(root).toplevel();
   process.chdir(root);
   const home = path.join(new Repo(root).gitDir(), "latex-review/server"),
@@ -506,6 +530,14 @@ export async function serve(root: string, port = 0, idle = 12 * 3600) {
     };
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
+    // Requests still open, such as a CLI waiting on feedback, end with it.
+    if (owner) {
+      owner.stop = () => {
+        shutdown();
+        server.server.closeAllConnections();
+      };
+      if (owner.left) owner.stop();
+    }
     timer = setInterval(
       () => {
         if (now() - app.activity > idle && !app.publisher.busy()) shutdown();

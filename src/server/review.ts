@@ -4,11 +4,15 @@ import { ENGINE } from './paths.ts';
 import type { Task } from '../shared.ts';
 
 export interface ReviewClient { url: string; token: string; get<T = any>(route: string): Promise<T>; post<T = any>(route: string, body?: unknown, timeout?: number): Promise<T> }
-let modulePromise: Promise<{ connect: (root: string, start?: boolean) => Promise<ReviewClient | null> }> | null = null;
+let modulePromise: Promise<{ connect: (root: string, start?: boolean, options?: { owned?: boolean }) => Promise<ReviewClient | null> }> | null = null;
+// The desktop app owns the review servers it starts, so they stop with it,
+// even after a crash. The web server leaves them running to finish builds
+// across a restart.
+const owned = process.env.PAPILOT_DESKTOP === '1';
 export function reviewClient(root: string, reuse = false): Promise<ReviewClient> {
   modulePromise ??= import(pathToFileURL(path.join(ENGINE, 'src/client.ts')).href);
   // Polling an existing job must not replace a healthy server of another version.
-  return modulePromise!.then(async module => (reuse && await module.connect(root, false)) || (await module.connect(root))!);
+  return modulePromise!.then(async module => (reuse && await module.connect(root, false)) || (await module.connect(root, true, { owned }))!);
 }
 export const taskRoute = (name: string) => `/api/tasks/${encodeURIComponent(name)}`;
 export function reviewConnectionError(error: unknown): boolean {

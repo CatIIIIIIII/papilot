@@ -1,6 +1,7 @@
 import {
   spawn,
   spawnSync,
+  type ChildProcess,
   type SpawnSyncOptionsWithBufferEncoding,
 } from "node:child_process";
 export class ProcessError extends Error {
@@ -39,8 +40,22 @@ export function run(
     status: result.status ?? 1,
   };
 }
-const running = new Set<ReturnType<typeof spawn>>();
+const running = new Set<ChildProcess>();
+let stopped = false;
+/** Tracks a child that `start` spawns in its own process group (detached),
+ *  so stopAll() ends it with everything it started. Once the server is
+ *  stopping nothing new starts: a build must not retry or move on to its next
+ *  step after its compiler was stopped. */
+export function startTracked<T extends ChildProcess>(start: () => T): T {
+  if (stopped) throw new ProcessError("The review server is stopping.");
+  const child = start();
+  running.add(child);
+  child.once("close", () => running.delete(child));
+  child.once("error", () => running.delete(child));
+  return child;
+}
 export function stopAll() {
+  stopped = true;
   for (const child of running) {
     try {
       if (child.pid) process.kill(-child.pid, "SIGTERM");
@@ -60,13 +75,14 @@ export function runAsync(
   } = {},
 ) {
   return new Promise<Buffer>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: options.env,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    running.add(child);
+    const child = startTracked(() =>
+      spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    );
     const chunks: Buffer[] = [];
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -85,12 +101,10 @@ export function runAsync(
     child.stderr.on("data", receive);
     child.on("error", (error) => {
       clearTimeout(timer);
-      running.delete(child);
       reject(error);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      running.delete(child);
       const data = Buffer.concat(chunks);
       if (code === 0 && !timedOut) resolve(data);
       else

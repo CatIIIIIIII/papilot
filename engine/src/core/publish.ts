@@ -276,6 +276,10 @@ export class Publisher {
   stop() {
     this.stopping = true;
   }
+  private phase(job: Pick<Job, "id">, phase: string) {
+    if (this.stopping) throw new Error("Server stopped during publication.");
+    this.update(job.id, { phase });
+  }
   async join() {
     await Promise.resolve();
     while (this.running.size || this.pruning)
@@ -313,6 +317,9 @@ export class Publisher {
       }
       this.update(job.id, { status: "done", result, finished: now() });
     } catch (error) {
+      // A build the server stopped stays unfinished: the next server marks it
+      // as interrupted by a restart, and the app builds it again.
+      if (this.stopping) return;
       const result: JobResult =
         error instanceof PublishError
           ? {
@@ -343,7 +350,7 @@ export class Publisher {
         [],
         "Run `finish --force`, then start a new task.",
       );
-    this.update(job.id, { phase: "snapshot" });
+    this.phase(job, "snapshot");
     const after = app.tasks.snapshot(task);
     task = app.tasks.get(name);
     const before = task.accepted,
@@ -384,7 +391,7 @@ export class Publisher {
     const units = diffUnits(app.repo, before, after, (f) =>
       isFigure(project, f),
     );
-    this.update(job.id, { phase: "build" });
+    this.phase(job, "build");
     const builder = new Builder(project, app.repo),
       targets = builder.plan(before, after, files);
     let seed = null,
@@ -417,7 +424,7 @@ export class Publisher {
     }
     if (app.review.lastChange(name) !== decided) throw new Stale();
     const warnings = next.warnings.filter((w) => !old.warnings.includes(w));
-    this.update(job.id, { phase: "render" });
+    this.phase(job, "render");
     const number = (latest?.number ?? 0) + 1,
       rounds = path.join(app.state, "rounds", name),
       final = path.join(rounds, String(number).padStart(3, "0")),

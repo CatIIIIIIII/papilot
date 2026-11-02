@@ -94,7 +94,12 @@ async function waitForExit(url: string, pid: number) {
     "The review server has not stopped yet. Retry after it finishes.",
   );
 }
-async function launch(root: string, port: number): Promise<Client> {
+// A CLI command exits right away, so the server it starts runs on its own.
+// An app owns the server it starts: the server stops when the app's process
+// ends, however it ends, because their IPC channel closes. Either way it
+// gets its own process group, so killing the app's group cannot skip the
+// server's cleanup.
+async function launch(root: string, port: number, owned: boolean): Promise<Client> {
   const home = serverHome(root);
   fs.mkdirSync(home, { recursive: true });
   const log = path.join(home, "server.log");
@@ -114,9 +119,12 @@ async function launch(root: string, port: number): Promise<Client> {
         String(port),
       ],
       {
+        // Process lists show this name instead of node. (process.title would
+        // register the server with macOS as a background app.)
+        argv0: owned ? "Papilot review server" : "latex-review server",
         cwd: ROOT,
         detached: true,
-        stdio: ["ignore", fd, fd],
+        stdio: owned ? ["ignore", fd, fd, "ipc"] : ["ignore", fd, fd],
         env: process.env,
       },
     );
@@ -126,6 +134,7 @@ async function launch(root: string, port: number): Promise<Client> {
     launchError = error;
   });
   child.unref();
+  child.channel?.unref();
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
     if (launchError) throw new ServerError(launchError.message);
@@ -149,10 +158,17 @@ export async function connect(
   root: string,
   start: false,
 ): Promise<Client | null>;
-export async function connect(root: string, start?: true): Promise<Client>;
+export async function connect(
+  root: string,
+  start?: true,
+  options?: { owned?: boolean },
+): Promise<Client>;
+/** With `owned`, a server this call starts stops with the calling process.
+ *  A server that is already running is reused and keeps its own lifetime. */
 export async function connect(
   root: string,
   start = true,
+  { owned = false }: { owned?: boolean } = {},
 ): Promise<Client | null> {
   // Match the canonical repository path reported by the server (e.g. macOS /var).
   root = fs.realpathSync(root);
@@ -199,7 +215,7 @@ export async function connect(
         await waitForExit(info.url, answer.pid);
       }
     }
-    return launch(root, info?.port ?? last?.port ?? 0);
+    return launch(root, info?.port ?? last?.port ?? 0, owned);
   });
 }
 export async function stop(root: string, force = false) {
