@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-02
+
+Papilot 0.8.4 opens folders in the desktop app the way an editor does, starts reviews on the changed sections and keeps the commit step in view.
+
 ### Changed
 
 - **The desktop app opens folders like an editor.** **Open a folder** in the paper menu, or **File › Open Folder…** (⌘O), goes straight to the system folder picker, and the chosen folder opens as a paper. There is no import window to fill in: Papilot detects the main file and engine, prepares Git history when needed, and compiles the PDF in the paper's own view. Only a folder with several possible main files asks which one to compile, and a folder that is already a paper opens again. The desktop app no longer offers ZIP imports or typed folder paths, and **Edit paper** shows the paper's folder, with **Change…** to pick another.
@@ -11,7 +15,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 - **The commit step stays in view.** Once every change is decided, the card with Papilot's next step, such as the commit message and **Commit**, floats at the top of the review while you scroll, instead of a bar that only jumped back to it.
 - **A calmer Updates page in the desktop app.** **Download desktop updates** appears only when a newer desktop release exists, as the main action beside its version. An up-to-date app shows just its status; **Papilot › Download Updates…** in the app menu still opens the releases page.
 
-## [0.8.3] - 2026-11-02 — Separate Desktop and Web Updates
+## [0.8.3] - 2026-11-02
 
 ### Added
 
@@ -229,7 +233,9 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/PapilotAI/papilot/compare/v0.8.3...v0.8.4
+[0.8.3]: https://github.com/PapilotAI/papilot/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/PapilotAI/papilot/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/PapilotAI/papilot/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/PapilotAI/papilot/compare/v0.7.0...v0.8.0
