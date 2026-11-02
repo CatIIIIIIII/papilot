@@ -10,6 +10,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- **A PDF whose word positions fail to load no longer freezes the tab.** Papilot falls back to the PDF's own text once instead of retrying forever, which also blocked reloading while a manuscript or review PDF was still opening.
 - **Come back to where you left off.** Returning to the manuscript from a task, or to a task from anywhere, opens it where you were instead of at the top: the PDF on the same page and spot, the **PDF / Changes** choice, a task's chat scrolled back through its history, the review within its current change and its PDF / Changes view, an AI review's PDF and the reference check. A chat that was following the latest messages keeps following them. Places survive a reload.
 - **Recover PDF comparisons after a lost connection.** Papilot retries brief connection failures, resumes saved builds after a restart, and offers **Check status** when the service remains unavailable. Completed comparisons are recovered without rerunning the agent. Build submissions are deduplicated across retries; a build interrupted by a review-service restart is retried once.
 

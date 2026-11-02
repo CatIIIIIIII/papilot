@@ -68,11 +68,27 @@ function exactText(document: PDFDocumentProxy, source: string) {
   document.getPage = (number: number) => {
     if (!pages.has(number)) pages.set(number, getPage(number).then(page => {
       if (page.rotate % 360 !== 0) return page;
-      const own = page.getTextContent.bind(page);
+      const own = page.streamTextContent.bind(page);
       let exact: Promise<ReturnType<typeof textContent> | null> | null = null;
       const content = () => exact ??= fetch(`${source}&page=${number - 1}`).then(response => response.ok ? response.json() : null).then((data: Words | null) => data ? textContent(data, page.view) : null, () => null);
-      page.getTextContent = (async (params?: Parameters<PDFPageProxy['getTextContent']>[0]) => (await content()) || own(params)) as PDFPageProxy['getTextContent'];
-      page.streamTextContent = ((params?: Parameters<PDFPageProxy['getTextContent']>[0]) => new ReadableStream({ async start(controller) { controller.enqueue((await content()) || await own(params)); controller.close(); } })) as PDFPageProxy['streamTextContent'];
+      // pdf.js's getTextContent reads this stream, so it gets the word places
+      // too. Without them the stream falls back to pdf.js's own stream: its
+      // getTextContent would read this one again, forever, and freeze the tab.
+      page.streamTextContent = ((params?: Parameters<PDFPageProxy['streamTextContent']>[0]) => {
+        let fallback: ReadableStreamDefaultReader | null = null;
+        return new ReadableStream({
+          async pull(controller) {
+            if (!fallback) {
+              const words = await content();
+              if (words) { controller.enqueue(words); controller.close(); return; }
+              fallback = own(params).getReader();
+            }
+            const chunk = await fallback.read();
+            if (chunk.done) controller.close(); else controller.enqueue(chunk.value);
+          },
+          cancel: reason => fallback?.cancel(reason),
+        });
+      }) as PDFPageProxy['streamTextContent'];
       return page;
     }));
     return pages.get(number)!;
