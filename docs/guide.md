@@ -279,7 +279,7 @@ Sessions last 30 days from last use and at most 90 days. Invited people cannot a
 
 ## Updates
 
-**Desktop app:** Settings → Updates checks GitHub Releases for a published installer matching your OS and CPU architecture. Download and install that desktop release to update the app; papers and settings stay in place. npm-only releases and unfinished desktop builds are not desktop updates. The app runs its bundled server and ignores legacy npm update records. Desktop update status is separate, and desktop apps do not offer the web server’s Stable/Dev channel selector. See [Papilot Desktop](../desktop/README.md).
+**Desktop app:** Settings → Updates offers the same **Stable** and **Dev (GitHub main)** channels. Stable follows published releases with an installer for your OS and CPU architecture; Dev follows a nightly build of main. When the new version was built for the installer you have, **Update now** downloads only Papilot's own code (about 5 MB), checks that it starts and restarts when tasks are idle, as the web server does. When it needs a newer Electron, Node, Codex or dependencies, the update links to the installer for your system instead. Papers and settings stay in place either way, and desktop update status is separate from the web server's. See [Papilot Desktop](../desktop/README.md).
 
 **Web server (npm or source checkout):** The owner sees a **New version** badge beside **Settings** when npm has a newer stable Papilot release. Papilot checks at startup and every six hours. Click the badge, then **Update to …**; the panel shows installation, waiting, restart and failure states. Collaborators cannot update the host.
 

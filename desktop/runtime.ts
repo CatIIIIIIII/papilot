@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 export function backendEnvironment(node: string, root: string, data: string, inherited = process.env) {
@@ -18,7 +19,8 @@ export function backendEnvironment(node: string, root: string, data: string, inh
     NODE_ENV: 'production', PAPILOT_DESKTOP: '1', PAPILOT_DATA: data, PAPILOT_PORT: '0',
     PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_TAILSCALE_LOGIN: '' };
   // The backend is ordinary Node, even when Electron itself was started by a tool.
-  for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'PAPILOT_REVIEW_ENGINE', 'PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX']) delete (env as NodeJS.ProcessEnv)[key];
+  for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'PAPILOT_REVIEW_ENGINE', 'PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX',
+    'PAPILOT_DESKTOP_BUNDLE', 'PAPILOT_DESKTOP_FINGERPRINT']) delete (env as NodeJS.ProcessEnv)[key];
   return env;
 }
 
@@ -60,4 +62,116 @@ export function startBackend(options: { node: string; root: string; data: string
     });
   }
   return { child, ready, stop };
+}
+
+// Updates download only Papilot's own code (a layer, see scripts/desktop-layer.mjs)
+// into the data directory. A layer runs on this installer's Node and
+// dependencies when it was built for the same shell fingerprint; installing
+// another app version retires it.
+export interface Bundle { root: string; version: string; fingerprint: string }
+type Json = Record<string, any> | null;
+const readJson = (file: string): Json => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+function writeJson(file: string, value: unknown) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = file + '.' + process.pid + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify(value), { mode: 0o600 });
+  fs.renameSync(temporary, file);
+}
+export const layerFiles = (data: string) => {
+  const folder = path.join(data, 'updates/desktop');
+  return { folder, layers: path.join(folder, 'layers'), active: path.join(folder, 'active.json'), status: path.join(folder, 'status.json'), lock: path.join(folder, 'install.lock') };
+};
+// The bundle can move between launches (an AppImage mounts at a new path), so
+// links to its dependencies are renewed before each start.
+export function linkBundle(root: string, bundle: string) {
+  for (const folder of ['node_modules', 'engine/node_modules']) {
+    const target = path.join(bundle, folder), link = path.join(root, folder);
+    if (!fs.existsSync(target) || !fs.existsSync(path.dirname(link))) continue;
+    try { if (fs.readlinkSync(link) === target) continue; } catch { /* absent or not a link */ }
+    fs.rmSync(link, { recursive: true, force: true });
+    fs.symlinkSync(target, link, 'dir');
+  }
+}
+// A layer this installer can run, downloaded by the updater.
+export function layer(data: string, bundle: Bundle, root: unknown, version: unknown) {
+  if (!bundle.fingerprint || typeof root !== 'string' || typeof version !== 'string') return null;
+  try { if (!fs.realpathSync(root).startsWith(fs.realpathSync(layerFiles(data).layers) + path.sep)) return null; } catch { return null; }
+  const pkg = readJson(path.join(root, 'package.json')), shell = readJson(path.join(root, 'desktop-layer.json'));
+  if (pkg?.name !== 'papilot' || pkg.version !== version || shell?.version !== version || shell.fingerprint !== bundle.fingerprint || !fs.existsSync(path.join(root, 'src/server/start.ts'))) return null;
+  return { root, version };
+}
+export function activeLayer(data: string, bundle: Bundle) {
+  const active = readJson(layerFiles(data).active);
+  return active?.phase === 'active' && active.installer === bundle.version ? layer(data, bundle, active.root, active.version) : null;
+}
+export function removeLayers(data: string, keep?: string) {
+  const { layers } = layerFiles(data);
+  let entries: string[] = [], kept = '';
+  try { entries = fs.readdirSync(layers); } catch { return; }
+  try { if (keep) kept = path.relative(fs.realpathSync(layers), fs.realpathSync(keep)).split(path.sep)[0]; } catch { /* keep nothing */ }
+  for (const entry of entries) if (entry !== kept) fs.rmSync(path.join(layers, entry), { recursive: true, force: true });
+}
+export const STARTUP_FAILED = 'The updated version did not start, so Papilot is using the version included with the app. Retry the update or download the latest desktop app.';
+// Starts the active layer, or the bundled server when there is none or it
+// fails. Returns the root that is running.
+export async function startServer(data: string, bundle: Bundle, launch: (root: string) => Promise<void>) {
+  // The development app shares the data directory; leave its updates alone.
+  if (!bundle.fingerprint) { await launch(bundle.root); return bundle.root; }
+  const { active, status } = layerFiles(data), chosen = activeLayer(data, bundle);
+  removeLayers(data, chosen?.root);
+  if (!chosen) { fs.rmSync(active, { force: true }); await launch(bundle.root); return bundle.root; }
+  try { linkBundle(chosen.root, bundle.root); await launch(chosen.root); return chosen.root; }
+  catch (error) {
+    console.error(`Papilot ${chosen.version} did not start:`, error);
+    fs.rmSync(active, { force: true });
+    writeJson(status, { ...readJson(status), phase: 'failed', checkedAt: Date.now(), error: STARTUP_FAILED, pid: process.pid });
+    await launch(bundle.root);
+    return bundle.root;
+  }
+}
+// Replaces the running backend with a downloaded layer, or with the bundled
+// server when the chosen version is the installer's own, once the backend has
+// finished its work. If it does not start, the database and the previous
+// version are restored. Returns the root that is running.
+export async function switchServer(data: string, bundle: Bundle, request: unknown, current: string, stop: () => Promise<void>, launch: (root: string) => Promise<void>) {
+  const paths = layerFiles(data), status = readJson(paths.status) || {};
+  const value = request && typeof request === 'object' ? request as Record<string, unknown> : {};
+  const target = value.root === bundle.root && value.version === bundle.version ? { root: bundle.root, version: bundle.version } : layer(data, bundle, value.root, value.version);
+  if (!target) {
+    writeJson(paths.status, { ...status, phase: 'failed', checkedAt: Date.now(), error: 'Invalid update activation.', pid: process.pid });
+    fs.rmSync(paths.lock, { force: true });
+    return current;
+  }
+  const previous = readJson(paths.active), database = path.join(data, 'papilot.sqlite'), backup = path.join(paths.folder, 'before-update.sqlite');
+  let backedUp = false;
+  try {
+    await stop();
+    if (fs.existsSync(database)) {
+      fs.copyFileSync(database, backup); backedUp = true;
+      // A forced shutdown may leave committed pages in the WAL.
+      if (fs.existsSync(database + '-wal')) fs.copyFileSync(database + '-wal', backup + '-wal');
+      else fs.rmSync(backup + '-wal', { force: true });
+    }
+    writeJson(paths.status, { ...status, phase: 'restarting', pid: process.pid });
+    const record = { root: target.root, version: target.version, installer: bundle.version, id: randomUUID() };
+    if (target.root === bundle.root) fs.rmSync(paths.active, { force: true });
+    else { linkBundle(target.root, bundle.root); writeJson(paths.active, { ...record, phase: 'starting' }); }
+    try {
+      await launch(target.root);
+      if (target.root !== bundle.root) writeJson(paths.active, { ...record, phase: 'active' });
+      writeJson(paths.status, { ...status, phase: 'updated', currentVersion: target.version, error: null, pid: process.pid });
+      removeLayers(data, target.root === bundle.root ? undefined : target.root);
+      return target.root;
+    } catch (error) {
+      if (previous) writeJson(paths.active, previous); else fs.rmSync(paths.active, { force: true });
+      if (backedUp) {
+        for (const suffix of ['-wal', '-shm']) fs.rmSync(database + suffix, { force: true });
+        fs.copyFileSync(backup, database);
+        if (fs.existsSync(backup + '-wal')) fs.copyFileSync(backup + '-wal', database + '-wal');
+      }
+      writeJson(paths.status, { ...status, phase: 'failed', checkedAt: Date.now(), error: `${error instanceof Error ? error.message : 'The update failed.'} The previous version has been restored.`, pid: process.pid });
+      await launch(current);
+      return current;
+    }
+  } finally { fs.rmSync(paths.lock, { force: true }); }
 }

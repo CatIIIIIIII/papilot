@@ -3,24 +3,52 @@ name: Desktop
 on:
   workflow_dispatch:
   workflow_call:
+  # The desktop Dev channel: a nightly build of main (03:00 in UTC+8), or one
+  # started with Run workflow on main.
+  schedule:
+    - cron: '0 19 * * *'
   push:
     branches: [main, codex/electron-desktop]
-    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'bin/**', 'skills/**', 'package*.json', '.github/workflows/desktop.yml']
   pull_request:
-    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'bin/**', 'skills/**', 'package*.json', '.github/workflows/desktop.yml']
 
 permissions:
   contents: read
 
+# A push to main does not cancel the nightly dev build.
 concurrency:
-  group: desktop-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  group: desktop-${{ github.ref }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'dev' || 'ci' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
 
 jobs:
+  # A nightly run without new commits on main has nothing to publish.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          published=$(gh release download desktop-dev --repo "$GITHUB_REPOSITORY" --pattern desktop.json --output - 2>/dev/null | jq -r '.version // empty' || true)
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "${published##*-dev.}" = "$GITHUB_SHA" ]; then
+            echo "desktop-dev already has $published."
+            echo build=false >> "$GITHUB_OUTPUT"
+          else
+            echo build=true >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: ${{ matrix.platform }} ${{ matrix.arch }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # Dev builds: their server and update layer report the commit.
+      PAPILOT_DESKTOP_REVISION: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.sha || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +88,9 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run desktop:build
+      # Papilot's own code for in-place updates of installers with the same shell.
+      - name: Build the update layer
+        run: node scripts/desktop.mjs layer
       - name: Launch the packaged app and check its backend
         if: runner.os == 'macOS'
         env:
@@ -79,6 +110,16 @@ jobs:
             release/desktop/*.deb
           if-no-files-found: error
           retention-days: 7
+      - name: Save the update layer
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Papilot-app
+          path: |
+            release/desktop/papilot-app-*.tgz
+            release/desktop/desktop.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Save desktop screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,3 +128,27 @@ jobs:
           path: test-results/desktop*.png
           if-no-files-found: ignore
           retention-days: 7
+
+  # The tested nightly build updates the rolling desktop-dev prerelease that
+  # desktop apps on the Dev channel check.
+  publish-dev:
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-dev-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download the tested installers and update layer
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Papilot-*
+          merge-multiple: true
+          path: release/desktop
+      - name: Publish the dev build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-desktop-dev.mjs release/desktop

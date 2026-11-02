@@ -16,8 +16,10 @@ concurrency:
 
 jobs:
   desktop:
+    # The reusable workflow's dev publishing job (skipped for tags) declares
+    # contents: write; its build jobs keep read-only tokens.
     permissions:
-      contents: read
+      contents: write
     uses: ./.github/workflows/desktop.yml
     secrets: inherit
 
@@ -67,12 +69,14 @@ jobs:
           pattern: Papilot-*
           merge-multiple: true
           path: release/desktop
-      - name: Require every tested desktop installer
+      - name: Require every tested desktop installer and the update layer
         run: |
           version="${GITHUB_REF_NAME#v}"
           for suffix in mac-arm64.dmg mac-arm64.zip mac-x64.dmg mac-x64.zip linux-x86_64.AppImage linux-amd64.deb; do
             test -s "release/desktop/Papilot-$version-$suffix"
           done
+          test -s "release/desktop/papilot-app-$version.tgz"
+          test "$(node -p 'require("./release/desktop/desktop.json").version')" = "$version"
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@11
       # A rerun after a later step failed finds the version already published.
@@ -99,4 +103,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
+          # The layer and its manifest go first, so apps that see the new
+          # installers can already update in place.
+          gh release upload "$GITHUB_REF_NAME" release/desktop/papilot-app-*.tgz release/desktop/desktop.json --clobber
           gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb --clobber

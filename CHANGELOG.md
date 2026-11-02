@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **Dev channel and small in-place updates in the desktop app.** Settings → Updates in the desktop app now offers **Stable** and **Dev (GitHub main)**, like the web server. When a new version was built for the installer you have, **Update now** downloads only Papilot's own code, about 5 MB instead of a 330 MB installer, checks that it starts, and restarts when tasks and PDF builds are idle; if it does not start, the previous version and database are restored. A version that needs a newer Electron, Node, Codex or dependencies links to its installer. A nightly build of main is published to the `desktop-dev` prerelease when main has changed, with new installers only when the app shell changed.
+
 ### Fixed
 
 - **Come back to where you left off.** Returning to the manuscript from a task, or to a task from anywhere, opens it where you were instead of at the top: the PDF on the same page and spot, the **PDF / Changes** choice, a task's chat scrolled back through its history, the review within its current change and its PDF / Changes view, an AI review's PDF and the reference check. A chat that was following the latest messages keeps following them. Places survive a reload.

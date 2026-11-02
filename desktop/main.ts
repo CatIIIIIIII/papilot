@@ -2,14 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'elect
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { backendEnvironment, startBackend } from './runtime.js';
+import { backendEnvironment, startBackend, startServer, switchServer, type Bundle } from './runtime.js';
 
 const releases = 'https://github.com/PapilotAI/papilot/releases';
 app.setName('Papilot');
 if (process.env.PAPILOT_DESKTOP_DATA) app.setPath('userData', path.resolve(process.env.PAPILOT_DESKTOP_DATA));
 let window: BrowserWindow | null = null;
 let backend: ReturnType<typeof startBackend> | undefined;
-let quitting = false, stopped = false, origin = '';
+let quitting = false, stopped = false, switching = false, origin = '';
 function external(url: string) {
   try { if (['https:', 'http:'].includes(new URL(url).protocol)) void shell.openExternal(url); } catch { /* invalid link */ }
 }
@@ -73,6 +73,10 @@ else {
     const node = app.isPackaged ? path.join(process.resourcesPath, 'runtime/bin/node') : process.env.PAPILOT_DESKTOP_NODE;
     if (!node) throw new Error('Use npm run desktop to start the development app.');
     const data = app.getPath('userData'), log = path.join(app.getPath('logs'), 'backend.log');
+    const read = (file: string) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+    // Only packaged apps know their shell and install update layers.
+    const bundle: Bundle = { root, version: read(path.join(root, 'package.json'))?.version || '',
+      fingerprint: app.isPackaged ? String(read(path.join(app.getAppPath(), 'package.json'))?.desktopFingerprint || '') : '' };
     // A stable localhost origin preserves renderer drafts and preferences.
     const portFile = path.join(data, 'desktop-port.json');
     let port = 0;
@@ -94,6 +98,7 @@ else {
       env.NO_PROXY = [env.NO_PROXY || env.no_proxy, 'localhost', '127.0.0.1', '::1'].filter(Boolean).join(',');
       // Node's fetch and SDK HTTP clients can use the system proxy as well.
       env.NODE_USE_ENV_PROXY = '1';
+      if (bundle.fingerprint) { env.PAPILOT_DESKTOP_BUNDLE = root; env.PAPILOT_DESKTOP_FINGERPRINT = bundle.fingerprint; }
       return env;
     };
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -103,6 +108,7 @@ else {
       { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
       { role: 'help', submenu: [{ label: 'Papilot Guide', click: () => external('https://github.com/PapilotAI/papilot#readme') }, { label: 'Show Logs', click: () => shell.showItemInFolder(log) }] },
     ]));
+    let server = root;
     const fatal = (message: string) => { dialog.showErrorBox('Papilot stopped', `${message}\n\nLog: ${log}`); app.quit(); };
     // Starts a backend and resolves once it serves requests. The window follows
     // it if an occupied port moved it to a new origin.
@@ -111,13 +117,21 @@ else {
       backend = next;
       let url: string;
       try { url = await next.ready; } catch (error) { await next.stop(); throw error; }
-      next.child.once('exit', () => { if (!quitting && backend === next) fatal('The local server stopped unexpectedly. Reopen Papilot to continue.'); });
+      next.child.once('exit', () => { if (!quitting && !switching && backend === next) fatal('The local server stopped unexpectedly. Reopen Papilot to continue.'); });
+      // The backend asks for the switch once its update is ready and idle.
+      next.child.on('message', message => {
+        if (backend !== next || switching || quitting || (message as { type?: unknown } | null)?.type !== 'papilot:activate') return;
+        switching = true;
+        void switchServer(data, bundle, message, server, () => next.stop(), launch).then(running => { server = running; })
+          .catch(error => fatal(`Papilot could not restart after the update: ${error instanceof Error ? error.message : error}`))
+          .finally(() => { switching = false; });
+      });
       port = Number(new URL(url).port);
       fs.writeFileSync(portFile, JSON.stringify(port), { mode: 0o600 });
       if (url !== origin) { const moved = Boolean(origin); origin = url; if (moved) void window?.loadURL(origin); }
     };
-    // Desktop always runs its bundled server, ignoring legacy npm activations.
-    await launch(root);
+    // Legacy npm activations (updates/active.json) are never used.
+    server = await startServer(data, bundle, launch);
     showWindow();
   }).catch(error => {
     dialog.showErrorBox('Could not start Papilot', `${error instanceof Error ? error.message : error}\n\nSee backend.log in ${app.getPath('logs')}.`);

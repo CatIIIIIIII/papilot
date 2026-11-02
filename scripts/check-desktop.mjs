@@ -5,6 +5,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
+import http from 'node:http';
+import { buildLayer } from './desktop-layer.mjs';
 import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 const require = createRequire(import.meta.url);
@@ -13,7 +15,9 @@ const env = { ...process.env, PAPILOT_DESKTOP_DATA: data, PAPILOT_DESKTOP_NODE: 
 delete env.ELECTRON_RUN_AS_NODE;
 const packaged = process.env.PAPILOT_DESKTOP_EXECUTABLE;
 const resources = packaged && (process.env.PAPILOT_DESKTOP_RESOURCES || path.resolve(path.dirname(packaged), process.platform === 'darwin' ? '../Resources' : 'resources'));
-const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+const base = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+// A nightly dev build bundles a dev version.
+const version = packaged ? JSON.parse(fs.readFileSync(path.join(resources, 'server/package.json'), 'utf8')).version : base;
 if (packaged) {
   // Exercise the bundled tools with no development Node on PATH.
   env.PATH = '/usr/bin:/bin';
@@ -70,9 +74,9 @@ try {
   assert.ok(fs.existsSync(path.join(data, 'papilot.sqlite')), 'The bundled Node runtime can open SQLite');
   const rejected = await fetch(`${origin}/api/state`, { headers: { Origin: 'https://example.com' } });
   assert.equal(rejected.status, 403, 'The ephemeral port still enforces origin checks');
-  // Both packaged and development desktop apps use installer downloads.
+  // Packaged apps update in place on a channel; the development app runs its checkout.
   const status = await (await fetch(`${origin}/api/updates`)).json();
-  assert.deepEqual([status.canUpdate, status.downloadUrl], [false, 'https://github.com/PapilotAI/papilot/releases']);
+  assert.deepEqual([status.canUpdate, status.downloadUrl, status.channel], packaged ? [true, undefined, /-dev\./.test(version) ? 'dev' : 'stable'] : [false, 'https://github.com/PapilotAI/papilot/releases', undefined]);
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   const windowOptions = await application.evaluate(({ BrowserWindow }) => {
     const preferences = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();
@@ -147,9 +151,10 @@ try {
   await settings.click();
   await page.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
   await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();
+  await expect(page.locator('.update-current-version')).toBeVisible();
   // A download appears only with a newer release; the app menu keeps the releases page.
   assert.equal(await page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ }).count(), 0);
-  assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), 0);
+  assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), packaged ? 1 : 0);
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-${packaged ? 'packaged' : 'dev'}.png` });
   assert.deepEqual(errors, []);
@@ -196,9 +201,70 @@ try {
     const run = await opened();
     assert.equal(run.health.version, version, 'The app always runs its bundled server');
     assert.equal(run.status.currentVersion, version);
-    assert.equal(run.status.canUpdate, false);
+    assert.equal(run.status.canUpdate, Boolean(packaged));
     assert.equal(fs.existsSync(active), true, 'Legacy records are ignored without deleting shared data');
     await application.close(); application = null;
+  }
+  // Linux runs this once, on the AppImage, whose path changes at every launch.
+  if (packaged && process.env.PAPILOT_DESKTOP_UPDATE_CHECK !== '0') {
+    // A newer dev build for this installer's shell installs in place: only
+    // Papilot's own code is downloaded, from a local stand-in for GitHub.
+    const output = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-layer-'));
+    const built = buildLayer(process.cwd(), output, 'b'.repeat(40));
+    const files = Object.fromEntries(['desktop.json', built.layer.name].map(name => [name, fs.readFileSync(path.join(output, name))]));
+    let source = '';
+    const github = http.createServer((request, response) => {
+      const route = new URL(request.url, 'http://localhost').pathname, send = value => response.end(JSON.stringify(value));
+      if (route === '/repos/PapilotAI/papilot/releases/tags/desktop-dev') return send({ tag_name: 'desktop-dev', draft: false, prerelease: true,
+        assets: Object.entries(files).map(([name, bytes]) => ({ name, state: 'uploaded', size: bytes.length, browser_download_url: `${source}/download/${name}` })) });
+      if (route === '/repos/PapilotAI/papilot/releases') return send([]);
+      const file = files[route.replace(/^\/download\//, '')];
+      if (file) response.end(file); else response.writeHead(404).end();
+    });
+    await new Promise(resolve => github.listen(0, '127.0.0.1', resolve));
+    source = `http://127.0.0.1:${github.address().port}`;
+    env.PAPILOT_DESKTOP_UPDATE_SOURCE = source;
+    const opened = async () => {
+      application = await launch();
+      const view = await application.firstWindow({ timeout: 90000 });
+      await view.waitForURL('http://127.0.0.1:*/');
+      return { view, address: new URL(view.url()).origin };
+    };
+    const running = async address => (await (await fetch(`${address}/api/health`)).json()).version;
+    try {
+      const { view, address } = await opened();
+      await view.getByRole('button', { name: /^(Settings|设置)$/ }).click();
+      await view.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
+      const channel = view.getByRole('combobox', { name: /Update channel|更新通道/ });
+      if (await channel.inputValue() === 'dev') await view.getByRole('button', { name: /^(Check for updates|检查更新)$/ }).click();
+      else await channel.selectOption('dev');
+      await view.getByRole('button', { name: /^(Update now|立即更新)$/ }).click();
+      await expect.poll(() => running(address).catch(() => null), { timeout: 120000, message: 'The app restarts on the downloaded layer' }).toBe(built.version);
+      // The page reloads itself on the new version.
+      await expect(view.locator('.brand-version').first()).toHaveText(`v${built.version.slice(0, -33)}`, { timeout: 30000 });
+      await view.screenshot({ path: 'test-results/desktop-updated.png' });
+      const record = JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/active.json'), 'utf8'));
+      assert.equal(record.phase, 'active'); assert.equal(record.installer, version);
+      // An AppImage runs from a new mount or extraction on each launch.
+      assert.ok(fs.readlinkSync(path.join(record.root, 'node_modules')).endsWith(`${path.sep}server${path.sep}node_modules`), 'The layer runs on the installer dependencies');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/channel.json'), 'utf8')).channel, 'dev');
+      await application.close(); application = null;
+      const reopened = await opened();
+      assert.equal(await running(reopened.address), built.version, 'The update survives a restart');
+      await application.close(); application = null;
+      // A layer that no longer starts falls back to the installer's own server.
+      fs.writeFileSync(path.join(record.root, 'src/server/start.ts'), 'process.exit(3);\n');
+      const fallback = await opened();
+      assert.equal(await running(fallback.address), version);
+      const after = await (await fetch(`${fallback.address}/api/updates`)).json();
+      assert.equal(after.phase, 'failed'); assert.match(after.error, /did not start/);
+      assert.equal(fs.existsSync(path.join(data, 'updates/desktop/active.json')), false);
+      await application.close(); application = null;
+    } finally {
+      delete env.PAPILOT_DESKTOP_UPDATE_SOURCE;
+      await new Promise(resolve => github.close(resolve));
+      fs.rmSync(output, { recursive: true, force: true });
+    }
   }
   console.log(`Desktop smoke passed (${packaged ? 'packaged app' : 'development'}, ${health.version}).`);
 } finally {

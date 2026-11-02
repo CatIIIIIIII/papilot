@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync, spawn } from 'node:child_process';
+import { buildLayer, desktopVersion, shellFingerprint } from './desktop-layer.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 process.chdir(root);
@@ -14,12 +15,20 @@ const run = (command, args, cwd = root) => {
   if (result.status !== 0) throw new Error(`${path.basename(command)} exited with ${result.status ?? result.signal}`);
 };
 const runNpm = (args, cwd = root) => run(process.execPath, [npm, ...args], cwd);
-fs.mkdirSync('.desktop/app', { recursive: true });
-fs.writeFileSync('.desktop/app/package.json', JSON.stringify({ name: 'papilot-desktop', productName: 'Papilot', version: pkg.version,
-  description: pkg.description, author: pkg.author, homepage: pkg.homepage, license: pkg.license,
-  desktopName: 'ai.papilot.desktop.desktop', desktopShell: pkg.desktopShell, type: 'module', main: 'main.js' }, null, 2) + '\n');
+// Only packaged apps record their shell, so only they install update layers;
+// the development app always runs this checkout.
+const writeApp = (fingerprint) => {
+  fs.mkdirSync('.desktop/app', { recursive: true });
+  fs.writeFileSync('.desktop/app/package.json', JSON.stringify({ name: 'papilot-desktop', productName: 'Papilot', version: pkg.version,
+    description: pkg.description, author: pkg.author, homepage: pkg.homepage, license: pkg.license,
+    desktopName: 'ai.papilot.desktop.desktop', desktopShell: pkg.desktopShell, ...(fingerprint ? { desktopFingerprint: fingerprint } : {}), type: 'module', main: 'main.js' }, null, 2) + '\n');
+};
 
-if (process.argv[2] === 'dev') {
+if (process.argv[2] === 'layer') {
+  const release = buildLayer(root);
+  console.log(`Built ${release.layer.name} (${(release.layer.size / 1048576).toFixed(1)} MB) for shell ${release.fingerprint.slice(0, 12)}.`);
+} else if (process.argv[2] === 'dev') {
+  writeApp();
   if (!fs.existsSync('engine/dist/web/index.html')) runNpm(['run', 'setup:review']);
   const env = { ...process.env, PAPILOT_DESKTOP_NODE: process.execPath };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -28,6 +37,7 @@ if (process.argv[2] === 'dev') {
   child.on('exit', code => process.exit(code ?? 1));
 } else if (process.argv[2] === 'package') {
   if (!['darwin', 'linux'].includes(process.platform)) throw new Error('Desktop packaging currently supports macOS and Linux. Build on the target OS and CPU architecture.');
+  writeApp(shellFingerprint(root));
   // Absent Actions secrets arrive as empty strings. electron-builder treats an
   // empty CSC_LINK as a certificate path, so omit unset signing credentials.
   for (const key of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'CSC_NAME', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
@@ -58,6 +68,8 @@ if (process.argv[2] === 'dev') {
   fs.rmSync(archive);
   fs.copyFileSync('package-lock.json', '.desktop/server/package-lock.json');
   const serverPackage = JSON.parse(fs.readFileSync('.desktop/server/package.json', 'utf8'));
+  // A main build reports the same dev version as its update layer.
+  serverPackage.version = desktopVersion(pkg.version);
   // The CLI installs this tested Codex on first run; desktop carries it so
   // opening the app for the first time works without an npm download.
   serverPackage.dependencies['@openai/codex'] = pkg.devDependencies['@openai/codex'];
@@ -67,4 +79,4 @@ if (process.argv[2] === 'dev') {
   runNpm(['ci', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server/engine'));
   run(process.execPath, [require.resolve('electron-builder/cli.js'), '--config', 'desktop/builder.cjs',
     process.platform === 'darwin' ? '--mac' : '--linux', `--${process.arch}`, '--publish', 'never', ...process.argv.slice(3)]);
-} else throw new Error('Expected dev or package.');
+} else throw new Error('Expected dev, package or layer.');

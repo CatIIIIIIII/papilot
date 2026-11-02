@@ -125,10 +125,19 @@ try {
   assert.ok((await dialog.boundingBox()).width <= 320);
   await page.screenshot({ path: 'test-results/update-dialog-mobile.png', animations: 'disabled' });
   await dialog.getByRole('button', { name: '稍后', exact: true }).click();
-  // Desktop updates check independently and always link to a complete installer.
+  // The development desktop app has no channel and links to installers.
   await page.setViewportSize({ width: 1440, height: 900 });
   state.version = '0.8.0';
-  update = { currentVersion: '0.8.0', latestVersion: '0.8.0', phase: 'idle', checkedAt: Date.now(), error: null, canUpdate: false, channel: 'stable', downloadUrl: 'https://github.com/PapilotAI/papilot/releases/tag/v0.8.0' };
+  update = { currentVersion: '0.8.0', latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: false, downloadUrl: 'https://github.com/PapilotAI/papilot/releases' };
+  await page.reload();
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '版本更新', exact: true }).click();
+  await expect(settingsDialog.getByRole('button', { name: '检查更新', exact: true })).toBeVisible();
+  assert.equal(await channel.count(), 0, 'The development desktop app runs its checkout');
+  assert.equal(await settingsDialog.getByText(/npm/).count(), 0);
+  await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  // Packaged desktop apps choose Stable or Dev and update in place.
+  update = { currentVersion: '0.8.0', latestVersion: '0.8.0', phase: 'idle', checkedAt: Date.now(), error: null, canUpdate: true, channel: 'stable' };
   await page.reload();
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '版本更新', exact: true }).click();
@@ -140,11 +149,12 @@ try {
   await settingsDialog.getByRole('button', { name: '检查更新', exact: true }).click();
   await expect(settingsDialog.getByRole('alert')).toContainText('检查网络连接');
   update.error = null;
-  assert.equal(await channel.count(), 0, 'Desktop apps have no development channel');
+  await expect(channel).toHaveValue('stable');
   await settingsDialog.screenshot({ path: 'test-results/desktop-updates.png' });
   await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
   const downloadUrl = 'https://github.com/PapilotAI/papilot/releases/tag/v0.9.0';
-  update = { ...update, latestVersion: '0.9.0', phase: 'available', canUpdate: false, downloadUrl };
+  // A release built for another installer shell links to that installer.
+  update = { ...update, latestVersion: '0.9.0', phase: 'available', downloadUrl };
   await page.reload(); await badge.waitFor(); await badge.click(); await dialog.waitFor();
   await expect(dialog.getByRole('link', { name: '下载桌面版更新', exact: true })).toHaveAttribute('href', downloadUrl);
   await expect(dialog.getByText('从 GitHub Releases 下载适合当前系统的最新桌面版。论文和设置会保留。', { exact: true })).toBeVisible();
@@ -155,6 +165,8 @@ try {
   await page.getByRole('button', { name: '版本更新', exact: true }).click();
   await expect(settingsDialog.getByRole('link', { name: '下载桌面版更新', exact: true })).toBeVisible();
   await expect(settingsDialog.locator('#update-latest-version')).toContainText('0.9.0');
+  await expect(channel).toBeVisible();
+  assert.equal(await settingsDialog.getByRole('button', { name: '立即更新', exact: true }).count(), 0, 'An installer download is not an in-place update');
   await settingsDialog.screenshot({ path: 'test-results/desktop-installer-settings.png' });
   await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
   state.version = devVersion; await page.setViewportSize({ width: 320, height: 640 });
@@ -167,5 +179,5 @@ try {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: '版本更新', exact: true }).count(), 0, 'Collaborators cannot change channels');
   assert.deepEqual(errors, []);
-  console.log('PASS: Update discovery, compact badge, confirmation, progress, retry, automatic reconnect/reload, dark/mobile layout, desktop release isolation and owner-only UI');
+  console.log('PASS: Update discovery, compact badge, confirmation, progress, retry, automatic reconnect/reload, dark/mobile layout, desktop channels and installer links, and owner-only UI');
 } finally { await browser.close(); await server.close(); }

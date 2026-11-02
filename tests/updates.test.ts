@@ -6,8 +6,9 @@ import os from 'node:os';
 import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 import { activeInstallation, devRevision, newerVersion, readJson, releaseVersion, stableVersion, writeJson } from '../bin/installation.mjs';
-import { DESKTOP_RELEASES, latestDesktopRelease, latestRelease, Updates } from '../src/server/updates.ts';
-import { DEV_REPOSITORY, health, installRelease, loaderFor, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
+import { DESKTOP_DEV_TAG, DESKTOP_RELEASES, latestDesktopRelease, latestRelease, Updates } from '../src/server/updates.ts';
+import { DEV_REPOSITORY, download, health, installLayer, installRelease, loaderFor, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
+import { createHash } from 'node:crypto';
 import { restartRelease } from '../src/server/update-worker.ts';
 
 const temporary = () => fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-update-test-'));
@@ -43,7 +44,7 @@ test('desktop discovery requires a published installer for this OS and architect
   await assert.rejects(latestDesktopRelease('darwin', 'arm64', async () => new Response('', { status: 503 })), /Could not check/);
   assert.ok(urls.every(url => url === 'https://api.github.com/repos/PapilotAI/papilot/releases?per_page=100'));
 });
-test('desktop checks use their own source and state, and never install npm or dev releases', async () => {
+test('the development desktop app checks its own source and only links to installers', async () => {
   const data = temporary(), downloadUrl = `${DESKTOP_RELEASES}/tag/v0.7.0`;
   const saved = { currentVersion: devVersion, latestVersion: devVersion, phase: 'restarting', pid: process.pid };
   writeJson(path.join(data, 'updates/status.json'), saved);
@@ -57,7 +58,7 @@ test('desktop checks use their own source and state, and never install npm or de
     assert.equal(f.updates.snapshot().phase, 'idle');
     let status = await f.updates.check();
     assert.equal(status.downloadUrl, downloadUrl); assert.equal(status.phase, 'available');
-    assert.equal(status.canUpdate, false); assert.equal(status.channel, 'stable');
+    assert.equal(status.canUpdate, false); assert.equal(status.channel, undefined);
     assert.throws(() => f.updates.setChannel('dev'), /desktop updates/);
     assert.throws(() => f.updates.install('0.7.0'), /desktop updates/);
     assert.throws(() => f.updates.install(devVersion), /desktop updates/);
@@ -73,6 +74,152 @@ test('desktop checks use their own source and state, and never install npm or de
     found = null; status = await f.updates.check();
     assert.equal(status.latestVersion, null); assert.equal(status.downloadUrl, DESKTOP_RELEASES);
   } finally { f.close(); fs.rmSync(data, { recursive: true, force: true }); }
+});
+const fingerprint = 'f'.repeat(64), sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+// GitHub's API lists the assets; their download URLs redirect to its download host.
+function githubFixture(releases: any[], files: Record<string, Buffer | string>) {
+  const requests: string[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input); requests.push(url);
+    if (url === 'https://api.github.com/repos/PapilotAI/papilot/releases?per_page=100') return new Response(JSON.stringify(releases.filter(release => !release.prerelease)));
+    if (url === `https://api.github.com/repos/PapilotAI/papilot/releases/tags/${DESKTOP_DEV_TAG}`) {
+      const dev = releases.find(release => release.tag_name === DESKTOP_DEV_TAG);
+      return dev ? new Response(JSON.stringify(dev)) : new Response('{"message":"Not Found"}', { status: 404 });
+    }
+    const download = /^https:\/\/github\.com\/PapilotAI\/papilot\/releases\/download\/(.+)$/.exec(url);
+    if (download) { assert.equal(init?.redirect, 'manual'); return new Response(null, { status: 302, headers: { Location: `https://release-assets.githubusercontent.com/${download[1]}` } }); }
+    const file = /^https:\/\/release-assets\.githubusercontent\.com\/(.+)$/.exec(url)?.[1];
+    if (file && file in files) { const body = files[file]; return new Response(typeof body === 'string' ? body : new Uint8Array(body)); }
+    return new Response('missing', { status: 404 });
+  };
+  return { fetcher, requests };
+}
+const asset = (tag: string, name: string, size = 1024) => ({ name, state: 'uploaded', size, browser_download_url: `https://github.com/PapilotAI/papilot/releases/download/${tag}/${name}` });
+function desktopRelease(tag: string, version: string, manifest: Record<string, any> | null, extra: Record<string, any> = {}) {
+  const layer = Buffer.from(`layer ${version}`), name = `papilot-app-${version}.tgz`;
+  const written = manifest && { format: 1, version, fingerprint, layer: { name, size: layer.length, sha256: sha256(layer) }, ...manifest };
+  const files = written ? { [`${tag}/desktop.json`]: JSON.stringify(written), [`${tag}/${name}`]: layer } : {};
+  const assets = [asset(tag, `Papilot-${version.split('-')[0]}-mac-arm64.dmg`), ...(written ? [asset(tag, 'desktop.json', 300), asset(tag, name, layer.length)] : [])];
+  return { release: { tag_name: tag, draft: false, prerelease: tag === DESKTOP_DEV_TAG, assets, ...extra }, files, layer: { url: `https://github.com/PapilotAI/papilot/releases/download/${tag}/${name}`, size: layer.length, sha256: sha256(layer) } };
+}
+test('desktop discovery offers the update layer only to the shell it was built for', async () => {
+  const stable = desktopRelease('v1.1.0', '1.1.0', {}), older = desktopRelease('v1.0.0', '1.0.0', null);
+  const dev = desktopRelease(DESKTOP_DEV_TAG, devVersion, {});
+  const github = githubFixture([stable.release, older.release, dev.release], { ...stable.files, ...dev.files });
+  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'stable', fingerprint),
+    { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0`, layer: stable.layer });
+  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'stable', 'e'.repeat(64)),
+    { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` }, 'Another shell needs the installer');
+  github.requests.length = 0;
+  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher), { version: '1.1.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v1.1.0` });
+  assert.equal(github.requests.length, 1, 'The development app reads no manifest');
+  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'dev', fingerprint),
+    { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}`, layer: dev.layer });
+  assert.deepEqual(await latestDesktopRelease('darwin', 'arm64', github.fetcher, 'dev', 'e'.repeat(64)),
+    { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}` });
+  // Manifests that do not describe this exact release and layer are ignored.
+  for (const manifest of [{ format: 2 }, { version: '1.0.9' }, { layer: { name: 'papilot-app-1.1.0.tgz', size: 1, sha256: 'a'.repeat(64) } }, { layer: { name: 'other.tgz', size: 13, sha256: 'a'.repeat(64) } }]) {
+    const changed = desktopRelease('v1.1.0', '1.1.0', manifest);
+    assert.equal((await latestDesktopRelease('darwin', 'arm64', githubFixture([changed.release], changed.files).fetcher, 'stable', fingerprint))?.layer, undefined, JSON.stringify(manifest));
+  }
+  assert.equal(await latestDesktopRelease('darwin', 'arm64', githubFixture([stable.release], stable.files).fetcher, 'dev', fingerprint), null, 'No main build has been published yet');
+  const unsafe = desktopRelease(DESKTOP_DEV_TAG, '1.2.0', {});
+  await assert.rejects(latestDesktopRelease('darwin', 'arm64', githubFixture([unsafe.release], unsafe.files).fetcher, 'dev', fingerprint), /Invalid release/);
+  // Downloads follow redirects only over HTTPS to GitHub's hosts.
+  const redirect = (location: string): typeof fetch => async () => new Response(null, { status: 302, headers: { Location: location } });
+  for (const location of ['http://release-assets.githubusercontent.com/x', 'https://example.com/x', 'https://githubusercontent.com.example.com/x']) {
+    await assert.rejects(download('https://github.com/PapilotAI/papilot/releases/download/v1.1.0/desktop.json', redirect(location), 1024), /could not be installed/);
+  }
+  await assert.rejects(download('https://github.com/x', async () => new Response('x'.repeat(2048)), 1024), /could not be installed/);
+});
+test('a packaged desktop app updates in place with layers and links to installers for other shells', async () => {
+  const data = temporary(), bundle = { root: '/app/server', version: '0.6.0', fingerprint };
+  const layer = { url: 'https://github.com/x/layer.tgz', size: 10, sha256: 'a'.repeat(64) };
+  writeJson(path.join(data, 'updates/channel.json'), { channel: 'dev' });
+  let found: any = { version: '0.7.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v0.7.0`, layer };
+  const channels: string[] = [], installed: unknown[][] = [], restarts: string[][] = [];
+  const f = fixture({ data, desktop: true, bundle, latest: async () => { throw new Error('must not check npm'); },
+    latestDesktop: async (channel: string) => { channels.push(channel); return found; },
+    install: async () => { assert.fail('must not install npm releases'); },
+    installLayer: async (...args: unknown[]) => { installed.push(args); return '/data/layer'; },
+    restart: async (root: string, version: string) => { restarts.push([root, version]); } });
+  try {
+    let status = await f.updates.check();
+    assert.deepEqual(channels, ['stable'], 'The web server channel preference is separate');
+    assert.equal(status.channel, 'stable'); assert.equal(status.canUpdate, true); assert.equal(status.phase, 'available'); assert.equal(status.downloadUrl, undefined);
+    status = f.updates.install('0.7.0'); await tick(); await tick();
+    assert.deepEqual(installed, [[data, '0.7.0', layer, bundle]]);
+    assert.deepEqual(restarts, [['/data/layer', '0.7.0']]);
+    assert.equal(f.updates.snapshot().phase, 'restarting');
+    assert.equal(readJson(path.join(data, 'updates/desktop/status.json')).phase, 'restarting');
+    assert.equal(readJson(path.join(data, 'updates/status.json')), null, 'Web update state is untouched');
+  } finally { f.close(); }
+  // A main build for another shell needs a new installer.
+  const second = temporary();
+  found = { version: devVersion, downloadUrl: `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}` };
+  const g = fixture({ data: second, desktop: true, bundle, latestDesktop: async (channel: string) => { channels.push(channel); return found; },
+    installLayer: async () => { assert.fail('must not install'); } });
+  try {
+    let status = await g.updates.setChannel('dev');
+    assert.equal(readJson(path.join(second, 'updates/desktop/channel.json')).channel, 'dev');
+    assert.equal(status.channel, 'dev'); assert.equal(status.phase, 'available'); assert.equal(status.downloadUrl, `${DESKTOP_RELEASES}/tag/${DESKTOP_DEV_TAG}`);
+    assert.throws(() => g.updates.install(devVersion), /desktop updates/);
+    found = { ...found, layer }; status = await g.updates.check();
+    assert.equal(status.downloadUrl, undefined); assert.equal(status.phase, 'available');
+    found = { version: '0.6.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v0.6.0` }; status = await g.updates.setChannel('stable');
+    assert.equal(status.phase, 'idle', 'The bundled version is current');
+  } finally { g.close(); }
+  // Leaving the dev channel returns to the installer's own version without a download.
+  const third = temporary(), restarted: string[][] = [];
+  found = { version: '0.6.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v0.6.0` };
+  const h = fixture({ data: third, desktop: true, bundle, version: devVersion, latestDesktop: async () => found,
+    installLayer: async () => { assert.fail('must not download the bundled version'); }, restart: async (root: string, version: string) => { restarted.push([root, version]); } });
+  try {
+    assert.equal(h.updates.snapshot().channel, 'dev', 'A dev build starts on the dev channel');
+    const status = await h.updates.setChannel('stable');
+    assert.equal(status.phase, 'available'); assert.equal(status.downloadUrl, undefined);
+    h.updates.install('0.6.0'); await tick(); await tick();
+    assert.deepEqual(restarted, [['/app/server', '0.6.0']]);
+  } finally { h.close(); }
+  // After a layer failed at launch, Retry finds the release again in the new process.
+  const fourth = temporary(), retried: unknown[][] = [];
+  writeJson(path.join(fourth, 'updates/desktop/status.json'), { currentVersion: '0.6.0', latestVersion: '0.7.0', phase: 'failed', error: 'did not start', pid: 1 });
+  found = { version: '0.7.0', downloadUrl: `${DESKTOP_RELEASES}/tag/v0.7.0`, layer };
+  const k = fixture({ data: fourth, desktop: true, bundle, latestDesktop: async () => found,
+    installLayer: async (...args: unknown[]) => { retried.push(args); return '/data/layer'; }, restart: async () => {} });
+  try {
+    assert.equal(k.updates.snapshot().phase, 'failed'); assert.equal(k.updates.snapshot().latestVersion, '0.7.0');
+    k.updates.install('0.7.0'); for (let i = 0; i < 5; i++) await tick();
+    assert.deepEqual(retried, [[fourth, '0.7.0', layer, bundle]]);
+  } finally { k.close(); }
+});
+test('installing a layer verifies the download, links the installer dependencies and checks that it starts', async () => {
+  const data = temporary(), source = temporary(), version = '0.7.0';
+  const root = path.join(source, 'package');
+  const files: Record<string, string> = {
+    'package.json': JSON.stringify({ name: 'papilot', version, type: 'module' }), 'desktop-layer.json': JSON.stringify({ format: 1, version, fingerprint }),
+    'dist/index.html': '', 'engine/package.json': '{}', 'src/server/start.ts': '',
+    'src/server/main.ts': `import http from 'node:http';\nimport { fileURLToPath } from 'node:url';\nimport fs from 'node:fs';\nhttp.createServer((_, res) => res.end(JSON.stringify({ name: 'Papilot', version: '${version}', linked: fs.existsSync(fileURLToPath(new URL('../../node_modules/tsx', import.meta.url))) }))).listen(Number(process.env.PAPILOT_PORT), '127.0.0.1');\n`,
+  };
+  for (const [name, content] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); fs.writeFileSync(path.join(root, name), content); }
+  const archive = path.join(source, 'layer.tgz');
+  execFileSync('tar', ['-czf', archive, '-C', source, 'package'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
+  const bytes = fs.readFileSync(archive), layer = { url: 'https://github.com/x/layer.tgz', size: bytes.length, sha256: sha256(bytes) };
+  const fetcher = (body: Buffer): typeof fetch => async () => new Response(new Uint8Array(body));
+  const bundle = { root: process.cwd(), fingerprint };
+  try {
+    const installed = await installLayer(data, version, layer, bundle, fetcher(bytes));
+    assert.ok(installed.startsWith(path.join(data, 'updates/desktop/layers') + path.sep));
+    assert.equal(readJson(path.join(installed, 'package.json')).version, version);
+    assert.equal(fs.readlinkSync(path.join(installed, 'node_modules')), path.join(process.cwd(), 'node_modules'));
+    assert.equal(fs.readlinkSync(path.join(installed, 'engine/node_modules')), path.join(process.cwd(), 'engine/node_modules'));
+    assert.equal(fs.existsSync(path.join(path.dirname(installed), 'layer.tgz')), false, 'The archive is not kept');
+    const damaged = Buffer.from(bytes); damaged[damaged.length - 1] ^= 1;
+    await assert.rejects(installLayer(data, version, layer, bundle, fetcher(damaged)), /could not be installed/);
+    await assert.rejects(installLayer(data, version, layer, { ...bundle, fingerprint: 'e'.repeat(64) }, fetcher(bytes)), /desktop updates/);
+    await assert.rejects(installLayer(data, '0.7.1', layer, bundle, fetcher(bytes)), /does not match/);
+    assert.deepEqual(fs.readdirSync(path.join(data, 'updates/desktop/layers')), [path.basename(path.dirname(installed))], 'Failed downloads leave nothing behind');
+  } finally { fs.rmSync(data, { recursive: true, force: true }); fs.rmSync(source, { recursive: true, force: true }); }
 });
 test('the installer rejects desktop calls before installing either stable or dev packages', async () => {
   const previous = process.env.PAPILOT_DESKTOP;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { backendEnvironment, startBackend } from '../desktop/runtime.ts';
+import { activeLayer, backendEnvironment, linkBundle, removeLayers, startBackend, startServer, STARTUP_FAILED, switchServer, type Bundle } from '../desktop/runtime.ts';
 import { readJson, writeJson } from '../bin/installation.mjs';
 
 test('desktop backend environment clears legacy npm activation settings', () => {
@@ -16,7 +16,7 @@ test('desktop backend environment clears legacy npm activation settings', () => 
   for (const key of ['PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX', 'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE']) assert.equal((env as NodeJS.ProcessEnv)[key], undefined);
 });
 
-test('desktop backend ignores legacy web update state and rejects install and channel requests', async () => {
+test('the development desktop app ignores legacy web update state and rejects install and channel requests', async () => {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-runtime-')), root = process.cwd();
   const version = readJson(path.join(root, 'package.json')).version;
   writeJson(path.join(data, 'updates/active.json'), { root: '/unwanted', version: '999.0.0', phase: 'active' });
@@ -29,7 +29,7 @@ test('desktop backend ignores legacy web update state and rejects install and ch
     const url = await backend.ready, state = await (await fetch(url + '/api/state')).json();
     const status = await (await fetch(url + '/api/updates')).json();
     assert.equal(status.currentVersion, version); assert.equal(status.phase, 'idle');
-    assert.equal(status.canUpdate, false); assert.equal(status.channel, 'stable');
+    assert.equal(status.canUpdate, false); assert.equal(status.channel, undefined, 'Only packaged apps choose a channel');
     assert.equal(status.downloadUrl, 'https://github.com/PapilotAI/papilot/releases');
     for (const [route, body] of [['install', { version: '999.0.0' }], ['channel', { channel: 'dev' }]] as const) {
       const response = await fetch(`${url}/api/updates/${route}`, { method: 'POST',
@@ -38,4 +38,147 @@ test('desktop backend ignores legacy web update state and rejects install and ch
     }
     assert.deepEqual(readJson(path.join(data, 'updates/status.json')), saved);
   } finally { await backend.stop(); fs.rmSync(data, { recursive: true, force: true }); }
+});
+
+const write = (file: string, value: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value)); };
+const fingerprint = 'f'.repeat(64);
+// A downloaded layer, laid out as the updater extracts it.
+function layer(data: string, version: string, shell = fingerprint) {
+  const root = path.join(data, 'updates/desktop/layers', `${version}-x`, 'papilot');
+  write(path.join(root, 'package.json'), { name: 'papilot', version });
+  write(path.join(root, 'desktop-layer.json'), { format: 1, version, fingerprint: shell });
+  write(path.join(root, 'src/server/start.ts'), '');
+  fs.mkdirSync(path.join(root, 'engine'), { recursive: true });
+  return root;
+}
+function fixture() {
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-layers-'));
+  const bundle: Bundle = { root: path.join(data, 'app/server'), version: '0.9.0', fingerprint };
+  write(path.join(bundle.root, 'package.json'), { name: 'papilot', version: '0.9.0' });
+  fs.mkdirSync(path.join(bundle.root, 'node_modules/.bin'), { recursive: true }); fs.mkdirSync(path.join(bundle.root, 'engine/node_modules'), { recursive: true });
+  const folder = path.join(data, 'updates/desktop');
+  return { data, bundle, active: path.join(folder, 'active.json'), status: path.join(folder, 'status.json'), lock: path.join(folder, 'install.lock'), close: () => fs.rmSync(data, { recursive: true, force: true }) };
+}
+
+test('the app runs a downloaded layer only on the installer shell it was built for', () => {
+  const f = fixture();
+  try {
+    const root = layer(f.data, '0.9.1-dev.' + 'a'.repeat(40)), version = '0.9.1-dev.' + 'a'.repeat(40);
+    const record = { root, version, installer: '0.9.0', phase: 'active' };
+    assert.equal(activeLayer(f.data, f.bundle), null, 'Nothing is active yet');
+    write(f.active, { ...record, phase: 'starting' });
+    assert.equal(activeLayer(f.data, f.bundle), null, 'An interrupted switch is not trusted');
+    write(f.active, record);
+    assert.deepEqual(activeLayer(f.data, f.bundle), { root, version });
+    assert.equal(activeLayer(f.data, { ...f.bundle, version: '0.9.2' }), null, 'Installing another app version retires the layer');
+    assert.equal(activeLayer(f.data, { ...f.bundle, fingerprint: 'e'.repeat(64) }), null, 'A layer built for another shell never runs');
+    assert.equal(activeLayer(f.data, { ...f.bundle, fingerprint: '' }), null, 'The development app runs its checkout');
+    write(f.active, { ...record, version: '0.9.2' });
+    assert.equal(activeLayer(f.data, f.bundle), null, 'The recorded version must match the package');
+    const outside = path.join(f.data, 'elsewhere/papilot');
+    write(path.join(outside, 'package.json'), { name: 'papilot', version }); write(path.join(outside, 'desktop-layer.json'), { version, fingerprint }); write(path.join(outside, 'src/server/start.ts'), '');
+    write(f.active, { ...record, root: outside });
+    assert.equal(activeLayer(f.data, f.bundle), null, 'Only the updater directory is trusted');
+  } finally { f.close(); }
+});
+
+test('layers run on the installer dependencies, wherever the installer moved', () => {
+  const f = fixture();
+  try {
+    const root = layer(f.data, '0.9.1');
+    linkBundle(root, f.bundle.root);
+    assert.equal(fs.readlinkSync(path.join(root, 'node_modules')), path.join(f.bundle.root, 'node_modules'));
+    assert.equal(fs.readlinkSync(path.join(root, 'engine/node_modules')), path.join(f.bundle.root, 'engine/node_modules'));
+    // An AppImage mounts at a new path on every launch.
+    const moved = path.join(f.data, 'mount/server');
+    fs.cpSync(f.bundle.root, moved, { recursive: true });
+    linkBundle(root, moved);
+    assert.equal(fs.readlinkSync(path.join(root, 'node_modules')), path.join(moved, 'node_modules'));
+    const env = backendEnvironment('/runtime/bin/node', root, f.data, { PATH: '/usr/bin' });
+    assert.ok(env.PATH!.split(path.delimiter).includes(path.join(root, 'node_modules/.bin')), 'The bundled Codex stays on PATH');
+  } finally { f.close(); }
+});
+
+test('startup falls back to the bundled version and removes unused layers', async () => {
+  const f = fixture();
+  try {
+    const old = layer(f.data, '0.9.1'), root = layer(f.data, '0.9.2');
+    write(f.active, { root, version: '0.9.2', installer: '0.9.0', phase: 'active' });
+    const launched: string[] = [];
+    assert.equal(await startServer(f.data, f.bundle, async folder => { launched.push(folder); }), root);
+    assert.deepEqual(launched, [root]);
+    assert.equal(fs.existsSync(path.dirname(old)), false, 'Superseded layers are removed');
+    assert.equal(fs.readlinkSync(path.join(root, 'node_modules')), path.join(f.bundle.root, 'node_modules'));
+
+    launched.length = 0;
+    write(f.status, { phase: 'updated', latestVersion: '0.9.2' });
+    assert.equal(await startServer(f.data, f.bundle, async folder => { launched.push(folder); if (folder === root) throw new Error('broken'); }), f.bundle.root);
+    assert.deepEqual(launched, [root, f.bundle.root]);
+    assert.equal(fs.existsSync(f.active), false);
+    assert.equal(readJson(f.status).phase, 'failed'); assert.equal(readJson(f.status).error, STARTUP_FAILED); assert.equal(readJson(f.status).latestVersion, '0.9.2');
+
+    launched.length = 0;
+    assert.equal(await startServer(f.data, f.bundle, async folder => { launched.push(folder); }), f.bundle.root);
+    assert.deepEqual(fs.readdirSync(path.join(f.data, 'updates/desktop/layers')), [], 'A layer that is not active is removed on the next launch');
+
+    const kept = layer(f.data, '0.9.3');
+    write(f.active, { root: kept, version: '0.9.3', installer: '0.9.0', phase: 'active' });
+    assert.equal(await startServer(f.data, { ...f.bundle, fingerprint: '' }, async () => {}), f.bundle.root);
+    assert.ok(fs.existsSync(kept) && fs.existsSync(f.active), 'The development app leaves the installed app\'s updates alone');
+  } finally { f.close(); }
+});
+
+test('switching layers backs up the database and restores everything if the new one fails', async () => {
+  const f = fixture();
+  try {
+    const database = path.join(f.data, 'papilot.sqlite');
+    write(database, 'before'); write(f.lock, { pid: 1 });
+    const first = layer(f.data, '0.9.1');
+    write(f.status, { phase: 'restarting', latestVersion: '0.9.1', pid: 1 });
+    const events: string[] = [];
+    const stop = async () => { events.push('stop'); };
+    assert.equal(await switchServer(f.data, f.bundle, { type: 'papilot:activate', root: first, version: '0.9.1' }, f.bundle.root, stop, async folder => { events.push(folder); }), first);
+    assert.deepEqual(events, ['stop', first]);
+    assert.equal(readJson(f.active).phase, 'active'); assert.equal(readJson(f.active).root, first); assert.equal(readJson(f.active).installer, '0.9.0');
+    assert.equal(readJson(f.status).phase, 'updated'); assert.equal(readJson(f.status).currentVersion, '0.9.1');
+    assert.equal(fs.readFileSync(path.join(f.data, 'updates/desktop/before-update.sqlite'), 'utf8'), 'before');
+    assert.equal(fs.existsSync(f.lock), false);
+    assert.ok(fs.existsSync(path.join(first, 'node_modules')), 'The layer was linked before it started');
+
+    const second = layer(f.data, '0.9.2'), previous = readJson(f.active);
+    events.length = 0; write(f.lock, { pid: 1 });
+    const launch = async (folder: string) => { events.push(folder); if (folder === second) { write(database, 'migrated'); throw new Error('The local server stopped (1).'); } };
+    assert.equal(await switchServer(f.data, f.bundle, { root: second, version: '0.9.2' }, first, stop, launch), first);
+    assert.deepEqual(events, ['stop', second, first]);
+    assert.deepEqual(readJson(f.active), previous);
+    assert.equal(fs.readFileSync(database, 'utf8'), 'before', 'The database is restored for the previous version');
+    assert.equal(readJson(f.status).phase, 'failed'); assert.match(readJson(f.status).error, /stopped \(1\)\. The previous version has been restored\./);
+    assert.equal(fs.existsSync(f.lock), false);
+
+    // Returning to the installer's own version needs no layer.
+    events.length = 0;
+    assert.equal(await switchServer(f.data, f.bundle, { root: f.bundle.root, version: '0.9.0' }, first, stop, async folder => { events.push(folder); }), f.bundle.root);
+    assert.deepEqual(events, ['stop', f.bundle.root]);
+    assert.equal(fs.existsSync(f.active), false); assert.equal(readJson(f.status).currentVersion, '0.9.0');
+    assert.deepEqual(fs.readdirSync(path.join(f.data, 'updates/desktop/layers')), [], 'Layers are removed once the bundled version runs');
+
+    events.length = 0;
+    const other = layer(f.data, '0.9.4', 'e'.repeat(64));
+    for (const request of [null, { root: path.join(f.data, 'elsewhere'), version: '0.9.4' }, { root: other, version: '0.9.4' }, { root: f.bundle.root, version: '0.9.4' }]) {
+      assert.equal(await switchServer(f.data, f.bundle, request, f.bundle.root, stop, launch), f.bundle.root);
+      assert.equal(readJson(f.status).error, 'Invalid update activation.');
+    }
+    assert.deepEqual(events, [], 'Invalid requests keep the running backend');
+  } finally { f.close(); }
+});
+
+test('removing layers keeps only the active one', () => {
+  const f = fixture();
+  try {
+    const keep = layer(f.data, '0.9.1'); layer(f.data, '0.9.2');
+    removeLayers(f.data, keep);
+    assert.deepEqual(fs.readdirSync(path.join(f.data, 'updates/desktop/layers')), ['0.9.1-x']);
+    removeLayers(f.data);
+    assert.deepEqual(fs.readdirSync(path.join(f.data, 'updates/desktop/layers')), []);
+  } finally { f.close(); }
 });

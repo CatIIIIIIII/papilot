@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { devRevision, readJson, stableVersion } from '../../bin/installation.mjs';
@@ -97,6 +98,62 @@ async function installDev(data: string, version: string) {
   const log = fs.openSync(path.join(data, 'updates/install.log'), 'a', 0o600);
   try {
     await prepareDev(root, version, log);
+    await probeInstallation(root, version, stage, log);
+    return root;
+  } catch (error) { fs.rmSync(stage, { recursive: true, force: true }); throw error; }
+  finally { fs.closeSync(log); }
+}
+const INSTALL_FAILED = 'The new version could not be installed. Check the connection and available disk space, then retry.';
+// Release assets redirect from github.com to GitHub's download hosts. Each hop
+// stays on HTTPS and on those hosts (or on the smoke test's local source).
+export async function download(url: string, fetcher: typeof fetch, limit: number) {
+  const source = process.env.PAPILOT_DESKTOP_UPDATE_SOURCE ? new URL(process.env.PAPILOT_DESKTOP_UPDATE_SOURCE).origin : null;
+  const trusted = (address: URL) => address.origin === source
+    || address.protocol === 'https:' && (address.hostname === 'github.com' || address.hostname.endsWith('.githubusercontent.com'));
+  let address = new URL(url);
+  for (let hop = 0; hop < 5; hop++) {
+    if (!trusted(address)) throw new Error(INSTALL_FAILED);
+    const response = await fetcher(address.href, { signal: AbortSignal.timeout(300000), redirect: 'manual', headers: { Accept: 'application/octet-stream', 'User-Agent': 'Papilot' } });
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) { address = new URL(location, address); continue; }
+    if (!response.ok || Number(response.headers.get('content-length') || 0) > limit) throw new Error(INSTALL_FAILED);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > limit) throw new Error(INSTALL_FAILED);
+    return bytes;
+  }
+  throw new Error(INSTALL_FAILED);
+}
+export interface DesktopLayer { url: string; size: number; sha256: string }
+// As in desktop/runtime.ts: a layer runs on the installer's dependencies.
+function linkBundle(root: string, bundle: string) {
+  for (const folder of ['node_modules', 'engine/node_modules']) {
+    const target = path.join(bundle, folder), link = path.join(root, folder);
+    if (!fs.existsSync(target) || !fs.existsSync(path.dirname(link))) continue;
+    fs.rmSync(link, { recursive: true, force: true });
+    fs.symlinkSync(target, link, 'dir');
+  }
+}
+// The desktop app downloads only Papilot's own code, built by the release
+// workflow for this installer's shell, and checks that it starts. The app then
+// switches to it (desktop/runtime.ts).
+export async function installLayer(data: string, version: string, layer: DesktopLayer, bundle: { root: string; fingerprint: string }, fetcher = fetch) {
+  const layers = path.join(data, 'updates/desktop/layers'); fs.mkdirSync(layers, { recursive: true, mode: 0o700 });
+  const stage = fs.mkdtempSync(path.join(layers, version + '-')), root = path.join(stage, 'papilot'), archive = path.join(stage, 'layer.tgz');
+  const log = fs.openSync(path.join(data, 'updates/desktop/install.log'), 'a', 0o600);
+  try {
+    const bytes = await download(layer.url, fetcher, layer.size);
+    if (bytes.length !== layer.size || createHash('sha256').update(bytes).digest('hex') !== layer.sha256) throw new Error(INSTALL_FAILED);
+    fs.writeFileSync(archive, bytes, { mode: 0o600 });
+    fs.mkdirSync(root);
+    await promisify(execFile)('tar', ['-xzf', archive, '-C', root, '--strip-components=1'], { timeout: 120000 });
+    fs.rmSync(archive);
+    const pkg = readJson(path.join(root, 'package.json')), shell = readJson(path.join(root, 'desktop-layer.json'));
+    if (pkg?.name !== 'papilot' || pkg.version !== version || shell?.version !== version) throw new Error('The downloaded package does not match the requested release.');
+    if (shell.fingerprint !== bundle.fingerprint) throw new Error('Download desktop updates from GitHub Releases.');
+    for (const file of ['dist/index.html', 'src/server/start.ts', 'src/server/main.ts', 'engine/package.json']) {
+      if (!fs.existsSync(path.join(root, file))) throw new Error('The downloaded release is incomplete.');
+    }
+    linkBundle(root, bundle.root);
     await probeInstallation(root, version, stage, log);
     return root;
   } catch (error) { fs.rmSync(stage, { recursive: true, force: true }); throw error; }

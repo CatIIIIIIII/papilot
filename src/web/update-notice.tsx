@@ -3,6 +3,7 @@ import { Icon } from './icons.tsx';
 import { ChipSelect } from './chip-select.tsx';
 import { keepDialogFocus } from './focus.ts';
 import { t } from './i18n.ts';
+import { desktopWindow } from './desktop-chrome.tsx';
 import logo from './logo.svg';
 import type { UpdateStatus } from '../shared.ts';
 import './update-notice.css';
@@ -131,7 +132,7 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
           <span className="update-summary-icon"><Icon name={icon} size={17}/></span>
           <h4 id="update-settings-title">{title}</h4>
         </div>
-        {!checkFailed && <p className="update-status-description">{status.phase === 'installing' ? status.channel === 'dev' ? t('Downloading and building the selected GitHub commit…') : t('Downloading and checking the new version…')
+        {!checkFailed && <p className="update-status-description">{status.phase === 'installing' ? status.channel === 'dev' && !desktopWindow ? t('Downloading and building the selected GitHub commit…') : t('Downloading and checking the new version…')
           : status.phase === 'waiting' ? t('The update is ready. Waiting for tasks and PDF builds to finish before restarting.')
           : status.phase === 'restarting' ? t('Restarting Papilot. This page will reconnect automatically; your drafts are kept.')
           : checking ? null
@@ -146,7 +147,9 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
         </div>}
       </div>
       {!status.canUpdate && !status.downloadUrl && <p className="update-settings-notice"><Icon name="info" size={15}/><span>{t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</span></p>}
-      {!status.downloadUrl && <div className="update-channel">
+      {/* Desktop apps that need a new installer can still change channels; the
+          development desktop app reports none. */}
+      {(status.channel || !status.downloadUrl) && <div className="update-channel">
         <div className="update-channel-copy"><h4>{t('Update channel')}</h4><p>{status.channel === 'dev' ? t('Early updates from GitHub main. May be less stable.') : t('Published releases, recommended for everyday use.')}</p></div>
         <ChipSelect label={t('Update channel')} icon={status.channel === 'dev' ? 'branch' : undefined} value={status.channel || 'stable'} disabled={sending || busy} onChange={channel => void send('/updates/channel', { channel })} options={[{ value: 'stable', label: t('Stable') }, { value: 'dev', label: t('Dev (GitHub main)') }]}/>
       </div>}
