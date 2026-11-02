@@ -194,6 +194,11 @@
     "textHash": "075c1d58b3149227e988460f65bf15c92d13737facf4e7b8d5cf241217898308",
     "model": "gemini-4-argon-medium"
   },
+  "Changes only": {
+    "revision": "12b124b9c1b80a87919875aba1890bc9ee6323d54ac36dc478c211e9c5bc438b",
+    "textHash": "b0b4ea658db12fd8829ecb44b3d7acdcfa9eee0c098d91f3df1c91c1be6c8656",
+    "model": "gemini-4-argon-medium"
+  },
   "Changes {list}": {
     "revision": "03908fabbee673729ad3d59cae660745287b7a13f3321c1bebe48e93033011cf",
     "textHash": "197dbca74ed839bf29477420d2f94b146c7214062610576bba3426b1c1af9b5c",
@@ -377,6 +382,11 @@
   "Finished": {
     "revision": "3d10719b0ebd677901acce78bfb8988b4b83bf9a5952fe223bd235eefe868bb7",
     "textHash": "d1d1259fbcf3c5732c629f7180ddda61a9fe57a30175282250d3513b723d5cf5",
+    "model": "gemini-4-argon-medium"
+  },
+  "Full paper": {
+    "revision": "ee469b4a719155b857ff76939989b0cd5ef5571cbb1fbef02d323cf9471cb165",
+    "textHash": "f2498c42fc680dfda496272401e0977c1135926c9718536d16a4f77b21f85357",
     "model": "gemini-4-argon-medium"
   },
   "History": {
@@ -602,6 +612,11 @@
   "Pending": {
     "revision": "6a89b4c961abc950d8a3c0d990935fa4dd39d787138aea43504174fdadcd71e7",
     "textHash": "b0f36bc7d7d010e51cb6d04c855a255cf7752ef24fe35ecfcff9ca5084ab1361",
+    "model": "gemini-4-argon-medium"
+  },
+  "Preparing the full PDF…": {
+    "revision": "c4f2f47a89e92c5eeee1050ba1d56a388ead03bb3e6a8de596f511b3b3e89ccd",
+    "textHash": "a0820f13c0e47fded03e1b8628fce11bd1824034b91baa42f5af73ee41cc7080",
     "model": "gemini-4-argon-medium"
   },
   "Preparing the next review…": {
@@ -882,6 +897,11 @@
   "The entry has no title, DOI or arXiv identifier to look up.": {
     "revision": "7f310684d3b16a1403902ab4efa6f507fb2d8b36918359c13842c56ab42e9de4",
     "textHash": "5b4cda59a4214537c043cc754965abde936f2131bd5b391ddebddff3fbfab5fe",
+    "model": "gemini-4-argon-medium"
+  },
+  "The full PDF could not be loaded.": {
+    "revision": "70b292bb2e3aeadcb315a6589da7a2a4732ffe9b12d442af5cd9dcd6c9de8899",
+    "textHash": "6355b4a6c0fc452fd44908183c5de95d31df8c84abc0c84fe83dff6e5f2642e5",
     "model": "gemini-4-argon-medium"
   },
   "The last commit changed. The comparison is being updated.": {

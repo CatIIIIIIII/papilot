@@ -473,6 +473,10 @@ export async function buildApp(options: AppOptions) {
     if (typeof b?.id !== 'string' || typeof b?.confirmed !== 'boolean') throw new Error('Choose an entry to confirm.');
     return changes.confirmReference(project.id, project.path, Number(request.params.number), b.id, b.confirmed);
   });
+  app.get<{ Params: { projectId: string; number: string } }>('/review/:projectId/changes/pdf/:number', changesAccess, (request, reply) => {
+    const pdf = changes.pdf(store.project(request.params.projectId).id, Number(request.params.number));
+    return reply.type('application/pdf').sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
+  });
   app.get<{ Params: { projectId: string; number: string; file: string } }>('/review/:projectId/changes/files/:number/:file', changesAccess, (request, reply) => {
     const file = changes.file(store.project(request.params.projectId).id, Number(request.params.number), request.params.file);
     return reply.header('Cache-Control', 'private, max-age=31536000, immutable').type(file.endsWith('.svg') ? 'image/svg+xml' : 'image/png').send(fs.createReadStream(file));
@@ -491,6 +495,14 @@ export async function buildApp(options: AppOptions) {
     return serialGit(project.id, () => workspace.exclusiveCommit(project.id, () => changes.undo(project.id, project.path, csrfFor(request.viewer!), id)));
   });
 
+  // The complete PDF of a round's new version, for the review's full paper.
+  // A round may compile only the changed chapters; this compiles them all once.
+  app.get<{ Params: { projectId: string; name: string; round: string } }>('/review/:projectId/pdf/:name/:round', { config: { access: { project: 'projectId' } } }, async (request, reply) => {
+    const project = store.project(request.params.projectId), name = request.params.name, round = Number(request.params.round);
+    if (!/^[a-z0-9-]+$/.test(name) || !Number.isSafeInteger(round) || round < 1) return reply.code(404).send({ error: 'Review resource not found.' });
+    const pdf = await fullPaperPdf(project.path, name, round, 'after');
+    return reply.type('application/pdf').sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
+  });
   app.route<{ Params: { projectId: string; '*': string } }>({
     // The review page posts with the review engine's token rather than Papilot's.
     method: ['GET', 'POST'], url: '/review/:projectId/*', config: { access: { project: 'projectId' }, csrf: false }, handler: async (request, reply) => {
@@ -528,6 +540,10 @@ export async function buildApp(options: AppOptions) {
               await workspace.refresh(task.id);
             }
           }
+          // A round's new version as one complete PDF, which Papilot compiles,
+          // lets the review show the changes in the whole paper.
+          const round = request.method === 'GET' && response.ok ? /^\/api\/tasks\/([a-z0-9-]+)\/rounds\/(\d+)$/.exec(route) : null;
+          if (round) (value as { pdf?: string }).pdf = `${prefix}/pdf/${round[1]}/${round[2]}`;
           return rewriteReviewJson(value, prefix);
         }
         if (reviewTask && writesFiles) throw new Error('The review engine returned an unexpected response. Select Check status before continuing.');

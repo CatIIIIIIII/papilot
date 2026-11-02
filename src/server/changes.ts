@@ -17,7 +17,7 @@ type Op = ['equal' | 'replace' | 'insert' | 'delete', number, number, number, nu
 export interface Unit { id: string; file: string; status: 'added' | 'deleted' | 'modified'; kind: string; whole_file: boolean; ops: Op[]; old_start: number; old_end: number; new_start: number; new_end: number; old_text: string; new_text: string; truncated: boolean }
 type Decision = 'pending' | 'accepted' | 'rejected' | 'commented';
 export type ChangeAction = 'stage' | 'unstage' | 'revert';
-interface Round { number: number; before: string; after: string; units: Unit[]; folder: string; warnings: string[]; decisions: Record<string, Decision> }
+interface Round { number: number; before: string; after: string; units: Unit[]; folder: string; warnings: string[]; decisions: Record<string, Decision>; pdf?: string }
 interface Job { key: string; phase: 'build' | 'render'; status: 'running' | 'failed'; created: number; error?: string; details?: string[]; log?: string }
 interface Snapshot { before: string | null; after: string }
 interface Entry { mode: string; sha: string }
@@ -139,7 +139,7 @@ export class Changes {
       const { Builder, BuildError, Repo, loadProject, withUnits, render } = await engine();
       const project = loadProject(root), repo = new Repo(root), number = comparison.next++;
       const units = await this.units(projectId, root, snapshot), folder = path.join(this.dir, projectId, String(number));
-      let warnings: string[] = [];
+      let warnings: string[] = [], pdf: string | undefined;
       fs.rmSync(folder, { recursive: true, force: true }); fs.mkdirSync(folder, { recursive: true });
       if (units.length) {
         const builder = new Builder(project, repo);
@@ -154,8 +154,9 @@ export class Changes {
         await render(folder, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units },
           (subset: Unit[]) => builder.build(withUnits(repo, snapshot.before!, snapshot.after, subset), ['full']));
         warnings = next.warnings.filter((warning: string) => !old.warnings.includes(warning));
+        pdf = next.pdf;
       } else fs.writeFileSync(path.join(folder, 'round.json'), JSON.stringify({ units: {}, sections: [], loose: [] }));
-      comparison.rounds.push({ number, before: snapshot.before!, after: snapshot.after, units, folder, warnings, decisions: {} });
+      comparison.rounds.push({ number, before: snapshot.before!, after: snapshot.after, units, folder, warnings, decisions: {}, pdf });
       // The viewer may still show the round before; older ones go.
       for (const old of comparison.rounds.splice(0, Math.max(0, comparison.rounds.length - 3))) fs.rmSync(old.folder, { recursive: true, force: true });
       if (comparison.job === job) comparison.job = null;
@@ -203,6 +204,8 @@ export class Changes {
       task: 'changes', round: round.number, before: round.before, after: round.after,
       units: round.units.map(unit => ({ ...unit, ...render.units[unit.id] })), sections: render.sections, loose: render.loose,
       warnings: round.warnings, files: `/review/${projectId}/changes/files/${round.number}/`,
+      // The working tree compiles in full, so its PDF shows the whole paper.
+      ...(round.pdf ? { pdf: `/review/${projectId}/changes/pdf/${round.number}` } : {}),
       ...(render.references ? { references: render.references } : {}),
     };
   }
@@ -236,6 +239,12 @@ export class Changes {
     if (!round || !/^c\d+$/.test(unit)) throw Object.assign(new Error('This comparison is out of date. Refresh the page.'), { statusCode: 404 });
     const { more } = await engine();
     return { places: await more(round.folder, unit) };
+  }
+
+  pdf(projectId: string, number: number) {
+    const file = this.comparison(projectId).rounds.find(item => item.number === number)?.pdf;
+    if (!file || !fs.existsSync(file)) throw Object.assign(new Error('This comparison is out of date. Refresh the page.'), { statusCode: 404 });
+    return file;
   }
 
   file(projectId: string, number: number, name: string) {

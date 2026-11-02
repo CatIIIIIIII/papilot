@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- **Review changes in the whole paper.** The review opens on the full paper: the new PDF's pages, with each change shown in place as before, old lines above new, and accepted, rejected or commented on with the same controls. **Changes only** in the review toolbar switches back to the changed sections. Pages are drawn only near where you read, so a 300-page thesis scrolls like a short paper. Reviews rendered before this release show the changed sections only.
 - **Compilation progress while adding a paper.** The import window shows LaTeX's current pass, the pages typeset so far against the paper's page count, and the elapsed time, so a long first compile no longer looks stuck.
 
 ### Changed

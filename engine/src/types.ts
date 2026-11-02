@@ -208,6 +208,8 @@ export interface Strip {
   clean: string;
   width: number;
   height: number;
+  /** Where the strip starts on its page, in points; absent in older rounds. */
+  top?: number;
   page: number;
   label: string;
   text?: TextLine[];
@@ -408,6 +410,9 @@ export interface RoundDetail extends Omit<RenderedRound, "units"> {
   warnings: string[];
   files: string;
   references?: References;
+  /** The new version's complete PDF, when the host serves one, so the review
+   * can show the changes in the whole paper. */
+  pdf?: string;
 }
 export type TaskState =
   "editing" | "building" | "build_failed" | "reviewing" | "revise" | "done";

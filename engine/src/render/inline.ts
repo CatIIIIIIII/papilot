@@ -626,6 +626,7 @@ export class Strips {
       clean,
       width: Math.round(page.width * 100) / 100,
       height: Math.round((bottom - top) * 100) / 100,
+      top: Math.round(top * 100) / 100,
       page: number + 1,
       label: page.label,
       text,

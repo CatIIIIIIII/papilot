@@ -1,5 +1,7 @@
 import {
   Fragment,
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -18,6 +20,9 @@ import type {
 } from "../types.ts";
 import { PdfStrip } from "./PdfStrip.tsx";
 import { ChangeMap } from "./ChangeMap.tsx";
+import { placeable, type PlacedChange } from "./paper.ts";
+// pdf.js loads only when the full paper is shown.
+const FullPaper = lazy(() => import("./FullPaper.tsx").then((module) => ({ default: module.FullPaper })));
 import { EFFECTS_EVENT, EFFECTS_STORAGE, readExpandedEffects } from "./effect-preferences.ts";
 import { STATUS } from "./overview.tsx";
 import { language, locale, t, tn, withLanguage } from "./i18n.ts";
@@ -167,6 +172,10 @@ export function ReviewApp({
     scrollUntil = useRef(0),
     snapshot = useRef({ state, detail, busy, composer, current });
   const [shortcuts, setShortcuts] = useState(readShortcuts);
+  // The whole paper with the changes in place, or the changed sections only.
+  const [view, setView] = useState<"paper" | "changes">(() =>
+    readStorage<string>("latex-review:view", "paper") === "changes" ? "changes" : "paper",
+  );
   const [expandedEffects, setExpandedEffects] = useState(readExpandedEffects);
   // Per-edit disclosure is temporary and scoped to its round. Changing the
   // global preference resets those overrides without reloading the review.
@@ -195,6 +204,16 @@ export function ReviewApp({
       [detail],
     ),
     stops = useMemo(() => (detail ? buildStops(detail) : []), [detail]),
+    // The change blocks in the order and numbering of the changes view.
+    placed = useMemo(() => {
+      const list: PlacedChange[] = [];
+      if (!detail) return list;
+      for (const section of detail.sections)
+        for (const block of section.blocks)
+          if (block.kind === "change") list.push({ block, index: list.length });
+      for (const block of detail.loose) list.push({ block, index: list.length });
+      return list;
+    }, [detail]),
     // An edit's places show under the first change that includes it.
     firstStop = useMemo(() => {
       const found = new Map<string, number>();
@@ -1094,6 +1113,18 @@ export function ReviewApp({
       </article>
     );
   }
+  const fullPaper = Boolean(detail?.pdf) && placeable(placed),
+    paperView = fullPaper && view === "paper";
+  function chooseView(next: "paper" | "changes") {
+    setView(next);
+    store("latex-review:view", next);
+    // Keep the selected change in view across the switch.
+    requestAnimationFrame(() => {
+      const index = snapshot.current.current;
+      const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${index}"]`);
+      if (article) reveal(article);
+    });
+  }
   let index = 0;
   return (
     <>
@@ -1232,6 +1263,24 @@ export function ReviewApp({
             >
               {t("Undo revert")}
             </button>
+          )}
+          {fullPaper && (
+            <div className="view-switch" role="group" aria-label={t("Review view")}>
+              <button
+                className={`ghost${view === "paper" ? " active" : ""}`}
+                aria-pressed={view === "paper"}
+                onClick={() => chooseView("paper")}
+              >
+                {t("Full paper")}
+              </button>
+              <button
+                className={`ghost${view === "changes" ? " active" : ""}`}
+                aria-pressed={view === "changes"}
+                onClick={() => chooseView("changes")}
+              >
+                {t("Changes only")}
+              </button>
+            </div>
           )}
           {/* History is a toolbar action; its own row appears only while
               browsing earlier decisions. */}
@@ -1462,7 +1511,28 @@ export function ReviewApp({
               />
             )}
           <div className="document">
-            {detail ? (
+            {detail && paperView ? (
+              <>
+                <Suspense fallback={<div className="paper-status" role="status"><div className="pulse" /></div>}>
+                <FullPaper
+                  url={detail.pdf!}
+                  changes={placed}
+                  render={(block, at) => change(block, at, true)}
+                  scrollRoot={paper}
+                  onReady={() => {
+                    const article = paper.current?.querySelector<HTMLElement>(
+                      `[data-stop="${snapshot.current.current}"]`,
+                    );
+                    if (article) reveal(article);
+                  }}
+                  onUnavailable={() => chooseView("changes")}
+                />
+                </Suspense>
+                {!stops.length && !changes && (
+                  <p className="empty">{t("No changes to review.")}</p>
+                )}
+              </>
+            ) : detail ? (
               <>
                 {detail.sections.map((section) => (
                   <section className="part" key={section.node}>

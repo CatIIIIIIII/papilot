@@ -122,7 +122,9 @@ export function ReviewNotes({ doc, task, onSend }: { doc: Document | null; task:
       strips.forEach((strip, index) => {
         const src = strip.querySelector('img')?.getAttribute('src') || '';
         const round = Number(src.match(/\/files\/[^/]+\/(\d+)\//)?.[1] || task.review?.round || 0);
-        const key = `${round}:${index}`;
+        // The strip's image names it in either view of the review; its index
+        // differs between the full paper and the changes view.
+        const key = `${round}:${src.split('/').pop() || index}`;
         const previous = mounted.get(strip);
         if (previous?.key === key) return;
         previous?.element.remove();
