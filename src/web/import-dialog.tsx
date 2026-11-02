@@ -43,8 +43,6 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
   const dialog = useRef<HTMLDialogElement>(null), folder = useRef<HTMLInputElement>(null), zip = useRef<HTMLInputElement>(null), pending = useRef(false);
   const [draft, setDraft] = useState<PaperImport | null>(null), [form, setForm] = useState({ name: '', path: '', main: '', engine: 'pdflatex' });
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [dragging, setDragging] = useState(false);
-  const desktop = window.papilotDesktop;
-  const nativeFolders = Boolean(desktop?.chooseDirectory && desktop?.pathForFile);
   const working = draft?.phase === 'building' || draft?.phase === 'repairing', locked = busy || working;
   function receive(value: PaperImport) { setDraft(value); setForm(current => ({ ...current, name: value.name, main: value.main, engine: value.engine })); browserStorage.setItem(memoryKey, value.id); }
   useEffect(() => {
@@ -85,21 +83,13 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
   }
   const upload = (list: File[], archive: boolean) => run(() => uploadFiles(list.map(file => ({ file, path: file.webkitRelativePath || file.name })), archive));
   const openFolder = async (path: string) => start(await api<PaperImport>('/imports', { path }, undefined, 120000));
-  function chooseFolder() {
-    if (!nativeFolders) { folder.current?.click(); return; }
-    void run(async () => { const path = await desktop!.chooseDirectory!(); if (path) await openFolder(path); });
-  }
   function drop(transfer: DataTransfer) {
     // Capture entries while the drop event still owns access to the data store.
     const files = Array.from(transfer.files), entries = Array.from(transfer.items).filter(item => item.kind === 'file').map(item => item.webkitGetAsEntry?.());
     void run(async () => {
       if (files.length !== 1 || entries.length > 1) throw new Error(t('Drop one folder or LaTeX ZIP file.'));
       const entry = entries[0];
-      if (nativeFolders && (entry?.isDirectory || !/\.zip$/i.test(files[0].name))) {
-        const path = desktop!.pathForFile!(files[0]);
-        if (!path) throw new Error(t('Could not read the selected folder. Please use Choose folder.'));
-        await openFolder(path);
-      } else if (entry?.isDirectory) await uploadFiles(await droppedFolder(entry as FileSystemDirectoryEntry), false);
+      if (entry?.isDirectory) await uploadFiles(await droppedFolder(entry as FileSystemDirectoryEntry), false);
       else await uploadFiles(files.map(file => ({ file, path: file.name })), true);
     });
   }
@@ -122,8 +112,8 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
         <div className={'import-drop' + (dragging ? ' dragging' : '')} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }} onDrop={event => { event.preventDefault(); setDragging(false); if (!locked) drop(event.dataTransfer); }}>
           <div className="import-options">
             <div className="import-option"><Icon name="folder" size={28}/><strong>{t('Open a folder')}</strong>
-              <p>{nativeFolders ? t('Work with the original files. Nothing is uploaded or copied.') : t('Choose a folder to upload a copy. To use original files, open it in the desktop app.')}</p>
-              <button data-choose-folder className="button secondary" disabled={locked} onClick={chooseFolder}>{t('Choose folder')}</button>
+              <p>{t('Choose a folder to upload a copy. To use original files, open it in the desktop app.')}</p>
+              <button data-choose-folder className="button secondary" disabled={locked} onClick={() => folder.current?.click()}>{t('Choose folder')}</button>
             </div>
             <div className="import-option"><Icon name="file" size={28}/><strong>{t('Import a ZIP')}</strong>
               <p>{t('Import a separate copy from Overleaf or a ZIP archive.')}</p>

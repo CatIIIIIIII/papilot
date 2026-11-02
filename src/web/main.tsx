@@ -28,7 +28,8 @@ import { DeleteTaskDialog } from './task-dialog.tsx';
 import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
 import { UpdateNotice, versionLabel } from './update-notice.tsx';
-import { DesktopWindowChrome } from './desktop-chrome.tsx';
+import { chooseDirectory, DesktopWindowChrome, nativeFolders } from './desktop-chrome.tsx';
+import { MainFileDialog } from './main-file-dialog.tsx';
 import { PaperDialog } from './paper-dialog.tsx';
 import { ImportDialog } from './import-dialog.tsx';
 import { CompileButton } from './compile-button.tsx';
@@ -792,6 +793,8 @@ function App() {
   const sidebarRef = useRef<HTMLElement>(null);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
   const [modal, setModal] = useState<'project' | null>(null);
+  const [openingFolder, setOpeningFolder] = useState(false), [mainChoice, setMainChoice] = useState<{ path: string; name: string; candidates: string[] } | null>(null);
+  const folderRequest = useRef(false);
   // Commit drafts survive switching tasks or moving between review and chat.
   const applyStates = useRef(new Map<string, TaskApplyState>());
   const commitDrafts = useRef(new Map<string, TaskCommitDraft>());
@@ -996,7 +999,27 @@ function App() {
     return searchTerms.every(term => text.includes(term));
   });
   const running = state?.tasks.filter(t => ['running', 'waiting_input', 'building'].includes(t.status)).length || 0;
-  function openProject() { setModal('project'); }
+  // The desktop app opens a folder the way an editor does: the system picker,
+  // then the paper itself. The browser imports a folder or ZIP in a dialog.
+  function openProject() { if (nativeFolders) void openFolder(); else setModal('project'); }
+  async function openFolder(folder?: string, main?: string) {
+    if (folderRequest.current) return;
+    folderRequest.current = true;
+    try {
+      const path = folder ?? await chooseDirectory();
+      if (!path) return;
+      setOpeningFolder(true); setError('');
+      const opened = await api<{ project: Project } | { name: string; candidates: string[] }>('/projects/open', { path, ...(main ? { main } : {}) }, undefined, 120000);
+      if ('candidates' in opened) { setMainChoice({ path, ...opened }); return; }
+      // Select the paper once the state lists it; an unknown ID falls back to the first paper.
+      await refresh(true);
+      setMainChoice(null); setProjectId(opened.project.id); setSelected(''); setSidebar(false);
+    } catch (failure) { if (main) throw failure; setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { folderRequest.current = false; setOpeningFolder(false); }
+  }
+  // File › Open Folder… in the desktop app's menu picks the folder natively.
+  const openFolderRef = useRef(openFolder); openFolderRef.current = openFolder;
+  useEffect(() => window.papilotDesktop?.onOpenFolder?.(folder => void openFolderRef.current(folder)), []);
   // A remembered choice the host no longer offers falls back to its default;
   // the preference is kept in case another model offers it again.
   const runtimes: Partial<Record<AgentId, RuntimeStatus>> = state?.runtimes || (state ? { codex: state.runtime } : {});
@@ -1411,9 +1434,9 @@ function App() {
       <div className="sidebar-header">
         {state?.projects.length && project ? <ActionMenu label={t('Paper: {name}', { name: project.name })} className="project-switcher" menuClassName="paper-menu" align="start" actions={[
           ...state.projects.map(p => ({ id: p.id, label: p.name, detail: shortPath(p.path), title: p.path, checked: p.id === project.id, select: p.id === project.id ? undefined : () => { setProjectId(p.id); setSelected(''); }, edit: { label: t('Edit {name}', { name: p.name }), select: () => setEditingPaper(p) } })),
-          ...(owner ? [{ label: t('Add paper…'), icon: 'plus', divider: true, select: () => openProject() }] : []),
+          ...(owner ? [{ label: nativeFolders ? t('Open a folder') : t('Add paper…'), icon: nativeFolders ? 'folder' : 'plus', divider: true, select: () => openProject() }] : []),
         ]}><span className="project-switcher-name">{project.name}</span><Icon name="chevronDown" size={13}/></ActionMenu>
-          : owner && <button className="add-project" disabled={!state} onClick={() => openProject()}><Icon name="plus" size={16}/>{t('Add paper')}</button>}
+          : owner && <button className="add-project" disabled={!state} onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button>}
         <button className="icon-button" aria-label={t('Hide task list')} title={t('Hide task list')} onClick={hideSidebar}><Icon name={narrow ? 'close' : 'sidebar'} size={18}/></button>
       </div>
       <div className="sidebar-actions">
@@ -1483,7 +1506,7 @@ function App() {
         </section>
       : !state ? <div className="home"><div className="home-inner"><div className="home-mark"><span className="spinner"/></div><h1>{t('Opening your workspace')}</h1><p className="home-copy" role="status">{connectionError || t('Connecting to your papers and tasks…')}</p>{connectionError && <button className="button secondary" onClick={() => void refresh(true)}>{t('Retry connection')}</button>}</div></div>
       : !owner ? <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('No papers yet')}</h1><p className="home-copy">{t('No papers have been shared with you yet. Papers appear here as soon as {name} shares them.', { name: viewer?.owner || '' })}</p></div></div>
-      : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name="plus" size={16}/>{t('Add paper')}</button></div></div>}
+      : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button></div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
     {settings && <SettingsDialog modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: agent.model, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={owner ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} people={owner ? { api, projects: state?.projects || [], ago: agoText } : undefined} onSignOut={viewer?.listener === 'account' ? () => { setSettings(false); void signOut(); } : undefined} accountName={viewer?.name} diagnostics={owner ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={owner ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
@@ -1501,8 +1524,11 @@ function App() {
       setState(previous => previous ? { ...previous, projects: previous.projects.filter(p => p.id !== paper.id), tasks: previous.tasks.filter(t => t.projectId !== paper.id) } : previous);
       await refresh(true);
     }}/>}
+    {mainChoice && <MainFileDialog key={mainChoice.path} name={mainChoice.name} candidates={mainChoice.candidates} open={main => openFolder(mainChoice.path, main)} onClose={() => setMainChoice(null)}/>}
+    {openingFolder && !mainChoice && <div role="status" className="toast toast-status"><span className="spinner"/><span>{t('Reading paper files…')}</span></div>}
     {modal && <ImportDialog api={api} agent={agentChoice} canRepair={Object.values(runtimes).some(runtime => runtime?.connected && runtime.authenticated)} onClose={() => setModal(null)} onDone={async paper => {
-      setProjectId(paper.id); setSelected(''); setModal(null); setSidebar(false); await refresh(true);
+      await refresh(true);
+      setProjectId(paper.id); setSelected(''); setModal(null); setSidebar(false);
     }}/>}
 
   </div></NoteResultsProvider></ViewerContext.Provider>;

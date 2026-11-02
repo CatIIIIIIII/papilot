@@ -45,12 +45,23 @@ else {
     void backend.stop().finally(() => { stopped = true; app.quit(); });
   });
   void app.whenReady().then(async () => {
+    const chooseDirectory = async (parent: BrowserWindow) => {
+      const result = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] });
+      return result.canceled ? null : result.filePaths[0] || null;
+    };
     ipcMain.handle('papilot:choose-directory', async event => {
       if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return null;
       if (!event.senderFrame || new URL(event.senderFrame.url).origin !== origin) return null;
-      const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] });
-      return result.canceled ? null : result.filePaths[0] || null;
+      return chooseDirectory(window);
     });
+    // Like an editor's File › Open Folder…: the chosen folder opens as a paper.
+    const openFolder = async () => {
+      showWindow();
+      const target = window;
+      if (!target || !target.webContents.getURL().startsWith(origin + '/')) return;
+      const folder = await chooseDirectory(target);
+      if (folder && window === target) target.webContents.send('papilot:open-folder', folder);
+    };
     ipcMain.on('papilot:window', (event, action: unknown) => {
       if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return;
       if (!event.senderFrame || new URL(event.senderFrame.url).origin !== origin) return;
@@ -88,6 +99,7 @@ else {
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { label: 'Papilot', submenu: [{ role: 'about' }, { label: 'Download Updates…', click: () => external(releases) }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+      { label: 'File', submenu: [{ id: 'open-folder', label: 'Open Folder…', accelerator: 'CmdOrCtrl+O', click: () => void openFolder() }, { type: 'separator' }, process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }] },
       { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
       { role: 'help', submenu: [{ label: 'Papilot Guide', click: () => external('https://github.com/PapilotAI/papilot#readme') }, { label: 'Show Logs', click: () => shell.showItemInFolder(log) }] },
     ]));

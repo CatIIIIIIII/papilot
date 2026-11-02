@@ -134,6 +134,7 @@ try {
   await page.getByRole('button', { name: '版本更新', exact: true }).click();
   await expect(settingsDialog.getByRole('button', { name: '检查更新', exact: true })).toBeVisible();
   await expect(settingsDialog.getByText('你已在使用此通道的最新版本。', { exact: true })).toBeVisible();
+  assert.equal(await settingsDialog.getByRole('link', { name: '下载桌面版更新', exact: true }).count(), 0, 'An up-to-date desktop app offers nothing to download');
   assert.equal(await settingsDialog.getByText(/npm/).count(), 0);
   update.error = 'Could not check for updates. Try again when connected.';
   await settingsDialog.getByRole('button', { name: '检查更新', exact: true }).click();

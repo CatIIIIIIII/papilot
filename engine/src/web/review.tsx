@@ -175,7 +175,7 @@ export function ReviewApp({
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   // The whole paper with the changes in place, or the changed sections only.
   // A host may fix the view in the address (Papilot's manuscript chooses its
-  // PDF with its own switch); otherwise it follows the stored choice.
+  // PDF with its own switch); otherwise it opens on the stored default.
   const [pinnedView] = useState<ReviewView | null>(() => {
     const value = new URLSearchParams(location.search).get("view");
     return value === "paper" || value === "changes" ? value : null;
@@ -1144,13 +1144,9 @@ export function ReviewApp({
       if (article) reveal(article);
     });
   }, [paperView]);
+  // The switch changes this review only; the default is a Papilot setting.
   function chooseView(next: ReviewView) {
     setView(next);
-    try {
-      localStorage.setItem(VIEW_STORAGE, next);
-    } catch {
-      /* The choice lasts for this page. */
-    }
   }
   let index = 0;
   return (

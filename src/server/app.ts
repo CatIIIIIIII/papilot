@@ -25,7 +25,7 @@ import type { Updates } from './updates.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
 import { MAX_ATTACHMENT_BYTES } from '../shared.ts';
-import { PaperImports } from './imports.ts';
+import { PaperImports, openFolder } from './imports.ts';
 import { DATA } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
@@ -174,6 +174,7 @@ export async function buildApp(options: AppOptions) {
   const string = (value: unknown, name: string, max = 20000) => { if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
   // Adding a paper names a folder on this host, so only the owner can.
   app.post('/api/projects', owner, async request => { const b = request.body as any; return workspace.addProject(string(b.path, 'Repository path', 4000), b.name ? string(b.name, 'Paper name', 120) : undefined); });
+  app.post('/api/projects/open', owner, request => openFolder((request.body || {}) as any, root => store.projectByPath(root), (root, name) => workspace.addProject(root, name)));
   app.post('/api/imports', { ...owner, bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
   app.get<{ Params: { id: string } }>('/api/imports/:id', owner, request => imports!.get(request.params.id));
   app.post<{ Params: { id: string } }>('/api/imports/:id/build', owner, request => imports!.build(request.params.id, (request.body || {}) as any));

@@ -79,49 +79,76 @@ try {
     return { sandbox: preferences.sandbox, nodeIntegration: preferences.nodeIntegration, contextIsolation: preferences.contextIsolation };
   });
   assert.deepEqual(windowOptions, { sandbox: true, nodeIntegration: false, contextIsolation: true });
-  // Native folder selection and OS directory drops send paths without reading
-  // or uploading contents, including folders larger than the upload limit.
+  // Like an editor, Open a folder goes straight to the system picker and the
+  // folder opens as a paper in place: nothing is typed, uploaded or copied.
   const localPaper = path.join(data, 'local-paper'); fs.mkdirSync(localPaper);
   fs.writeFileSync(path.join(localPaper, 'main.tex'), '\\documentclass{article}\n\\begin{document}\nLocal paper.\n\\end{document}\n');
   const largeAsset = path.join(localPaper, 'large.dat'); fs.writeFileSync(largeAsset, ''); fs.truncateSync(largeAsset, 65 * 1024 * 1024);
-  const importRequests = [];
-  page.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith('/api/imports')) importRequests.push({ route: new URL(request.url()).pathname, body: request.postDataJSON() }); });
-  await page.getByRole('button', { name: /^Paper:|^论文：/ }).click();
-  await page.getByRole('menuitem', { name: /^(Add paper…|添加论文…)$/ }).click();
-  const importDialog = page.getByRole('dialog', { name: /^(Add a paper|添加论文)$/ });
-  await expect(importDialog).toBeVisible();
-  await expect(importDialog.getByRole('textbox', { name: /^(Folder path|文件夹路径)$/ })).toBeHidden();
-  await application.evaluate(({ dialog }) => {
-    globalThis.originalOpenDialog = dialog.showOpenDialog;
+  const openRequests = [];
+  page.on('request', request => { const route = new URL(request.url()).pathname; if (request.method() === 'POST' && /^\/api\/(imports|projects\/open)/.test(route)) openRequests.push({ route, body: request.postDataJSON() }); });
+  const pick = folder => application.evaluate(({ dialog }, folder) => {
+    globalThis.originalOpenDialog ||= dialog.showOpenDialog; globalThis.pickerCalls = 0;
     dialog.showOpenDialog = async (_window, options) => {
+      globalThis.pickerCalls++;
       if (JSON.stringify(options.properties) !== '["openDirectory"]') throw new Error('Expected a native folder chooser');
-      return { canceled: true, filePaths: [] };
+      return folder ? { canceled: false, filePaths: [folder] } : { canceled: true, filePaths: [] };
     };
-  });
-  await importDialog.getByRole('button', { name: /^(Choose folder|选择文件夹)$/ }).click();
-  await expect(importDialog.getByRole('button', { name: /^(Choose folder|选择文件夹)$/ })).toBeEnabled();
-  assert.equal(importRequests.length, 0, 'Canceling the picker does not start an import');
-  await application.evaluate(({ dialog }, folder) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] }); }, localPaper);
-  await importDialog.getByRole('button', { name: /^(Choose folder|选择文件夹)$/ }).click();
-  await expect(importDialog.getByRole('combobox', { name: /^(Main TeX file|TeX 主文件)$/ })).toHaveValue('main.tex');
-  assert.deepEqual(importRequests, [{ route: '/api/imports', body: { path: localPaper } }]);
-  assert.deepEqual(fs.readdirSync(localPaper).sort(), ['large.dat', 'main.tex'], 'Selecting a folder does not configure, initialize Git, or compile it');
+  }, folder);
+  const paperMenu = page.getByRole('button', { name: /^Paper:|^论文：/ });
+  const openFromSidebar = async () => { await paperMenu.click(); await page.getByRole('menuitem', { name: /^(Open a folder|打开文件夹)$/ }).click(); };
+  const openFromFileMenu = () => application.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('open-folder').click());
+  const opened = name => expect(page.getByRole('button', { name: new RegExp(`^(Paper: |论文：)${name}$`) })).toBeVisible({ timeout: 30000 });
+  await pick(null);
+  await openFromSidebar();
+  await expect.poll(() => application.evaluate(() => globalThis.pickerCalls)).toBe(1);
+  assert.equal(await page.getByRole('dialog').count(), 0, 'Open a folder shows no import dialog');
+  assert.equal(openRequests.length, 0, 'Canceling the picker opens nothing');
+  await pick(localPaper);
+  await openFromSidebar();
+  await opened('local-paper');
+  assert.deepEqual(openRequests, [{ route: '/api/projects/open', body: { path: localPaper } }]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(localPaper, '.latex-review.json'), 'utf8')), { main: 'main.tex', engine: 'pdflatex', source_dir: '' });
+  assert.ok(fs.existsSync(path.join(localPaper, '.git')), 'The opened folder gets its version history in place');
+  // File › Open Folder… asks for the main file only when several could be it.
+  const twoMains = path.join(data, 'two-mains'); fs.mkdirSync(twoMains);
+  for (const name of ['a.tex', 'b.tex']) fs.writeFileSync(path.join(twoMains, name), '\\documentclass{article}\n\\begin{document}\nPaper.\n\\end{document}\n');
+  await pick(twoMains);
+  await openFromFileMenu();
+  const mainDialog = page.getByRole('dialog', { name: 'two-mains' });
+  await expect(mainDialog).toBeVisible();
+  assert.deepEqual(fs.readdirSync(twoMains).sort(), ['a.tex', 'b.tex'], 'Asking for the main file changes nothing');
+  await mainDialog.getByRole('combobox', { name: /^(Main TeX file|TeX 主文件)$/ }).selectOption('b.tex');
+  await mainDialog.screenshot({ path: 'test-results/desktop-main-file.png' });
+  await mainDialog.getByRole('button', { name: /^(Open paper|打开论文)$/ }).click();
+  await opened('two-mains');
+  await expect(mainDialog).toBeHidden();
+  assert.deepEqual(openRequests.slice(1), [{ route: '/api/projects/open', body: { path: twoMains } }, { route: '/api/projects/open', body: { path: twoMains, main: 'b.tex' } }]);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(twoMains, '.latex-review.json'), 'utf8')).main, 'b.tex');
+  // A folder already in Papilot opens again instead of being added twice.
+  await pick(localPaper);
+  await openFromFileMenu();
+  await opened('local-paper');
+  assert.equal((await (await fetch(`${origin}/api/state`)).json()).projects.length, 3);
+  // A paper moves by choosing its folder, never by typing a path.
+  await paperMenu.click();
+  await page.getByRole('menuitem', { name: /^(Edit local-paper|编辑 local-paper)$/ }).click();
+  const paperDialog = page.getByRole('dialog', { name: /^(Edit paper|编辑论文)$/ });
+  const location = paperDialog.getByRole('group', { name: /^(Location|位置)$/ });
+  await expect(location).toContainText(localPaper.split('/').pop());
+  assert.equal(await paperDialog.getByRole('textbox').count(), 1, 'Only the paper name is typed');
+  await pick(twoMains);
+  await location.getByRole('button', { name: /^(Change…|更改…)$/ }).click();
+  await expect(location).toContainText('two-mains');
+  await expect.poll(() => application.evaluate(() => globalThis.pickerCalls)).toBe(1);
+  await paperDialog.screenshot({ path: 'test-results/desktop-paper-dialog.png' });
+  await paperDialog.getByRole('button', { name: /^(Cancel|取消)$/ }).click();
   await application.evaluate(({ dialog }) => { dialog.showOpenDialog = globalThis.originalOpenDialog; delete globalThis.originalOpenDialog; });
-  await importDialog.getByRole('button', { name: /^(Choose different files|重新选择文件)$/ }).click();
-  await importDialog.screenshot({ path: 'test-results/desktop-import.png' });
-  const dropBox = await page.locator('.import-drop').boundingBox(), cdp = await page.context().newCDPSession(page);
-  for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', { type, x: dropBox.x + 20, y: dropBox.y + 20, data: { items: [], files: [localPaper], dragOperationsMask: 1 } });
-  await expect(importDialog.getByRole('combobox', { name: /^(Main TeX file|TeX 主文件)$/ })).toHaveValue('main.tex');
-  assert.deepEqual(importRequests.at(-1), { route: '/api/imports', body: { path: localPaper } });
-  assert.equal(importRequests.length, 2, 'A native folder drop does not auto-compile or upload');
-  assert.deepEqual(fs.readdirSync(localPaper).sort(), ['large.dat', 'main.tex']);
-  await cdp.detach();
-  await importDialog.getByRole('button', { name: /^(Continue later|稍后继续)$/ }).click();
   const settings = page.getByRole('button', { name: /^(Settings|设置)$/ });
   await settings.click();
   await page.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
   await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ })).toBeVisible();
+  // A download appears only with a newer release; the app menu keeps the releases page.
+  assert.equal(await page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ }).count(), 0);
   assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), 0);
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-${packaged ? 'packaged' : 'dev'}.png` });

@@ -4,6 +4,13 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **The desktop app opens folders like an editor.** **Open a folder** in the paper menu, or **File › Open Folder…** (⌘O), goes straight to the system folder picker, and the chosen folder opens as a paper. There is no import window to fill in: Papilot detects the main file and engine, prepares Git history when needed, and compiles the PDF in the paper's own view. Only a folder with several possible main files asks which one to compile, and a folder that is already a paper opens again. The desktop app no longer offers ZIP imports or typed folder paths, and **Edit paper** shows the paper's folder, with **Change…** to pick another.
+- **Reviews open on the changed sections.** The whole paper takes longer to show, so reviews now start on **Changes**. **Settings → Review preferences → Open reviews on** chooses **PDF** instead, and the switch in the review toolbar changes only the review in front of you.
+- **The commit step stays in view.** Once every change is decided, the card with Papilot's next step, such as the commit message and **Commit**, floats at the top of the review while you scroll, instead of a bar that only jumped back to it.
+- **A calmer Updates page in the desktop app.** **Download desktop updates** appears only when a newer desktop release exists, as the main action beside its version. An up-to-date app shows just its status; **Papilot › Download Updates…** in the app menu still opens the releases page.
+
 ## [0.8.3] - 2026-11-02 — Separate Desktop and Web Updates
 
 ### Added

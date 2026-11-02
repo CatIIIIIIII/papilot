@@ -6,12 +6,16 @@ declare global {
     papilotDesktop?: {
       platform: string; minimize(): void; maximize(): void; close(): void;
       chooseDirectory?(): Promise<string | null>;
-      pathForFile?(file: File): string;
+      onOpenFolder?(listener: (folder: string) => void): () => void;
     };
   }
 }
 export const desktopWindow = Boolean(window.papilotDesktop);
 if (desktopWindow) document.documentElement.dataset.desktop = window.papilotDesktop!.platform;
+// The desktop app opens papers in place, as folders from the system picker.
+// Nothing is typed, uploaded or copied.
+export const nativeFolders = Boolean(window.papilotDesktop?.chooseDirectory);
+export const chooseDirectory = () => window.papilotDesktop!.chooseDirectory!();
 
 export function DesktopWindowChrome() {
   if (!desktopWindow) return null;

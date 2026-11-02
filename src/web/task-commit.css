@@ -29,13 +29,10 @@
 .review-complete:has(.task-commit)>span{font-size:12px;color:var(--text-3)}
 .review-complete-actions:has(.task-commit){width:100%;margin:8px 0 0}
 .task-delivery:has(.task-commit){align-items:stretch}
-.review-complete-jump{position:fixed;top:calc(var(--papilot-review-bar-height,44px) + 8px);left:14px;right:34px;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;padding:8px 10px 8px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--bg);color:var(--text);box-shadow:var(--float);font:12px/1.4 var(--sans)}
-.review-complete-jump>span{display:flex;align-items:center;gap:6px;min-width:0;font-weight:500}
-.review-complete-jump>span>svg{flex:none;color:var(--green)}
-.review-complete-jump button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:30px;padding:4px 11px;border:1px solid var(--line-strong);border-radius:7px;background:var(--bg);color:var(--text);font:500 13px/1.4 var(--sans);cursor:pointer;transition:background-color .15s,border-color .15s}
-.review-complete-jump button:hover{background:var(--bg-subtle);border-color:var(--line-hover)}
-.review-complete-jump button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media(max-width:520px){.review-complete-jump{left:8px;right:24px;gap:8px;padding:6px 8px}.review-complete-jump button{min-height:36px}}
+/* Papilot's next step floats at the top of the review while the author reads on. */
+.review-complete:has(>.review-complete-actions:not(:empty)){position:sticky;top:var(--paper-top,14px);z-index:6;transition:box-shadow .15s}
+:root[data-papilot-scrolled] .review-complete:has(>.review-complete-actions:not(:empty)){box-shadow:var(--float)}
+@media(prefers-reduced-motion:reduce){.review-complete{transition:none}}
 @container task-commit (max-width:460px){
   .task-commit-toolbar:has(.task-commit-alternative) .task-commit-actions{flex-basis:100%;padding-top:2px}
   .task-commit-toolbar:has(.task-commit-alternative) .task-commit-branch{max-width:calc(100% - 44px)}

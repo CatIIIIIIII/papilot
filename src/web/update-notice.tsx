@@ -145,7 +145,6 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
             : <button className="button primary" aria-describedby="update-latest-version" disabled={sending || !status.canUpdate} onClick={() => void send('/updates/install', { version: status.latestVersion })}><Icon name="arrowUp" size={15}/>{status.phase === 'failed' ? t('Retry update') : t('Update now')}</button>)}
         </div>}
       </div>
-      {status.downloadUrl && !available && <a className="button secondary" href={status.downloadUrl} target="_blank" rel="noreferrer">{t('Download desktop updates')}</a>}
       {!status.canUpdate && !status.downloadUrl && <p className="update-settings-notice"><Icon name="info" size={15}/><span>{t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</span></p>}
       {!status.downloadUrl && <div className="update-channel">
         <div className="update-channel-copy"><h4>{t('Update channel')}</h4><p>{status.channel === 'dev' ? t('Early updates from GitHub main. May be less stable.') : t('Published releases, recommended for everyday use.')}</p></div>

@@ -140,6 +140,15 @@ try {
   const settings = () => page.locator('dialog').filter({ has: page.locator('.settings-dialog') });
   await settings().getByRole('button', { name: 'Review preferences', exact: true }).click();
   const expandEffects = () => settings().getByRole('switch', { name: 'Expand indirect changes', exact: true });
+  // Reviews open on the changed sections unless the whole paper is chosen here.
+  const openOn = settings().getByRole('group', { name: 'Open reviews on', exact: true });
+  await expect(openOn.getByRole('button', { name: 'Changes', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await openOn.getByRole('button', { name: 'PDF', exact: true }).click();
+  await expect(openOn.getByRole('button', { name: 'PDF', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  assert.equal(await page.evaluate(() => localStorage.getItem('latex-review:default-view')), 'paper');
+  await openOn.screenshot({ path: 'test-results/review-default-view-setting.png' });
+  await openOn.getByRole('button', { name: 'Changes', exact: true }).click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('latex-review:default-view')), 'changes');
   await expect(expandEffects()).not.toBeChecked();
   await expandEffects().check();
   await expect(indirect().locator('.place')).toHaveCount(2);
@@ -412,22 +421,23 @@ try {
   assert.equal(messageRequests.length, messageBefore, 'Applying needs no agent-written commit message');
   assert.equal(await card.evaluate(el => el.parentElement.firstElementChild === el), true);
   await viewer().locator('.document').evaluate(el => { el.style.minHeight = '1800px'; });
-  const summaryLink = () => viewer().getByRole('button', { name: 'Back to summary', exact: true });
+  // The commit step floats at the top of the review instead of a jump back to it.
+  const lifted = () => card.evaluate(el => getComputedStyle(el).boxShadow !== 'none');
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     if (width === 390) await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
     await expect(applyButton()).toBeVisible();
     await viewer().locator('#paper').hover();
     await page.mouse.wheel(0, 1800);
-    await expect(summaryLink()).toBeInViewport();
-    assert.ok(await viewer().locator('#paper').evaluate(el => el.scrollTop > 500));
-    assert.equal(await viewer().locator('.review-complete-jump').evaluate(el => el.getBoundingClientRect().right <= document.documentElement.clientWidth), true);
-    await page.screenshot({ path: `test-results/review-summary-jump-${width}.png`, animations: 'disabled' });
-    await summaryLink().click();
-    await expect.poll(() => viewer().locator('#paper').evaluate(el => el.scrollTop)).toBeLessThan(2);
-    await expect(summaryLink()).toHaveCount(0);
-    await expect(card).toBeFocused();
-    await expect(applyButton()).toBeVisible();
+    await expect.poll(() => viewer().locator('#paper').evaluate(el => el.scrollTop)).toBeGreaterThan(500);
+    await expect(applyButton()).toBeInViewport();
+    await expect(commitButton()).toBeInViewport();
+    await expect.poll(lifted).toBe(true);
+    assert.ok(await card.evaluate(el => Math.abs(el.getBoundingClientRect().top - document.getElementById('paper').getBoundingClientRect().top) < 30), 'The card stays at the top of the review');
+    assert.equal(await viewer().locator('.review-complete-jump').count(), 0);
+    await page.screenshot({ path: `test-results/review-commit-floating-${width}.png`, animations: 'disabled' });
+    await viewer().locator('#paper').evaluate(el => el.scrollTo(0, 0));
+    await expect.poll(lifted).toBe(false);
     assert.deepEqual(await viewer().locator('#root').evaluate(el => [el.scrollTop, document.documentElement.scrollTop]), [0, 0]);
   }
   await viewer().locator('.document').evaluate(el => { el.style.minHeight = ''; });

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { PaperImports, inspectPaper, prepareRepository, texFiles } from '../src/server/imports.ts';
+import { PaperImports, inspectPaper, openFolder, prepareRepository, texFiles } from '../src/server/imports.ts';
 import { Manuscripts } from '../src/server/manuscript.ts';
 
 const source = '\\documentclass{article}\n\\begin{document}\nHello paper.\n\\end{document}\n';
@@ -187,6 +187,39 @@ test('parent repositories are refused before changing source and empty Git repos
     const value = await f.imports.create({ path: nested }); await f.imports.build(value.id, {});
     assert.match((await settled(f.imports, value.id)).error!, /parent Git/); assert.equal(fs.existsSync(path.join(nested, '.latex-review.json')), false);
     fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root); assert.ok(git(f.root, 'rev-parse', 'HEAD'));
+  } finally { f.close(); }
+});
+
+test('the desktop opens a folder as a paper at once and asks only which of several main files to compile', async () => {
+  const f = fixture();
+  try {
+    const projects = new Map<string, { id: string; name: string; path: string; createdAt: number }>();
+    const known = (root: string) => projects.get(root);
+    const register = async (root: string, name: string) => { await prepareRepository(root); const project = { id: String(projects.size + 1), name, path: root, createdAt: 0 }; projects.set(root, project); return project; };
+    await assert.rejects(openFolder({ path: f.root }, known, register), /Select a folder containing the paper/);
+    fs.writeFileSync(path.join(f.root, 'notes.txt'), 'not a paper');
+    await assert.rejects(openFolder({ path: path.join(f.root, 'notes.txt') }, known, register), /Select a folder containing the paper/);
+    // A clear main file opens directly, with its engine detected and remembered.
+    const clear = path.join(f.directory, 'thesis'); fs.mkdirSync(clear);
+    fs.writeFileSync(path.join(clear, 'main.tex'), source.replace('\\begin{document}', '\\usepackage{fontspec}\n\\begin{document}'));
+    const opened = await openFolder({ path: clear }, known, register);
+    assert.ok('project' in opened); assert.equal(opened.project.name, 'thesis'); assert.equal(opened.project.path, clear);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(clear, '.latex-review.json'), 'utf8')), { main: 'main.tex', engine: 'xelatex', source_dir: '' });
+    assert.ok(git(clear, 'rev-parse', 'HEAD'));
+    const again = await openFolder({ path: clear + '/' }, known, register);
+    assert.ok('project' in again); assert.equal(again.project, opened.project, 'A paper already in Papilot opens again');
+    // Several possible main files are offered without changing the folder.
+    fs.writeFileSync(path.join(f.root, 'a.tex'), source); fs.writeFileSync(path.join(f.root, 'b.tex'), source.replace('\\documentclass', '% !TEX program = lualatex\n\\documentclass'));
+    assert.deepEqual(await openFolder({ path: f.root }, known, register), { name: 'original', candidates: ['a.tex', 'b.tex'] });
+    assert.deepEqual(fs.readdirSync(f.root).sort(), ['a.tex', 'b.tex', 'notes.txt']);
+    await assert.rejects(openFolder({ path: f.root, main: '../thesis/main.tex' }, known, register), /existing TeX main file/);
+    const chosen = await openFolder({ path: f.root, main: 'b.tex' }, known, register);
+    assert.ok('project' in chosen);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8')), { main: 'b.tex', engine: 'lualatex', source_dir: '' });
+    // A folder inside another repository is refused before anything is written.
+    const nested = path.join(f.root, 'chapter'); fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'main.tex'), source);
+    await assert.rejects(openFolder({ path: nested }, known, register), /parent Git/);
+    assert.deepEqual(fs.readdirSync(nested), ['main.tex']);
   } finally { f.close(); }
 });
 
