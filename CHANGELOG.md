@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- **Review builds no longer recompile chapters from scratch.** A review compiles the changed chapters on their own (`\includeonly`), before and after the change. Those builds started clean every time: about three TeX passes and two BibTeX runs each, which on a thesis kept several compilations running for minutes after a commit and slowed the manuscript's own build. Now each set of chapters continues from its previous build, as full builds already did, and usually needs one pass. The other chapters' cross-references still come from the latest full build.
+
 ## [0.8.5] - 2026-11-02
 
 Papilot 0.8.5 brings the Dev channel to the desktop app with small in-place updates, returns you to where you left off, recovers PDF comparisons after a lost connection and lays out the Git panel like Cursor's.

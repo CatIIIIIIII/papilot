@@ -263,12 +263,13 @@ export class Builder {
         fs.utimesSync(folder, new Date(), new Date());
         return cached;
       }
-      // A full build continues from the latest completed one, or from the
-      // author's own latexmk output, as latexmk does when a folder is
-      // compiled again: unchanged files are cloned and LaTeX keeps its state,
-      // so it reruns only as often as the edit requires. Manual recompilation
-      // starts clean, and so does a retry when leftover state broke a build.
-      const start = partial || options.force ? null : this.latest(context) ?? "author";
+      // A build continues from the latest completed one with the same
+      // targets, or a full build from the author's own latexmk output, as
+      // latexmk does when a folder is compiled again: unchanged files are
+      // cloned and LaTeX keeps its state, so it reruns only as often as the
+      // edit requires. Manual recompilation starts clean, and so does a retry
+      // when leftover state broke a build.
+      const start = options.force ? null : this.latest(context, targets) ?? (partial ? null : "author");
       let result: BuildInfo;
       try {
         result = await this.compile(rev, tree, key, targets, seed, date, start, options.progress);
@@ -276,15 +277,21 @@ export class Builder {
         if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
         result = await this.compile(rev, tree, key, targets, seed, date, null, options.progress);
       }
-      if (!partial) writeJson(path.join(this.cache, "latest.json"), { key, context, date: date.SOURCE_DATE_EPOCH });
+      writeJson(this.latestFile(targets), { key, context, date: date.SOURCE_DATE_EPOCH });
       return result;
     });
   }
-  private latest(context: string): { info: BuildInfo; date: unknown } | null {
-    const latest = readJson<{ key?: unknown; context?: unknown; date?: unknown } | null>(path.join(this.cache, "latest.json"), null);
+  // Review rounds build the same chapters again and again (\includeonly), so
+  // each set of targets continues from its own latest build.
+  private latestFile(targets: string[]) {
+    const name = JSON.stringify(targets) === '["full"]' ? "latest.json" : `latest-${hash(JSON.stringify(targets)).slice(0, 16)}.json`;
+    return path.join(this.cache, name);
+  }
+  private latest(context: string, targets: string[]): { info: BuildInfo; date: unknown } | null {
+    const latest = readJson<{ key?: unknown; context?: unknown; date?: unknown } | null>(this.latestFile(targets), null);
     if (typeof latest?.key !== "string" || !/^[0-9a-f]{32}$/.test(latest.key) || latest.context !== context) return null;
     const info = readJson<BuildInfo | null>(path.join(this.cache, latest.key, "result.json"), null);
-    return info && JSON.stringify(info.targets) === '["full"]' && fs.existsSync(info.pdf) && fs.existsSync(info.root) ? { info, date: latest.date } : null;
+    return info && JSON.stringify(info.targets) === JSON.stringify(targets) && fs.existsSync(info.pdf) && fs.existsSync(info.root) ? { info, date: latest.date } : null;
   }
   private async compile(
     rev: string,
@@ -353,12 +360,16 @@ export class Builder {
       "-file-line-error",
     ];
     if (partial) {
-      const seedOut = path.dirname(seed!.pdf);
+      // Chapters outside \includeonly keep the seed's auxiliary files, also
+      // when this build continues from an earlier one built on another seed.
+      // latexmk compares contents, so an unchanged chapter causes no rerun.
+      const seedOut = path.dirname(seed!.pdf),
+        others = new Set(included.filter((target) => !targets.includes(target)).map((target) => path.join(...target.split("/")) + ".aux"));
       for (const file of listFiles(seedOut))
         if (AUXILIARY.has(path.extname(file))) {
-          const target = path.join(out, path.relative(seedOut, file));
+          const relative = path.relative(seedOut, file), target = path.join(out, relative);
           fs.mkdirSync(path.dirname(target), { recursive: true });
-          if (!fs.existsSync(target)) fs.copyFileSync(file, target);
+          if (!fs.existsSync(target) || others.has(relative)) fs.copyFileSync(file, target);
         }
       const preload = Object.entries(p.preload)
         .filter(

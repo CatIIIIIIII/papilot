@@ -8,7 +8,8 @@ Papilot should compile about as fast as running `latexmk` (or `make`) in the pap
 2. **Export.** The new build folder starts as a clone of the latest completed build. On APFS, `cp -c` clones the whole folder in one step. Files outside the new tree are removed, files with a different Git object or size are streamed from Git, and nothing else is read. Other systems clone or copy file by file. The first build of a paper exports the whole tree from Git, streaming one blob at a time.
 3. **LaTeX state.** latexmk's database, auxiliary files and minted cache carry over from that build. Within the same day, the PDF, SyncTeX data and log carry over too. latexmk then decides what to run, exactly as in the author's folder: nothing if no input changed, usually one pass after an edit. Paths in kept SyncTeX data and logs are rewritten in place for the new folder; build folders differ only in their equal-length key. On a new day the PDF is rebuilt, so `\today` stays current.
 4. **First build.** When the author has compiled the paper with latexmk into `<main folder>/build`, that job's auxiliary state and minted cache seed the first build. Other editions and subfolders in that directory are ignored. The author's PDF and SyncTeX data are not reused: their paths have a different length, and SyncTeX records byte offsets.
-5. **Fallbacks.** A build that fails on leftover state, with an error located in a generated file under `build/` (for example a stale `.aux` or `.bbl`), is retried once from a clean folder. **Recompile PDF** always starts clean.
+5. **Review builds.** A review compiles only the changed chapters (`\includeonly`), before and after the change, on top of a full build of the task's base (the seed). Each set of chapters continues from its own latest build in the same way, so a chapter that was compiled before needs one pass, not a clean build. The other chapters' auxiliary files come from the seed every time, so their cross-references stay current.
+6. **Fallbacks.** A build that fails on leftover state, with an error located in a generated file under `build/` (for example a stale `.aux` or `.bbl`), is retried once from a clean folder. **Recompile PDF** always starts clean.
 
 ## Measurements
 
@@ -31,8 +32,17 @@ Papilot's own work per build, outside latexmk:
 | Export of the build folder | 240 MB per build, kept for three days | 0.76 s, copy-on-write |
 | Copy LaTeX state | not done | 0.06 s |
 
+Review builds of one chapter of the same thesis, measured on 2026-11-02 at a load average of about 9, for a commit that revised the chapter's framing and title:
+
+| Build | Before | Now |
+|---|---|---|
+| Chapter, the first build for this set of chapters | 88.5 s: 3 passes, 2 BibTeX runs | the same, clean |
+| Chapter, every later build | 68.7–88.5 s: 3 passes, 2 BibTeX runs | 25.8 s: 1 pass |
+
+Several tasks' reviews refresh after a commit, so these clean builds used to run side by side with the manuscript's own build.
+
 When the import dialog compiled a paper, it used to force a clean build under a one-off key, so opening the paper afterwards compiled it a second time. Now it builds under the normal key, and the paper view reuses that PDF.
 
 ## Reproducing
 
-`tests/incremental-build.test.ts` checks pass counts on a small paper: one pass when continuing from the author's latexmk output, one pass after an edit, no TeX run after an unrelated change, a clean retry after stale auxiliary state, and a clean manual recompile. To time a real paper, clone it outside its folder, run `latexmk` there for reference, then build the same commits with `Builder` from `engine/src/core/build.ts` and compare the `Running '…latex'` lines in each build's `latexmk.log`.
+`tests/incremental-build.test.ts` checks pass counts on a small paper: one pass when continuing from the author's latexmk output, one pass after an edit, no TeX run after an unrelated change, a clean retry after stale auxiliary state, and a clean manual recompile. It also checks that a chapter's review build needs one pass the second time and takes renumbered references from a new seed. To time a real paper, clone it outside its folder, run `latexmk` there for reference, then build the same commits with `Builder` from `engine/src/core/build.ts` and compare the `Running '…latex'` lines in each build's `latexmk.log`.

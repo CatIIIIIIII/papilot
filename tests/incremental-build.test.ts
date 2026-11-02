@@ -99,3 +99,32 @@ test('builds export every file and continue like latexmk in the same folder; sta
     assert.ok(runs(path.dirname(manual.root)) >= 2, 'Manual recompilation starts clean');
   } finally { f.close(); }
 });
+
+test('review builds of a chapter continue from the previous one and take other chapters from their seed', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+  const f = fixture();
+  try {
+    const commit = (message: string) => { f.repo.run(['add', '-A']); f.repo.run(['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', message]); return f.repo.text(['rev-parse', 'HEAD']); };
+    fs.mkdirSync(path.join(f.root, 'chapters'));
+    fs.writeFileSync(path.join(f.root, 'main.tex'), '\\documentclass{article}\n\\begin{document}\n\\tableofcontents\n\\include{chapters/a}\n\\include{chapters/b}\n\\end{document}\n');
+    const chapterA = (text: string) => `\\section{A}\\label{sec:a}\n${text} See Section~\\ref{sec:b}.\n`;
+    fs.writeFileSync(path.join(f.root, 'chapters/a.tex'), chapterA('First draft.'));
+    fs.writeFileSync(path.join(f.root, 'chapters/b.tex'), '\\section{B}\\label{sec:b}\nSee Section~\\ref{sec:a}.\n');
+    const first = commit('First');
+    const builder = new Builder(loadProject(f.root), f.repo), targets = ['chapters/a'];
+    const seed = await builder.build(first);
+    const clean = await builder.build(first, targets, seed);
+    assert.ok(runs(path.dirname(clean.root)) >= 2, 'The first build of a chapter starts clean');
+
+    fs.writeFileSync(path.join(f.root, 'chapters/a.tex'), chapterA('Second draft.'));
+    const second = commit('Second');
+    const continued = await builder.build(second, targets, seed);
+    assert.equal(runs(path.dirname(continued.root)), 1, 'An edit that keeps references stable needs one pass');
+    assert.match(execFileSync('pdftotext', [continued.pdf, '-']).toString(), /Second draft\. See Section 2\./);
+
+    // Another chapter gains a section, so Section B is renumbered in the new seed.
+    fs.writeFileSync(path.join(f.root, 'chapters/b.tex'), '\\section{Extra}\n\\section{B}\\label{sec:b}\nSee Section~\\ref{sec:a}.\n');
+    const third = commit('Third');
+    const renumbered = await builder.build(third, targets, await builder.build(third));
+    assert.match(execFileSync('pdftotext', [renumbered.pdf, '-']).toString(), /Second draft\. See Section 3\./, 'References follow the seed, not the earlier build');
+  } finally { f.close(); }
+});
