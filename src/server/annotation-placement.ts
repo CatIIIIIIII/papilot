@@ -48,15 +48,29 @@ export class AnnotationPages {
   }
 }
 
-export function placeAnnotation(note: Annotation, previous: AnnotationPages, current: AnnotationPages): AnnotationPlacement | null {
+// Reading a page's text or pixels takes milliseconds, and a search may read
+// every page of a long PDF, so the server answers other requests between pages.
+const breather = () => new Promise<void>(resolve => setImmediate(resolve));
+
+export async function placeAnnotation(note: Annotation, previous: AnnotationPages, current: AnnotationPages): Promise<AnnotationPlacement | null> {
   if (note.page < 0 || note.page >= previous.document.length) return null;
   const samePage = (page: number) => previous.hash(note.page) === current.hash(page);
-  if (note.page < current.document.length && samePage(note.page)) return { page: note.page, rect: note.rect, rects: note.rects };
+  if (note.page < current.document.length) {
+    // Each fingerprint renders a page, so they take turns with other requests.
+    previous.hash(note.page);
+    await breather();
+    if (samePage(note.page)) return { page: note.page, rect: note.rect, rects: note.rects };
+    await breather();
+  }
 
   // A box may contain a figure rather than text. Only move it automatically
   // when the entire original page still exists, exactly once, in the new PDF.
   if (!note.rects?.length) {
-    const pages = Array.from({ length: current.document.length }, (_, index) => index).filter(samePage);
+    const pages: number[] = [];
+    for (let index = 0; index < current.document.length; index++) {
+      if (index % 2 === 1) await breather();
+      if (samePage(index)) pages.push(index);
+    }
     return pages.length === 1 ? { page: pages[0], rect: note.rect, rects: note.rects } : null;
   }
 
@@ -71,6 +85,7 @@ export function placeAnnotation(note: Annotation, previous: AnnotationPages, cur
   const before = old.text.slice(Math.max(0, start - 32), start), after = old.text.slice(end, end + 32);
   const matches: { page: number; start: number }[] = [];
   for (let page = 0; page < current.document.length; page++) {
+    if (page % 2 === 1) await breather();
     const text = current.text(page).text;
     for (let from = 0; from <= text.length - needle.length;) {
       const found = text.indexOf(needle, from);

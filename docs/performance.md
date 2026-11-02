@@ -73,9 +73,10 @@ End to end with `scripts/profile-commit.ts` on a copy of the paper: a deferred t
 | Review engine's slowest answer while a task is created | 4.1 s | 35 ms |
 | Review engine's slowest answer while a round is published | 2.4 s | 16–35 ms |
 | Review engine's slowest answer while the task is committed | 0.33 s | 0.25–0.28 s |
-| Longest wait in Papilot's event loop from the commit to the PDF | 113–115 ms | 23–74 ms |
 
 Before, the manuscript started compiling when its view next asked, and "before" here assumes it was open the whole time. A 30 s review gives the prediction a 45 s head start on a 90–110 s build; the commit then promotes it, and the waiting view takes over its passes.
+
+Papilot's own event loop, measured as the longest gap between ticks of a 2 ms timer while the manuscript compiles an edit of the paper (one pass, 47–49 s): 106 ms before, with seven gaps over 50 ms, and 34 ms now, with none. Placing a text note from an earlier version on the new PDF searches every page's text; on the 324-page paper that held the event loop for 1,076 ms after every build, and now for at most 42 ms at a time.
 
 ## Reproducing
 

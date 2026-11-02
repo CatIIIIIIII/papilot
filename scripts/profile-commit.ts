@@ -11,7 +11,6 @@
 // without predictions simply waits after the commit.
 import fs from 'node:fs';
 import path from 'node:path';
-import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { connect } from '../engine/src/client.ts';
 import { Manuscripts } from '../src/server/manuscript.ts';
 
@@ -37,9 +36,13 @@ const pinger = (async () => {
 })();
 const slowest = (from: number, to: number) => Math.max(0, ...answers.filter(([at]) => at >= from && at <= to).map(([, ms]) => ms));
 // This process's event loop stands in for Papilot's, which runs the same
-// manuscript code.
-const lag = monitorEventLoopDelay({ resolution: 10 });
-lag.enable();
+// manuscript code: the longest gap between ticks of a 2 ms timer.
+// (monitorEventLoopDelay misses long synchronous stretches.)
+const lag = (() => {
+  let last = performance.now(), max = 0;
+  setInterval(() => { const now = performance.now(); max = Math.max(max, now - last); last = now; }, 2).unref();
+  return { get max() { return max; }, reset() { max = 0; last = performance.now(); } };
+})();
 
 const manuscripts = new Manuscripts() as Manuscripts & { refresh?: Manuscripts['refresh']; predict?: Manuscripts['predict'] };
 async function ready(since: number) {
@@ -95,6 +98,6 @@ console.log(JSON.stringify({
   publishSeconds: (marks.published - marks.publish) / 1000,
   commitToPdfSeconds: (marks.pdf - marks.commit) / 1000,
   manuscriptBuild: { key: newest.name, seconds: newest.result.seconds, texPasses: passes },
-  slowestEventLoopMs: { papilot: { publish: Math.round(publishLag / 1e6), commitToPdf: Math.round(commitLag / 1e6) }, engine: { publish: slowest(marks.publish, marks.published), commitToPdf: slowest(marks.commit, marks.pdf) } },
+  slowestEventLoopMs: { papilot: { publish: Math.round(publishLag), commitToPdf: Math.round(commitLag) }, engine: { publish: slowest(marks.publish, marks.published), commitToPdf: slowest(marks.commit, marks.pdf) } },
 }));
 process.exit(0);

@@ -596,13 +596,26 @@ export class Manuscripts extends EventEmitter {
     const cacheKey = (note: Annotation) => JSON.stringify([projectId, build.key, note.key, note.page, note.rect, note.rects, note.quote]);
     if (notes.every(note => note.key === build.key || this.placements.has(cacheKey(note))))
       return notes.map(note => { const placement = note.key === build.key ? null : this.placements.get(cacheKey(note)); return placement ? { ...note, ...placement } : note; });
+    // Placing reads every page of a long PDF between other requests; a poll
+    // that arrives meanwhile shares the work instead of repeating it.
+    const batch = JSON.stringify([projectId, build.key, notes.map(note => cacheKey(note))]);
+    let placing = this.reanchoring.get(batch);
+    if (!placing) {
+      placing = this.place(projectId, root, notes, build.pdf, build.key, cacheKey);
+      this.reanchoring.set(batch, placing);
+      void placing.then(() => undefined, () => undefined).then(() => this.reanchoring.delete(batch));
+    }
+    return placing;
+  }
+  private reanchoring = new Map<string, Promise<Annotation[]>>();
+  private async place(projectId: string, root: string, notes: Annotation[], pdfFile: string, buildKey: string, cacheKey: (note: Annotation) => string): Promise<Annotation[]> {
     const { PdfDocument } = await engine();
-    const current = new PdfDocument(build.pdf), target = new AnnotationPages(current);
+    const current = new PdfDocument(pdfFile), target = new AnnotationPages(current);
     const old = new Map<string, { document: InstanceType<typeof PdfDocument>; pages: AnnotationPages }>();
     try {
       const output: Annotation[] = [];
       for (const note of notes) {
-        if (note.key === build.key) { output.push(note); continue; }
+        if (note.key === buildKey) { output.push(note); continue; }
         const key = cacheKey(note);
         if (!this.placements.has(key)) {
           let placement: Pick<Annotation, 'key' | 'page' | 'rect' | 'rects' | 'source'> | null = null;
@@ -610,10 +623,10 @@ export class Manuscripts extends EventEmitter {
             const pdf = await this.cachedPdf(root, note.key);
             if (pdf) {
               if (!old.has(pdf)) { const document = new PdfDocument(pdf); old.set(pdf, { document, pages: new AnnotationPages(document) }); }
-              const match = placeAnnotation(note, old.get(pdf)!.pages, target);
+              const match = await placeAnnotation(note, old.get(pdf)!.pages, target);
               if (match) {
-                const { source } = await this.locate(projectId, build.key, match.page, match.rect, match.rects, note.quote);
-                placement = { ...match, key: build.key, source };
+                const { source } = await this.locate(projectId, buildKey, match.page, match.rect, match.rects, note.quote);
+                placement = { ...match, key: buildKey, source };
               }
             }
           } catch { /* Keep the annotation intact when its position cannot be verified. */ }
@@ -624,7 +637,7 @@ export class Manuscripts extends EventEmitter {
       }
       if (this.placements.size > 2000) this.placements.clear();
       if (this.oldPdfs.size > 500) this.oldPdfs.clear();
-      return this.builds.get(projectId)?.key === build.key ? output : notes;
+      return this.builds.get(projectId)?.key === buildKey ? output : notes;
     } finally { current.close(); for (const entry of old.values()) entry.document.close(); }
   }
 
@@ -713,7 +726,7 @@ export class Manuscripts extends EventEmitter {
     const key = state.build.key, { PdfDocument } = await engine();
     const original = new PdfDocument(pdf), current = new PdfDocument(this.pdf(projectId, key));
     try {
-      const match = placeAnnotation(note, new AnnotationPages(original), new AnnotationPages(current));
+      const match = await placeAnnotation(note, new AnnotationPages(original), new AnnotationPages(current));
       if (!match) throw new Error('This passage could not be located reliably in the current manuscript. The suggestion remains in the review task.');
       const { source } = await this.locate(projectId, key, match.page, match.rect, match.rects, note.quote);
       const latest = await this.state(projectId, root);
