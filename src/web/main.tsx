@@ -1037,6 +1037,8 @@ function App() {
       if (canStreamUpdates(protocol)) {
         events = new EventSource('/api/events');
         events.addEventListener('change', () => { if (cycle === generation) void refresh(); });
+        // A manuscript build started or ended: the open PDF view reloads now.
+        events.addEventListener('manuscript', () => { if (cycle === generation) window.dispatchEvent(new Event('papilot:manuscript')); });
       }
       async function poll() {
         await refresh();
@@ -1258,13 +1260,16 @@ function App() {
     void loadManuscript(project.id);
     const focus = () => void loadManuscript(project.id);
     window.addEventListener('focus', focus);
-    return () => { ++manuscriptRequest.current; window.removeEventListener('focus', focus); };
+    window.addEventListener('papilot:manuscript', focus);
+    return () => { ++manuscriptRequest.current; window.removeEventListener('focus', focus); window.removeEventListener('papilot:manuscript', focus); };
   }, [manuscriptOpen, project?.id, project?.path, loadManuscript]);
   // Starting a compile switches to fast polling immediately, including a
   // manual retry made between the regular working-tree refreshes.
   useEffect(() => {
     if (!manuscriptOpen || !project) return;
-    const delay = manuscriptBuilding ? 1500 : 15000;
+    // Papilot compiles after its own writes and tells the view; this notices
+    // edits saved by another editor.
+    const delay = manuscriptBuilding ? 1500 : 5000;
     let stopped = false, timer: ReturnType<typeof setTimeout>;
     const tick = async () => { await loadManuscript(project.id); if (!stopped) timer = setTimeout(() => void tick(), delay); };
     timer = setTimeout(() => void tick(), delay);

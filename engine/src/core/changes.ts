@@ -20,10 +20,27 @@ export function diffUnits(
   after: string,
   isFigure: (p: string) => boolean = () => false,
 ): Unit[] {
-  const files = repo.changedFiles(before, after),
-    oldBlobs = repo.blobs(before, files),
-    newBlobs = repo.blobs(after, files),
-    units: Unit[] = [];
+  const files = repo.changedFiles(before, after);
+  return unitsOf(files, repo.blobs(before, files), repo.blobs(after, files), isFigure);
+}
+/** `diffUnits` for servers, which keep answering requests meanwhile. */
+export async function diffUnitsAsync(
+  repo: Repo,
+  before: string,
+  after: string,
+  isFigure: (p: string) => boolean = () => false,
+): Promise<Unit[]> {
+  const files = await repo.changedFilesAsync(before, after),
+    [old, next] = await Promise.all([repo.blobsAsync(before, files), repo.blobsAsync(after, files)]);
+  return unitsOf(files, old, next, isFigure);
+}
+function unitsOf(
+  files: string[],
+  oldBlobs: Record<string, Buffer | null>,
+  newBlobs: Record<string, Buffer | null>,
+  isFigure: (p: string) => boolean,
+): Unit[] {
+  const units: Unit[] = [];
   for (const file of files) {
     const old = oldBlobs[file],
       next = newBlobs[file],

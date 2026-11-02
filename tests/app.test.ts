@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { Store } from '../src/server/store.ts';
@@ -849,4 +850,42 @@ test('changing a relocated paper path recovers its preserved review PDF without 
     assert.equal(missing.statusCode, 400);
     assert.match(missing.json().error, /PDF copy.*unavailable/);
   } finally { await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('writing a paper compiles its manuscript at once, and a reviewed deferred task compiles what applying it will write', async () => {
+  const f = await fixture();
+  try {
+    const refreshed: string[][] = [], predicted: [string, string, Record<string, string | null>][] = [];
+    f.manuscripts.refresh = async (id: string, root: string) => { refreshed.push([id, root]); };
+    f.manuscripts.predict = async (id: string, root: string, files: Record<string, Buffer | null>) => { predicted.push([id, root, Object.fromEntries(Object.entries(files).map(([file, data]) => [file, data?.toString() ?? null]))]); };
+    f.workspace.commitTask = async () => ({ commit: 'abc', git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null } }) as any;
+    const headers = { ...LOCAL, 'x-papilot-token': 'local-csrf' };
+    const committed = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/commit', headers, payload: { message: 'Apply the task' } });
+    assert.equal(committed.statusCode, 200, committed.body);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(refreshed, [['thesis', '/unused/thesis']], 'the commit started the manuscript build');
+    const failed = await f.local.inject({ method: 'POST', url: '/api/projects/thesis/git/stage', headers, payload: { paths: [] } });
+    assert.equal(failed.statusCode, 400);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(refreshed.length, 1, 'a request that changed nothing compiles nothing');
+    // A review action through the review page, which may write the manuscript.
+    const engine = http.createServer((_request, response) => { response.setHeader('Content-Type', 'application/json'); response.end('{}'); });
+    await new Promise<void>(resolve => engine.listen(0, '127.0.0.1', resolve));
+    f.review.url = `http://127.0.0.1:${(engine.address() as { port: number }).port}`;
+    try {
+      const noted = await f.local.inject({ method: 'POST', url: '/review/thesis/api/tasks/p-thesis-task/note', headers: { ...LOCAL, 'x-review-token': 'review-token' }, payload: { body: 'A note.' } });
+      assert.equal(noted.statusCode, 200, noted.body);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(refreshed[1], ['thesis', '/unused/thesis'], 'a review action through the review page compiles too');
+    } finally { engine.close(); }
+    f.store.updateTask('thesis-task', { deferred: true, review: { state: 'reviewing', round: 1, counts: { pending: 1 }, unsent: 0 } } as any);
+    f.review.get = async (route: string) => (route.endsWith('/preview') ? { files: { 'main.tex': Buffer.from('Applied.\n').toString('base64'), 'old.tex': null } } : {}) as any;
+    f.workspace.emit('reviewed', 'thesis-task');
+    for (let i = 0; i < 20 && !predicted.length; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.deepEqual(predicted, [['thesis', '/unused/thesis', { 'main.tex': 'Applied.\n', 'old.tex': null }]], 'once, though two listeners serve the workspace');
+    f.store.updateTask('thesis-task', { deferred: false } as any);
+    f.workspace.emit('reviewed', 'thesis-task');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(predicted.length, 1, 'a task that applies as it is reviewed needs no prediction');
+  } finally { await f.close(); }
 });

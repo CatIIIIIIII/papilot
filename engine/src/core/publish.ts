@@ -351,7 +351,7 @@ export class Publisher {
         "Run `finish --force`, then start a new task.",
       );
     this.phase(job, "snapshot");
-    const after = app.tasks.snapshot(task);
+    const after = await app.tasks.snapshotAsync(task);
     task = app.tasks.get(name);
     const before = task.accepted,
       latest = app.review.latestRound(name),
@@ -378,7 +378,7 @@ export class Publisher {
     if (
       latest &&
       latest.before === before &&
-      app.repo.treeId(latest.after) === app.repo.treeId(after) &&
+      (await app.repo.treeIdAsync(latest.after)) === (await app.repo.treeIdAsync(after)) &&
       latest.summary.renderer === codeVersion()
     )
       return {
@@ -386,42 +386,31 @@ export class Publisher {
         round: latest.number,
         changes: latest.units.length,
       };
-    const files = app.repo.changedFiles(before, after);
+    const files = await app.repo.changedFilesAsync(before, after);
     if (!files.length) return { outcome: "empty", round: null, changes: 0 };
     const units = diffUnits(app.repo, before, after, (f) =>
       isFigure(project, f),
     );
     this.phase(job, "build");
     const builder = new Builder(project, app.repo),
-      targets = builder.plan(before, after, files);
-    let seed = null,
-      old,
-      next;
-    try {
-      seed = targets[0] !== "full" ? await builder.build(task.base) : null;
-      old = await builder.build(before, targets, seed);
-    } catch (error) {
+      targets = await builder.planAsync(before, after, files);
+    const failed = (what: string) => (error: unknown) => {
       if (error instanceof BuildError)
         throw new PublishError(
-          "The comparison baseline could not be compiled.",
+          what,
           error.details,
           "Check the compiler diagnostics, fix the document or build environment, then publish again.",
           error.log,
         );
       throw error;
-    }
-    try {
-      next = await builder.build(after, targets, seed);
-    } catch (error) {
-      if (error instanceof BuildError)
-        throw new PublishError(
-          "The revised document could not be compiled.",
-          error.details,
-          "Check the compiler diagnostics, fix the document or build environment, then publish again.",
-          error.log,
-        );
-      throw error;
-    }
+    };
+    const seed = targets[0] !== "full" ? await builder.build(task.base).catch(failed("The comparison baseline could not be compiled.")) : null;
+    // Both versions compile at once: each needs only the seed.
+    const baseline = builder.build(before, targets, seed).catch(failed("The comparison baseline could not be compiled.")),
+      revised = builder.build(after, targets, seed).catch(failed("The revised document could not be compiled."));
+    // A failure of either is reported once both have settled, the baseline's first.
+    await Promise.allSettled([baseline, revised]);
+    const old = await baseline, next = await revised;
     if (app.review.lastChange(name) !== decided) throw new Stale();
     const warnings = next.warnings.filter((w) => !old.warnings.includes(w));
     this.phase(job, "render");

@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { App } from "../server.ts";
 import type { Delivery } from "../types.ts";
-import { merge3 } from "./git.ts";
+import { merge3, merge3Async } from "./git.ts";
+import { applyUnits } from "./changes.ts";
 import { readBytes, same, writeOrDelete } from "./files.ts";
 import { planCurrentCommit, finishCurrentCommit, CommitNeedsReview } from "./current-commit.ts";
 import { safePath } from "./review.ts";
@@ -22,6 +23,47 @@ export class Deliveries {
   }
   save(name: string, data: Delivery) {
     this.app.store.execute("INSERT OR REPLACE INTO deliveries(task,data) VALUES(?,?)", name, JSON.stringify(data));
+  }
+  /** What applying this task to the manuscript would write, if every change
+   *  still pending in its latest round were accepted first: the new contents
+   *  of each file it changes, merged with the files on disk exactly as an
+   *  application merges them. Null while the result cannot be foreseen: a
+   *  delivery or merge review is in progress, or a file would conflict. */
+  async preview(name: string): Promise<Record<string, Buffer | null> | null> {
+    const app = this.app, task = app.tasks.get(name), last = this.get(name), reconciliation = app.reconciliation.get(name);
+    if (!task.deferred || (last && !last.done) || (reconciliation && !reconciliation.ready) || app.publisher.busy(name)) return null;
+    const before = reconciliation?.base ?? (last && last.mode !== "branch" ? last.accepted : task.base);
+    // The latest round's pending changes, accepted onto the accepted text.
+    let accepted = task.accepted;
+    const round = app.review.latestRound(name);
+    if (round) {
+      const decisions = app.review.decisions(name, round), groups: Record<string, typeof round.units> = {};
+      for (const unit of round.units) if (decisions[unit.id] === "pending") (groups[unit.file] ??= []).push(unit);
+      const files = Object.keys(groups);
+      if (files.length) {
+        const [old, next, records] = await Promise.all([round.before, round.after, task.accepted].map((rev) => app.repo.blobsAsync(rev, files)));
+        const contents: Record<string, Buffer | null> = {};
+        for (const file of files) {
+          const [merged, conflict] = await merge3Async(records[file], old[file], applyUnits(old[file], next[file], groups[file]));
+          if (conflict) return null;
+          contents[file] = merged;
+        }
+        accepted = await app.repo.treeWithAsync(task.accepted, contents);
+      }
+    }
+    const files = await app.repo.changedFilesAsync(before, accepted);
+    const [base, result] = await Promise.all([app.repo.blobsAsync(before, files), app.repo.blobsAsync(accepted, files)]);
+    const writes: Record<string, Buffer | null> = {};
+    for (const file of files) {
+      const current = await fs.promises.readFile(safePath(app.root, file)).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      });
+      const [merged, conflict] = await merge3Async(current, base[file], result[file]);
+      if (conflict) return null;
+      writes[file] = merged;
+    }
+    return writes;
   }
   assertReady(name: string) {
     const last = this.get(name);

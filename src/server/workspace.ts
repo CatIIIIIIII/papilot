@@ -838,6 +838,8 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
         await delay(1500);
       }
       await this.refresh(taskId);
+      // What applying the new round will write can now be compiled ahead.
+      this.emit('reviewed', taskId);
     } catch (e) {
       if (this.closing) return;
       if (reviewConnectionError(e)) {

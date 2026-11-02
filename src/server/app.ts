@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
-import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState } from './review.ts';
+import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
 import { fullPaperPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
@@ -31,6 +31,8 @@ import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
 
 const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
+// Each workspace compiles predicted manuscripts once, however many listeners serve it.
+const predicting = new WeakSet<Workspace>();
 
 // Git writes to one repository run one at a time; each returns the new status.
 // Both listeners share one queue, so the owner and a collaborator take turns.
@@ -81,6 +83,33 @@ export async function buildApp(options: AppOptions) {
     if (id) projectRequests.set(request, workspace.enterProjectRequest(id));
   });
   app.addHook('onSend', async (request, _reply, payload) => { projectRequests.get(request)?.(); return payload; });
+  // Whatever may have written a paper's files compiles its manuscript right
+  // away: committing or applying a task, a Git action, a review decision. The
+  // PDF is on its way before anyone opens it, and a tree that did not change
+  // costs one snapshot.
+  const WRITES = /^\/api\/projects\/:id\/git\/|^\/api\/tasks\/:id\/(?:commit|apply|reconcile)$|^\/review\/:projectId\/(?:api\/changes\/(?:decide|undo)|\*)$/;
+  app.addHook('onResponse', async (request, reply) => {
+    if (request.method !== 'POST' || reply.statusCode >= 400 || !WRITES.test(request.routeOptions.url || '')) return;
+    const params = (request.params || {}) as Record<string, string>;
+    try {
+      const project = store.project(params.projectId ?? (request.routeOptions.url!.startsWith('/api/tasks/') ? store.task(params.id).projectId : params.id));
+      void manuscripts.refresh(project.id, project.path).catch(() => undefined);
+    } catch { /* The paper or task is gone. */ }
+  });
+  // A deferred task is applied as a whole once it is reviewed, so after each
+  // new round and each decision the manuscript it will produce compiles in
+  // the background.
+  const predict = async (taskId: string) => {
+    const task = store.task(taskId), project = store.project(task.projectId);
+    if (!task.deferred || task.mode === 'review' || task.delivery?.pending || task.status === 'deleting') return;
+    const client = await connectReview(project.path);
+    const preview = await client.get<{ files: Record<string, string | null> | null }>(`${taskRoute(task.name)}/preview`);
+    if (preview.files) await manuscripts.predict(project.id, project.path, Object.fromEntries(Object.entries(preview.files).map(([file, data]) => [file, data === null ? null : Buffer.from(data, 'base64')])));
+  };
+  if (!predicting.has(workspace)) {
+    predicting.add(workspace);
+    workspace.on('reviewed', (taskId: string) => void predict(taskId).catch(() => undefined));
+  }
   app.addHook('onError', async request => { projectRequests.get(request)?.(); });
   await app.register(compress);
   app.setErrorHandler((error, _request, reply) => { reply.code((error as any).statusCode || 400).send({ error: (error as Error).message }); });
@@ -159,11 +188,16 @@ export async function buildApp(options: AppOptions) {
       if (viewer.listener !== 'account' || (event.userId !== viewer.user.id && event.sessionId !== viewer.session.id)) return;
       if (!accounts.session(cookie(request.headers.cookie, SESSION_COOKIE))) { reply.raw.write('event: change\ndata: {}\n\n'); reply.raw.end(); } else change();
     };
+    // A manuscript build started or finished: the open PDF view reloads now
+    // instead of at its next poll. The event names no paper.
+    let paperTimer: NodeJS.Timeout | undefined;
+    const paper = () => { paperTimer ??= setTimeout(() => { paperTimer = undefined; reply.raw.write('event: manuscript\ndata: {}\n\n'); }, 100); };
     workspace.on('change', change);
+    manuscripts.on('change', paper);
     accounts.on('revoked', revoked);
     const heartbeat = setInterval(() => reply.raw.write(': heartbeat\n\n'), 15000);
     reply.raw.on('close', () => {
-      clearInterval(heartbeat); if (timer) clearTimeout(timer); workspace.off('change', change); accounts.off('revoked', revoked);
+      clearInterval(heartbeat); if (timer) clearTimeout(timer); if (paperTimer) clearTimeout(paperTimer); workspace.off('change', change); manuscripts.off('change', paper); accounts.off('revoked', revoked);
       if (session) { const open = (streams.get(session) || 1) - 1; if (open) streams.set(session, open); else streams.delete(session); }
     });
   });
@@ -544,6 +578,8 @@ export async function buildApp(options: AppOptions) {
             if (task) {
               store.updateTask(task.id, { error: null });
               await workspace.refresh(task.id);
+              // A decision changes what applying the task will write.
+              workspace.emit('reviewed', task.id);
             }
           }
           // A round's new version as one complete PDF, which Papilot compiles,

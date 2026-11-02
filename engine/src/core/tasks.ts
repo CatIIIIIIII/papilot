@@ -73,6 +73,12 @@ export class Tasks {
       GENERATED,
     );
   }
+  snapshotAsync(task: Task) {
+    return new Repo(task.worktree).snapshotAsync(
+      [this.app.project.source_dir, ...task.scope.paths],
+      GENERATED,
+    );
+  }
   create(
     name?: string,
     title?: string,
@@ -80,6 +86,41 @@ export class Tasks {
     files: string[] = [],
     deferred = false,
   ): Task {
+    const reserved = this.reserve(name, title, sections, files);
+    if ("existing" in reserved) return reserved.existing;
+    const base = this.app.repo.snapshot([this.app.project.source_dir, ...reserved.paths], GENERATED);
+    const scope = this.scopeOf(base, sections, reserved.paths);
+    fs.mkdirSync(path.dirname(reserved.worktree), { recursive: true });
+    this.app.repo.run(["worktree", "add", "--detach", reserved.worktree, base]);
+    return this.record(reserved, base, scope, deferred);
+  }
+  /** `create` for the server: the snapshot and the checkout of the new
+   *  worktree, seconds for a large paper, run while it answers requests. */
+  async createAsync(
+    name?: string,
+    title?: string,
+    sections: string[] = [],
+    files: string[] = [],
+    deferred = false,
+  ): Promise<Task> {
+    const reserved = this.reserve(name, title, sections, files);
+    if ("existing" in reserved) return reserved.existing;
+    this.creating.add(reserved.name);
+    try {
+      const base = await this.app.repo.snapshotAsync([this.app.project.source_dir, ...reserved.paths], GENERATED);
+      const scope = this.scopeOf(base, sections, reserved.paths);
+      await fs.promises.mkdir(path.dirname(reserved.worktree), { recursive: true });
+      await this.app.repo.runAsync(["worktree", "add", "--detach", reserved.worktree, base]);
+      return this.record(reserved, base, scope, deferred);
+    } finally {
+      this.creating.delete(reserved.name);
+    }
+  }
+  // Names of tasks whose worktree is being created.
+  private creating = new Set<string>();
+  // The task's name, title, worktree and scope paths, or the open task that
+  // already covers this request.
+  private reserve(name: string | undefined, title: string | undefined, sections: string[], files: string[]): { existing: Task } | { name: string; title: string; worktree: string; paths: string[] } {
     const { app } = this,
       project = app.project;
     if (sections.length && files.length)
@@ -93,18 +134,21 @@ export class Tasks {
       );
     let candidate = name,
       suffix = 1;
-    for (;;) {
+    for (;; candidate = `${name.slice(0, 60)}-${++suffix}`) {
+      if (this.creating.has(candidate)) {
+        if (explicit) throw new Error(`Task ${JSON.stringify(name)} is being created. Try again in a moment.`);
+        continue;
+      }
       const existing = app.store.one<Task>(
         "SELECT * FROM tasks WHERE name=?",
         candidate,
       );
       if (!existing || existing.closed) break;
-      if (this.matches(existing, sections, files)) return existing;
+      if (this.matches(existing, sections, files)) return { existing };
       if (explicit)
         throw new Error(
           `Task ${JSON.stringify(name)} already exists with a different scope. Finish it first or choose another name.`,
         );
-      candidate = `${name.slice(0, 60)}-${++suffix}`;
     }
     name = candidate;
     if (!app.repo.hasHead())
@@ -122,31 +166,33 @@ export class Tasks {
       throw new Error(
         `The folder ${worktree} already exists. Remove it or choose another name.`,
       );
-    const paths = files.map(cleanPath),
-      base = app.repo.snapshot([project.source_dir, ...paths], GENERATED);
-    let scope: Scope;
-    if (sections.length) {
-      const outline = buildOutline(
-        revisionReader(app.repo, base, project.doc_dir),
-        project.main,
-      );
-      const [ranges, chosen] = selectedRanges(
-        outline.nodes,
-        resolveSections(outline.nodes, sections),
-      );
-      scope = { sections: chosen, ranges, paths: Object.keys(ranges).sort() };
-    } else
-      scope = {
+    return { name, title, worktree, paths: files.map(cleanPath) };
+  }
+  private scopeOf(base: string, sections: string[], paths: string[]): Scope {
+    const project = this.app.project;
+    if (!sections.length)
+      return {
         sections: [],
         ranges: null,
         paths: paths.length ? paths : [project.source_dir],
       };
-    fs.mkdirSync(path.dirname(worktree), { recursive: true });
-    app.repo.run(["worktree", "add", "--detach", worktree, base]);
+    const outline = buildOutline(
+      revisionReader(this.app.repo, base, project.doc_dir),
+      project.main,
+    );
+    const [ranges, chosen] = selectedRanges(
+      outline.nodes,
+      resolveSections(outline.nodes, sections),
+    );
+    return { sections: chosen, ranges, paths: Object.keys(ranges).sort() };
+  }
+  // Records a task whose worktree was just checked out at `base`.
+  private record({ name, title, worktree }: { name: string; title: string; worktree: string }, base: string, scope: Scope, deferred: boolean) {
+    const { app } = this;
     try {
       writeJson(path.join(new Repo(worktree).gitDir(), "latex-review.json"), {
         task: name,
-        root: project.root,
+        root: app.project.root,
       });
       app.repo.updateRef(`refs/latex-review/${name}/base`, base);
       app.store.transaction(() => {

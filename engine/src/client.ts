@@ -53,8 +53,17 @@ export class Client {
     return call<T>(this.url, route, data, this.token, timeout);
   }
 }
-export const serverHome = (root: string) =>
-  path.join(new Repo(root).gitDir(), "latex-review/server");
+// Every request an app forwards connects first, so the Git directory is
+// looked up once per repository rather than with a Git command each time.
+const homes = new Map<string, string>();
+export function serverHome(root: string) {
+  let home = homes.get(root);
+  if (!home || !fs.existsSync(path.dirname(path.dirname(home)))) {
+    home = path.join(new Repo(root).gitDir(), "latex-review/server");
+    homes.set(root, home);
+  }
+  return home;
+}
 export async function probe(root: string, info: Partial<Connection> | null) {
   if (!info?.url) return null;
   const address = new URL(info.url);

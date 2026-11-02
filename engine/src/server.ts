@@ -324,10 +324,10 @@ export function createServer(app: App) {
           },
         },
       },
-      (request) => {
+      async (request) => {
         const d = request.body;
         return app.taskInfo(
-          app.tasks.create(d.name, d.title, d.sections, d.files, d.deferred).name,
+          (await app.tasks.createAsync(d.name, d.title, d.sections, d.files, d.deferred)).name,
         );
       },
     );
@@ -351,6 +351,12 @@ export function createServer(app: App) {
       { schema: { body: { ...objectSchema, additionalProperties: false, properties: { confirmation: { type: "string", maxLength: 100 }, keepCurrent: { type: "boolean" }, mode: { enum: ["workspace", "commit"] }, message: { type: "string", maxLength: 5000 } } } } },
       request => app.delivery.apply(request.params.name, request.body.keepCurrent === true, request.body.mode, request.body.message, request.body.confirmation),
     );
+    // A speculative build of the manuscript compiles what applying the task
+    // would write, so its PDF is ready when the author applies it.
+    server.get<{ Params: { name: string } }>("/api/tasks/:name/preview", async (request) => {
+      const writes = await app.delivery.preview(request.params.name);
+      return { files: writes && Object.fromEntries(Object.entries(writes).map(([file, data]) => [file, data?.toString("base64") ?? null])) };
+    });
     server.post<{ Params: { name: string }; Body: { mode: "workspace" | "branch"; message?: string } }>(
       "/api/tasks/:name/deliver",
       { schema: { body: { ...objectSchema, required: ["mode"], properties: { mode: { enum: ["workspace", "branch"] }, message: { type: "string", maxLength: 5000 } } } } },

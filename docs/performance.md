@@ -5,15 +5,30 @@ Papilot should compile about as fast as running `latexmk` (or `make`) in the pap
 ## How a build runs
 
 1. **Snapshot.** The working tree is recorded as a Git tree with a private index, `.git/latex-review/working-index`. It starts from the previous snapshot, or from the repository's own index, so Git rehashes only files whose size or modification time changed.
-2. **Export.** The new build folder starts as a clone of the latest completed build. On APFS, `cp -c` clones the whole folder in one step. Files outside the new tree are removed, files with a different Git object or size are streamed from Git, and nothing else is read. Other systems clone or copy file by file. The first build of a paper exports the whole tree from Git, streaming one blob at a time.
-3. **LaTeX state.** latexmk's database, auxiliary files and minted cache carry over from that build. Within the same day, the PDF, SyncTeX data and log carry over too. latexmk then decides what to run, exactly as in the author's folder: nothing if no input changed, usually one pass after an edit. Paths in kept SyncTeX data and logs are rewritten in place for the new folder; build folders differ only in their equal-length key. On a new day the PDF is rebuilt, so `\today` stays current.
+2. **Export.** The new build folder starts as a clone of a recent completed build: of the last 16 with the same chapters, the one whose sources differ from the new version in the fewest files, preferring the newer. After a task is reviewed or applied this is often not the manuscript's previous build but the task's own, which already has the edit's references and page numbers. On APFS, `cp -c` clones the whole folder in one step. Files outside the new tree are removed, files with a different Git object or size are streamed from Git, and nothing else is read. Other systems clone or copy file by file. The first build of a paper exports the whole tree from Git, streaming one blob at a time.
+3. **LaTeX state.** latexmk's database, auxiliary files and minted cache carry over from the build the new one starts from. Within the same day, the PDF, SyncTeX data and log carry over too. latexmk then decides what to run, exactly as in the author's folder: nothing if no input changed, usually one pass after an edit. Paths in kept SyncTeX data and logs are rewritten in place for the new folder; build folders differ only in their equal-length key. On a new day the PDF is rebuilt, so `\today` stays current.
 4. **First build.** When the author has compiled the paper with latexmk into `<main folder>/build`, that job's auxiliary state and minted cache seed the first build. Other editions and subfolders in that directory are ignored. The author's PDF and SyncTeX data are not reused: their paths have a different length, and SyncTeX records byte offsets.
-5. **Review builds.** A review compiles only the changed chapters (`\includeonly`), before and after the change, on top of a full build of the task's base (the seed). Each set of chapters continues from its own latest build in the same way, so a chapter that was compiled before needs one pass, not a clean build. The other chapters' auxiliary files come from the seed every time, so their cross-references stay current.
-6. **Fallbacks.** A build that fails on leftover state, with an error located in a generated file under `build/` (for example a stale `.aux` or `.bbl`), is retried once from a clean folder. **Recompile PDF** always starts clean.
+5. **Review builds.** A review compiles only the changed chapters (`\includeonly`), before and after the change, on top of a full build of the task's base (the seed). The two versions compile at the same time. Each set of chapters continues from its own latest build in the same way, so a chapter that was compiled before needs one pass, not a clean build. The other chapters' auxiliary files come from the seed every time, so their cross-references stay current.
+6. **Passes on screen.** An edit that moves page numbers, references or the bibliography needs more than one TeX pass. After every pass, latexmk (4.84 or later) runs a hook that copies the pass's output aside. Once latexmk starts more work after a pass, such as BibTeX or another pass, that pass's pages replace the previous PDF in the manuscript view (an `.xdv` is converted with `xdvipdfmx`, which takes under a second for a 324-page paper), with their own SyncTeX data. The edit shows after one pass; the later passes only settle numbers. If the build then fails, the previous PDF comes back.
+7. **Fallbacks.** A build that fails on leftover state, with an error located in a generated file under `build/` (for example a stale `.aux` or `.bbl`), is retried once from a clean folder. **Recompile PDF** always starts clean.
+
+## When builds start
+
+The manuscript compiles as soon as something may have changed its files, not when its view is next opened: after a task is committed or applied, a Git action, or a review decision. A build started meanwhile is followed right away by one of the newest files. The view learns that a build started or finished from the server's event stream and reloads at once; edits saved in another editor are noticed within five seconds while the manuscript is open, and immediately when Papilot's window regains focus.
+
+A task that waits to be applied (the default) changes the manuscript only when it is committed or applied, so that build could only start then. Instead, whenever a round is published or a change is accepted or rejected, Papilot asks the review engine what applying the task would write if every pending change were accepted, merged with the files on disk exactly as applying merges them, and compiles that version in the background. When the task is applied, the manuscript's build has the same key: its PDF is already there, or the build already under way is the one it waits for. A rejected change makes a new prediction, which continues from the previous one.
+
+## Priorities
+
+Builds have a priority: the manuscript the author is looking at first, then review builds, then predictions. While a build of higher priority compiles in the same process, a prediction's compiler is stopped (`SIGSTOP`) and continues afterwards. On macOS a prediction also yields to TeX running anywhere else, such as the review engine compiling another task: meanwhile its processes run at background priority (`taskpolicy -b`: efficiency cores, throttled disk), and once nothing else compiles they get normal priority back (`taskpolicy -B`), so on an idle machine a prediction runs at full speed. Unlike a nice value, both can be undone, so when someone starts waiting for a build that is running as a prediction, it takes the higher priority at once.
+
+## Event loops
+
+Neither server waits for Git, the file system or a compiler on its event loop while it builds: snapshots, exports, cloning LaTeX state, rewriting SyncTeX paths, reading logs and writing results all run asynchronously, so the PDF view, the review page and the task list keep answering. The review engine's snapshots of a task's worktree also start from a saved index (`latex-review/snapshot-index` in that worktree's Git directory) with `read-tree -m`, which keeps each file's size and modification time, instead of a fresh index that made Git rehash every tracked file twice per snapshot.
 
 ## Measurements
 
-Thesis used for testing: 2,239 tracked files (240 MB), XeLaTeX, BibTeX with back-references, minted and `\include`d chapters. Measured on an Apple Silicon MacBook on 2026-11-02, compared with `latexmk -norc -r latexmkrc Thesis.tex` in a copy of the same commit. Both columns in each table were run alternately under the same load. Other sessions kept the load average at 7–9, which is why one pass took 69 s here, compared with 43–51 s on an idle machine.
+Paper used for testing: 2,239 tracked files (240 MB), XeLaTeX, BibTeX with back-references, minted and `\include`d chapters. Measured on an Apple Silicon MacBook on 2026-11-02, compared with `latexmk -norc -r latexmkrc` on the main file in a copy of the same commit. Both columns in each table were run alternately under the same load. Other sessions kept the load average at 7–9, which is why one pass took 69 s here, compared with 43–51 s on an idle machine.
 
 | Change | `latexmk` in the folder | Papilot, before | Papilot, now |
 |---|---|---|---|
@@ -32,7 +47,7 @@ Papilot's own work per build, outside latexmk:
 | Export of the build folder | 240 MB per build, kept for three days | 0.76 s, copy-on-write |
 | Copy LaTeX state | not done | 0.06 s |
 
-Review builds of one chapter of the same thesis, measured on 2026-11-02 at a load average of about 9, for a commit that revised the chapter's framing and title:
+Review builds of one chapter of the same paper, measured on 2026-11-02 at a load average of about 9, for a commit that revised the chapter's framing and title:
 
 | Build | Before | Now |
 |---|---|---|
@@ -43,6 +58,27 @@ Several tasks' reviews refresh after a commit, so these clean builds used to run
 
 When the import dialog compiled a paper, it used to force a clean build under a one-off key, so opening the paper afterwards compiled it a second time. Now it builds under the normal key, and the paper view reuses that PDF.
 
+### Committing a reviewed task
+
+The paper's seven commits of 2026-11-02, each built by continuing from the previous one as the manuscript does, needed 4, 2, 1, 1, 3, 4 and 2 XeLaTeX passes (330, 98, 88, 65, 163, 183 and 92 s at a load average of 5–25). These counts are LaTeX's own: an edit that moves a label, a cited page (back-references) or the bibliography needs another pass for each round of changes, exactly as with latexmk in the author's folder. What Papilot controls is when that work starts and when its pages appear.
+
+End to end with `scripts/profile-commit.ts` on a copy of the paper: a deferred task adds a paragraph to chapter 4, its round is published, everything is accepted after a review, and 15 s later the task is committed to the manuscript. Measured on 2026-11-03 on an Apple M1 at a load average of 11–26; the manuscript's build after the commit took two passes in every run.
+
+| | Before | Now |
+|---|---|---|
+| Round ready after the agent's edit | 108.7 s, 46.5 s | 23.1–47.2 s |
+| PDF after the commit, after a 150 s review | 94.4 s, and only if the manuscript was open | 0.8 s |
+| PDF after the commit, after a 30 s review | 94.3 s, 94.4 s | 51.8–65.1 s; the new pages after 18.3 s |
+| First new pages when nothing was predicted | 113 s, the whole build | 55.2 s, the first pass |
+| Review engine's slowest answer while a task is created | 4.1 s | 35 ms |
+| Review engine's slowest answer while a round is published | 2.4 s | 16–35 ms |
+| Review engine's slowest answer while the task is committed | 0.33 s | 0.25–0.28 s |
+| Longest wait in Papilot's event loop from the commit to the PDF | 113–115 ms | 23–74 ms |
+
+Before, the manuscript started compiling when its view next asked, and "before" here assumes it was open the whole time. A 30 s review gives the prediction a 45 s head start on a 90–110 s build; the commit then promotes it, and the waiting view takes over its passes.
+
 ## Reproducing
+
+`node --import tsx scripts/profile-commit.ts COPY FILE LINE [--review S] [--think S]` runs the whole flow above on a copy of a paper and prints the timings as JSON; it commits to the copy's repository. Run it from an older checkout to measure that version. `tests/fast-builds.test.ts` checks the snapshot index, continuing from the closest build, pass previews, background priorities, predicted builds and delivery previews on small papers.
 
 `tests/incremental-build.test.ts` checks pass counts on a small paper: one pass when continuing from the author's latexmk output, one pass after an edit, no TeX run after an unrelated change, a clean retry after stale auxiliary state, and a clean manual recompile. It also checks that a chapter's review build needs one pass the second time and takes renumbered references from a new seed. To time a real paper, clone it outside its folder, run `latexmk` there for reference, then build the same commits with `Builder` from `engine/src/core/build.ts` and compare the `Running '…latex'` lines in each build's `latexmk.log`.
