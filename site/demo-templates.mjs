@@ -1,5 +1,8 @@
-// A 1000 × 740 desktop workspace, matching the product's 46px toolbar and
-// 340px side panel. The entire scene scales as one unit, including on phones.
+// A 1000 × 700 desktop window, matching the product's 46px toolbar and 340px
+// side panel. As in the Electron app (desktop/main.ts, desktop-chrome.css),
+// there is no title bar: the macOS window controls sit in the toolbar and the
+// collapsed sidebar toggle moves 92px right to clear them. The entire scene
+// scales as one unit, including on phones.
 // The icon paths and control geometry follow src/web/icons.tsx and style.css.
 const t = (en, zh) => `<span lang="en">${en}</span><span lang="zh-CN">${zh}</span>`;
 const paths = {
@@ -40,7 +43,7 @@ function manuscript(revised = false) {
 }
 const smallLabel = (iconName, text, active = false) => `<span class="tool-label ${active ? 'tool-active' : ''}">${icon(iconName)}${text}</span>`;
 function toolbar(scene) {
-  return `<div class="workspace-toolbar"><div class="paper-toolbar"><span class="tool-icon">${icon('sidebar')}</span><div class="pdf-modes"><span class="${scene !== 'review' ? 'mode-active' : ''}">${icon('paper')}PDF</span><span class="${scene === 'review' ? 'mode-active' : ''}">${icon('diff')}${t('Changes', '改动')}</span></div><span class="paper-section-title">Queueing</span><span class="page-nav">${icon('chevronUp')}</span><span class="page-input">18</span><span class="page-total">/ 26</span><span class="page-nav">${icon('chevronDown')}</span><span class="tool-icon">${icon('search')}</span><span class="tool-icon">${icon('region')}</span><span class="tool-icon">${icon('pen')}</span><span class="tool-icon compile-icon">${icon('compile')}</span></div><div class="side-toolbar"><span class="tool-icon">${icon('sidebar')}</span>${smallLabel('pen', t('New task', '新任务'), scene === 'annotate')}${smallLabel('list', t('Contents', '目录'), scene === 'read')}${smallLabel('branch', 'Git', scene === 'commit')}<span class="tool-icon">${icon('external')}</span></div></div>`;
+  return `<div class="workspace-toolbar"><div class="paper-toolbar"><span class="tool-icon sidebar-toggle">${icon('sidebar')}</span><div class="pdf-modes"><span class="${scene !== 'review' ? 'mode-active' : ''}">${icon('paper')}PDF</span><span class="${scene === 'review' ? 'mode-active' : ''}">${icon('diff')}${t('Changes', '改动')}</span></div><span class="paper-section-title">Queueing</span><span class="page-nav">${icon('chevronUp')}</span><span class="page-input">18</span><span class="page-total">/ 26</span><span class="page-nav">${icon('chevronDown')}</span><span class="tool-icon">${icon('search')}</span><span class="tool-icon">${icon('region')}</span><span class="tool-icon">${icon('pen')}</span><span class="tool-icon compile-icon">${icon('compile')}</span></div><div class="side-toolbar"><span class="tool-icon">${icon('sidebar')}</span>${smallLabel('pen', t('New task', '新任务'), scene === 'annotate')}${smallLabel('list', t('Contents', '目录'), scene === 'read')}${smallLabel('branch', 'Git', scene === 'commit')}<span class="tool-icon">${icon('external')}</span></div></div>`;
 }
 const usage = `<div class="usage-row"><span>Codex <b>Pro</b></span><span class="usage-meter"></span><span class="icon-copy">51% ${t('used', '已用')}${icon('chevronDown')}</span></div>`;
 function composer(content = '') {
@@ -67,6 +70,6 @@ export function renderDemo(kind) {
   if (!descriptions[kind]) throw new Error(`Unknown demo: ${kind}`);
   const keys = kind === 'hero' ? Object.keys(panels) : [kind];
   return `<figure class="ui-demo ${kind === 'hero' ? 'demo' : 'demo-compact'}" id="demo-${kind}" data-demo="${kind}" role="img" aria-label="${descriptions[kind][0]} — automatic demonstration" data-zh-aria-label="${descriptions[kind][1]}，自动演示">
-    <div class="demo-visual" aria-hidden="true" inert><div class="app-windowbar"><span class="window-lights"><i></i><i></i><i></i></span><span class="window-address">127.0.0.1:7274</span></div><div class="demo-stage">${keys.map((key, i) => `<div class="demo-panel" data-scene="${key}" data-phase="0" ${i ? 'hidden' : ''}>${toolbar(key)}<div class="workspace-body">${panels[key]()}</div></div>`).join('')}</div></div>
+    <div class="demo-visual" aria-hidden="true" inert><span class="window-lights"><i></i><i></i><i></i></span><div class="demo-stage">${keys.map((key, i) => `<div class="demo-panel" data-scene="${key}" data-phase="0" ${i ? 'hidden' : ''}>${toolbar(key)}<div class="workspace-body">${panels[key]()}</div></div>`).join('')}</div></div>
   </figure>`;
 }
