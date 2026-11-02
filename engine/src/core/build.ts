@@ -8,7 +8,8 @@ import { listFiles, readJson, writeJson, withLock, now } from "./files.ts";
 import { stripComments } from "./outline.ts";
 import { signature, type Project } from "./config.ts";
 import { run, runAsync } from "./process.ts";
-import type { BuildInfo } from "../types.ts";
+import { progressReader, writtenPages } from "./progress.ts";
+import type { BuildInfo, BuildProgress } from "../types.ts";
 export class BuildError extends Error {
   constructor(
     message: string,
@@ -219,7 +220,7 @@ export class Builder {
     rev: string,
     targets = ["full"],
     seed: BuildInfo | null = null,
-    options: { force?: boolean } = {},
+    options: { force?: boolean; progress?: (progress: BuildProgress) => void } = {},
   ): Promise<BuildInfo> {
     const p = this.project,
       partial = JSON.stringify(targets) !== '["full"]';
@@ -270,10 +271,10 @@ export class Builder {
       const start = partial || options.force ? null : this.latest(context) ?? "author";
       let result: BuildInfo;
       try {
-        result = await this.compile(rev, tree, key, targets, seed, date, start);
+        result = await this.compile(rev, tree, key, targets, seed, date, start, options.progress);
       } catch (error) {
         if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
-        result = await this.compile(rev, tree, key, targets, seed, date, null);
+        result = await this.compile(rev, tree, key, targets, seed, date, null, options.progress);
       }
       if (!partial) writeJson(path.join(this.cache, "latest.json"), { key, context, date: date.SOURCE_DATE_EPOCH });
       return result;
@@ -293,6 +294,7 @@ export class Builder {
     seed: BuildInfo | null,
     date: ReturnType<typeof buildDate>,
     start: { info: BuildInfo; date: unknown } | "author" | null,
+    progress?: (progress: BuildProgress) => void,
   ): Promise<BuildInfo> {
     const p = this.project,
       partial = JSON.stringify(targets) !== '["full"]',
@@ -373,14 +375,28 @@ export class Builder {
     args.push(main);
     const transcript = path.join(folder, "latexmk.log"),
       fd = fs.openSync(transcript, "w"),
-      started = now();
+      started = now(),
+      // Pages are counted against the build this one continues from.
+      read = progress
+        ? progressReader(
+            progress,
+            writtenPages(
+              base
+                ? path.join(path.dirname(base.pdf), job + ".log")
+                : path.join(p.root, p.doc_dir, "build", job + ".log"),
+            ),
+          )
+        : null;
     let failure: Error | null = null;
     try {
       await runAsync("latexmk", args, {
         cwd,
         env: { ...process.env, ...date },
         timeout: 1800000,
-        output: (chunk) => fs.writeSync(fd, chunk),
+        output: (chunk) => {
+          fs.writeSync(fd, chunk);
+          read?.(chunk);
+        },
       });
     } catch (error) {
       failure = error as Error;

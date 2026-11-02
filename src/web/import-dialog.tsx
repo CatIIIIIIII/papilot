@@ -12,6 +12,33 @@ const memoryKey = 'papilot:paper-import';
 function base64(file: File): Promise<string> {
   return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error(t('Could not read the selected file.'))); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.readAsDataURL(file); });
 }
+const clock = (ms: number) => { const seconds = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; };
+// What a long compilation is doing, so it never looks stuck: latexmk's step,
+// the LaTeX pass with the pages typeset in it, and the time since it started.
+function BuildStatus({ draft }: { draft: PaperImport }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const progress = draft.phase === 'repairing' ? undefined : draft.progress;
+  const typesetting = progress?.step === 'tex' && progress.pass > 0 ? progress : undefined;
+  const label = draft.phase === 'repairing' ? t('The assistant is fixing compilation…')
+    : progress?.step === 'bibliography' ? t('Processing the bibliography…')
+      : progress?.step === 'pdf' ? t('Writing the PDF…')
+        : typesetting ? t('Typesetting with LaTeX, pass {n}…', { n: typesetting.pass })
+          : t('Preparing version history and compiling the PDF…');
+  const total = typesetting?.total ? Math.max(typesetting.total, typesetting.pages) : null;
+  return <div className="import-status">
+    <span className="spinner"/>
+    <div className="import-status-body">
+      <div className="import-status-line"><span role="status">{label}</span>{draft.startedAt ? <span className="import-elapsed">{clock(now - draft.startedAt)}</span> : null}</div>
+      {typesetting && <div className="import-progress">
+        <div className="import-progress-track" role="progressbar" aria-label={t('Pages typeset')} aria-valuemin={0} aria-valuenow={typesetting.pages} {...(total ? { 'aria-valuemax': total } : {})}>
+          <span className={total ? '' : 'indeterminate'} style={total ? { width: `${(100 * typesetting.pages) / total}%` } : undefined}/>
+        </div>
+        <span className="import-pages">{total ? t('Page {pages} of {total}', { pages: typesetting.pages, total }) : t('Page {pages}', { pages: typesetting.pages })}</span>
+      </div>}
+    </div>
+  </div>;
+}
 export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: Api; agent: AgentId; canRepair: boolean; onDone: (project: Project) => Promise<void>; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null), folder = useRef<HTMLInputElement>(null), zip = useRef<HTMLInputElement>(null), pending = useRef(false);
   const [draft, setDraft] = useState<PaperImport | null>(null), [form, setForm] = useState({ name: '', path: '', main: '', engine: 'pdflatex' });
@@ -121,7 +148,7 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
           <label>{t('LaTeX engine')}<select aria-label={t('LaTeX engine')} value={form.engine} disabled={locked} onChange={event => setForm({ ...form, engine: event.target.value })}><option value="pdflatex">pdfLaTeX</option><option value="xelatex">XeLaTeX</option><option value="lualatex">LuaLaTeX</option></select></label></div>
           {!draft.candidates.length && <p role="alert">{t('Could not detect a main file. Enter its path relative to the paper folder.')}</p>}
           {draft.candidates.length > 1 && draft.phase === 'choose' && <p>{t('Several TeX files were found. Check the selected main document before continuing.')}</p>}
-          {working && <p className="import-status" role="status"><span className="spinner"/>{draft.phase === 'repairing' ? t('The assistant is fixing compilation…') : t('Preparing version history and compiling the PDF…')}</p>}
+          {working && <BuildStatus draft={draft}/>}
           {draft.phase === 'ready' && <p className="import-success" role="status">{t('Your paper compiled successfully. It is ready for editing.')}</p>}
           {(failure || draft.phase === 'failed') && <div className="import-problem" role="alert"><strong>{preparationFailure ? t('Could not prepare the paper') : t('The paper needs a little help')}</strong><p>{hint}</p><details><summary>{t('Compilation details')}</summary><pre>{failure}</pre></details></div>}
           {draft.summary && <div className="import-summary"><strong>{t('Repair summary')}</strong><p>{draft.summary}</p><p>{t('Repairs are saved as uncommitted changes. Review them in the paper’s file changes.')}</p></div>}

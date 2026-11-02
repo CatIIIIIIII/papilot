@@ -126,7 +126,10 @@ export interface GitWorktree {
 }
 export interface GitGraphCommit { hash: string; parents: string[]; subject: string; author: string; date: number; refs: string[] }
 export interface GitOverview { worktrees: GitWorktree[]; commits: GitGraphCommit[]; truncated: boolean }
-export interface ManuscriptBuild { status: 'building' | 'ready' | 'failed'; key?: string; pages?: [number, number][]; builtAt?: number; error?: string; current: boolean; problems?: BuildProblemCounts }
+// A running compilation, from latexmk's output: its step, the TeX pass, and
+// the pages typeset in that pass against the last known page count.
+export interface BuildProgress { step: 'tex' | 'bibliography' | 'pdf'; pass: number; pages: number; total: number | null; startedAt: number }
+export interface ManuscriptBuild { status: 'building' | 'ready' | 'failed'; key?: string; pages?: [number, number][]; builtAt?: number; error?: string; current: boolean; problems?: BuildProblemCounts; progress?: BuildProgress }
 // What the last finished build reported. Errors stop the build; warnings are
 // mistakes in the PDF (?? and missing citations); minor problems are
 // typesetting (overfull lines) and package remarks, listed but never counted.
@@ -156,6 +159,8 @@ export interface PaperImport {
   id: string; path: string; name: string; copied: boolean; candidates: string[]; main: string; engine: string;
   phase: 'choose' | 'building' | 'failed' | 'ready' | 'repairing';
   error?: string; summary?: string; versioned?: boolean;
+  // While building: when it started, and the compilation's progress.
+  startedAt?: number; progress?: BuildProgress;
 }
 // The paper's bibliography as the References panel reads it: the review
 // engine's report of every entry, with online checks and the entries the

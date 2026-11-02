@@ -149,7 +149,9 @@ export class PaperImports {
   private save(value: PaperImport) {
     fs.mkdirSync(path.join(this.directory, 'imports'), { recursive: true, mode: 0o700 });
     const file = path.join(this.directory, 'imports', value.id + '.json');
-    fs.writeFileSync(file + '.tmp', JSON.stringify(value), { mode: 0o600 }); fs.renameSync(file + '.tmp', file);
+    // Progress is live state; a restarted server fails a running import anyway.
+    const { progress: _progress, ...stored } = value;
+    fs.writeFileSync(file + '.tmp', JSON.stringify(stored), { mode: 0o600 }); fs.renameSync(file + '.tmp', file);
     this.sessions.set(value.id, value); return { ...value };
   }
   get(id: string) {
@@ -207,7 +209,7 @@ export class PaperImports {
     if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120)) throw new Error('Enter a paper name under 120 characters.');
     this.active.add(id);
     const previousError = value.error || '';
-    Object.assign(value, { main, engine, ...(input.name ? { name: input.name } : {}), phase: repair ? 'repairing' : 'building', error: undefined });
+    Object.assign(value, { main, engine, ...(input.name ? { name: input.name } : {}), phase: repair ? 'repairing' : 'building', error: undefined, startedAt: Date.now(), progress: undefined });
     this.save(value);
     void (async () => {
       try {
@@ -227,10 +229,13 @@ export class PaperImports {
         // opened paper finds this PDF in the cache instead of compiling again.
         this.manuscripts.forgetProject('import-' + id);
         let result = await this.manuscripts.state('import-' + id, value.path);
-        while (result.build.status === 'building') { await new Promise(resolve => setTimeout(resolve, 400)); result = await this.manuscripts.state('import-' + id, value.path); }
+        while (result.build.status === 'building') {
+          value.progress = result.build.progress;
+          await new Promise(resolve => setTimeout(resolve, 400)); result = await this.manuscripts.state('import-' + id, value.path);
+        }
         value.phase = result.build.status === 'ready' ? 'ready' : 'failed'; value.error = result.build.error;
       } catch (error) { value.phase = 'failed'; value.error = (error as Error).message; }
-      finally { this.active.delete(id); this.save(value); }
+      finally { this.active.delete(id); value.progress = undefined; this.save(value); }
     })();
     return this.get(id);
   }

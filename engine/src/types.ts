@@ -163,6 +163,14 @@ export interface BuildInfo {
   seconds: number;
   warnings: string[];
 }
+// A running compilation: latexmk's current step, the TeX pass, and the
+// pages typeset in it against the last known page count.
+export interface BuildProgress {
+  step: "tex" | "bibliography" | "pdf";
+  pass: number;
+  pages: number;
+  total: number | null;
+}
 export interface Position {
   page: number;
   clip: Rect;

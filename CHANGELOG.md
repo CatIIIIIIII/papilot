@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **Compilation progress while adding a paper.** The import window shows LaTeX's current pass, the pages typeset so far against the paper's page count, and the elapsed time, so a long first compile no longer looks stuck.
+
 ### Changed
 
 - **PDF comparisons of long papers in seconds.** Placing each change in the PDF used to parse the paper's whole SyncTeX file once per source line, which on a 324-page thesis meant 2,910 parses and six and a half minutes. The file is now read once per build and every lookup answered from its index, so the same comparison takes about 11 seconds, with identical results.

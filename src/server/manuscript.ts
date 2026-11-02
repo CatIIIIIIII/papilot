@@ -8,7 +8,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { ENGINE } from './paths.ts';
-import type { Annotation, BuildProblem, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
+import type { Annotation, BuildProblem, BuildProgress, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
 import { notesInstructions } from '../notes.ts';
 import { ignorePattern } from '../commit.ts';
 import { AnnotationPages, placeAnnotation } from './annotation-placement.ts';
@@ -360,7 +360,7 @@ export async function pdfWords(pdf: string, page: number) {
 // `problems` come from the last finished build. They are placed on the PDF
 // named `problemsKey`; a failed build has no PDF of its own to place them on.
 interface Build {
-  tree: string; status: ManuscriptBuild['status']; key?: string; pdf?: string; root?: string; sourceDir?: string; pages?: [number, number][]; builtAt?: number; error?: string;
+  tree: string; status: ManuscriptBuild['status']; key?: string; pdf?: string; root?: string; sourceDir?: string; pages?: [number, number][]; builtAt?: number; error?: string; progress?: BuildProgress;
   problems?: StoredProblem[]; problemsKey?: string; log?: string; logFolder?: string;
 }
 
@@ -402,7 +402,7 @@ export class Manuscripts extends EventEmitter {
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
     const { status: state, key, pages, builtAt, error } = build;
-    return { git: status, build: { status: state, key, pages, builtAt, error, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems) } };
+    return { git: status, build: { status: state, key, pages, builtAt, error, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems), ...(state === 'building' && build.progress ? { progress: build.progress } : {}) } };
   }
 
   // Keep the previous pages visible while a newer working tree compiles.
@@ -415,7 +415,8 @@ export class Manuscripts extends EventEmitter {
       try {
         const { Builder, Repo, loadProject, mupdf } = await engine();
         project = loadProject(root);
-        const result = await new Builder(project, new Repo(root)).build(tree, ['full'], null, { force });
+        const startedAt = Date.now();
+        const result = await new Builder(project, new Repo(root)).build(tree, ['full'], null, { force, progress: (progress: Omit<BuildProgress, 'startedAt'>) => { if (this.builds.get(projectId) === build) build.progress = { ...progress, startedAt }; } });
         const document = mupdf.Document.openDocument(fs.readFileSync(result.pdf), 'application/pdf');
         const pages: [number, number][] = [];
         for (let i = 0; i < document.countPages(); i++) { const [x0, y0, x1, y1] = document.loadPage(i).getBounds(); pages.push([Math.round(x1 - x0), Math.round(y1 - y0)]); }
