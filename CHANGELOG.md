@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **PDF comparisons of long papers in seconds.** Placing each change in the PDF used to parse the paper's whole SyncTeX file once per source line, which on a 324-page thesis meant 2,910 parses and six and a half minutes. The file is now read once per build and every lookup answered from its index, so the same comparison takes about 11 seconds, with identical results.
+
 ## [0.8.2] - 2026-11-02
 
 Papilot 0.8.2 opens local paper folders in place, compiles as fast as latexmk, updates the desktop app in place and speaks eleven languages.
