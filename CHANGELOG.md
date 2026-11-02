@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **Desktop updates in place.** Like Obsidian, the desktop app now installs newer Papilot releases itself instead of sending you to GitHub Releases. It downloads the release, checks that it starts, and restarts on it when tasks and PDF builds are idle; if it does not start, the previous version and database are restored. A new installer is needed only when a release changes what the app itself provides, and the update notice says so. Settings → Updates shows the installer version next to the running version.
+
 ### Changed
 
 - **Open local paper folders in place.** In the desktop app, choose or drag in a folder and only its path is used: there are no upload size or file count limits, and existing configuration and main files are detected without scanning caches or reference material. Importing keeps the author's `.latex-review.json` unchanged unless the main file or engine changes. ZIP imports still create a separate copy.

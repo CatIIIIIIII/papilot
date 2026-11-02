@@ -7,7 +7,7 @@ import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 import { activeInstallation, devRevision, newerVersion, readJson, releaseVersion, stableVersion, writeJson } from '../bin/installation.mjs';
 import { latestRelease, Updates } from '../src/server/updates.ts';
-import { DEV_REPOSITORY, health, loaderFor, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
+import { codexVersion, desktopSupports, DEV_REPOSITORY, health, loaderFor, NEEDS_INSTALLER, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
 import { restartRelease } from '../src/server/update-worker.ts';
 
 const temporary = () => fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-update-test-'));
@@ -32,6 +32,50 @@ test('desktop updates cannot install npm releases or switch to a dev checkout', 
     assert.throws(() => f.updates.install('0.7.0'), /desktop updates/);
     assert.equal(checked, false); assert.equal(installed, false);
   } finally { f.close(); }
+});
+test('desktop installers update to releases they can run and ask for a new installer otherwise', async () => {
+  const downloadUrl = 'https://github.com/PapilotAI/papilot/releases/latest', desktop = { shell: 1, installer: '0.6.0', downloadUrl };
+  let manifest: Record<string, any> = { name: 'papilot', version: '0.7.0', desktopShell: 1, engines: { node: '>=22.22.0' } };
+  const installed: string[] = [], restarted: string[] = [];
+  const f = fixture({ desktop, latest: async () => manifest, install: async (_data: string, version: string) => { installed.push(version); return '/releases/0.7.0'; }, restart: async (root: string) => { restarted.push(root); } });
+  try {
+    let status = await f.updates.check();
+    assert.equal(status.phase, 'available'); assert.equal(status.canUpdate, true);
+    assert.equal(status.downloadUrl, undefined); assert.equal(status.installerVersion, '0.6.0'); assert.equal(status.channel, 'stable');
+    assert.throws(() => f.updates.setChannel('dev'), /desktop updates/);
+    for (const next of [{ ...manifest, desktopShell: 2 }, { ...manifest, engines: { node: '>=99.0.0' } }, { name: 'papilot', version: '0.7.0' }]) {
+      manifest = next;
+      status = await f.updates.check();
+      assert.equal(status.phase, 'available'); assert.equal(status.canUpdate, false); assert.equal(status.downloadUrl, downloadUrl, JSON.stringify(next));
+      assert.throws(() => f.updates.install('0.7.0'), new RegExp(NEEDS_INSTALLER.slice(0, 20)));
+    }
+    manifest = { name: 'papilot', version: '0.6.0' };
+    status = await f.updates.check();
+    assert.equal(status.phase, 'idle'); assert.equal(status.downloadUrl, undefined, 'The running version never asks for an installer');
+    manifest = { name: 'papilot', version: '0.7.0', desktopShell: 1 };
+    await f.updates.check();
+    f.updates.install('0.7.0');
+    for (let i = 0; i < 20 && !restarted.length; i++) await tick();
+    assert.deepEqual(installed, ['0.7.0']); assert.deepEqual(restarted, ['/releases/0.7.0']);
+  } finally { f.close(); }
+});
+test('desktop compatibility follows the shell level and the bundled Node', () => {
+  assert.ok(desktopSupports({ desktopShell: 1 }, 1));
+  assert.ok(desktopSupports({ desktopShell: 1, engines: { node: '>=22.22.0' } }, 2, '22.22.0'));
+  assert.equal(desktopSupports({ desktopShell: 2 }, 1), false);
+  assert.equal(desktopSupports({ desktopShell: 0 }, 1), false);
+  assert.equal(desktopSupports({ desktopShell: '1' }, 1), false);
+  assert.equal(desktopSupports({}, 1), false, 'Releases from before desktop updates cannot be activated by the app');
+  assert.equal(desktopSupports({ desktopShell: 1, engines: { node: '>=24.1.0' } }, 1, '22.22.0'), false);
+  assert.ok(desktopSupports({ desktopShell: 1, engines: { node: '^22 || >=24' } }, 1, '22.22.0'), 'npm checks other ranges while installing');
+  const folder = temporary(), bin = path.join(folder, 'node_modules/.bin/codex'), pkg = path.join(folder, 'node_modules/@openai/codex');
+  try {
+    fs.mkdirSync(path.join(pkg, 'bin'), { recursive: true }); fs.mkdirSync(path.dirname(bin));
+    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ version: '0.164.0' })); fs.writeFileSync(path.join(pkg, 'bin/codex.js'), '');
+    fs.symlinkSync('../@openai/codex/bin/codex.js', bin);
+    assert.equal(codexVersion(bin), '0.164.0');
+    assert.equal(codexVersion(path.join(folder, 'missing')), null);
+  } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
 test('release comparisons reject unsafe targets and never downgrade', () => {
   for (const version of ['latest', '../1.0.0', '1.2.3;whoami', '1.2.3-beta.1', '01.2.3', '1.2']) assert.equal(stableVersion(version), false, version);

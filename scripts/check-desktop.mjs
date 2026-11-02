@@ -12,10 +12,11 @@ const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-test-'));
 const env = { ...process.env, PAPILOT_DESKTOP_DATA: data, PAPILOT_DESKTOP_NODE: process.execPath, PAPILOT_UPDATE_PROBE: '1', LANG: 'en_US.UTF-8' };
 delete env.ELECTRON_RUN_AS_NODE;
 const packaged = process.env.PAPILOT_DESKTOP_EXECUTABLE;
+const resources = packaged && (process.env.PAPILOT_DESKTOP_RESOURCES || path.resolve(path.dirname(packaged), process.platform === 'darwin' ? '../Resources' : 'resources'));
+const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 if (packaged) {
   // Exercise the bundled tools with no development Node on PATH.
   env.PATH = '/usr/bin:/bin';
-  const resources = process.env.PAPILOT_DESKTOP_RESOURCES || path.resolve(path.dirname(packaged), process.platform === 'darwin' ? '../Resources' : 'resources');
   const node = path.join(resources, 'runtime/bin/node'), server = path.join(resources, 'server');
   assert.match(execFileSync(node, ['--version'], { encoding: 'utf8' }), /^v\d+\./);
   assert.match(execFileSync(node, [path.join(resources, 'runtime/lib/node_modules/npm/bin/npm-cli.js'), '--version'], { encoding: 'utf8' }), /^\d+\./);
@@ -37,7 +38,7 @@ try {
   origin = new URL(page.url()).origin;
   const health = await (await fetch(`${origin}/api/health`)).json();
   assert.equal(health.name, 'Papilot');
-  assert.equal(health.version, JSON.parse(fs.readFileSync('package.json', 'utf8')).version);
+  assert.equal(health.version, version);
   const state = await (await fetch(`${origin}/api/state`)).json();
   assert.ok(state.csrf); assert.equal(state.viewer.role, 'owner');
   assert.equal(state.projects.length, 1, 'First launch includes the demo paper');
@@ -68,9 +69,10 @@ try {
   assert.ok(fs.existsSync(path.join(data, 'papilot.sqlite')), 'The bundled Node runtime can open SQLite');
   const rejected = await fetch(`${origin}/api/state`, { headers: { Origin: 'https://example.com' } });
   assert.equal(rejected.status, 403, 'The ephemeral port still enforces origin checks');
+  // Packaged apps install newer releases themselves; development builds link to downloads.
   const status = await (await fetch(`${origin}/api/updates`)).json();
-  assert.equal(status.canUpdate, false);
-  assert.equal(status.downloadUrl, 'https://github.com/PapilotAI/papilot/releases/latest');
+  if (packaged) assert.deepEqual([status.canUpdate, status.downloadUrl, status.installerVersion], [true, undefined, version]);
+  else assert.deepEqual([status.canUpdate, status.downloadUrl], [false, 'https://github.com/PapilotAI/papilot/releases/latest']);
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   const windowOptions = await application.evaluate(({ BrowserWindow }) => {
     const preferences = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();
@@ -118,7 +120,8 @@ try {
   const settings = page.getByRole('button', { name: /^(Settings|设置)$/ });
   await settings.click();
   await page.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
-  await expect(page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ })).toBeVisible();
+  if (packaged) await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();
+  else await expect(page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ })).toBeVisible();
   assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), 0);
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-${packaged ? 'packaged' : 'dev'}.png` });
@@ -147,6 +150,36 @@ try {
     } else await application.close();
     application = null;
   } finally { await new Promise(resolve => occupied.close(resolve)); }
+  if (packaged) {
+    // An installed newer release runs on this app, laid out as npm installs it.
+    const server = path.join(resources, 'server'), next = '999.0.0';
+    const root = path.join(data, `updates/releases/${next}-smoke/node_modules/papilot`), active = path.join(data, 'updates/active.json');
+    fs.mkdirSync(root, { recursive: true });
+    for (const name of fs.readdirSync(server)) {
+      if (name === 'node_modules' || name === 'vendor') fs.symlinkSync(path.join(server, name), path.join(root, name));
+      else if (name !== 'package.json') fs.cpSync(path.join(server, name), path.join(root, name), { recursive: true });
+    }
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(server, 'package.json'), 'utf8')), version: next }));
+    fs.writeFileSync(active, JSON.stringify({ root, version: next, id: 'smoke', phase: 'active' }));
+    const opened = async () => {
+      application = await launch();
+      const window = await application.firstWindow({ timeout: 90000 });
+      await window.waitForURL('http://127.0.0.1:*/');
+      const address = new URL(window.url()).origin;
+      return { health: await (await fetch(`${address}/api/health`)).json(), status: await (await fetch(`${address}/api/updates`)).json() };
+    };
+    let run = await opened();
+    assert.equal(run.health.version, next, 'The app runs the installed release');
+    assert.deepEqual([run.status.currentVersion, run.status.installerVersion], [next, version]);
+    await application.close(); application = null;
+    // A release that cannot start falls back to the version in the app.
+    fs.writeFileSync(path.join(root, 'src/server/start.ts'), 'process.exit(3);\n');
+    run = await opened();
+    assert.equal(run.health.version, version);
+    assert.equal(run.status.phase, 'failed');
+    assert.equal(fs.existsSync(active), false);
+    await application.close(); application = null;
+  }
   console.log(`Desktop smoke passed (${packaged ? 'packaged app' : 'development'}, ${health.version}).`);
 } finally {
   await application?.close();

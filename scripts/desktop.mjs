@@ -17,7 +17,7 @@ const runNpm = (args, cwd = root) => run(process.execPath, [npm, ...args], cwd);
 fs.mkdirSync('.desktop/app', { recursive: true });
 fs.writeFileSync('.desktop/app/package.json', JSON.stringify({ name: 'papilot-desktop', productName: 'Papilot', version: pkg.version,
   description: pkg.description, author: pkg.author, homepage: pkg.homepage, license: pkg.license,
-  desktopName: 'ai.papilot.desktop.desktop', type: 'module', main: 'main.js' }, null, 2) + '\n');
+  desktopName: 'ai.papilot.desktop.desktop', desktopShell: pkg.desktopShell, type: 'module', main: 'main.js' }, null, 2) + '\n');
 
 if (process.argv[2] === 'dev') {
   if (!fs.existsSync('vendor/latex-review/dist/web/index.html')) runNpm(['run', 'setup:review']);
