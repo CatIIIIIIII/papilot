@@ -244,7 +244,8 @@ try {
       assert.equal(record.phase, 'active'); assert.equal(record.installer, version);
       // An AppImage runs from a new mount or extraction on each launch.
       assert.ok(fs.readlinkSync(path.join(record.root, 'node_modules')).endsWith(`${path.sep}server${path.sep}node_modules`), 'The layer runs on the installer dependencies');
-      assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/channel.json'), 'utf8')).channel, 'dev');
+      // A dev installer starts on the Dev channel; a stable one saved the choice.
+      assert.equal((await (await fetch(`${address}/api/updates`)).json()).channel, 'dev');
       await application.close(); application = null;
       const reopened = await opened();
       assert.equal(await running(reopened.address), built.version, 'The update survives a restart');
