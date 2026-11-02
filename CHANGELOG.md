@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-11-02
+
+Papilot 0.8.5 brings the Dev channel to the desktop app with small in-place updates, returns you to where you left off, recovers PDF comparisons after a lost connection and lays out the Git panel like Cursor's.
+
 ### Added
 
 - **Dev channel and small in-place updates in the desktop app.** Settings → Updates in the desktop app now offers **Stable** and **Dev (GitHub main)**, like the web server. When a new version was built for the installer you have, **Update now** downloads only Papilot's own code, about 5 MB instead of a 330 MB installer, checks that it starts, and restarts when tasks and PDF builds are idle; if it does not start, the previous version and database are restored. A version that needs a newer Electron, Node, Codex or dependencies links to its installer. A nightly build of main is published to the `desktop-dev` prerelease when main has changed, with new installers only when the app shell changed.
@@ -12,11 +16,14 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 - **A PDF whose word positions fail to load no longer freezes the tab.** Papilot falls back to the PDF's own text once instead of retrying forever, which also blocked reloading while a manuscript or review PDF was still opening.
 - **Come back to where you left off.** Returning to the manuscript from a task, or to a task from anywhere, opens it where you were instead of at the top: the PDF on the same page and spot, the **PDF / Changes** choice, a task's chat scrolled back through its history, the review within its current change and its PDF / Changes view, an AI review's PDF and the reference check. A chat that was following the latest messages keeps following them. Places survive a reload.
+- **Sandboxed Cursor tasks run again.** When Papilot had fetched the Cursor SDK on first use, every sandboxed Cursor run failed with "sandboxing is not supported in this environment", because the SDK could not find its sandbox helper. It finds it now, and the sandbox stays on.
 - **Recover PDF comparisons after a lost connection.** Papilot retries brief connection failures, resumes saved builds after a restart, and offers **Check status** when the service remains unavailable. Completed comparisons are recovered without rerunning the agent. Build submissions are deduplicated across retries; a build interrupted by a review-service restart is retried once.
 
 ### Changed
 
 - **A Git panel like Cursor's.** The panel now has three views that fold away. **Changes** starts with the commit message and **✓ Commit**, whose arrow also offers **Commit and push**, and lists **Staged changes** and **Changes** with each file's status letter. Hovering over a file shows **+** to stage, **−** to unstage, and an undo arrow that discards its unstaged changes after asking. **Commit graph** shows the history in single rows with branch, remote and tag badges and HEAD as an open circle; its header names the branch, how far it is ahead or behind, and fetch, pull and push. **Worktrees** lists the tasks' checkouts. The tick boxes, the build-output banner (now in the **⋯** menu) and the **Git details** section are gone.
+- **Enter sends a PDF note to the chat.** In the note popover, Enter now saves the note and quotes it in the chat, as the arrow does. A note already in the chat just saves, and the note library keeps Enter for saving edits.
+- **Notes fly back to My notes.** Clearing the selection or removing a note in the new-task panel sends the cards along an arc into **My notes**, which shows +N for a moment; on a phone they land on the PDF view button, and reduced motion skips the flight. The note library is tighter: the region note and **Add all to task** share a row, and each card's buttons sit beside its location.
 
 ## [0.8.4] - 2026-11-02
 
@@ -247,7 +254,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.5...HEAD
+[0.8.5]: https://github.com/PapilotAI/papilot/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/PapilotAI/papilot/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/PapilotAI/papilot/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/PapilotAI/papilot/compare/v0.8.1...v0.8.2
