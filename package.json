@@ -52,7 +52,9 @@
     "engine/dist",
     "engine/package.json",
     "engine/package-lock.json",
-    "engine/LICENSE"
+    "engine/LICENSE",
+    "vendor/latex-review/package.json",
+    "vendor/latex-review/package-lock.json"
   ],
   "engines": {
     "node": ">=22.22.0"
