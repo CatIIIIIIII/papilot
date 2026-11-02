@@ -12,12 +12,15 @@ import { ReviewNoteConnections } from './review-note-connections.tsx';
 import { SHORTCUT_EVENT, useShortcuts } from './shortcuts.ts';
 import { installReviewScroll } from './review-scroll.ts';
 import { EFFECTS_EVENT, useExpandedEffects } from './effect-preferences.ts';
-import { saveReviewView, useReviewView, VIEW_EVENT, type ReviewView } from './review-view.ts';
+import { saveReviewView, useReviewView, VIEW_EVENT } from './review-view.ts';
+import { ModeSwitch } from './mode-switch.tsx';
 
 // The viewer reads the interface language from its address.
 export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `/review/${task.projectId}/?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
 // The same viewer shows a paper's uncommitted changes against its last commit.
-export const changesUrl = (projectId: string) => `/review/${projectId}/?changes=1${language() === 'en' ? '' : `&lang=${language()}`}`;
+// The manuscript's own PDF / Changes switch chooses its PDF; its review of the
+// changes shows them alone.
+export const changesUrl = (projectId: string) => `/review/${projectId}/?changes=1&view=changes${language() === 'en' ? '' : `&lang=${language()}`}`;
 
 // The embedded viewer shares our origin. Keep its decision controls, but remove
 // navigation and the task title that the workspace already provides. Its bar
@@ -232,18 +235,12 @@ function cropMargins(doc: Document) {
 // completion is the next step shown in the viewer's card once every change is decided.
 // Without a task the frame shows the paper's uncommitted changes (changesOf),
 // and the viewer's own waiting message shows while they are compared.
-// Whole paper or changed sections, in the same control as PDF and Changes.
-function ReviewViewSwitch({ view, onView }: { view: ReviewView; onView: (view: ReviewView) => void }) {
-  return <div className="pdf-modes" role="group" aria-label={t('Review view')}>
-    <button type="button" aria-label={t('Full paper')} title={t('Full paper')} aria-pressed={view === 'paper'} onClick={() => onView('paper')}><Icon name="book" size={15}/><span>{t('Full paper')}</span></button>
-    <button type="button" aria-label={t('Changes only')} title={t('Changes only')} aria-pressed={view === 'changes'} onClick={() => onView('changes')}><Icon name="compress" size={15}/><span>{t('Changes only')}</span></button>
-  </div>;
-}
-
 export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNotes, onDecided }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onSendNotes?: (message: { text: string; requestKey: string; notes?: NoteSummary[] }) => Promise<void>; onDecided?: () => void }) {
   const shortcuts = useShortcuts();
   const expandedEffects = useExpandedEffects();
   const view = useReviewView(), [fullPaper, setFullPaper] = useState(false);
+  // A task's review offers the whole paper as PDF, where the manuscript has its PDF.
+  const modes = task && fullPaper ? <ModeSwitch mode={view === 'paper' ? 'pdf' : 'changes'} onMode={mode => saveReviewView(mode === 'pdf' ? 'paper' : 'changes')} changesTitle={t('Changes')}/> : null;
   const noteLinks = useNoteResults(), linksRef = useRef(noteLinks); linksRef.current = noteLinks;
   // Current changes open in the usual review; only older results need history.
   const linkedRound = task ? noteLinks?.focus?.change.round : undefined;
@@ -304,7 +301,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNo
     const element = leading.current; if (!element) { setLeadWidth(0); return; }
     const observer = new ResizeObserver(() => setLeadWidth(Math.ceil(element.offsetWidth)));
     observer.observe(element); return () => observer.disconnect();
-  }, [Boolean(lead)]);
+  }, [Boolean(lead || modes)]);
   useEffect(() => {
     if (!document || !frame.current || !hostBar.current) return;
     const root = document.documentElement, bar = document.querySelector<HTMLElement>('.bar');
@@ -415,8 +412,8 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNo
     <iframe ref={frame} key={`${attempt}:${shown}:${linkedRound || ''}:${focusSequence || ''}`} title={task ? t('{title} PDF change review', { title: task.title }) : t('Uncommitted changes in the PDF')} src={task ? reviewUrl(task, linkedRound, linkedChange) : changesUrl(changesOf!)} onLoad={loaded} onError={() => setPhase('error')} className="review-frame" aria-hidden={!ready} tabIndex={ready ? 0 : -1}/>
     {task && ready && <ReviewNoteConnections doc={document} round={linkedRound || task.review?.round || 0}/>}
     <div ref={hostBar} className="review-host-bar">
-      {lead && <div ref={leading} className="review-lead">{lead}</div>}
-      <div ref={toolbar} className="review-tools">{fullPaper && <ReviewViewSwitch view={view} onView={saveReviewView}/>}{task && onSendNotes && <ReviewNotes doc={ready ? document : null} task={task} onSend={onSendNotes}/>}{tools}</div>
+      {(lead || modes) && <div ref={leading} className="review-lead">{lead}{modes}</div>}
+      <div ref={toolbar} className="review-tools">{task && onSendNotes && <ReviewNotes doc={ready ? document : null} task={task} onSend={onSendNotes}/>}{tools}</div>
     </div>
     {slot && completion ? createPortal(completion, slot) : null}
     {document && slot && completion && completionOffscreen ? createPortal(<div className="review-complete-jump">

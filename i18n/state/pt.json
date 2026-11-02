@@ -535,7 +535,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Changes": {
-    "revision": "75d942ebd77e6be97b089f226fd8528a90893b30102eed68d38c1863a0d261b8",
+    "revision": "497247c1ef7c48cf659fcf0496012f07bd6cbdf2d9d18a4b7965f4f859c6aa31",
     "textHash": "95c1a89d2b79ea854c07eee31928b63c52dcbe8578a2c93176ab6b4bfb23494a",
     "model": "gemini-4-argon-medium"
   },
@@ -547,11 +547,6 @@
   "Changes in {path}": {
     "revision": "7a81f2b1c3026da223bfde89e6d2c93fd67234bdba1631bae61b15117aeb7ddf",
     "textHash": "2a7785e16855f31b969fc8556d7dbd3c33796b9cbabc6e5e656007e4670e2293",
-    "model": "gemini-4-argon-medium"
-  },
-  "Changes only": {
-    "revision": "3eb15eb96e2ca15e8f2d379688ce0cfd4120ab66174e2ae9f1f5b1009bc3c9c3",
-    "textHash": "b1b81b28b8d74d57048adb13bdd70514c8a32853fc986e1a161cdb3534734371",
     "model": "gemini-4-argon-medium"
   },
   "Chart": {
@@ -1727,11 +1722,6 @@
   "Full PDF": {
     "revision": "495659aaac7c7c044f41154f52d300cfb9b7327825d85001c28b5159ba647098",
     "textHash": "ca43cebab61a890dbc4a21f9835ebca7e17cb7ab25280c3af783fb5e16adafdd",
-    "model": "gemini-4-argon-medium"
-  },
-  "Full paper": {
-    "revision": "a6914a38c781d869e689b62a4f4d609fdd55171a01d561a2cc8f959b44ad6e7d",
-    "textHash": "d493f5691f2ec2748c77f54cc8f8a04a5b506a8ca3e18773f43c0d64b54c88f3",
     "model": "gemini-4-argon-medium"
   },
   "General": {
@@ -3664,11 +3654,6 @@
     "textHash": "42b3e48b989e4825eed24b8168b6e34c2392c4526b9e2c4cbfddc0d7065bd4bf",
     "model": "gemini-4-argon-high"
   },
-  "Review view": {
-    "revision": "409d968e322ae3c60a10a7cef350e7050fc0c1cb3f469c59704eb476f15dbee5",
-    "textHash": "1dd77371785ccfff00fc11eca17291988f9c68110dc8079691c4fdbea13a4119",
-    "model": "gemini-4-argon-medium"
-  },
   "Review, {n} to decide": {
     "revision": "7305738f998faf5389facdb02debe309f8e2cfcf51e7184e02d60f9b6de9b9c3",
     "textHash": "07c49c425b86789e0c7e64038b8941142b96c344c84287737e3dcece4383a0fd",
@@ -3980,7 +3965,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Show": {
-    "revision": "a41bc576451bd0786def7cb473b3ee82803a9a92455861bb031ac5503e1fe0a0",
+    "revision": "9a121307b9978e7b0019583e46b89f5e857879a00cf4ac0e04d335f2e593ed15",
     "textHash": "5c492f37a63f6e931b6c5cda3097586fd6f14f3f87a1facb851912291241cf46",
     "model": "gemini-4-argon-medium"
   },
@@ -4975,8 +4960,8 @@
     "model": "gemini-4-argon-medium"
   },
   "What changed since the last commit, to stage, revert and commit change by change": {
-    "revision": "ca1b82e1865f98af52993e41888b4c58601b26d5cd6acb4c817927b2186f564e",
-    "textHash": "4f7fc165488c61e51b343a343b21b7b919e00125f7796830c5d741412ff66d92",
+    "revision": "4f509275b4052b21a474dc4ca93becd711b8785439decb79135519014d981c88",
+    "textHash": "31cfa8a7e4fbec7ff5870a27bf189cbce056d822f4d4c0aa0a3ab8aa47668878",
     "model": "gemini-4-argon-medium"
   },
   "What does this skill help with?": {

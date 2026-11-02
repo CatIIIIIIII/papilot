@@ -148,7 +148,7 @@ export function FullPaper({
       <div className="paper-status" role="alert">
         <p>{t("The full PDF could not be loaded.")}</p>
         <button className="ghost" onClick={onUnavailable}>
-          {t("Changes only")}
+          {t("Changes")}
         </button>
       </div>
     );

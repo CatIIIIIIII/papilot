@@ -20,6 +20,7 @@ import type { Attachment } from '../shared.ts';
 import { noteLocation } from './note-location.ts';
 import { ReadRequest, canStreamUpdates } from './refresh.ts';
 import { browserStorage } from './storage.ts';
+import { ModeSwitch, type PdfMode } from './mode-switch.tsx';
 import { ReviewFrame, reviewUrl } from './review-frame.tsx';
 import { AiReviewView } from './ai-review.tsx';
 import { keepDialogFocus } from './focus.ts';
@@ -668,15 +669,6 @@ function PendingComparison({ task, busy, onBuild }: { task: Task; busy: boolean;
   </div>;
 }
 
-// The PDF page shows the manuscript as it is, or what changed since the last
-// commit, as a review of each change that can be staged, unstaged or reverted.
-type PdfMode = 'pdf' | 'changes';
-function ModeSwitch({ mode, onMode }: { mode: PdfMode; onMode: (mode: PdfMode) => void }) {
-  return <div className="pdf-modes" role="group" aria-label={t('Show')}>
-    <button type="button" aria-label="PDF" title="PDF" aria-pressed={mode === 'pdf'} onClick={() => onMode('pdf')}><Icon name="paper" size={15}/><span>PDF</span></button>
-    <button type="button" aria-label={t('Changes')} aria-pressed={mode === 'changes'} title={t('What changed since the last commit, to stage, revert and commit change by change')} onClick={() => onMode('changes')}><Icon name="diff" size={15}/><span>{t('Changes')}</span></button>
-  </div>;
-}
 
 type ManuscriptPanel = 'pdf' | 'task' | 'contents' | 'git';
 function ManuscriptView({ project, data, error, view, setView, region, setRegion, active, setActive, actions, newTask, tools, openPdf, navigation, onGit, writer, reportError, tasks, onOpenTask, onFixProblems }: { onFixProblems?: (request: string) => void; tasks: Task[]; onOpenTask: (id: string) => void; navigation?: React.ReactNode; newTask: (notes: React.ReactNode) => React.ReactNode; tools?: React.ReactNode; openPdf?: React.ReactNode; onGit: (status: GitStatus) => void; writer: CommitWriter; reportError: (error: unknown) => void; project: Project; data: Manuscript | null; error: string; view: ManuscriptPanel; setView: (view: ManuscriptPanel) => void; region: boolean; setRegion: (on: boolean) => void; active: string; setActive: (id: string) => void; actions: NoteActions }) {

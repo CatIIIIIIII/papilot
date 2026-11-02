@@ -174,14 +174,21 @@ export function ReviewApp({
     snapshot = useRef({ state, detail, busy, composer, current });
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   // The whole paper with the changes in place, or the changed sections only.
-  const [view, setView] = useState<ReviewView>(readView);
+  // A host may fix the view in the address (Papilot's manuscript chooses its
+  // PDF with its own switch); otherwise it follows the stored choice.
+  const [pinnedView] = useState<ReviewView | null>(() => {
+    const value = new URLSearchParams(location.search).get("view");
+    return value === "paper" || value === "changes" ? value : null;
+  });
+  const [view, setView] = useState<ReviewView>(() => pinnedView ?? readView());
   useEffect(() => {
+    if (pinnedView) return;
     const chosen = (event: Event) => setView((event as CustomEvent).detail === "changes" ? "changes" : "paper");
     const stored = (event: StorageEvent) => { if (event.key === VIEW_STORAGE || event.key === null) setView(readView()); };
     window.addEventListener(VIEW_EVENT, chosen);
     window.addEventListener("storage", stored);
     return () => { window.removeEventListener(VIEW_EVENT, chosen); window.removeEventListener("storage", stored); };
-  }, []);
+  }, [pinnedView]);
   const [expandedEffects, setExpandedEffects] = useState(readExpandedEffects);
   // Per-edit disclosure is temporary and scoped to its round. Changing the
   // global preference resets those overrides without reloading the review.
@@ -1119,7 +1126,7 @@ export function ReviewApp({
       </article>
     );
   }
-  const fullPaper = Boolean(detail?.pdf) && placeable(placed),
+  const fullPaper = !pinnedView && Boolean(detail?.pdf) && placeable(placed),
     paperView = fullPaper && view === "paper";
   // A host shows its own switch while the whole paper can be shown.
   useEffect(() => {
@@ -1291,14 +1298,14 @@ export function ReviewApp({
                 aria-pressed={view === "paper"}
                 onClick={() => chooseView("paper")}
               >
-                {t("Full paper")}
+                PDF
               </button>
               <button
                 className={`ghost${view === "changes" ? " active" : ""}`}
                 aria-pressed={view === "changes"}
                 onClick={() => chooseView("changes")}
               >
-                {t("Changes only")}
+                {t("Changes")}
               </button>
             </div>
           )}
