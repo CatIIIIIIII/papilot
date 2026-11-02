@@ -104,6 +104,17 @@ it.skipIf(!tex)(
       });
       expect(detail.sections[0].title).toBe("Acknowledgments");
       expect(detail.units[0].pages?.length).toBeGreaterThan(0);
+      // Strips record where they start on the page; a round rendered before
+      // they did recovers the same positions from its PDF.
+      const after = [...detail.sections.flatMap((s) => s.blocks), ...detail.loose].flatMap((b) =>
+        b.kind === "change" ? b.after : [],
+      );
+      expect(after.length).toBeGreaterThan(0);
+      expect(after.every((s) => typeof s.top === "number")).toBe(true);
+      const recorded = after.map((s) => s.top);
+      for (const strip of after) delete strip.top;
+      await app.review.positioned(detail);
+      expect(after.map((s) => s.top)).toEqual(recorded);
       expect((await publish()).outcome).toBe("unchanged");
 
       // Simulate a round made before renderer versions were recorded.

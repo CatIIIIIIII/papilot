@@ -6,8 +6,8 @@ export interface PlacedChange {
   index: number;
 }
 
-// The full paper can show the changes when their strips know where they
-// start on the page (rounds rendered before that was recorded cannot).
+// The full paper can show the changes when at least one strip knows where
+// it starts on its page; a change whose strips do not follows the change
+// before it.
 export const placeable = (changes: PlacedChange[]) =>
-  changes.some((c) => c.block.after.length) &&
-  changes.every((c) => c.block.after.every((s) => s.top !== undefined));
+  changes.some((c) => c.block.after.some((s) => s.top !== undefined));

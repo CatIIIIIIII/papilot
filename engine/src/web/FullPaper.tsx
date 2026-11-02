@@ -60,7 +60,7 @@ function plan(count: number, labels: string[] | null, changes: PlacedChange[]) {
     find = locator(count, labels);
   let last: Cut | null = null;
   for (const change of changes) {
-    const spots = change.block.after.map((strip) => ({ strip, page: find(strip) }));
+    const spots = change.block.after.map((strip) => ({ strip, page: strip.top === undefined ? -1 : find(strip) }));
     if (!spots.length || spots.some((s) => s.page < 0)) {
       // No new lines here (a deletion), or none this PDF has: after the
       // previous change, or before the paper when it is the first.

@@ -8,6 +8,7 @@ import type { App } from "../server.ts";
 import type {
   Action,
   ActionDetail,
+  BuildInfo,
   ActionKind,
   Decision,
   Feedback,
@@ -54,6 +55,8 @@ export function safePath(root: string, file: string) {
   return target;
 }
 export class Review {
+  // Strip positions recovered for earlier rounds, by round and strip image.
+  private tops = new Map<string, Map<string, number>>();
   constructor(public app: App) {}
   latestRound(name: string) {
     return this.app.store.one<Round>(
@@ -222,6 +225,35 @@ export class Review {
           }
         : null,
     };
+  }
+  // The full paper places each change by where its strips start on the page.
+  // Rounds rendered before strips recorded that recover it from the round's
+  // new PDF the first time they are shown.
+  async positioned(detail: RoundDetail): Promise<RoundDetail> {
+    const strips = [...detail.sections.flatMap((s) => s.blocks), ...detail.loose]
+      .flatMap((block) => (block.kind === "change" ? block.after : []))
+      .filter((strip) => strip.top === undefined);
+    if (!strips.length) return detail;
+    const key = `${detail.task}:${detail.round}`;
+    let tops = this.tops.get(key);
+    if (!tops) {
+      tops = new Map();
+      const build = this.round(detail.task, detail.round).summary.builds?.at(-1),
+        info = build
+          ? readJson<BuildInfo | null>(path.join(this.app.state, "cache/builds", build, "result.json"), null)
+          : null;
+      if (info && fs.existsSync(info.pdf)) {
+        const { stripTops } = await import("../render/positions.ts");
+        stripTops(info.pdf, strips);
+        for (const strip of strips) if (strip.top !== undefined) tops.set(strip.src, strip.top);
+      }
+      this.tops.set(key, tops);
+    }
+    for (const strip of strips) {
+      const top = tops.get(strip.src);
+      if (top !== undefined) strip.top = top;
+    }
+    return detail;
   }
   roundDetail(name: string, number: number): RoundDetail {
     const round = this.round(name, number),

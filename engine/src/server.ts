@@ -188,9 +188,11 @@ export function createServer(app: App) {
     server.get<{ Params: { name: string; number: string } }>(
       "/api/tasks/:name/rounds/:number",
       (request) =>
-        app.review.roundDetail(
-          request.params.name,
-          Number(request.params.number),
+        app.review.positioned(
+          app.review.roundDetail(
+            request.params.name,
+            Number(request.params.number),
+          ),
         ),
     );
     // The places an edit changes away from its lines, past those its round
