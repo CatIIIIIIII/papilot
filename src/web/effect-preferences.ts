@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { browserStorage } from './storage.ts';
-import { EFFECTS_STORAGE } from '../../vendor/latex-review/src/web/effect-preferences.ts';
+import { EFFECTS_STORAGE } from '../../engine/src/web/effect-preferences.ts';
 
-export { EFFECTS_EVENT } from '../../vendor/latex-review/src/web/effect-preferences.ts';
+export { EFFECTS_EVENT } from '../../engine/src/web/effect-preferences.ts';
 let expanded = browserStorage.getItem(EFFECTS_STORAGE) === 'on';
 const listeners = new Set<() => void>();
 function apply(value: boolean) { expanded = value; listeners.forEach(listener => listener()); }

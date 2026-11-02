@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { Repo } from '../vendor/latex-review/src/core/git.ts';
+import { Repo } from '../engine/src/core/git.ts';
 
 async function digest(file: string) {
   const hash = createHash('sha256');

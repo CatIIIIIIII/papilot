@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Manuscripts, workingTree } from '../src/server/manuscript.ts';
-import { PdfDocument } from '../vendor/latex-review/src/render/pdf.ts';
+import { PdfDocument } from '../engine/src/render/pdf.ts';
 import type { Annotation } from '../src/shared.ts';
 
 const latexmk = (() => {

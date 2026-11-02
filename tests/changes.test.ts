@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Changes, stageLines, stagedLines, unstageLines } from '../src/server/changes.ts';
 import { gitCommit, gitStage, gitStatus } from '../src/server/manuscript.ts';
-import { opcodes } from '../vendor/latex-review/src/core/diff.ts';
+import { opcodes } from '../engine/src/core/diff.ts';
 
 const lines = (...items: string[]) => items.map(item => item + '\n');
 const hasTeX = (() => { try { execFileSync('latexmk', ['-v'], { stdio: 'ignore' }); return true; } catch { return false; } })();

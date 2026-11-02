@@ -12,7 +12,7 @@ export function scopeCatalog(root: string, scope: Scope) {
   if (scope === 'workspace') return collectCatalog(root);
   if (scope === 'errors') return collectErrorCatalog(root);
   if (scope === 'review') {
-    const file = 'vendor/latex-review/src/web/zh-CN.ts';
+    const file = 'engine/src/web/zh-CN.ts';
     return { messages: Object.keys(readLegacyChinese(root, file)).map(source => ({ source, occurrences: [{ file, line: 1, context: 'PDF change-review interface; English message key from the maintained review catalog.' }] })), dynamic: [] };
   }
   if (scope === 'site') {
@@ -23,7 +23,7 @@ export function scopeCatalog(root: string, scope: Scope) {
   return { messages: [{ source, occurrences: [{ file: 'README.md', line: 1, context: 'Complete README document. Translate ALL prose, headings, table cells, image alt text and link labels. Preserve Markdown and HTML structure, emoji, every URL/link destination/anchor/path, code blocks, inline code, versions, badges, command names and identifiers exactly. Keep existing language names. Output the whole document, without omitting or summarizing anything.' }] }], dynamic: [] };
 }
 export function scopeDirectory(scope: Scope) {
-  return { workspace: 'src/web/locales', review: 'vendor/latex-review/src/web/locales', site: 'site/locales', readme: 'i18n/readme', errors: 'src/web/locales/errors' }[scope];
+  return { workspace: 'src/web/locales', review: 'engine/src/web/locales', site: 'site/locales', readme: 'i18n/readme', errors: 'src/web/locales/errors' }[scope];
 }
 export function scopeValidation(scope: Scope, source: string, translated: string): string | null {
   if ((scope === 'site' || scope === 'readme') && typeof translated === 'string') {

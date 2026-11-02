@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { keyBinding, parseShortcuts, reservedBinding, resolveShortcuts, shortcutAction } from '../vendor/latex-review/src/web/shortcuts.ts';
+import { keyBinding, parseShortcuts, reservedBinding, resolveShortcuts, shortcutAction } from '../engine/src/web/shortcuts.ts';
 
 const key = (key: string, modifiers: Partial<KeyboardEvent> = {}) => ({ key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, isComposing: false, ...modifiers });
 test('review shortcuts replace all old aliases, support modifiers, and can be cleared', () => {

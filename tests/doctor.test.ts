@@ -12,13 +12,13 @@ interface Report { ok: boolean; checks: Check[]; error?: string }
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-doctor-'));
   const app = path.join(dir, 'app'), tools = path.join(dir, 'tools'), data = path.join(dir, 'data'), home = path.join(dir, 'home');
-  for (const folder of [app, tools, home, path.join(app, 'dist'), path.join(app, 'vendor/latex-review/dist/web')]) fs.mkdirSync(folder, { recursive: true });
+  for (const folder of [app, tools, home, path.join(app, 'dist'), path.join(app, 'engine/dist/web')]) fs.mkdirSync(folder, { recursive: true });
   fs.cpSync(path.join(root, 'bin'), path.join(app, 'bin'), { recursive: true });
   fs.copyFileSync(path.join(root, 'package.json'), path.join(app, 'package.json'));
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(app, 'node_modules'), 'dir');
-  fs.symlinkSync(path.join(root, 'vendor/latex-review/src'), path.join(app, 'vendor/latex-review/src'), 'dir');
+  fs.symlinkSync(path.join(root, 'engine/src'), path.join(app, 'engine/src'), 'dir');
   fs.writeFileSync(path.join(app, 'dist/index.html'), '<html></html>');
-  fs.writeFileSync(path.join(app, 'vendor/latex-review/dist/web/index.html'), '<html></html>');
+  fs.writeFileSync(path.join(app, 'engine/dist/web/index.html'), '<html></html>');
   const log = path.join(dir, 'commands');
   const env: NodeJS.ProcessEnv = { PATH: tools, HOME: home, TMPDIR: os.tmpdir(), PAPILOT_DATA: data, PAPILOT_PORT: '65534' };
   function tool(name: string, script = 'console.log("test tool 1.0");') {
@@ -92,7 +92,7 @@ test('doctor still produces JSON when packages and build files are missing', asy
     f.baseTools();
     fs.unlinkSync(path.join(f.app, 'node_modules'));
     fs.rmSync(path.join(f.app, 'dist'), { recursive: true });
-    fs.rmSync(path.join(f.app, 'vendor/latex-review/dist'), { recursive: true });
+    fs.rmSync(path.join(f.app, 'engine/dist'), { recursive: true });
     fs.writeFileSync(f.data, 'a file, not a directory');
     const result = await f.run(['--json']);
     assert.equal(result.code, 1);

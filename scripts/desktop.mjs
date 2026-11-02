@@ -20,7 +20,7 @@ fs.writeFileSync('.desktop/app/package.json', JSON.stringify({ name: 'papilot-de
   desktopName: 'ai.papilot.desktop.desktop', desktopShell: pkg.desktopShell, type: 'module', main: 'main.js' }, null, 2) + '\n');
 
 if (process.argv[2] === 'dev') {
-  if (!fs.existsSync('vendor/latex-review/dist/web/index.html')) runNpm(['run', 'setup:review']);
+  if (!fs.existsSync('engine/dist/web/index.html')) runNpm(['run', 'setup:review']);
   const env = { ...process.env, PAPILOT_DESKTOP_NODE: process.execPath };
   delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(require('electron'), ['.desktop/app'], { stdio: 'inherit', env });
@@ -64,7 +64,7 @@ if (process.argv[2] === 'dev') {
   delete serverPackage.devDependencies['@openai/codex'];
   fs.writeFileSync('.desktop/server/package.json', JSON.stringify(serverPackage, null, 2) + '\n');
   runNpm(['install', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server'));
-  runNpm(['ci', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server/vendor/latex-review'));
+  runNpm(['ci', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server/engine'));
   run(process.execPath, [require.resolve('electron-builder/cli.js'), '--config', 'desktop/builder.cjs',
     process.platform === 'darwin' ? '--mac' : '--linux', `--${process.arch}`, '--publish', 'never', ...process.argv.slice(3)]);
 } else throw new Error('Expected dev or package.');

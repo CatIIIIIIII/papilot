@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from '../vendor/latex-review/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 // Skills in the composers, review feedback and skills in the chat, and the
 // feedback bar after a review, against simulated workspace data.

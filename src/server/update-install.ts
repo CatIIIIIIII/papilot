@@ -84,7 +84,7 @@ export async function prepareDev(root: string, version: string, log: number, run
   // Test-only tools can exclude a Node version that supports the application.
   // Build first, then enforce engine compatibility for the retained runtime.
   await run(['ci', '--include=dev', '--engine-strict=false', ...flags], root, log);
-  const engine = path.join(root, 'vendor/latex-review');
+  const engine = path.join(root, 'engine');
   await run(['ci', '--include=dev', '--engine-strict=false', ...flags], engine, log);
   // Only this installed snapshot gets a dev version; the repository stays unchanged.
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ ...pkg, version }, null, 2) + '\n');
@@ -126,11 +126,11 @@ export async function installRelease(data: string, version: string, desktop?: { 
     await runInstall(['install', '--prefix', stage, '--save-exact', ...flags, `papilot@${version}`], stage, log);
     const pkg = readJson(path.join(root, 'package.json'));
     if (pkg?.name !== 'papilot' || pkg.version !== version) throw new Error('The downloaded package does not match the requested release.');
-    for (const file of ['dist/index.html', 'src/server/start.ts', 'src/server/main.ts', 'bin/papilot.mjs', 'vendor/latex-review/package-lock.json']) {
+    for (const file of ['dist/index.html', 'src/server/start.ts', 'src/server/main.ts', 'bin/papilot.mjs', 'engine/package-lock.json']) {
       if (!fs.existsSync(path.join(root, file))) throw new Error('The downloaded release is incomplete.');
     }
     if (desktop && !desktopSupports(pkg, desktop.shell)) throw new Error(NEEDS_INSTALLER);
-    await runInstall(['ci', '--prefix', path.join(root, 'vendor/latex-review'), ...flags], stage, log);
+    await runInstall(['ci', '--prefix', path.join(root, 'engine'), ...flags], stage, log);
     // Like the CLI's first run, Codex installs with its own scripts. The app
     // finds it beside the release.
     const tested = pkg.devDependencies?.['@openai/codex'], bundled = desktop && codexVersion(desktop.codex);

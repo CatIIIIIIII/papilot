@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
 const decide = (app: any, name: string, round: any, action = 'accept', units = round.units) => app.review.decide(name, { id: crypto.randomUUID(), round: round.number, action, changes: units.map((unit: any) => unit.id) });
 
 test('isolated acceptance and undo preserve the manuscript; a task commit includes only accepted changes', async () => {

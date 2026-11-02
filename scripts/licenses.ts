@@ -59,17 +59,17 @@ export function collectLicenses(root = projectRoot): LicenseNotice[] {
     for (const dep of Object.keys(pkg.optionalDependencies || {})) visit(dep, directory, true);
     for (const dep of Object.keys(pkg.peerDependencies || {})) visit(dep, directory, Boolean(pkg.peerDependenciesMeta?.[dep]?.optional));
   }
-  const reviewRoot = path.join(root, 'vendor/latex-review');
+  const reviewRoot = path.join(root, 'engine');
   for (const directory of [root, reviewRoot]) for (const name of Object.keys(readPackage(directory).dependencies)) visit(name, directory);
   for (const name of browserPackages) visit(name, root);
   const review = readPackage(reviewRoot);
-  packages.set('latex-review', { name: 'latex-review', version: review.version, license: 'MIT', url: `${appInfo(root).repository}/tree/main/vendor/latex-review`, notices: [{ name: 'LICENSE', text: readText(path.join(reviewRoot, 'LICENSE')) }] });
+  packages.set('latex-review', { name: 'latex-review', version: review.version, license: 'MIT', url: `${appInfo(root).repository}/tree/main/engine`, notices: [{ name: 'LICENSE', text: readText(path.join(reviewRoot, 'LICENSE')) }] });
   const fontNotice = (name: string, file: string) => ({ name, text: readText(path.join(root, file)) });
   packages.set('pagella', { name: 'TeX Gyre Pagella X / newpx', version: '', license: 'GUST Font License / LPPL-1.3c', url: 'https://ctan.org/pkg/newpx', notices: [
     fontNotice('GUST Font License', 'src/web/fonts/GUST-FONT-LICENSE.txt'),
-    fontNotice('LPPL', 'vendor/latex-review/src/web/fonts/LPPL.txt'),
-    fontNotice('Font manifest', 'vendor/latex-review/src/web/fonts/MANIFEST-newpx.txt'),
-    fontNotice('newpx README', 'vendor/latex-review/src/web/fonts/README-newpx.txt'),
+    fontNotice('LPPL', 'engine/src/web/fonts/LPPL.txt'),
+    fontNotice('Font manifest', 'engine/src/web/fonts/MANIFEST-newpx.txt'),
+    fontNotice('newpx README', 'engine/src/web/fonts/README-newpx.txt'),
   ] });
   packages.set('inconsolata', { name: 'Inconsolata zi4', version: '', license: 'OFL-1.1', url: 'https://ctan.org/pkg/inconsolata', notices: [fontNotice('SIL Open Font License', 'src/web/fonts/OFL-Inconsolata.txt')] });
   packages.set('lobe-icons', { name: 'Lobe Icons', version: '1.101.0', license: 'MIT', url: 'https://github.com/lobehub/lobe-icons', notices: [fontNotice('MIT License', 'src/web/brand-icons/LICENSE-LobeHub.txt'), fontNotice('Icon sources', 'src/web/brand-icons/SOURCES.txt')] });

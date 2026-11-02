@@ -35,4 +35,4 @@ When the import dialog compiled a paper, it used to force a clean build under a 
 
 ## Reproducing
 
-`tests/incremental-build.test.ts` checks pass counts on a small paper: one pass when continuing from the author's latexmk output, one pass after an edit, no TeX run after an unrelated change, a clean retry after stale auxiliary state, and a clean manual recompile. To time a real paper, clone it outside its folder, run `latexmk` there for reference, then build the same commits with `Builder` from `vendor/latex-review/src/core/build.ts` and compare the `Running '…latex'` lines in each build's `latexmk.log`.
+`tests/incremental-build.test.ts` checks pass counts on a small paper: one pass when continuing from the author's latexmk output, one pass after an edit, no TeX run after an unrelated change, a clean retry after stale auxiliary state, and a clean manual recompile. To time a real paper, clone it outside its folder, run `latexmk` there for reference, then build the same commits with `Builder` from `engine/src/core/build.ts` and compare the `Running '…latex'` lines in each build's `latexmk.log`.

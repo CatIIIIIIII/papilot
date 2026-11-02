@@ -5,9 +5,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { Repo } from '../vendor/latex-review/src/core/git.ts';
-import { Builder } from '../vendor/latex-review/src/core/build.ts';
-import { loadProject } from '../vendor/latex-review/src/core/config.ts';
+import { Repo } from '../engine/src/core/git.ts';
+import { Builder } from '../engine/src/core/build.ts';
+import { loadProject } from '../engine/src/core/config.ts';
 import { workingTree } from '../src/server/manuscript.ts';
 
 const tex = (() => {

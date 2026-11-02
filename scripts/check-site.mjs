@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, webkit } from '../vendor/latex-review/node_modules/playwright/index.mjs';
+import { chromium, webkit } from '../engine/node_modules/playwright/index.mjs';
 
 const languages = JSON.parse(fs.readFileSync('i18n/languages.json', 'utf8'));
 const route = locale => locale === 'en' ? '/' : `/${locale}/`;

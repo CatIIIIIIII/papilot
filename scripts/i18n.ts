@@ -73,7 +73,7 @@ async function main() {
   const stateFile = path.join(values['out-dir'] ? path.join(directory, '.state') : path.join(root, 'i18n/state'), `${scope === 'workspace' ? '' : scope + '.'}${locale}.json`);
   const translations = readJson<Record<string, string>>(file, {});
   const state = readJson<TranslationState>(stateFile, {});
-  const curated = locale === 'zh-CN' && (scope === 'workspace' || scope === 'review') ? readLegacyChinese(root, scope === 'review' ? 'vendor/latex-review/src/web/zh-CN.ts' : undefined) : {};
+  const curated = locale === 'zh-CN' && (scope === 'workspace' || scope === 'review') ? readLegacyChinese(root, scope === 'review' ? 'engine/src/web/zh-CN.ts' : undefined) : {};
   const messages = catalog.messages.map(message => baseConfig.messageInstructions?.[message.source] ? { ...message, occurrences: [...message.occurrences, { file: 'i18n/config.json', line: 1, context: baseConfig.messageInstructions[message.source] }] } : message);
   const merged = { ...translations, ...curated };
   if (command === 'check') {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { scopeCatalog, scopeDirectory, scopeValidation, type Scope } from '../scripts/i18n/scopes.ts';
-import { LANGUAGES } from '../vendor/latex-review/src/locales.ts';
+import { LANGUAGES } from '../engine/src/locales.ts';
 import { readLegacyChinese } from '../scripts/i18n/catalog.ts';
 import { validateTranslation } from '../scripts/i18n/translate.ts';
 // @ts-expect-error The static site's build helpers are plain JavaScript.
@@ -15,7 +15,7 @@ for (const scope of ['review', 'site', 'readme', 'errors'] as Scope[]) for (cons
   test(`${scope} has complete ${locale} translations with preserved structure`, () => {
     const catalog = scopeCatalog(root, scope).messages;
     const file = `${root}/${scopeDirectory(scope)}/${locale}.json`;
-    const translations = { ...(fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {}), ...(scope === 'review' && locale === 'zh-CN' ? readLegacyChinese(root, 'vendor/latex-review/src/web/zh-CN.ts') : {}) };
+    const translations = { ...(fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {}), ...(scope === 'review' && locale === 'zh-CN' ? readLegacyChinese(root, 'engine/src/web/zh-CN.ts') : {}) };
     assert.ok(catalog.length > 0);
     for (const { source } of catalog) {
       assert.equal(validateTranslation(source, translations[source]), null, source.slice(0, 100));

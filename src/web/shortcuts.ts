@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { browserStorage } from './storage.ts';
-import { SHORTCUT_STORAGE, parseShortcuts, type Shortcuts } from '../../vendor/latex-review/src/web/shortcuts.ts';
+import { SHORTCUT_STORAGE, parseShortcuts, type Shortcuts } from '../../engine/src/web/shortcuts.ts';
 
-export * from '../../vendor/latex-review/src/web/shortcuts.ts';
+export * from '../../engine/src/web/shortcuts.ts';
 const BINDINGS_STORAGE = 'latex-review:shortcut-bindings';
 let bindings = parseShortcuts(browserStorage.getItem(BINDINGS_STORAGE));
 let state = parseShortcuts(browserStorage.getItem(SHORTCUT_STORAGE));

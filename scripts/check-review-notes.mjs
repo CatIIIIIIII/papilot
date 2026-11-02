@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium } from '../vendor/latex-review/node_modules/playwright/index.mjs';
+import { chromium } from '../engine/node_modules/playwright/index.mjs';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
@@ -32,7 +32,7 @@ await page.route('**/api/**', route => {
   throw Error(`Unexpected request ${url.pathname}`);
 });
 const strip = (text, page) => `<div class="pdf-strip" data-page="${page}" style="aspect-ratio:600/180"><img alt="" aria-hidden="true" width="600" height="180"><div class="pdf-text"><span class="pdf-text-line"><span class="pdf-glyph" style="left:15%;top:30%;font-size:20px">${text}</span></span></div></div>`;
-const review = `<html><head><style>${fs.readFileSync('vendor/latex-review/src/web/style.css', 'utf8')} .pdf-glyph{color:#171717}</style></head><body><header class="bar"><div class="identity"><span>Round 1</span></div><span class="meter">2 of 2 decided</span></header><main id="paper"><div class="document"><div class="sheet"><div class="context">${strip('Unchanged paragraph for context.', 'ix')}</div>${['rejected', 'accepted'].map((state, i) => `<article class="change inline" data-stop="${i}" data-state="${state}" data-resolved="${i ? 'after' : 'before'}"><header class="change-head"><span class="change-number">Change ${i + 1}</span><span class="change-where" title="main/frontmatter/acknowledgments.tex:26–43">main/frontmatter/acknowledgments.tex:26–43</span><span class="badge">${state}</span></header><div class="side ${i ? 'after' : 'before'}">${strip(i ? 'Accepted paragraph remains available.' : 'Thank you to my friends and family.', 'x')}</div></article>`).join('')}</div></div></main></body></html>`;
+const review = `<html><head><style>${fs.readFileSync('engine/src/web/style.css', 'utf8')} .pdf-glyph{color:#171717}</style></head><body><header class="bar"><div class="identity"><span>Round 1</span></div><span class="meter">2 of 2 decided</span></header><main id="paper"><div class="document"><div class="sheet"><div class="context">${strip('Unchanged paragraph for context.', 'ix')}</div>${['rejected', 'accepted'].map((state, i) => `<article class="change inline" data-stop="${i}" data-state="${state}" data-resolved="${i ? 'after' : 'before'}"><header class="change-head"><span class="change-number">Change ${i + 1}</span><span class="change-where" title="main/frontmatter/acknowledgments.tex:26–43">main/frontmatter/acknowledgments.tex:26–43</span><span class="badge">${state}</span></header><div class="side ${i ? 'after' : 'before'}">${strip(i ? 'Accepted paragraph remains available.' : 'Thank you to my friends and family.', 'x')}</div></article>`).join('')}</div></div></main></body></html>`;
 await page.route('**/review/**', route => route.fulfill({ contentType: 'text/html', body: review }));
 const frame = () => page.frameLocator('.review-frame');
 async function selectText(selector) {

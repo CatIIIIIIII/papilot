@@ -91,7 +91,7 @@ export async function doctor(args) {
   const clean = value => secrets.reduce((text, secret) => text.split(secret).join('[redacted]'), String(value))
     .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
   const check = (id, ok, severity, detail, fix = null) => checks.push({ id, ok: Boolean(ok), severity, detail: clean(detail), fix: ok || !fix ? null : clean(fix) });
-  const engine = expand(process.env.PAPILOT_REVIEW_ENGINE || path.join(root, 'vendor/latex-review'));
+  const engine = expand(process.env.PAPILOT_REVIEW_ENGINE || path.join(root, 'engine'));
   const sourceCheckout = fs.existsSync(path.join(root, '.git'));
   const repair = sourceCheckout ? 'Run npm ci in the Papilot checkout.' : 'Reinstall Papilot with npm install -g papilot.';
 

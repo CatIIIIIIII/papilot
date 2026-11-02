@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium } from '../vendor/latex-review/node_modules/playwright/index.mjs';
+import { chromium } from '../engine/node_modules/playwright/index.mjs';
 import { taskNoteResults } from '../src/server/note-results.ts';
 import { rewriteReviewHtml } from '../src/server/review.ts';
 
@@ -41,7 +41,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   throw new Error('Unexpected request: ' + url.pathname);
 });
-const css = fs.readFileSync('vendor/latex-review/src/web/style.css', 'utf8');
+const css = fs.readFileSync('engine/src/web/style.css', 'utf8');
 await page.route('**/review/**', async route => {
   const url = new URL(route.request().url());
   if (url.pathname.includes('/rounds/')) return route.fulfill({ json: rounds[Number(url.pathname.split('/').at(-1))] });

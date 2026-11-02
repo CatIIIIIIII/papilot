@@ -6,7 +6,7 @@ import { zhCN } from '../src/web/zh-CN.ts';
 import generatedZhCN from '../src/web/locales/zh-CN.json';
 import zhHant from '../src/web/locales/zh-Hant.json';
 import { messages, errorMessages } from '../src/web/locales/index.ts';
-import { LANGUAGES } from '../vendor/latex-review/src/locales.ts';
+import { LANGUAGES } from '../engine/src/locales.ts';
 import { collectCatalog } from '../scripts/i18n/catalog.ts';
 import { placeholders } from '../scripts/i18n/translate.ts';
 

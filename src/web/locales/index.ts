@@ -1,4 +1,4 @@
-import type { Language } from '../../../vendor/latex-review/src/locales.ts';
+import type { Language } from '../../../engine/src/locales.ts';
 import { zhCN } from '../zh-CN.ts';
 import generatedZhCN from './zh-CN.json';
 import zhHant from './zh-Hant.json';

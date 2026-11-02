@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Fixture, METHOD, fakeRound } from '../vendor/latex-review/tests/ts/helpers.ts';
-import { scopeViolations } from '../vendor/latex-review/src/core/changes.ts';
+import { Fixture, METHOD, fakeRound } from '../engine/tests/ts/helpers.ts';
+import { scopeViolations } from '../engine/src/core/changes.ts';
 
 const decide = (app: ReturnType<Fixture['app']>, name: string, action: 'accept' | 'reject' = 'accept') => {
   const round = fakeRound(app, name);

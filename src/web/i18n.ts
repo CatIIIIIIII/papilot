@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { browserStorage } from './storage.ts';
-import { LANGUAGES, supportedLanguage, singularCount, interpolateMessage, type Language } from '../../vendor/latex-review/src/locales.ts';
+import { LANGUAGES, supportedLanguage, singularCount, interpolateMessage, type Language } from '../../engine/src/locales.ts';
 import { messages, errorMessages } from './locales/index.ts';
 export { LANGUAGES, type Language };
 

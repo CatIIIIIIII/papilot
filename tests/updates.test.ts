@@ -133,7 +133,7 @@ test('dev preparation builds the advertised commit, independently of a newer mai
     fs.mkdirSync(source); fs.mkdirSync(root);
     git(source, ['init', '-q']); git(source, ['config', 'user.name', 'Test']); git(source, ['config', 'user.email', 'test@localhost']);
     writeJson(path.join(source, 'package.json'), { name: 'papilot', version: '0.7.0' });
-    writeJson(path.join(source, 'vendor/latex-review/package.json'), { name: 'review' });
+    writeJson(path.join(source, 'engine/package.json'), { name: 'review' });
     git(source, ['add', '.']); git(source, ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Selected']);
     const sha = git(source, ['rev-parse', 'HEAD']);
     fs.writeFileSync(path.join(source, 'newer.txt'), 'Not selected'); git(source, ['add', '.']);
@@ -148,7 +148,7 @@ test('dev preparation builds the advertised commit, independently of a newer mai
     assert.equal(readJson(path.join(root, 'package.json')).version, version);
     assert.equal(readJson(path.join(source, 'package.json')).version, '0.7.0');
     assert.deepEqual(calls.map(call => call.args[0]), ['ci', 'ci', 'run', 'run', 'prune', 'prune']);
-    assert.deepEqual(calls.filter(call => call.args[0] === 'run').map(call => call.cwd), [path.join(root, 'vendor/latex-review'), root]);
+    assert.deepEqual(calls.filter(call => call.args[0] === 'run').map(call => call.cwd), [path.join(root, 'engine'), root]);
     await assert.rejects(prepareDev(root, '0.7.0-dev.bad', 1), /Invalid development version/);
   } finally { fs.rmSync(data, { recursive: true, force: true }); }
 });
@@ -162,7 +162,7 @@ test('dev builds tolerate test-only engine restrictions but reject incompatible 
     writeJson(path.join(dependency, 'package.json'), { name: 'fixture-incompatible', version: '1.0.0', engines: { node: '<0' } });
     npm(dependency, ['pack', '--pack-destination', source]);
     const build = `node -e "const fs = require('node:fs'); fs.accessSync('node_modules/fixture-incompatible/package.json'); fs.writeFileSync('build-ok', 'yes')"`;
-    const engine = path.join(source, 'vendor/latex-review');
+    const engine = path.join(source, 'engine');
     git(source, ['init', '-q']); git(source, ['config', 'user.name', 'Test']); git(source, ['config', 'user.email', 'test@localhost']);
     for (const [name, appKind, reviewKind] of [
       ['dev-only', 'devDependencies', 'devDependencies'],
@@ -170,7 +170,7 @@ test('dev builds tolerate test-only engine restrictions but reject incompatible 
       ['review-runtime', 'devDependencies', 'dependencies'],
     ]) {
       writeJson(path.join(source, 'package.json'), { name: 'papilot', version: '0.7.0', scripts: { build }, [appKind]: { 'fixture-incompatible': 'file:./fixture-incompatible-1.0.0.tgz' } });
-      writeJson(path.join(engine, 'package.json'), { name: 'review', version: '1.0.0', scripts: { build }, [reviewKind]: { 'fixture-incompatible': 'file:../../fixture-incompatible-1.0.0.tgz' } });
+      writeJson(path.join(engine, 'package.json'), { name: 'review', version: '1.0.0', scripts: { build }, [reviewKind]: { 'fixture-incompatible': 'file:../fixture-incompatible-1.0.0.tgz' } });
       npm(source, ['install', '--package-lock-only']);
       npm(engine, ['install', '--package-lock-only']);
       git(source, ['add', '.']); git(source, ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', name]);
@@ -180,14 +180,14 @@ test('dev builds tolerate test-only engine restrictions but reject incompatible 
       else {
         await preparing;
         assert.equal(fs.readFileSync(path.join(root, 'build-ok'), 'utf8'), 'yes');
-        assert.equal(fs.readFileSync(path.join(root, 'vendor/latex-review/build-ok'), 'utf8'), 'yes');
+        assert.equal(fs.readFileSync(path.join(root, 'engine/build-ok'), 'utf8'), 'yes');
         assert.equal(fs.existsSync(path.join(root, 'node_modules/fixture-incompatible')), false);
-        assert.equal(fs.existsSync(path.join(root, 'vendor/latex-review/node_modules/fixture-incompatible')), false);
+        assert.equal(fs.existsSync(path.join(root, 'engine/node_modules/fixture-incompatible')), false);
         // The launcher reads tested agent versions from the retained devDependencies.
-        const app = readJson(path.join(root, 'package.json')), review = readJson(path.join(root, 'vendor/latex-review/package.json'));
+        const app = readJson(path.join(root, 'package.json')), review = readJson(path.join(root, 'engine/package.json'));
         assert.equal(app.version, `0.7.0-dev.${revision}`);
         assert.deepEqual(app.devDependencies, { 'fixture-incompatible': 'file:./fixture-incompatible-1.0.0.tgz' });
-        assert.deepEqual(review.devDependencies, { 'fixture-incompatible': 'file:../../fixture-incompatible-1.0.0.tgz' });
+        assert.deepEqual(review.devDependencies, { 'fixture-incompatible': 'file:../fixture-incompatible-1.0.0.tgz' });
       }
     }
   } catch (error) { t.diagnostic(fs.readFileSync(path.join(data, 'install.log'), 'utf8')); throw error; }
@@ -331,7 +331,7 @@ for (const version of ['0.7.0', devVersion]) test(`a browser install of ${versio
     fs.cpSync(path.join(process.cwd(), 'bin'), path.join(root, 'bin'), { recursive: true });
     writeJson(path.join(root, 'package.json'), { ...readJson(path.join(process.cwd(), 'package.json')), version });
     fs.symlinkSync(path.join(process.cwd(), 'node_modules'), path.join(root, 'node_modules'), 'dir');
-    fs.symlinkSync(path.join(process.cwd(), 'vendor'), path.join(root, 'vendor'), 'dir');
+    fs.symlinkSync(path.join(process.cwd(), 'engine'), path.join(root, 'engine'), 'dir');
     const start = path.join(root, 'src/server/start.ts');
     fs.appendFileSync(start, "\nfs.writeFileSync(path.join(DATA, 'test-server.pid'), String(process.pid));\n");
   };

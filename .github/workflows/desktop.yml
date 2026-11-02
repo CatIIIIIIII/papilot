@@ -9,9 +9,9 @@ on:
         default: ''
   push:
     branches: [main, codex/electron-desktop]
-    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'vendor/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
   pull_request:
-    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'vendor/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'package*.json', '.github/workflows/desktop.yml']
 
 permissions:
   contents: read
@@ -51,7 +51,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vendor/latex-review/package-lock.json
+            engine/package-lock.json
       - name: Install Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |

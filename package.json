@@ -48,11 +48,11 @@
     "scripts/demo.ts",
     "scripts/service.ts",
     "examples/papilot-paper",
-    "vendor/latex-review/src",
-    "vendor/latex-review/dist",
-    "vendor/latex-review/package.json",
-    "vendor/latex-review/package-lock.json",
-    "vendor/latex-review/LICENSE"
+    "engine/src",
+    "engine/dist",
+    "engine/package.json",
+    "engine/package-lock.json",
+    "engine/LICENSE"
   ],
   "engines": {
     "node": ">=22.22.0"
@@ -64,7 +64,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit && tsc -p desktop/tsconfig.json --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "setup:review": "npm --prefix vendor/latex-review ci && npm --prefix vendor/latex-review run build",
+    "setup:review": "npm --prefix engine ci && npm --prefix engine run build",
     "demo": "tsx scripts/demo.ts",
     "doctor": "node bin/papilot.mjs doctor",
     "service:install": "tsx scripts/service.ts install",
@@ -79,7 +79,7 @@
     "test:desktop": "node scripts/check-desktop.mjs",
     "i18n": "tsx scripts/i18n.ts",
     "i18n:check-app": "tsx scripts/i18n/app-locales.ts",
-    "test:locales": "npm run build && npm --prefix vendor/latex-review run build && node --import tsx scripts/check-locales.mjs"
+    "test:locales": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-locales.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^9.2.2",

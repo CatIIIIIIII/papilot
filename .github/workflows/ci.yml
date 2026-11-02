@@ -28,7 +28,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vendor/latex-review/package-lock.json
+            engine/package-lock.json
       - run: npm ci
       - run: npm run setup:review
       - run: npm run typecheck

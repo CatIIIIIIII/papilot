@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { annotateReviewState } from '../src/server/review.ts';
 import type { Task, TaskStatus } from '../src/shared.ts';
-import type { PageState, RoundDetail } from '../vendor/latex-review/src/types.ts';
+import type { PageState, RoundDetail } from '../engine/src/types.ts';
 
 const task = (status: TaskStatus = 'reviewing'): Task => ({
   id: 'task-1', projectId: 'project-1', name: 'example', title: 'Example', instructions: '',
@@ -69,7 +69,7 @@ test('state annotation preserves decision response extras and ignores non-state 
   }
 });
 
-// Opt in after building the vendored viewer:
+// Opt in after building the engine's viewer:
 // PAPILOT_REVIEW_BROWSER=1 npx tsx --test tests/review-state.test.ts
 test('viewer locks buttons and keyboard decisions, permits comments, and follows lock changes', {
   skip: process.env.PAPILOT_REVIEW_BROWSER !== '1', timeout: 30000,
@@ -77,9 +77,9 @@ test('viewer locks buttons and keyboard decisions, permits comments, and follows
   const [{ default: Fastify }, { default: staticFiles }] = await Promise.all([
     import('fastify'), import('@fastify/static'),
   ]);
-  const { chromium, expect } = createRequire(import.meta.url)('../vendor/latex-review/node_modules/@playwright/test') as typeof import('../vendor/latex-review/node_modules/@playwright/test/index.js');
+  const { chromium, expect } = createRequire(import.meta.url)('../engine/node_modules/@playwright/test') as typeof import('../engine/node_modules/@playwright/test/index.js');
   const server = Fastify();
-  await server.register(staticFiles, { root: new URL('../vendor/latex-review/dist/web', import.meta.url).pathname });
+  await server.register(staticFiles, { root: new URL('../engine/dist/web', import.meta.url).pathname });
   await server.listen({ host: '127.0.0.1', port: 0 });
   const origin = `http://127.0.0.1:${(server.server.address() as { port: number }).port}`;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;

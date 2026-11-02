@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LANGUAGES, supportedLanguage, singularCount, interpolateMessage } from '../vendor/latex-review/src/locales.ts';
+import { LANGUAGES, supportedLanguage, singularCount, interpolateMessage } from '../engine/src/locales.ts';
 
 test('the agreed language list has exactly eleven canonical choices', () => {
   assert.deepEqual(LANGUAGES.map(item => item.id), ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es', 'pt', 'it', 'sv']);

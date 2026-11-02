@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LANGUAGES } from '../../vendor/latex-review/src/locales.ts';
+import { LANGUAGES } from '../../engine/src/locales.ts';
 import { scopeCatalog, scopeDirectory, type Scope } from './scopes.ts';
 import { readLegacyChinese } from './catalog.ts';
 import { pendingMessages, validateTranslation, type LocaleConfig, type TranslationState } from './translate.ts';
@@ -16,7 +16,7 @@ for (const scope of ['workspace', 'review', 'errors'] as Scope[]) {
     // The existing curated catalogs retain their file names for compatibility.
     const locale = id === 'zh-Hans' ? 'zh-CN' : id;
     const file = path.join(root, scopeDirectory(scope), `${locale}.json`);
-    const curated = locale === 'zh-CN' && scope !== 'errors' ? readLegacyChinese(root, scope === 'review' ? 'vendor/latex-review/src/web/zh-CN.ts' : undefined) : {};
+    const curated = locale === 'zh-CN' && scope !== 'errors' ? readLegacyChinese(root, scope === 'review' ? 'engine/src/web/zh-CN.ts' : undefined) : {};
     const generated: Record<string, string> = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
     const dictionary: Record<string, string> = { ...generated, ...curated };
     const stateFile = path.join(root, 'i18n/state', `${scope === 'workspace' ? '' : scope + '.'}${locale}.json`);

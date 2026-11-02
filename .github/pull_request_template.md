@@ -7,4 +7,4 @@
 - [ ] `npm run typecheck`
 - [ ] `npm test`
 - [ ] `npm run test:ui`, with screenshots attached (interface changes)
-- [ ] `npm test` in `vendor/latex-review` (review engine changes)
+- [ ] `npm test` in `engine/` (review engine changes)

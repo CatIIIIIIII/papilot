@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Fixture, METHOD, fakeRound } from '../vendor/latex-review/tests/ts/helpers.ts';
+import { Fixture, METHOD, fakeRound } from '../engine/tests/ts/helpers.ts';
 
 function accept(app: ReturnType<Fixture['app']>, name: string) {
   const round = fakeRound(app, name);

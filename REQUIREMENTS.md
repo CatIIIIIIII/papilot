@@ -48,4 +48,4 @@ Your paper agents, anywhere.
 
 ## Implementation choices
 
-React/Vite frontend, Fastify backend, SQLite state, official Codex app-server over stdio, a pinned vendored copy of the existing review engine, and launchd for the macOS service. The initial supported use is a single owner over Tailscale.
+React/Vite frontend, Fastify backend, SQLite state, official Codex app-server over stdio, Papilot's own review engine in `engine/` (started from latex-review-skill), and launchd for the macOS service. The initial supported use is a single owner over Tailscale.

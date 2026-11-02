@@ -31,7 +31,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vendor/latex-review/package-lock.json
+            engine/package-lock.json
       - name: Check the tag against package.json and the CHANGELOG
         run: |
           version="${GITHUB_REF_NAME#v}"

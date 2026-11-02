@@ -5,9 +5,9 @@ _site/
 .papilot/
 .env
 .DS_Store
-vendor/latex-review/node_modules
-vendor/latex-review/dist/
-vendor/latex-review/.cache/
+engine/node_modules
+engine/dist/
+engine/.cache/
 test-results/
 .desktop/
 release/desktop/

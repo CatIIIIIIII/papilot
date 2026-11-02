@@ -4,7 +4,7 @@ import fs from 'node:fs';
 fs.mkdirSync('test-results', { recursive: true });
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from '../vendor/latex-review/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });

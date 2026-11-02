@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium, expect } from '../vendor/latex-review/node_modules/@playwright/test/index.mjs';
-import { stop } from '../vendor/latex-review/src/client.ts';
+import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { stop } from '../engine/src/client.ts';
 
 const freePort = () => new Promise(resolve => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); }); });
 const [port, accountPort] = [await freePort(), await freePort()];

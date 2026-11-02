@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const DATA = path.resolve(process.env.PAPILOT_DATA || path.join(ROOT, '.papilot'));
-export const ENGINE = path.resolve(process.env.PAPILOT_REVIEW_ENGINE || path.join(ROOT, 'vendor/latex-review'));
+export const ENGINE = path.resolve(process.env.PAPILOT_REVIEW_ENGINE || path.join(ROOT, 'engine'));
 export const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 export const PORT = Number(process.env.PAPILOT_PORT || 7274);
 export const PUBLIC_ORIGIN = process.env.PAPILOT_PUBLIC_ORIGIN || '';

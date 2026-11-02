@@ -33,7 +33,7 @@ export function skillPrompt(skill: { name: string; body: string; folder?: string
 }
 
 interface FeedbackItem { kind?: string; round?: number | null; text?: string; changes?: (string | { file?: string; lines?: [number, number] })[] }
-// The review engine's feedback (see vendor/latex-review FeedbackItem) as the chat shows it.
+// The review engine's feedback (see engine FeedbackItem) as the chat shows it.
 export function summarizeFeedback(feedback: { feedback?: FeedbackItem[]; build_error?: unknown }): FeedbackSummary | undefined {
   const items = feedback.feedback || [];
   if (!items.length && !feedback.build_error) return undefined;

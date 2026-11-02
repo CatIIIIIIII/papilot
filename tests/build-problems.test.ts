@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { collectProblems, countProblems, locateProblems, parseLatexLog, parseSynctexView, placementOrder, scrubLog, unwrapLog } from '../src/server/build-problems.ts';
 import { Manuscripts } from '../src/server/manuscript.ts';
-import { PdfDocument } from '../vendor/latex-review/src/render/pdf.ts';
+import { PdfDocument } from '../engine/src/render/pdf.ts';
 
 const fixture = fs.readFileSync(new URL('./fixtures/problems.log', import.meta.url), 'utf8');
 const methods = './chapters/a-rather-long-directory-name-for-wrapping/methods-and-a-long-file-name.tex';

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { _electron as electron, expect } from '../vendor/latex-review/node_modules/@playwright/test/index.mjs';
+import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 const require = createRequire(import.meta.url);
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-test-'));
@@ -21,7 +21,7 @@ if (packaged) {
   assert.match(execFileSync(node, ['--version'], { encoding: 'utf8' }), /^v\d+\./);
   assert.match(execFileSync(node, [path.join(resources, 'runtime/lib/node_modules/npm/bin/npm-cli.js'), '--version'], { encoding: 'utf8' }), /^\d+\./);
   assert.match(execFileSync(node, [path.join(server, 'node_modules/@openai/codex/bin/codex.js'), '--version'], { encoding: 'utf8' }), /codex-cli/);
-  const help = execFileSync(node, ['--import', path.join(server, 'node_modules/tsx/dist/loader.mjs'), path.join(server, 'vendor/latex-review/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
+  const help = execFileSync(node, ['--import', path.join(server, 'node_modules/tsx/dist/loader.mjs'), path.join(server, 'engine/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
   assert.match(help, /Usage:/);
 }
 // Keep Chromium's sandbox in native/CI checks. The opt-out is only for a
@@ -157,7 +157,7 @@ try {
     const root = path.join(data, `updates/releases/${next}-smoke/node_modules/papilot`), active = path.join(data, 'updates/active.json');
     fs.mkdirSync(root, { recursive: true });
     for (const name of fs.readdirSync(server)) {
-      if (name === 'node_modules' || name === 'vendor') fs.symlinkSync(path.join(server, name), path.join(root, name));
+      if (name === 'node_modules' || name === 'engine') fs.symlinkSync(path.join(server, name), path.join(root, name));
       else if (name !== 'package.json') fs.cpSync(path.join(server, name), path.join(root, name), { recursive: true });
     }
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(server, 'package.json'), 'utf8')), version: next }));

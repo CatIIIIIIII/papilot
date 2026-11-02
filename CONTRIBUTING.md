@@ -41,7 +41,7 @@ Open `http://127.0.0.1:7276`. For the latest committed development version witho
 | `src/server` | The Fastify server, the agent adapters (Codex, Claude, Cursor, GLM, Antigravity, and Copilot, Grok, Kimi, DeepSeek, Qwen and OpenCode through ACP), tasks, Git and the PDF build |
 | `src/web` | The React interface and the PDF viewer |
 | `src/shared.ts` | Types shared by the server and the interface |
-| `vendor/latex-review` | The review engine that builds and compares the PDFs, with its own tests |
+| `engine/` | The review engine that builds and compares the PDFs, with its own tests |
 | `bin/papilot.mjs` | The `papilot` command installed by npm |
 | `examples/papilot-paper` | The example paper used by `papilot demo` |
 | `tests`, `scripts/check-ui.mjs` | Unit tests and the browser checks |
@@ -54,7 +54,7 @@ npm test
 npm run test:ui   # interface changes; needs Chrome
 ```
 
-Changes to the review engine also need `npm test` in `vendor/latex-review`.
+Changes to the review engine also need `npm test` in `engine/`.
 
 - Keep a pull request to one change, and add or update tests for any change in behavior.
 - Match the code around you: its naming, comment density and idioms.

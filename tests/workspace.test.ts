@@ -921,8 +921,8 @@ test('deleted task IDs cannot be recreated by a delayed create retry', async () 
 });
 
 test('real engine deletion removes one temporary worktree while preserving accepted text and another task', async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
-  const { createServer: createReviewServer } = await import(new URL('../vendor/latex-review/src/server.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
+  const { createServer: createReviewServer } = await import(new URL('../engine/src/server.ts', import.meta.url).href);
   const disk = new Fixture();
   const app = disk.app();
   const engine = createReviewServer(app);
@@ -1170,7 +1170,7 @@ test('sent review feedback shows as decisions and comments, not as the prompt', 
 });
 
 test('accepting puts a change in the manuscript without a commit, and the review knows the files it touched', async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture();
   const app = disk.app();
   const f = fixture();
@@ -1469,7 +1469,7 @@ test('an agent resolves a merge in the manuscript checkout, and review writes wa
 });
 
 for (const mode of ['workspace', 'commit'] as const) test(`tasks save to the manuscript using ${mode} without task branches`, async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture(), app = disk.app();
   const f = fixture(async (method, route, body: any) => {
     if (route.includes('/feedback')) return app.review.feedback('p-task');
@@ -1508,7 +1508,7 @@ for (const mode of ['workspace', 'commit'] as const) test(`tasks save to the man
 });
 
 test('application conflicts automatically queue one AI suggestion and require review before saving', async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture(), app = disk.app();
   const f = fixture(async (method, route, body: any) => {
     if (route.includes('/feedback')) return app.review.feedback('p-task');
@@ -1557,7 +1557,7 @@ test('application conflicts automatically queue one AI suggestion and require re
 });
 
 for (const recovery of ['lost-response', 'restart', 'legacy-manual'] as const) test(`merge suggestions recover after ${recovery} without duplicate agent runs`, async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture(), app = disk.app();
   const f = fixture(async (method, route) => {
     if (route.includes('/feedback')) return app.review.feedback('p-task');
@@ -1593,7 +1593,7 @@ for (const recovery of ['lost-response', 'restart', 'legacy-manual'] as const) t
 });
 
 for (const stage of ['reviewed', 'interrupted', 'waiting_input'] as const) test(`automatic conflict recovery respects ${stage} tasks`, async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture(), app = disk.app();
   const f = fixture(async (_method, route) => route.includes('/feedback') ? app.review.feedback('p-task') : app.taskInfo('p-task'));
   try {
@@ -1616,7 +1616,7 @@ for (const stage of ['reviewed', 'interrupted', 'waiting_input'] as const) test(
 });
 
 test('a task commits only what it accepted since its last commit, never during a review write, and can push', async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../vendor/latex-review/tests/ts/helpers.ts', import.meta.url).href);
+  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
   const disk = new Fixture();
   const app = disk.app();
   const f = fixture(undefined, { file: path.join(disk.base, 'state.db') });

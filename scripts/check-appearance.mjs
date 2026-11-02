@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium } from '../vendor/latex-review/node_modules/playwright/index.mjs';
+import { chromium } from '../engine/node_modules/playwright/index.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();
