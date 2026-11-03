@@ -555,7 +555,7 @@ export const PdfView = forwardRef<PdfHandle, {
     if (!editing) return false;
     setNoteBusy(true); setNoteError('');
     try {
-      await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action !== 'close', quote: action === 'quote' });
+      await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action === 'keep', quote: action === 'quote' });
       setEditing(null); latest.current.setRegion(false); return true;
     } catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); return false; }
     finally { setNoteBusy(false); }

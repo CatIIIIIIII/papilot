@@ -72,8 +72,9 @@ async function markPoint(note, target = page) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
 }
 async function clickMark(note) {
-  const close = page.getByRole('button', { name: 'Close note', exact: true });
-  if (await close.isVisible()) await close.click();
+  // A personal note's popover closes with Escape; it has no close button.
+  const open = page.getByRole('dialog', { name: /^PDF note/ });
+  if (await open.isVisible()) { await page.keyboard.press('Escape'); await expect(open).toHaveCount(0); }
   const { x, y } = await markPoint(note);
   await page.mouse.click(x, y);
   await expect(page.locator('.note-tag.active')).toHaveAttribute('data-note', note.id);

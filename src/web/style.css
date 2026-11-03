@@ -121,8 +121,13 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .sidebar-toggle{position:relative}
 .sidebar-toggle:has(.task-added-dot){color:var(--accent);background:var(--accent-soft);animation:task-toggle-notify .8s ease-out 2}
 .task-added-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);animation:task-notify .8s ease-out 2}
-.note-flight{position:fixed;top:0;left:0;z-index:60;box-sizing:border-box;margin:0;overflow:hidden;list-style:none;border-color:var(--accent);background:var(--bg);color:var(--text-2);font-size:12px;box-shadow:0 14px 36px rgb(0 0 0/.18),0 0 0 3px var(--accent-soft);transform-origin:top left;pointer-events:none;will-change:transform,opacity}
+/* A flying copy keeps its card's classes; those placing the card in a list
+   (My notes sets position, layer and shadow) must not place the copy. */
+.note-flight{position:fixed!important;top:0;left:0;z-index:60!important;box-sizing:border-box;margin:0!important;overflow:hidden;list-style:none;border-color:var(--accent);background:var(--bg);color:var(--text-2);font-size:12px;box-shadow:0 14px 36px rgb(0 0 0/.18),0 0 0 3px var(--accent-soft)!important;transform-origin:top left;pointer-events:none;will-change:transform,opacity}
 [data-notes-home]{position:relative}
+/* A note that just joined the task lights up where it landed. */
+.task-note-reference.note-arrived{animation:note-arrived 1.3s ease-out}
+[data-task-home].task-received{animation:task-received .45s cubic-bezier(.3,1.5,.5,1)}
 [data-notes-home].notes-received{z-index:1;color:var(--accent);background:var(--accent-soft);animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
 .notes-received::after{content:attr(data-received);position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:var(--primary);color:#fff;box-shadow:0 0 0 2px var(--bg);font:600 10px/16px var(--sans);font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;animation:notes-received-count 1.6s ease-out both}
 .task-link{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;text-align:left;padding:8px 4px 8px 10px;border-radius:var(--r-md)}
@@ -982,6 +987,8 @@ body.resizing iframe{pointer-events:none}
 @keyframes task-added{0%,18%,38%{background:color-mix(in srgb,var(--accent) 20%,var(--sidebar));box-shadow:inset 3px 0 var(--accent),inset 0 0 0 1px var(--accent-line)}28%,55%{background:var(--accent-soft);box-shadow:inset 3px 0 var(--accent),inset 0 0 0 1px transparent}100%{background:var(--task-row-background,transparent);box-shadow:inset 3px 0 transparent,inset 0 0 0 1px transparent}}
 @keyframes task-notify{0%{transform:scale(.7);box-shadow:0 0 0 2px var(--bg),0 0 0 0 var(--accent-line)}45%{transform:scale(1.3)}100%{transform:scale(1);box-shadow:0 0 0 2px var(--bg),0 0 0 9px transparent}}
 @keyframes notes-received{40%{transform:scale(1.2)}100%{transform:none}}
+@keyframes note-arrived{0%,30%{border-color:var(--accent);background:var(--accent-soft)}}
+@keyframes task-received{40%{transform:scale(1.12);color:var(--accent)}}
 @keyframes notes-received-count{0%{opacity:0;transform:scale(.4)}15%{opacity:1;transform:scale(1.15)}25%,80%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-3px)}}
 @keyframes task-toggle-notify{0%,100%{transform:none}30%{transform:translateX(-3px)}60%{transform:translateX(2px)}}
 @keyframes sheet-in{from{opacity:0;transform:translateY(16px)}}
@@ -1008,7 +1015,8 @@ body.resizing iframe{pointer-events:none}
 .task-notes-panel{flex:1;min-height:0;overflow:auto;font-size:12px;color:var(--text-2)}
 .task-note-list{list-style:none;margin:0;padding:0}
 .task-note-reference{padding:8px;margin:6px 0;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
-.task-note-comment{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 var(--sans);color:var(--text)}
+.task-note-comment{display:flow-root;margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 var(--sans);color:var(--text)}
+.task-note-comment>.note-send{float:right;margin-left:8px}
 .task-notes-panel .note-placement-warning{font-size:12px;color:var(--amber-text)}
 
 .ai-review-view{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0}

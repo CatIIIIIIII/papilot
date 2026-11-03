@@ -19,7 +19,6 @@ const paths: Record<string, React.ReactNode> = {
   arrowUp: <path d="M12 19V5m-7 7 7-7 7 7"/>,
   arrowDown: <path d="M12 5v14m7-7-7 7-7-7"/>,
   arrowRight: <path d="M5 12h14m-6-6 6 6-6 6"/>,
-  arrowRightSolid: <path d="M13 5.5a.75.75 0 0 1 1.28-.53l6.5 6.5a.75.75 0 0 1 0 1.06l-6.5 6.5A.75.75 0 0 1 13 18.5V14H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h9Z" fill="currentColor" stroke="none"/>,
   stop: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>,
   updown: <path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>,
   check: <path d="M20 6 9 17l-5-5"/>,
