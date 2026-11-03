@@ -7,6 +7,7 @@ import { chromium } from '../engine/node_modules/playwright/index.mjs';
 import { LANGUAGES } from '../engine/src/locales.ts';
 import { messages, errorMessages } from '../src/web/locales/index.ts';
 import { messages as reviewMessages } from '../engine/src/web/locales/index.ts';
+import { selectOption, selectedValue } from './select.mjs';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
@@ -41,11 +42,11 @@ try {
   for (const { id, name } of LANGUAGES) {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.getByRole('button', { name: label(previous, 'Settings'), exact: true }).click();
-    await page.getByRole('combobox', { name: label(previous, 'Language'), exact: true }).selectOption(id);
+    await selectOption(page.getByRole('combobox', { name: label(previous, 'Language'), exact: true }), id);
     const dialog = page.getByRole('dialog', { name: label(id, 'Settings'), exact: true });
     await dialog.waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), id);
-    assert.equal(await page.getByRole('combobox', { name: label(id, 'Language'), exact: true }).inputValue(), id);
+    assert.equal(await selectedValue(page.getByRole('combobox', { name: label(id, 'Language'), exact: true })), id);
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${id} page overflows at ${width}px`);

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
+import { selectOption } from './select.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();
@@ -39,7 +40,7 @@ const open = async () => {
 };
 const variable = (target, name) => target.locator('html').evaluate((el, name) => getComputedStyle(el).getPropertyValue(name).trim(), name);
 const rootHas = async (name, value) => page.waitForFunction(([name, value]) => document.documentElement.style.getPropertyValue(name) === value, [name, value]);
-const choose = async (name, value) => dialog.getByRole('combobox', { name, exact: true }).selectOption(value);
+const choose = async (name, value) => selectOption(dialog.getByRole('combobox', { name, exact: true }), value);
 try {
   await page.goto(origin);
   await page.getByRole('button', { name: /^Refine the introduction/ }).click();

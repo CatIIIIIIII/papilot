@@ -4,6 +4,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { selectOption } from './select.mjs';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
@@ -79,11 +80,11 @@ try {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '版本更新', exact: true }).click();
   const settingsDialog = page.getByRole('dialog', { name: '版本更新', exact: true });
-  const channel = settingsDialog.getByLabel('更新通道', { exact: true });
-  await expect(channel).toHaveValue('stable');
+  const channel = settingsDialog.getByRole('combobox', { name: '更新通道', exact: true });
+  await expect(channel).toHaveAttribute('data-value', 'stable');
   await settingsDialog.getByRole('button', { name: '检查更新', exact: true }).click();
   await expect(settingsDialog.getByText('你已在使用此通道的最新版本。', { exact: true })).toBeVisible();
-  await channel.selectOption('dev');
+  await selectOption(channel, 'dev');
   await expect(settingsDialog.getByText('0.7.0-dev.aaaaaaa', { exact: true })).toBeVisible();
   assert.equal(installs.length, 2, 'changing channels only checks; it never installs automatically');
   await settingsDialog.getByRole('button', { name: '立即更新', exact: true }).click();
@@ -102,8 +103,8 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '版本更新', exact: true }).click();
-  await expect(channel).toHaveValue('dev');
-  await channel.selectOption('stable');
+  await expect(channel).toHaveAttribute('data-value', 'dev');
+  await selectOption(channel, 'stable');
   await settingsDialog.getByRole('button', { name: '立即更新', exact: true }).click();
   assert.deepEqual(installs.at(-1), { version: '0.7.0' }, 'returning to stable is available from a dev build');
   assert.deepEqual(channels, ['dev', 'stable']);
@@ -149,7 +150,7 @@ try {
   await settingsDialog.getByRole('button', { name: '检查更新', exact: true }).click();
   await expect(settingsDialog.getByRole('alert')).toContainText('检查网络连接');
   update.error = null;
-  await expect(channel).toHaveValue('stable');
+  await expect(channel).toHaveAttribute('data-value', 'stable');
   await settingsDialog.screenshot({ path: 'test-results/desktop-updates.png' });
   await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
   const downloadUrl = 'https://github.com/PapilotAI/papilot/releases/tag/v0.9.0';

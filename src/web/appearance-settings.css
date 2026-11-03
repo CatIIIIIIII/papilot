@@ -32,8 +32,7 @@
 .appearance-customized{font-size:11px;color:var(--text-3)}
 .appearance-theme-picker,.appearance-accent-picker{position:relative;display:inline-flex;flex:none;max-width:100%}
 .appearance-settings .appearance-theme-picker .chip-select{min-width:174px;height:38px;border-radius:22px;font-size:14px}
-.appearance-accent-picker .chip-select{min-width:118px;padding-left:33px;border-radius:20px}
-.appearance-accent-dot{position:absolute;z-index:1;left:10px;top:9px;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 1px rgb(0 0 0/.1);pointer-events:none}
+.appearance-accent-picker .chip-select{min-width:118px;border-radius:20px}
 .appearance-color-field{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
 .appearance-color-chip{display:flex;align-items:center;gap:9px;padding:5px 10px 5px 8px;border:1px solid var(--line-strong);border-radius:20px;height:34px;background:var(--bg)}
 .appearance-swatch{position:relative;display:block;width:19px;height:19px;flex:none;border-radius:50%;box-shadow:inset 0 0 0 1px rgb(128 128 128/.25);overflow:hidden;cursor:pointer}

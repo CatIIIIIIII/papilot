@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import { ACCENTS, DEFAULT_APPEARANCE, appearanceColors, appearanceVariables, hexColor, type AccentId, type Appearance, type ColorMode, type PresetId } from './appearance.ts';
+import { ACCENTS, DEFAULT_APPEARANCE, PRESETS, appearanceColors, appearanceVariables, hexColor, type AccentId, type Appearance, type ColorMode, type PresetId } from './appearance.ts';
 import { ChipSelect } from './chip-select.tsx';
 import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
@@ -41,8 +41,10 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
 export function AppearanceSettings({ theme, onTheme, resolved, appearance, onAppearance }: AppearanceSettingsProps) {
   const colors = appearanceColors(appearance, resolved);
   const customized = Object.values(appearance.colors).some(colors => colors.background || colors.foreground);
-  const presets = [{ value: 'papilot', label: 'Papilot' }, { value: 'paper', label: t('Paper') }, { value: 'slate', label: t('Slate') }];
-  const accents = [{ value: 'default', label: t('Default') }, { value: 'blue', label: t('Slate blue') }, { value: 'graphite', label: t('Graphite') }, { value: 'stone', label: t('Stone') }];
+  // Each theme shows its surface and accent in the current mode; each accent its color.
+  const themeSwatch = (id: PresetId) => `linear-gradient(135deg, ${PRESETS[id][resolved].background} 50%, ${PRESETS[id][resolved].accent} 50%)`;
+  const presets = [{ value: 'papilot', label: 'Papilot', swatch: themeSwatch('papilot') }, { value: 'paper', label: t('Paper'), swatch: themeSwatch('paper') }, { value: 'slate', label: t('Slate'), swatch: themeSwatch('slate') }];
+  const accents = [{ value: 'default', label: t('Default'), swatch: PRESETS[appearance.preset][resolved].accent }, { value: 'blue', label: t('Slate blue'), swatch: ACCENTS.blue }, { value: 'graphite', label: t('Graphite'), swatch: ACCENTS.graphite }, { value: 'stone', label: t('Stone'), swatch: ACCENTS.stone }];
   const changeColor = (name: 'background' | 'foreground', value: string) => onAppearance({ ...appearance, colors: { ...appearance.colors, [resolved]: { ...appearance.colors[resolved], [name]: value } } });
   return <div className="settings-page appearance-settings">
     <section aria-labelledby="appearance-visual-style">
@@ -72,7 +74,7 @@ export function AppearanceSettings({ theme, onTheme, resolved, appearance, onApp
         </div>
         <div className="settings-row">
           <span className="settings-name">{t('Accent')}</span>
-          <span className="appearance-accent-picker"><i className="appearance-accent-dot" style={{ background: appearance.accent === 'default' ? colors.accent : ACCENTS[appearance.accent] }}/><ChipSelect label={t('Accent')} value={appearance.accent} options={accents} onChange={value => onAppearance({ ...appearance, accent: value as AccentId })}/></span>
+          <span className="appearance-accent-picker"><ChipSelect label={t('Accent')} value={appearance.accent} options={accents} onChange={value => onAppearance({ ...appearance, accent: value as AccentId })}/></span>
         </div>
         <div className="settings-row"><span className="settings-name">{t('Background')}</span><ColorField key={`background-${resolved}-${appearance.preset}`} label={t('Background')} value={colors.background} onChange={value => changeColor('background', value)}/></div>
         <div className="settings-row"><span className="settings-name">{t('Foreground')}</span><ColorField key={`foreground-${resolved}-${appearance.preset}`} label={t('Foreground')} value={colors.foreground} onChange={value => changeColor('foreground', value)}/></div>
