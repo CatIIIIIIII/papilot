@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chinese, Japanese and Korean text shows in the PDF view.** Text in fonts that a PDF embeds without a Unicode map, such as the Fandol fonts xeCJK uses by default, was blank in the manuscript and in a review's full paper, while the changes view showed it. Papilot now ships the character maps that pdf.js needs to read these fonts and loads only the one a PDF uses.
+
 ## [0.8.7] - 2026-11-03
 
 Papilot 0.8.7 prepares the manuscript's PDF while you review, keeps long builds responsive, exports PDFs with notes and makes adding notes to a task feel like sending a message.
