@@ -8,8 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
-import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState } from './review.ts';
-import { fullPaperPdf } from './pdf.ts';
+import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
+import { fullPaperPdf, nextPaperPass, paperPassPdf, preparePaper } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus } from './manuscript.ts';
@@ -31,6 +31,8 @@ import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
 
 const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
+// Each workspace compiles predicted manuscripts once, however many listeners serve it.
+const predicting = new WeakSet<Workspace>();
 
 // Git writes to one repository run one at a time; each returns the new status.
 // Both listeners share one queue, so the owner and a collaborator take turns.
@@ -81,6 +83,39 @@ export async function buildApp(options: AppOptions) {
     if (id) projectRequests.set(request, workspace.enterProjectRequest(id));
   });
   app.addHook('onSend', async (request, _reply, payload) => { projectRequests.get(request)?.(); return payload; });
+  // Whatever may have written a paper's files compiles its manuscript right
+  // away: committing or applying a task, a Git action, a review decision. The
+  // PDF is on its way before anyone opens it, and a tree that did not change
+  // costs one snapshot.
+  const WRITES = /^\/api\/projects\/:id\/git\/|^\/api\/tasks\/:id\/(?:commit|apply|reconcile)$|^\/review\/:projectId\/(?:api\/changes\/(?:decide|undo)|\*)$/;
+  app.addHook('onResponse', async (request, reply) => {
+    if (request.method !== 'POST' || reply.statusCode >= 400 || !WRITES.test(request.routeOptions.url || '')) return;
+    const params = (request.params || {}) as Record<string, string>;
+    try {
+      const project = store.project(params.projectId ?? (request.routeOptions.url!.startsWith('/api/tasks/') ? store.task(params.id).projectId : params.id));
+      void manuscripts.refresh(project.id, project.path).catch(() => undefined);
+    } catch { /* The paper or task is gone. */ }
+  });
+  // A deferred task is applied as a whole once it is reviewed, so after each
+  // new round and each decision the manuscript it will produce compiles in
+  // the background.
+  const predict = async (taskId: string) => {
+    const task = store.task(taskId), project = store.project(task.projectId);
+    if (!task.deferred || task.mode === 'review' || task.delivery?.pending || task.status === 'deleting') return;
+    const client = await connectReview(project.path);
+    const preview = await client.get<{ files: Record<string, string | null> | null }>(`${taskRoute(task.name)}/preview`);
+    if (preview.files) await manuscripts.predict(project.id, project.path, Object.fromEntries(Object.entries(preview.files).map(([file, data]) => [file, data === null ? null : Buffer.from(data, 'base64')])));
+  };
+  if (!predicting.has(workspace)) {
+    predicting.add(workspace);
+    workspace.on('reviewed', (taskId: string) => void predict(taskId).catch(() => undefined));
+    // While a round compiles its changed chapters, the whole new version
+    // compiles too, for the review's full paper and often for the commit.
+    workspace.on('publishing', (taskId: string, revision: string) => {
+      try { preparePaper(store.project(store.task(taskId).projectId).path, revision, 'background'); }
+      catch { /* The task is gone. */ }
+    });
+  }
   app.addHook('onError', async request => { projectRequests.get(request)?.(); });
   await app.register(compress);
   app.setErrorHandler((error, _request, reply) => { reply.code((error as any).statusCode || 400).send({ error: (error as Error).message }); });
@@ -159,11 +194,16 @@ export async function buildApp(options: AppOptions) {
       if (viewer.listener !== 'account' || (event.userId !== viewer.user.id && event.sessionId !== viewer.session.id)) return;
       if (!accounts.session(cookie(request.headers.cookie, SESSION_COOKIE))) { reply.raw.write('event: change\ndata: {}\n\n'); reply.raw.end(); } else change();
     };
+    // A manuscript build started or finished: the open PDF view reloads now
+    // instead of at its next poll. The event names no paper.
+    let paperTimer: NodeJS.Timeout | undefined;
+    const paper = () => { paperTimer ??= setTimeout(() => { paperTimer = undefined; reply.raw.write('event: manuscript\ndata: {}\n\n'); }, 100); };
     workspace.on('change', change);
+    manuscripts.on('change', paper);
     accounts.on('revoked', revoked);
     const heartbeat = setInterval(() => reply.raw.write(': heartbeat\n\n'), 15000);
     reply.raw.on('close', () => {
-      clearInterval(heartbeat); if (timer) clearTimeout(timer); workspace.off('change', change); accounts.off('revoked', revoked);
+      clearInterval(heartbeat); if (timer) clearTimeout(timer); if (paperTimer) clearTimeout(paperTimer); workspace.off('change', change); manuscripts.off('change', paper); accounts.off('revoked', revoked);
       if (session) { const open = (streams.get(session) || 1) - 1; if (open) streams.set(session, open); else streams.delete(session); }
     });
   });
@@ -223,7 +263,7 @@ export async function buildApp(options: AppOptions) {
     const round = request.query.round === undefined ? task.review?.round : Number(request.query.round);
     const side = request.query.version || 'after';
     if (!round || !Number.isSafeInteger(round) || round < 1 || (side !== 'before' && side !== 'after')) return reply.code(400).send({ error: 'Select an existing review round and either the before or after PDF.' });
-    const pdf = await fullPaperPdf(project.path, task.name, round, side);
+    const pdf = await fullPaperPdf(connectReview, project.path, task.name, round, side);
     const filename = `papilot-${task.name}-r${round}-${side}.pdf`;
     return reply.type('application/pdf').header('Content-Disposition', `${request.query.download === '1' ? 'attachment' : 'inline'}; filename="${filename}"`).sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
   });
@@ -511,11 +551,19 @@ export async function buildApp(options: AppOptions) {
 
   // The complete PDF of a round's new version, for the review's full paper.
   // A round may compile only the changed chapters; this compiles them all once.
-  app.get<{ Params: { projectId: string; name: string; round: string } }>('/review/:projectId/pdf/:name/:round', { config: { access: { project: 'projectId' } } }, async (request, reply) => {
+  // While it compiles, `passes` names each earlier version that `?pass=`
+  // serves: the chapters the round compiled, then each TeX pass of the whole.
+  app.get<{ Params: { projectId: string; name: string; round: string }; Querystring: { pass?: string } }>('/review/:projectId/pdf/:name/:round', { config: { access: { project: 'projectId' } } }, async (request, reply) => {
     const project = store.project(request.params.projectId), name = request.params.name, round = Number(request.params.round);
-    if (!/^[a-z0-9-]+$/.test(name) || !Number.isSafeInteger(round) || round < 1) return reply.code(404).send({ error: 'Review resource not found.' });
-    const pdf = await fullPaperPdf(project.path, name, round, 'after');
+    const pass = request.query.pass === undefined ? null : Number(request.query.pass);
+    if (!/^[a-z0-9-]+$/.test(name) || !Number.isSafeInteger(round) || round < 1 || (pass !== null && (!Number.isSafeInteger(pass) || pass < 1))) return reply.code(404).send({ error: 'Review resource not found.' });
+    const pdf = pass === null ? await fullPaperPdf(connectReview, project.path, name, round, 'after') : await paperPassPdf(connectReview, project.path, name, round, pass);
     return reply.type('application/pdf').sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
+  });
+  app.get<{ Params: { projectId: string; name: string; round: string }; Querystring: { after?: string } }>('/review/:projectId/pdf/:name/:round/passes', { config: { access: { project: 'projectId' } } }, async (request, reply) => {
+    const project = store.project(request.params.projectId), name = request.params.name, round = Number(request.params.round), after = Number(request.query.after ?? 0);
+    if (!/^[a-z0-9-]+$/.test(name) || !Number.isSafeInteger(round) || round < 1 || !Number.isSafeInteger(after) || after < 0) return reply.code(404).send({ error: 'Review resource not found.' });
+    return nextPaperPass(connectReview, project.path, name, round, after);
   });
   app.route<{ Params: { projectId: string; '*': string } }>({
     // The review page posts with the review engine's token rather than Papilot's.
@@ -552,12 +600,14 @@ export async function buildApp(options: AppOptions) {
             if (task) {
               store.updateTask(task.id, { error: null });
               await workspace.refresh(task.id);
+              // A decision changes what applying the task will write.
+              workspace.emit('reviewed', task.id);
             }
           }
           // A round's new version as one complete PDF, which Papilot compiles,
           // lets the review show the changes in the whole paper.
           const round = request.method === 'GET' && response.ok ? /^\/api\/tasks\/([a-z0-9-]+)\/rounds\/(\d+)$/.exec(route) : null;
-          if (round) (value as { pdf?: string }).pdf = `${prefix}/pdf/${round[1]}/${round[2]}`;
+          if (round) Object.assign(value as object, { pdf: `${prefix}/pdf/${round[1]}/${round[2]}`, passes: `${prefix}/pdf/${round[1]}/${round[2]}/passes` });
           return rewriteReviewJson(value, prefix);
         }
         if (reviewTask && writesFiles) throw new Error('The review engine returned an unexpected response. Select Check status before continuing.');

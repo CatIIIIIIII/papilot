@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { App } from "../server.ts";
 import type { Delivery } from "../types.ts";
-import { merge3 } from "./git.ts";
+import { merge3Async } from "./git.ts";
+import { applyUnits } from "./changes.ts";
 import { readBytes, same, writeOrDelete } from "./files.ts";
 import { planCurrentCommit, finishCurrentCommit, CommitNeedsReview } from "./current-commit.ts";
 import { safePath } from "./review.ts";
@@ -23,11 +24,57 @@ export class Deliveries {
   save(name: string, data: Delivery) {
     this.app.store.execute("INSERT OR REPLACE INTO deliveries(task,data) VALUES(?,?)", name, JSON.stringify(data));
   }
+  /** What applying this task to the manuscript would write, if every change
+   *  still pending in its latest round were accepted first: the new contents
+   *  of each file it changes, merged with the files on disk exactly as an
+   *  application merges them. Null while the result cannot be foreseen: a
+   *  delivery or merge review is in progress, or a file would conflict. */
+  async preview(name: string): Promise<Record<string, Buffer | null> | null> {
+    const app = this.app, task = app.tasks.get(name), last = this.get(name), reconciliation = app.reconciliation.get(name);
+    if (!task.deferred || (last && !last.done) || (reconciliation && !reconciliation.ready) || app.publisher.busy(name)) return null;
+    const before = reconciliation?.base ?? (last && last.mode !== "branch" ? last.accepted : task.base);
+    // The latest round's pending changes, accepted onto the accepted text.
+    let accepted = task.accepted;
+    const round = app.review.latestRound(name);
+    if (round) {
+      const decisions = app.review.decisions(name, round), groups: Record<string, typeof round.units> = {};
+      for (const unit of round.units) if (decisions[unit.id] === "pending") (groups[unit.file] ??= []).push(unit);
+      const files = Object.keys(groups);
+      if (files.length) {
+        const [old, next, records] = await Promise.all([round.before, round.after, task.accepted].map((rev) => app.repo.blobsAsync(rev, files)));
+        const contents: Record<string, Buffer | null> = {};
+        for (const file of files) {
+          const [merged, conflict] = await merge3Async(records[file], old[file], applyUnits(old[file], next[file], groups[file]));
+          if (conflict) return null;
+          contents[file] = merged;
+        }
+        accepted = await app.repo.treeWithAsync(task.accepted, contents);
+      }
+    }
+    const files = await app.repo.changedFilesAsync(before, accepted);
+    const [base, result] = await Promise.all([app.repo.blobsAsync(before, files), app.repo.blobsAsync(accepted, files)]);
+    const writes: Record<string, Buffer | null> = {};
+    for (const file of files) {
+      const current = await fs.promises.readFile(safePath(app.root, file)).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      });
+      const [merged, conflict] = await merge3Async(current, base[file], result[file]);
+      if (conflict) return null;
+      writes[file] = merged;
+    }
+    return writes;
+  }
   assertReady(name: string) {
     const last = this.get(name);
     if (last && !last.done) throw new Error("Finish the pending delivery before changing this review. Retry the same destination.");
   }
+  /** Applies the task to the manuscript, with or without a commit. Runs
+   *  after every other write of the review engine, never beside one. */
   apply(name: string, keepCurrent = false, mode?: "workspace" | "commit", message?: string, confirmation?: string) {
+    return this.app.exclusive(() => this.applyNow(name, keepCurrent, mode, message, confirmation));
+  }
+  private async applyNow(name: string, keepCurrent = false, mode?: "workspace" | "commit", message?: string, confirmation?: string) {
     const active = this.app.reconciliation.get(name);
     mode ??= active?.intent?.mode ?? "workspace";
     message ??= active?.intent?.message ?? "";
@@ -35,27 +82,31 @@ export class Deliveries {
     if (mode === "commit" && (!message.trim() || message.length > 5000)) throw new Error("Write a commit message (at most 5,000 characters).");
     const last = this.get(name);
     if (last && !last.done) {
-      const delivery = this.finish(name, last);
+      const delivery = await this.finish(name, last);
       if (last.mode !== "branch") return { delivery };
     }
     if (keepCurrent) {
       const task = this.app.tasks.get(name);
-      if (!active?.ready || task.accepted !== active.reviewBase || this.app.repo.changedFiles(task.accepted, this.app.tasks.snapshot(task)).length)
+      if (!active?.ready || task.accepted !== active.reviewBase || (await this.app.repo.changedFilesAsync(task.accepted, await this.app.tasks.snapshotAsync(task))).length)
         throw new Error("Review the merge suggestion before applying it, or ask the agent to keep the latest wording.");
     }
     if (active) this.app.reconciliation.intent(name, { mode, message });
     if (!keepCurrent && active && (!active.ready || (this.app.review.latestRound(name)?.number ?? 0) <= active.round))
-      return { reconciliation: this.app.reconciliation.prepare(name, this.app.reconciliation.get(name)!) };
-    try { return { delivery: this.deliver(name, mode, message, keepCurrent, confirmation) }; }
+      return { reconciliation: await this.app.reconciliation.prepare(name, this.app.reconciliation.get(name)!) };
+    try { return { delivery: await this.deliverNow(name, mode, message, keepCurrent, confirmation) }; }
     catch (error) {
       if (error instanceof CommitNeedsReview) return { commitReview: error.review };
       if (!(error instanceof DeliveryConflict)) throw error;
-      const reconciliation = this.app.reconciliation.start(name, keepCurrent, { mode, message });
+      const reconciliation = await this.app.reconciliation.start(name, keepCurrent, { mode, message });
       if (reconciliation) return { reconciliation };
-      return { delivery: this.deliver(name, mode, message, keepCurrent, confirmation) };
+      return { delivery: await this.deliverNow(name, mode, message, keepCurrent, confirmation) };
     }
   }
+  /** Delivers the accepted changes to the working directory or a task branch. */
   deliver(name: string, mode: Delivery["mode"], message = "", keepCurrent = false, confirmation?: string) {
+    return this.app.exclusive(() => this.deliverNow(name, mode, message, keepCurrent, confirmation));
+  }
+  private async deliverNow(name: string, mode: Delivery["mode"], message = "", keepCurrent = false, confirmation?: string) {
     const app = this.app, task = app.tasks.get(name), last = this.get(name);
     if (!task.deferred) throw new Error("This task already applies accepted changes to the manuscript.");
     if (mode !== "workspace" && mode !== "commit" && mode !== "branch") throw new Error("Choose a working directory or task branch.");
@@ -69,9 +120,9 @@ export class Deliveries {
     if (last && last.mode === mode && (!last.done || (!reconciliation && last.accepted === task.accepted))) return this.finish(name, last);
     if (app.publisher.busy(name) || app.review.counts(name).pending) throw new Error("Finish reviewing every change before choosing a destination.");
     const before = reconciliation?.base ?? (last && last.mode !== "branch" ? last.accepted : task.base);
-    const files = app.repo.changedFiles(before, task.accepted);
+    const files = await app.repo.changedFilesAsync(before, task.accepted);
     if (!files.length && !reconciliation) throw new Error("This task has no accepted changes left to deliver.");
-    const base = app.repo.blobs(before, files), accepted = app.repo.blobs(task.accepted, files);
+    const [base, accepted] = await Promise.all([app.repo.blobsAsync(before, files), app.repo.blobsAsync(task.accepted, files)]);
     const data: Delivery = { mode, accepted: task.accepted, seq: app.store.one<{ seq: number }>("SELECT MAX(seq) AS seq FROM actions WHERE task=?", name)!.seq, done: false, writes: [] };
     const contents: Record<string, Buffer | null> = {};
     let current: Record<string, Buffer | null>;
@@ -81,50 +132,51 @@ export class Deliveries {
       data.previous = last?.commit;
       // The base snapshot may include the author's uncommitted edits. Apply
       // only the accepted delta onto its original HEAD, never commit those edits.
-      data.parent = last?.commit ?? app.repo.rev(`${task.base}^`);
-      current = app.repo.blobs(data.parent, files);
-      const ref = app.repo.text(["show-ref", "--verify", "--hash", `refs/heads/${data.branch}`], { check: false });
+      data.parent = last?.commit ?? await app.repo.revAsync(`${task.base}^`);
+      current = await app.repo.blobsAsync(data.parent, files);
+      const ref = await app.repo.textAsync(["show-ref", "--verify", "--hash", `refs/heads/${data.branch}`], { check: false });
       if (ref !== (data.previous ?? "")) throw new Error("The task branch was changed outside Papilot. Nothing was committed.");
-      this.assertBranchAvailable(data.branch);
+      await this.assertBranchAvailable(data.branch);
     } else {
-      this.assertNoMerge();
+      await this.assertNoMerge();
       current = Object.fromEntries(files.map(file => [file, readBytes(safePath(app.root, file))]));
     }
     for (const file of files) {
-      const [merged, conflict] = merge3(current[file], base[file], accepted[file]);
+      const [merged, conflict] = await merge3Async(current[file], base[file], accepted[file]);
       if (conflict) throw new DeliveryConflict(`Cannot deliver ${file}: it conflicts with the destination. Nothing was written. Revise the task and try again.`);
       contents[file] = merged;
       if (mode !== "branch" && !same(current[file], merged)) data.writes.push({ file, before: encode(current[file]), after: encode(merged) });
     }
     if (mode === "branch") {
-      const tree = app.repo.treeWith(data.parent!, contents);
-      data.commit = app.repo.text(["commit-tree", tree, "-p", data.parent!, "-m", message.trim()]);
+      const tree = await app.repo.treeWithAsync(data.parent!, contents);
+      data.commit = await app.repo.textAsync(["commit-tree", tree, "-p", data.parent!, "-m", message.trim()]);
     }
     if (mode === "commit" && (!message.trim() || message.length > 5000)) throw new Error("Write a commit message (at most 5,000 characters).");
-    if (mode === "commit") planCurrentCommit(app.repo, data, before, files, message, confirmation);
+    if (mode === "commit") await planCurrentCommit(app.repo, data, before, files, message, confirmation);
     this.save(name, data);
     return this.finish(name, data);
   }
-  private assertBranchAvailable(branch: string) {
-    if (this.app.repo.text(["worktree", "list", "--porcelain"]).split("\n").includes(`branch refs/heads/${branch}`))
+  private async assertBranchAvailable(branch: string) {
+    if ((await this.app.repo.textAsync(["worktree", "list", "--porcelain"])).split("\n").includes(`branch refs/heads/${branch}`))
       throw new Error("The task branch is checked out. Switch that worktree to another branch before committing here.");
   }
-  private assertNoMerge() {
-    if (fs.existsSync(path.resolve(this.app.root, this.app.repo.text(["rev-parse", "--git-path", "MERGE_HEAD"]))))
+  private async assertNoMerge() {
+    if (fs.existsSync(path.resolve(this.app.root, await this.app.repo.textAsync(["rev-parse", "--git-path", "MERGE_HEAD"]))))
       throw new Error("Finish or abort the merge before applying changes.");
   }
-  finish(name: string, data: Delivery) {
+  // Completes a saved delivery. Callers hold the engine's write turn.
+  private async finish(name: string, data: Delivery) {
     if (data.done) { if (data.mode !== "branch") this.app.reconciliation.clear(name); return this.result(data); }
     const app = this.app;
     if (data.mode === "branch") {
       const ref = `refs/heads/${data.branch}`;
-      const current = app.repo.text(["show-ref", "--verify", "--hash", ref], { check: false });
+      const current = await app.repo.textAsync(["show-ref", "--verify", "--hash", ref], { check: false });
       if (current !== data.commit) {
-        this.assertBranchAvailable(data.branch!);
-        app.repo.run(["update-ref", ref, data.commit!, data.previous ?? "0".repeat(data.commit!.length)]);
+        await this.assertBranchAvailable(data.branch!);
+        await app.repo.runAsync(["update-ref", ref, data.commit!, data.previous ?? "0".repeat(data.commit!.length)]);
       }
     } else {
-      this.assertNoMerge();
+      await this.assertNoMerge();
       const writes = data.writes.map(write => ({ ...write, target: safePath(app.root, write.file) }));
       const validate = () => {
         for (const write of writes) {
@@ -134,7 +186,7 @@ export class Deliveries {
         }
       };
       const applyFiles = () => { for (const write of writes) writeOrDelete(write.target, decode(write.after)); };
-      if (data.mode === "commit") finishCurrentCommit(app.repo, data, validate, applyFiles);
+      if (data.mode === "commit") await finishCurrentCommit(app.repo, data, validate, applyFiles);
       else { validate(); applyFiles(); }
     }
     this.save(name, { ...data, done: true, writes: [] });
@@ -145,11 +197,12 @@ export class Deliveries {
     const { mode, accepted, branch, commit } = data;
     return { mode, accepted, ...(branch ? { branch, commit } : {}) };
   }
-  recover() {
+  // At start, before any other write.
+  async recover() {
     for (const row of this.app.store.all<{ task: string; data: Delivery }>("SELECT * FROM deliveries")) {
       if (row.data.done && row.data.mode !== "branch" && this.app.reconciliation.get(row.task) && this.app.tasks.get(row.task).accepted === row.data.accepted)
         this.app.reconciliation.clear(row.task);
-      else if (!row.data.done) try { this.finish(row.task, row.data); } catch { /* Retain the journal for an explicit retry. */ }
+      else if (!row.data.done) try { await this.finish(row.task, row.data); } catch { /* Retain the journal for an explicit retry. */ }
     }
   }
 }

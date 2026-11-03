@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { Builder, BuildError } from "./build.ts";
 import { cleanPath, within } from "./git.ts";
-import { run } from "./process.ts";
+import { capture } from "./process.ts";
 import { mupdf } from "../render/pdf.ts";
 import type { App } from "../server.ts";
 import type { BuildInfo } from "../types.ts";
@@ -72,15 +72,15 @@ function location(app: App, worktree: string, value: string): Location {
 }
 // The pages SyncTeX gives for a source line, or for the nearest line that
 // printed something.
-function pagesOf(pdf: string, file: string, line: number) {
+async function pagesOf(pdf: string, file: string, line: number) {
   for (let distance = 0; distance <= NEARBY; distance++)
     for (const candidate of distance ? [line - distance, line + distance] : [line]) {
       if (candidate < 1) continue;
-      const output = run(
+      const output = (await capture(
         "synctex",
         ["view", "-i", `${candidate}:0:${file}`, "-o", pdf],
         { check: false, timeout: 20000 },
-      ).stdout.toString();
+      ).catch(() => ({ stdout: Buffer.alloc(0) }))).stdout.toString();
       const pages = [
         ...new Set(
           [...output.matchAll(/^Page:(\d+)$/gm)].map((m) => Number(m[1])),
@@ -105,12 +105,12 @@ export async function view(
     labels = (request.pages ?? []).map((p) => p.trim()).filter(Boolean);
   if (!locations.length && !labels.length)
     throw new Error("Ask for at least one source location or page number.");
-  const after = app.tasks.snapshot(task),
+  const after = await app.tasks.snapshotAsync(task),
     before = task.accepted,
     builder = new Builder(project, app.repo),
-    targets = builder.plan(before, after, [
+    targets = await builder.planAsync(before, after, [
       ...new Set([
-        ...app.repo.changedFiles(before, after),
+        ...(await app.repo.changedFilesAsync(before, after)),
         ...locations.map((l) => l.file),
       ]),
     ]);
@@ -150,7 +150,7 @@ export async function view(
           build.root,
           path.posix.relative(project.source_dir || ".", l.file),
         ),
-        found = fs.existsSync(file) ? pagesOf(pdf, file, l.line) : [];
+        found = fs.existsSync(file) ? await pagesOf(pdf, file, l.line) : [];
       if (found.length) found.forEach((page) => ask(page, l.asked));
       else missing.push(`${l.asked}: SyncTeX places no typeset text at or near this line.`);
     }

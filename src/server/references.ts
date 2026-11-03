@@ -20,7 +20,7 @@ interface Engine {
   entryInputs(entries: unknown[]): Input[];
   ReferenceChecker: new (file: string) => Checker;
   Confirmations: new (file: string) => Confirmations;
-  Repo: new (root: string) => { gitDir(): string };
+  Repo: new (root: string) => { gitDir(): string; textAsync(args: string[]): Promise<string> };
 }
 let loading: Promise<Engine> | undefined;
 export function engine(): Promise<Engine> {
@@ -38,9 +38,17 @@ export async function checker(file = path.join(DATA, 'references.json')) {
 }
 // Confirmations live beside the review engine's state in the repository, so
 // a task's review, the uncommitted changes and this panel agree.
+const gitDirs = new Map<string, Promise<string>>();
 export async function confirmations(root: string) {
   const { Confirmations, Repo } = await engine();
-  return new Confirmations(path.join(new Repo(root).gitDir(), 'latex-review', 'references-confirmed.json'));
+  // The panel polls while a check runs; the Git directory is looked up once.
+  let dir = gitDirs.get(root);
+  if (!dir) {
+    const found = new Repo(root).textAsync(['rev-parse', '--absolute-git-dir']).then(folder => fs.promises.realpath(folder));
+    found.catch(() => gitDirs.delete(root));
+    gitDirs.set(root, dir = found);
+  }
+  return new Confirmations(path.join(await dir, 'latex-review', 'references-confirmed.json'));
 }
 
 // A file of the paper, read only from inside its folder.

@@ -17,15 +17,15 @@ test('isolated acceptance and undo preserve the manuscript; a task commit includ
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted sentence.');
     disk.edit(task, METHOD, 'Detail sentence 2.', 'Rejected sentence.');
     const round = fakeRound(app, task.name);
-    decide(app, task.name, round, 'accept', [round.units[0]]);
+    await decide(app, task.name, round, 'accept', [round.units[0]]);
     assert.equal(disk.read(METHOD), original);
     const undo = app.review.undoEntry(task.name);
-    app.review.undo(task.name, undo.id);
+    await app.review.undo(task.name, undo.id);
     assert.equal(disk.read(METHOD), original);
-    decide(app, task.name, round, 'accept', [round.units[0]]);
-    assert.throws(() => app.delivery.deliver(task.name, 'branch', 'Too soon'), /Finish reviewing/);
-    decide(app, task.name, round, 'reject', [round.units[1]]);
-    const delivered = app.delivery.deliver(task.name, 'branch', 'Explain the method');
+    await decide(app, task.name, round, 'accept', [round.units[0]]);
+    await assert.rejects(async () => app.delivery.deliver(task.name, 'branch', 'Too soon'), /Finish reviewing/);
+    await decide(app, task.name, round, 'reject', [round.units[1]]);
+    const delivered = await app.delivery.deliver(task.name, 'branch', 'Explain the method');
     assert.equal(delivered.branch, 'papilot/isolated');
     assert.equal(disk.repo.rev('HEAD'), head);
     assert.equal(disk.repo.text(['write-tree']), index);
@@ -37,11 +37,11 @@ test('isolated acceptance and undo preserve the manuscript; a task commit includ
     assert.equal(disk.repo.text(['log', '-1', '--format=%an <%ae>', delivered.commit]), 'Test <test@localhost>');
     assert.equal(disk.repo.text(['log', '-1', '--format=%s', delivered.commit]), 'Explain the method');
     assert.equal(app.review.undoEntry(task.name), null, 'delivered decisions cannot be undone behind the destination');
-    assert.deepEqual(app.delivery.deliver(task.name, 'branch', 'Retry'), delivered);
+    assert.deepEqual(await app.delivery.deliver(task.name, 'branch', 'Retry'), delivered);
     disk.edit(task, METHOD, 'Method sentence 7.', 'Next round sentence.');
     const next = fakeRound(app, task.name);
-    decide(app, task.name, next);
-    const second = app.delivery.deliver(task.name, 'branch', 'Follow up');
+    await decide(app, task.name, next);
+    const second = await app.delivery.deliver(task.name, 'branch', 'Follow up');
     assert.equal(disk.repo.rev(`${second.commit}^`), delivered.commit);
     assert.match(disk.repo.text(['show', `${second.commit}:${METHOD}`]), /Next round sentence/);
     assert.equal(disk.read(METHOD), original);
@@ -56,17 +56,17 @@ test('applying accepted changes preserves the index and independent edits, and r
     const task = app.tasks.create('apply', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted sentence.');
     const round = fakeRound(app, task.name);
-    decide(app, task.name, round);
+    await decide(app, task.name, round);
     disk.write(METHOD, disk.read(METHOD).replace('Detail sentence 19.', 'A later hand edit.'));
     disk.repo.run(['add', METHOD]);
     const head = disk.repo.rev('HEAD'), index = disk.repo.text(['write-tree']);
-    app.delivery.deliver(task.name, 'workspace');
+    await app.delivery.deliver(task.name, 'workspace');
     assert.match(disk.read(METHOD), /Accepted sentence/);
     assert.match(disk.read(METHOD), /A later hand edit/);
     assert.equal(disk.repo.rev('HEAD'), head);
     assert.equal(disk.repo.text(['write-tree']), index);
     disk.write(METHOD, disk.read(METHOD).replace('Accepted sentence.', 'Edited after delivery.'));
-    app.delivery.deliver(task.name, 'workspace');
+    await app.delivery.deliver(task.name, 'workspace');
     assert.match(disk.read(METHOD), /Edited after delivery/);
     assert.equal(app.review.undoEntry(task.name), null);
   } finally { await disk.close(); }
@@ -79,14 +79,14 @@ test('a destination conflict writes no files and a task commit never overwrites 
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted sentence.');
     disk.edit(task, 'paper/main.tex', 'Intro sentence 2.', 'Accepted introduction.');
     const round = fakeRound(app, task.name);
-    decide(app, task.name, round);
+    await decide(app, task.name, round);
     const main = disk.read('paper/main.tex');
     disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'A conflicting hand edit.'));
-    assert.throws(() => app.delivery.deliver(task.name, 'workspace'), /conflicts with the destination/);
+    await assert.rejects(async () => app.delivery.deliver(task.name, 'workspace'), /conflicts with the destination/);
     assert.equal(disk.read('paper/main.tex'), main);
     assert.equal(app.delivery.get(task.name), undefined);
     disk.repo.run(['branch', 'papilot/conflict']);
-    assert.throws(() => app.delivery.deliver(task.name, 'branch', 'Commit'), /changed outside Papilot/);
+    await assert.rejects(async () => app.delivery.deliver(task.name, 'branch', 'Commit'), /changed outside Papilot/);
   } finally { await disk.close(); }
 });
 
@@ -96,8 +96,8 @@ test('task commits refuse dependencies on uncommitted baseline text instead of i
     disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'Uncommitted baseline.'));
     const task = app.tasks.create('dependency', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'Uncommitted baseline.', 'Rewritten baseline.');
-    decide(app, task.name, fakeRound(app, task.name));
-    assert.throws(() => app.delivery.deliver(task.name, 'branch', 'Commit'), /conflicts with the destination/);
+    await decide(app, task.name, fakeRound(app, task.name));
+    await assert.rejects(async () => app.delivery.deliver(task.name, 'branch', 'Commit'), /conflicts with the destination/);
     assert.match(disk.read(METHOD), /Uncommitted baseline/);
     assert.equal(disk.repo.text(['for-each-ref', '--format=%(refname)', 'refs/heads/papilot/']), '');
   } finally { await disk.close(); }
@@ -108,16 +108,17 @@ for (const mode of ['workspace', 'branch'] as const) test(`${mode} delivery reco
   try {
     const task = app.tasks.create('recover', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted sentence.');
-    decide(app, task.name, fakeRound(app, task.name));
+    await decide(app, task.name, fakeRound(app, task.name));
     const save = app.delivery.save.bind(app.delivery);
     app.delivery.save = (name: string, data: any) => { if (data.done) throw new Error('Crash after writing'); save(name, data); };
-    assert.throws(() => app.delivery.deliver(task.name, mode, 'Commit'), /Crash after writing/);
+    await assert.rejects(async () => app.delivery.deliver(task.name, mode, 'Commit'), /Crash after writing/);
     const pending = app.delivery.get(task.name);
     assert.equal(pending.done, false);
-    assert.throws(() => app.review.undo(task.name, 'any'), /pending delivery/);
+    await assert.rejects(async () => app.review.undo(task.name, 'any'), /pending delivery/);
     const recovered = disk.app();
+    await recovered.ready;
     assert.equal(recovered.delivery.get(task.name).done, true);
-    const result = recovered.delivery.deliver(task.name, mode, 'Retry');
+    const result = await recovered.delivery.deliver(task.name, mode, 'Retry');
     if (mode === 'branch') assert.equal(result.commit, pending.commit);
     else assert.match(fs.readFileSync(path.join(disk.root, METHOD), 'utf8'), /Accepted sentence/);
   } finally { await disk.close(); }

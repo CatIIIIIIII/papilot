@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { ROOT, codeVersion } from "../runtime.ts";
 import { Builder, BuildError } from "./build.ts";
-import { diffUnits, scopeViolations, withUnits } from "./changes.ts";
+import { diffUnitsAsync, scopeViolationsAsync, withUnits } from "./changes.ts";
 import { isFigure } from "./config.ts";
 import { now, readJson, writeJson } from "./files.ts";
 import { runAsync } from "./process.ts";
@@ -189,6 +189,10 @@ export class Publisher {
   running = new Map<string, Promise<void>>();
   queue: string[] = [];
   stopping = false;
+  // The new version of each running job whose round compiles only some of
+  // its chapters: a host may compile the whole paper meanwhile, without
+  // waiting for or competing with a build of the same files here.
+  private revisions = new Map<string, string>();
   constructor(public app: App) {
     app.store.execute(
       "UPDATE jobs SET status='failed', finished=?, result=? WHERE status IN ('queued','running')",
@@ -240,6 +244,9 @@ export class Publisher {
     const job = this.app.store.one<Job>("SELECT * FROM jobs WHERE id=?", id);
     if (!job) throw new Error("Unknown job " + id);
     return job;
+  }
+  revision(id: string) {
+    return this.revisions.get(id) ?? null;
   }
   current(name: string) {
     return this.app.store.one<Job>(
@@ -331,6 +338,7 @@ export class Publisher {
           : { error: (error as Error).message, next: "Publish again." };
       this.update(job.id, { status: "failed", result, finished: now() });
     } finally {
+      this.revisions.delete(job.id);
       this.running.delete(job.task);
       if (this.pending.get(job.task) === job.id) this.pending.delete(job.task);
       else if (!this.stopping) this.queue.push(this.pending.get(job.task)!);
@@ -351,15 +359,16 @@ export class Publisher {
         "Run `finish --force`, then start a new task.",
       );
     this.phase(job, "snapshot");
-    const after = app.tasks.snapshot(task);
-    task = app.tasks.get(name);
-    const before = task.accepted,
-      latest = app.review.latestRound(name),
-      decided = app.review.lastChange(name),
-      violations = scopeViolations(app.repo, task.base, after, task.scope);
+    // The worktree and the decisions are read together, between writes.
+    const { after, before, latest, decided } = await app.exclusive(async () => {
+      const after = await app.tasks.snapshotAsync(task);
+      task = app.tasks.get(name);
+      return { after, before: task.accepted, latest: app.review.latestRound(name), decided: app.review.lastChange(name) };
+    });
+    const violations = await scopeViolationsAsync(app.repo, task.base, after, task.scope);
     const reconciliation = app.reconciliation.get(name);
     if (reconciliation) {
-      for (const file of app.repo.changedFiles(task.base, after))
+      for (const file of await app.repo.changedFilesAsync(task.base, after))
         if (!reconciliation.files.includes(file) && !violations.includes(file)) violations.push(file);
     }
     if (violations.length)
@@ -378,7 +387,7 @@ export class Publisher {
     if (
       latest &&
       latest.before === before &&
-      app.repo.treeId(latest.after) === app.repo.treeId(after) &&
+      (await app.repo.treeIdAsync(latest.after)) === (await app.repo.treeIdAsync(after)) &&
       latest.summary.renderer === codeVersion()
     )
       return {
@@ -386,42 +395,32 @@ export class Publisher {
         round: latest.number,
         changes: latest.units.length,
       };
-    const files = app.repo.changedFiles(before, after);
+    const files = await app.repo.changedFilesAsync(before, after);
     if (!files.length) return { outcome: "empty", round: null, changes: 0 };
-    const units = diffUnits(app.repo, before, after, (f) =>
+    const units = await diffUnitsAsync(app.repo, before, after, (f) =>
       isFigure(project, f),
     );
     this.phase(job, "build");
     const builder = new Builder(project, app.repo),
-      targets = builder.plan(before, after, files);
-    let seed = null,
-      old,
-      next;
-    try {
-      seed = targets[0] !== "full" ? await builder.build(task.base) : null;
-      old = await builder.build(before, targets, seed);
-    } catch (error) {
+      targets = await builder.planAsync(before, after, files);
+    if (targets[0] !== "full") this.revisions.set(job.id, after);
+    const failed = (what: string) => (error: unknown) => {
       if (error instanceof BuildError)
         throw new PublishError(
-          "The comparison baseline could not be compiled.",
+          what,
           error.details,
           "Check the compiler diagnostics, fix the document or build environment, then publish again.",
           error.log,
         );
       throw error;
-    }
-    try {
-      next = await builder.build(after, targets, seed);
-    } catch (error) {
-      if (error instanceof BuildError)
-        throw new PublishError(
-          "The revised document could not be compiled.",
-          error.details,
-          "Check the compiler diagnostics, fix the document or build environment, then publish again.",
-          error.log,
-        );
-      throw error;
-    }
+    };
+    const seed = targets[0] !== "full" ? await builder.build(task.base).catch(failed("The comparison baseline could not be compiled.")) : null;
+    // Both versions compile at once: each needs only the seed.
+    const baseline = builder.build(before, targets, seed).catch(failed("The comparison baseline could not be compiled.")),
+      revised = builder.build(after, targets, seed).catch(failed("The revised document could not be compiled."));
+    // A failure of either is reported once both have settled, the baseline's first.
+    await Promise.allSettled([baseline, revised]);
+    const old = await baseline, next = await revised;
     if (app.review.lastChange(name) !== decided) throw new Stale();
     const warnings = next.warnings.filter((w) => !old.warnings.includes(w));
     this.phase(job, "render");
@@ -454,20 +453,23 @@ export class Publisher {
             seed,
           ),
       );
-      if (app.review.lastChange(name) !== decided) throw new Stale();
-      fs.rmSync(final, { recursive: true, force: true });
-      fs.renameSync(output, final);
-      app.store.execute(
-        "INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)",
-        name,
-        number,
-        before,
-        after,
-        JSON.stringify(units),
-        JSON.stringify(summary),
-        now(),
-      );
-      app.repo.updateRef(`refs/latex-review/${name}/round-${number}`, after);
+      // No decision may come between this check and the new round.
+      await app.exclusive(async () => {
+        if (app.review.lastChange(name) !== decided) throw new Stale();
+        await fs.promises.rm(final, { recursive: true, force: true });
+        await fs.promises.rename(output, final);
+        app.store.execute(
+          "INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)",
+          name,
+          number,
+          before,
+          after,
+          JSON.stringify(units),
+          JSON.stringify(summary),
+          now(),
+        );
+        await app.repo.updateRefAsync(`refs/latex-review/${name}/round-${number}`, after);
+      });
     } finally {
       fs.rmSync(output, { recursive: true, force: true });
     }

@@ -282,9 +282,11 @@ export function ReviewApp({
           ? ["pending", "accepted"].includes(decisions[id])
           : decisions[id] === "pending",
     );
+  // Only undecided changes can be decided: a decided one is changed back
+  // with Undo while that is possible.
   const kinds = (units: string[]): Kind[] =>
     !changes
-      ? ["accept", "reject", "comment"]
+      ? targets(units, "accept").length ? ["accept", "reject", "comment"] : []
       : targets(units, "accept").length
         ? ["accept", "reject"]
         : targets(units, "unstage").length
@@ -1569,6 +1571,7 @@ export function ReviewApp({
                 <Suspense fallback={<div className="paper-status" role="status"><div className="pulse" /></div>}>
                 <FullPaper
                   url={detail.pdf!}
+                  passes={detail.passes}
                   changes={placed}
                   render={(block, at) => change(block, at, true)}
                   scrollRoot={paper}

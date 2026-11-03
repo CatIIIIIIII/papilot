@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { ROOT, codeVersion, environmentVersion } from "./runtime.ts";
-import { Repo } from "./core/git.ts";
+import { gitDirOf } from "./core/git.ts";
 import { readJson, sleep, withLock } from "./core/files.ts";
 export interface Connection {
   url: string;
@@ -53,8 +53,9 @@ export class Client {
     return call<T>(this.url, route, data, this.token, timeout);
   }
 }
-export const serverHome = (root: string) =>
-  path.join(new Repo(root).gitDir(), "latex-review/server");
+// Every request an app forwards connects first, so the Git directory is
+// looked up once per repository rather than with a Git command each time.
+export const serverHome = (root: string) => path.join(gitDirOf(root), "latex-review/server");
 export async function probe(root: string, info: Partial<Connection> | null) {
   if (!info?.url) return null;
   const address = new URL(info.url);

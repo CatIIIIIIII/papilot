@@ -559,7 +559,7 @@ export const zhCN: Record<string, string> = {
   'Archived tasks': '已归档任务', 'Show current tasks': '显示未归档任务', 'Show archived tasks': '显示已归档任务',
   'Search tasks': '搜索任务', 'Search tasks…': '搜索任务…', 'Search task titles and instructions': '搜索任务标题和初始指令', 'Clear task search': '清除任务搜索',
   'Search archived tasks…': '搜索已归档任务…',
-  'Restore task': '恢复任务', 'Archive task': '归档任务', 'Archive': '归档', 'No matching tasks': '没有匹配的任务', 'No archived tasks': '暂无归档任务',
+  'Restore task': '恢复任务', 'Archive task': '归档任务', 'Archive': '归档', 'Delete': '删除', 'No matching tasks': '没有匹配的任务', 'No archived tasks': '暂无归档任务',
   'Undo': '撤销',
   'Keyboard shortcuts': '键盘快捷键',
   'Your review keyboard': '审阅快捷键一览',

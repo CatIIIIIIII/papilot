@@ -55,8 +55,12 @@
 .review-complete:has(.task-save-result) .review-complete-actions{margin:0;justify-content:flex-start}
 .task-save-result{display:inline-flex;align-items:center;gap:7px;min-width:0;overflow-wrap:anywhere}
 .task-save-result>svg{flex:none;color:var(--green)}
-.task-commit.task-saved{flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
-.task-saved .task-commit-actions{flex:none}
+/* The result keeps room for a few words; actions that do not fit beside it
+   move to their own line rather than squeezing it. */
+.task-commit.task-saved{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px}
+.task-saved .task-save-result{flex:1 1 9em}
+.task-saved .task-commit-actions{flex:none;margin-left:auto}
+.task-saved .task-delete:hover:not(:disabled){color:var(--danger)}
 .review-complete:has(.task-apply)>span{display:none}
 .task-apply textarea{field-sizing:content}
 @container task-commit (max-width:460px){.task-apply .task-commit-toolbar .task-commit-actions{flex-basis:auto;padding-top:0}}

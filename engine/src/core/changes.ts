@@ -20,10 +20,27 @@ export function diffUnits(
   after: string,
   isFigure: (p: string) => boolean = () => false,
 ): Unit[] {
-  const files = repo.changedFiles(before, after),
-    oldBlobs = repo.blobs(before, files),
-    newBlobs = repo.blobs(after, files),
-    units: Unit[] = [];
+  const files = repo.changedFiles(before, after);
+  return unitsOf(files, repo.blobs(before, files), repo.blobs(after, files), isFigure);
+}
+/** `diffUnits` for servers, which keep answering requests meanwhile. */
+export async function diffUnitsAsync(
+  repo: Repo,
+  before: string,
+  after: string,
+  isFigure: (p: string) => boolean = () => false,
+): Promise<Unit[]> {
+  const files = await repo.changedFilesAsync(before, after),
+    [old, next] = await Promise.all([repo.blobsAsync(before, files), repo.blobsAsync(after, files)]);
+  return unitsOf(files, old, next, isFigure);
+}
+function unitsOf(
+  files: string[],
+  oldBlobs: Record<string, Buffer | null>,
+  newBlobs: Record<string, Buffer | null>,
+  isFigure: (p: string) => boolean,
+): Unit[] {
+  const units: Unit[] = [];
   for (const file of files) {
     const old = oldBlobs[file],
       next = newBlobs[file],
@@ -159,15 +176,27 @@ export function scopeViolations(
   scope: Scope,
 ) {
   const files = repo.changedFiles(base, revision);
-  if (scope.ranges === null)
-    return files.filter((f) => !within(f, scope.paths));
-  const old = repo.blobs(base, files),
-    next = repo.blobs(revision, files),
-    violations: string[] = [];
+  if (scope.ranges === null) return files.filter((f) => !within(f, scope.paths));
+  return violationsOf(files, repo.blobs(base, files), repo.blobs(revision, files), scope);
+}
+/** `scopeViolations` for servers, which keep answering requests meanwhile. */
+export async function scopeViolationsAsync(repo: Repo, base: string, revision: string, scope: Scope) {
+  const files = await repo.changedFilesAsync(base, revision);
+  if (scope.ranges === null) return files.filter((f) => !within(f, scope.paths));
+  const [old, next] = await Promise.all([repo.blobsAsync(base, files), repo.blobsAsync(revision, files)]);
+  return violationsOf(files, old, next, scope);
+}
+function violationsOf(
+  files: string[],
+  old: Record<string, Buffer | null>,
+  next: Record<string, Buffer | null>,
+  scope: Scope,
+) {
+  const violations: string[] = [];
   for (const file of files) {
     const a = textOf(old[file]),
       b = textOf(next[file]),
-      allowed = scope.ranges[file];
+      allowed = scope.ranges?.[file];
     if (!allowed || old[file] === null || a === null || b === null) {
       violations.push(file);
       continue;

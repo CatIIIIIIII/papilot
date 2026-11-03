@@ -29,6 +29,25 @@ export function atomicWrite(
     fs.rmSync(temporary, { force: true });
   }
 }
+/** `atomicWrite` without blocking the event loop on the disk. */
+export async function atomicWriteAsync(file: string, data: string | Uint8Array) {
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomUUID()}.tmp`);
+  try {
+    const handle = await fs.promises.open(temporary, "w");
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.promises.rename(temporary, file);
+  } finally {
+    await fs.promises.rm(temporary, { force: true });
+  }
+}
+export const writeJsonAsync = (file: string, value: unknown) =>
+  atomicWriteAsync(file, JSON.stringify(value, null, 2) + "\n");
 export function readBytes(file: string): Buffer | null {
   try {
     return fs.readFileSync(file);

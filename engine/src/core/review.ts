@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { applyUnits, revertUnits } from "./changes.ts";
 import { now, readBytes, readJson, same, writeOrDelete } from "./files.ts";
-import { cleanPath, merge3 } from "./git.ts";
+import { cleanPath, merge3Async } from "./git.ts";
 import type { App } from "../server.ts";
 import type {
   Action,
@@ -293,6 +293,9 @@ export class Review {
       loose: render.loose,
       warnings: round.summary.warnings ?? [],
       files: `/files/${name}/${number}/`,
+      ...(round.summary.builds?.length
+        ? { build: { key: round.summary.builds.at(-1)!, targets: round.summary.targets ?? ["full"] } }
+        : {}),
       ...(render.references ? { references: render.references } : {}),
     };
   }
@@ -386,7 +389,21 @@ export class Review {
       warnings: this.latestRound(name)?.summary.warnings ?? [],
     };
   }
+  /** Accepts, rejects or comments on changes of the latest round. Runs after
+   *  every other write of the review engine, never beside one. */
   decide(
+    name: string,
+    data: {
+      action: ActionKind;
+      id?: string;
+      changes: string[];
+      round: number;
+      body?: string;
+    },
+  ) {
+    return this.app.exclusive(() => this.decideNow(name, data));
+  }
+  private async decideNow(
     name: string,
     data: {
       action: ActionKind;
@@ -443,8 +460,8 @@ export class Review {
     if (body.length > 20000)
       throw new Error("Comments are limited to 20,000 characters.");
     const selected = chosen.map((c) => latest.units.find((u) => u.id === c)!);
-    if (kind === "accept") this.accept(task, latest, identity, selected);
-    else if (kind === "reject") this.reject(task, latest, identity, selected);
+    if (kind === "accept") await this.accept(task, latest, identity, selected);
+    else if (kind === "reject") await this.reject(task, latest, identity, selected);
     else
       this.app.store.transaction(() => {
         this.record(
@@ -470,22 +487,20 @@ export class Review {
     for (const unit of units) (groups[unit.file] ??= []).push(unit);
     return groups;
   }
-  accept(task: Task, round: Round, identity: string, units: Unit[]) {
+  private async accept(task: Task, round: Round, identity: string, units: Unit[]) {
     const app = this.app,
       writes: [string, Buffer | null, Buffer | null][] = [],
       accepted: Record<string, Buffer | null> = {},
       conflicts: string[] = [],
       groups = this.byFile(units),
       files = Object.keys(groups),
-      before = app.repo.blobs(round.before, files),
-      after = app.repo.blobs(round.after, files),
-      records = app.repo.blobs(task.accepted, files);
+      [before, after, records] = await Promise.all([round.before, round.after, task.accepted].map((rev) => app.repo.blobsAsync(rev, files)));
     for (const [file, group] of Object.entries(groups)) {
       const proposed = applyUnits(before[file], after[file], group),
         target = task.deferred ? "" : safePath(app.root, file),
         current = task.deferred ? records[file] : readBytes(target),
-        [merged, conflict] = merge3(current, before[file], proposed),
-        [recorded, recordedConflict] = merge3(
+        [merged, conflict] = await merge3Async(current, before[file], proposed),
+        [recorded, recordedConflict] = await merge3Async(
           records[file],
           before[file],
           proposed,
@@ -498,7 +513,7 @@ export class Review {
       throw new Conflict(
         `${units.map((u) => u.id).join(", ")} can't be applied: ${conflicts.join(", ")} changed in your manuscript since this round was published. Nothing was written. Comment on the change to have the agent redo it.`,
       );
-    const afterCommit = app.repo.commitWith(
+    const afterCommit = await app.repo.commitWithAsync(
       task.accepted,
       accepted,
       "latex-review: accept " + units.map((u) => u.id).join(", "),
@@ -513,20 +528,19 @@ export class Review {
       { accepted_before: task.accepted, accepted_after: afterCommit },
       writes,
     );
-    this.carryOut(identity, "apply");
+    await this.carryOut(identity, "apply");
   }
-  reject(task: Task, round: Round, identity: string, units: Unit[]) {
+  private async reject(task: Task, round: Round, identity: string, units: Unit[]) {
     const writes: [string, Buffer | null, Buffer | null][] = [],
       kept: string[] = [],
       groups = this.byFile(units),
       files = Object.keys(groups),
-      before = this.app.repo.blobs(round.before, files),
-      after = this.app.repo.blobs(round.after, files);
+      [before, after] = await Promise.all([this.app.repo.blobsAsync(round.before, files), this.app.repo.blobsAsync(round.after, files)]);
     for (const [file, group] of Object.entries(groups)) {
       const reverted = revertUnits(before[file], after[file], group),
         target = safePath(task.worktree, file),
         current = readBytes(target),
-        [merged, conflict] = merge3(current, after[file], reverted);
+        [merged, conflict] = await merge3Async(current, after[file], reverted);
       if (conflict) kept.push(file);
       else if (!same(merged, current)) writes.push([target, current, merged]);
     }
@@ -540,7 +554,7 @@ export class Review {
       { not_reverted: kept },
       writes,
     );
-    this.carryOut(identity, "apply");
+    await this.carryOut(identity, "apply");
   }
   record(
     identity: string,
@@ -601,7 +615,7 @@ export class Review {
       if (!same(current.get(row.path)!, row.target))
         writeOrDelete(row.path, row.target);
   }
-  carryOut(identity: string, phase: Write["phase"]) {
+  private async carryOut(identity: string, phase: Write["phase"]) {
     try {
       this.perform(identity, phase);
     } catch (error) {
@@ -629,9 +643,9 @@ export class Review {
       });
       throw error;
     }
-    this.complete(identity);
+    await this.complete(identity);
   }
-  complete(identity: string) {
+  private async complete(identity: string) {
     const app = this.app,
       action = app.store.one<Action>(
         "SELECT * FROM actions WHERE id=?",
@@ -674,7 +688,7 @@ export class Review {
       }
     });
     if (action.kind === "accept")
-      app.repo.updateRef(
+      await app.repo.updateRefAsync(
         `refs/latex-review/${action.task}/accepted`,
         accepted!,
       );
@@ -713,7 +727,11 @@ export class Review {
     );
     return this.pageState(name);
   }
+  /** Undoes the latest decision, after every other write of the engine. */
   undo(name: string, identity: string) {
+    return this.app.exclusive(() => this.undoNow(name, identity));
+  }
+  private async undoNow(name: string, identity: string) {
     this.app.delivery.assertReady(name);
     const app = this.app,
       task = app.tasks.get(name),
@@ -734,7 +752,7 @@ export class Review {
       identity,
     )) {
       const current = readBytes(write.path),
-        [restored, conflict] = merge3(current, write.target, write.expected);
+        [restored, conflict] = await merge3Async(current, write.target, write.expected);
       if (conflict) conflicts.push(write.path);
       else if (!same(restored, current))
         restores.push([write.path, current, restored]);
@@ -757,15 +775,16 @@ export class Review {
           target,
         );
     });
-    this.carryOut(identity, "undo");
+    await this.carryOut(identity, "undo");
     return { ...this.pageState(name), restored: action.changes };
   }
-  recover() {
+  // At start, before any other write.
+  async recover() {
     for (const action of this.app.store.all<Action>(
       "SELECT * FROM actions WHERE status IN ('applying','undoing') ORDER BY seq",
     )) {
       try {
-        this.carryOut(
+        await this.carryOut(
           action.id,
           action.status === "applying" ? "apply" : "undo",
         );

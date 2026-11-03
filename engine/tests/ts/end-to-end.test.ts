@@ -87,16 +87,31 @@ it.skipIf(!tex)(
         "the guidance",
         "the patient guidance throughout my research",
       );
+      // A round that compiles only some chapters names its new version
+      // while it runs, so that a host can compile the whole paper meanwhile.
+      const named: string[][] = [];
       const publish = async () => {
-        const job = app.publisher.submit(task.name);
+        const job = app.publisher.submit(task.name),
+          seen = new Set<string>(),
+          watch = setInterval(() => {
+            const revision = app.publisher.revision(job.id);
+            if (revision) seen.add(revision);
+          }, 5);
         await app.publisher.join();
+        clearInterval(watch);
+        named.push([...seen]);
+        expect(app.publisher.revision(job.id)).toBeNull();
         const done = app.publisher.job(job.id);
         expect(done.status, JSON.stringify(done.result)).toBe("done");
         return done.result;
       };
       expect((await publish()).outcome).toBe("published");
       const round = app.review.round(task.name, 1);
+      expect(round.summary.targets).not.toEqual(["full"]);
+      expect(named[0]).toEqual([round.after]);
       const detail = app.review.roundDetail(task.name, 1);
+      // A host can show the chapters the round compiled while the whole paper compiles.
+      expect(detail.build).toEqual({ key: round.summary.builds!.at(-1), targets: round.summary.targets });
       expect(detail.units).toHaveLength(1);
       expect(detail.units[0]).toMatchObject({
         visual: "text",
@@ -157,7 +172,7 @@ it.skipIf(!tex)(
       expect(detail.units.some((u) => u.kind === "figure")).toBe(true);
       expect(detail.units.some((u) => u.visual === "identical")).toBe(true);
       expect(detail.units.every((u) => u.visual !== "unmapped")).toBe(true);
-      const state = app.review.decide(task.name, {
+      const state = await app.review.decide(task.name, {
         action: "accept",
         round: 1,
         changes: detail.units.map((u) => u.id),
@@ -166,7 +181,7 @@ it.skipIf(!tex)(
         Object.values(state.decisions).every((d) => d === "accepted"),
       ).toBe(true);
       expect(app.review.summary(task.name).state).toBe("done");
-      app.review.undo(task.name, state.undo!.id);
+      await app.review.undo(task.name, state.undo!.id);
       expect(app.review.summary(task.name).state).toBe("reviewing");
     } finally {
       await app.close();
@@ -228,7 +243,7 @@ it.skipIf(!tex)(
           const result = await original.apply(this, args);
           if (!decided) {
             decided = true;
-            app.review.decide(task.name, {
+            await app.review.decide(task.name, {
               action: "accept",
               round: 1,
               changes: ["c001"],

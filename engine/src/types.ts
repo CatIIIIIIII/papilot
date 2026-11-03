@@ -413,6 +413,14 @@ export interface RoundDetail extends Omit<RenderedRound, "units"> {
   /** The new version's complete PDF, when the host serves one, so the review
    * can show the changes in the whole paper. */
   pdf?: string;
+  /** The build whose PDF the strips come from, and the chapters it compiled
+   * (["full"] when it is the whole paper). */
+  build?: { key: string; targets: string[] };
+  /** While that PDF compiles, a host may show each TeX pass of it: this URL
+   * answers `?after=N` with `{ pass }`, a later pass whose PDF is `pdf?pass=`
+   * that number, `{ pass: null }` once `pdf` is complete, or `{}` to ask
+   * again. */
+  passes?: string;
 }
 export type TaskState =
   "editing" | "building" | "build_failed" | "reviewing" | "revise" | "done";

@@ -161,6 +161,16 @@ export class Workspace extends EventEmitter {
     this.emit('change');
   }
   snapshot(): Snapshot { return { version: VERSION, projects: this.store.projects(), tasks: this.store.tasks(), requests: [...this.requests.values()].map(({ rpcId: _, agent: __, ...r }) => r), runtime: this.runtime, runtimes: this.runtimes }; }
+  /** Loads the SDKs of the agents this host has before the server answers
+   *  requests. Evaluating one blocks for up to a few hundred milliseconds,
+   *  which would otherwise hold up whatever the app asked for while the
+   *  agents connect. SDKs not installed yet are fetched when first used. */
+  async preload() {
+    await Promise.all(AGENTS.map(async id => {
+      const agent = this.agents[id];
+      try { if (agent.preload && (!agent.detect || agent.detect())) await agent.preload(); } catch { /* Connecting reports it. */ }
+    }));
+  }
   async connect() {
     if (this.connecting) return this.connecting;
     this.connecting = Promise.all(AGENTS.map(id => this.connectAgent(id))).then(() => { this.emit('change'); this.schedule(); }).finally(() => { this.connecting = null; });
@@ -780,6 +790,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     let pending = this.store.task(taskId).pendingBuild!;
     let client: ReviewClient | undefined;
     let reuse = resume;
+    let compiling: string | undefined;
     // Only connection failures are retried. Every submission has a persisted key,
     // so losing its response cannot submit a second build.
     const request = async <T>(work: (client: ReviewClient) => Promise<T>, submitting = false): Promise<T> => {
@@ -810,6 +821,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
           this.store.updateTask(taskId, { pendingBuild: pending });
         }
         const current = await request(client => client.get(`/api/jobs/${pending.job}`));
+        // The round's new version exists; it compiles only some chapters here.
+        if (typeof current.revision === 'string' && current.revision !== compiling) {
+          compiling = current.revision;
+          this.emit('publishing', taskId, compiling);
+        }
         const summary = await request(client => client.get(taskRoute(task.name)));
         this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, job: { ...current, id: pending.job } } });
         if (current.status === 'done' || current.status === 'completed' || current.status === 'succeeded') {
@@ -838,6 +854,8 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
         await delay(1500);
       }
       await this.refresh(taskId);
+      // What applying the new round will write can now be compiled ahead.
+      this.emit('reviewed', taskId);
     } catch (e) {
       if (this.closing) return;
       if (reviewConnectionError(e)) {

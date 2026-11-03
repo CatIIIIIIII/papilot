@@ -14,47 +14,47 @@ function note(quote: string, rects = true): Annotation {
   return { id: 'saved-note', projectId: 'paper', key: 'old-pdf', page: 0, rect, ...(rects ? { rects: [rect] } : {}), quote, comment: 'Keep my note.', source: null, createdAt: 1 };
 }
 
-test('unchanged PDF pages preserve text and region positions', () => {
+test('unchanged PDF pages preserve text and region positions', async () => {
   const text = 'A uniquely marked sentence.';
   for (const textSelection of [true, false]) {
     const saved = note(text, textSelection);
-    const result = placeAnnotation(saved, pages(page(text)), pages(page(text)));
+    const result = await placeAnnotation(saved, pages(page(text)), pages(page(text)));
     assert.deepEqual(result, { page: 0, rect: saved.rect, rects: saved.rects });
     assert.equal(saved.key, 'old-pdf');
   }
 });
 
-test('text follows its unambiguous passage onto another page', () => {
+test('text follows its unambiguous passage onto another page', async () => {
   const text = 'A uniquely marked sentence.', saved = note(text);
-  const result = placeAnnotation(saved, pages(page(text)), pages(page('Inserted content.'), page(text, 170)));
+  const result = await placeAnnotation(saved, pages(page(text)), pages(page('Inserted content.'), page(text, 170)));
   assert.equal(result?.page, 1);
   assert.equal(result?.rect[1], 170 / 800);
   assert.equal(saved.comment, 'Keep my note.');
 });
 
-test('removed text and ambiguous copies retain their earlier anchors', () => {
+test('removed text and ambiguous copies retain their earlier anchors', async () => {
   const text = 'A uniquely marked sentence.', saved = note(text);
-  assert.equal(placeAnnotation(saved, pages(page(text)), pages(page('The original sentence was removed.'))), null);
-  assert.equal(placeAnnotation(saved, pages(page(text)), pages(page(text, 90), page(text, 170))), null);
+  assert.equal(await placeAnnotation(saved, pages(page(text)), pages(page('The original sentence was removed.'))), null);
+  assert.equal(await placeAnnotation(saved, pages(page(text)), pages(page(text, 90), page(text, 170))), null);
 });
 
-test('short selections need their surrounding text to disambiguate them', () => {
+test('short selections need their surrounding text to disambiguate them', async () => {
   const text = 'value', context = ' surrounded by enough unchanged context to identify the paragraph';
-  assert.equal(placeAnnotation(note(text), pages(page(text)), pages(page(text, 80))), null);
-  const result = placeAnnotation(note(text), pages(page(text + context)), pages(page('An unrelated value'), page(text + context, 80)));
+  assert.equal(await placeAnnotation(note(text), pages(page(text)), pages(page(text, 80))), null);
+  const result = await placeAnnotation(note(text), pages(page(text + context)), pages(page('An unrelated value'), page(text + context, 80)));
   assert.equal(result?.page, 1);
 });
 
-test('a changed figure cannot inherit a region annotation merely because its text is unchanged', () => {
+test('a changed figure cannot inherit a region annotation merely because its text is unchanged', async () => {
   const saved = note('Figure caption.', false);
-  assert.equal(placeAnnotation(saved, pages(page(saved.quote, 20, 'old figure')), pages(page(saved.quote, 20, 'new figure'))), null);
-  const moved = placeAnnotation(saved, pages(page(saved.quote, 20, 'old figure')), pages(page('New cover'), page(saved.quote, 20, 'old figure')));
+  assert.equal(await placeAnnotation(saved, pages(page(saved.quote, 20, 'old figure')), pages(page(saved.quote, 20, 'new figure'))), null);
+  const moved = await placeAnnotation(saved, pages(page(saved.quote, 20, 'old figure')), pages(page('New cover'), page(saved.quote, 20, 'old figure')));
   assert.equal(moved?.page, 1);
 });
 
-test('a truncated stored quote still preserves the full highlighted passage', () => {
+test('a truncated stored quote still preserves the full highlighted passage', async () => {
   const text = 'A uniquely marked sentence that is longer than its stored preview.';
   const saved = { ...note(text), quote: text.slice(0, 18) };
-  const result = placeAnnotation(saved, pages(page(text)), pages(page(text, 80)));
+  const result = await placeAnnotation(saved, pages(page(text)), pages(page(text, 80)));
   assert.equal(result?.rect[2], saved.rect[2]);
 });

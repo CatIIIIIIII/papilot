@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { App } from "../server.ts";
-import { merge3 } from "./git.ts";
+import { merge3Async } from "./git.ts";
 import { readBytes, same, writeOrDelete } from "./files.ts";
 import { safePath } from "./review.ts";
-import { GENERATED, revisionReader } from "./tasks.ts";
+import { GENERATED, revisionReaderAsync } from "./tasks.ts";
 import { buildOutline, resolveSections, selectedRanges } from "./outline.ts";
 
 export interface Reconciliation {
@@ -34,45 +34,46 @@ export class Reconciliations {
   clear(name: string) {
     this.app.store.execute("DELETE FROM reconciliations WHERE task=?", name);
   }
-  start(name: string, force = false, intent?: Reconciliation["intent"]) {
+  // Callers hold the engine's write turn.
+  async start(name: string, force = false, intent?: Reconciliation["intent"]) {
     const app = this.app, task = app.tasks.get(name), previous = this.get(name);
     if (previous && (!previous.ready || (!force && (app.review.latestRound(name)?.number ?? 0) <= previous.round)))
       return this.prepare(name, previous);
-    const worktreeBefore = app.tasks.snapshot(task);
-    if (app.repo.changedFiles(task.accepted, worktreeBefore).length)
+    const worktreeBefore = await app.tasks.snapshotAsync(task);
+    if ((await app.repo.changedFilesAsync(task.accepted, worktreeBefore)).length)
       throw new Error("Review the latest task edits before applying the manuscript changes.");
     const delivered = app.delivery.get(name);
     const sourceBase = previous?.base ?? (delivered && delivered.mode !== "branch" ? delivered.accepted : task.base);
-    const base = app.repo.snapshot([app.project.source_dir, ...task.scope.paths], GENERATED);
-    const changed = app.repo.changedFiles(sourceBase, task.accepted);
-    const old = app.repo.blobs(sourceBase, changed), accepted = app.repo.blobs(task.accepted, changed), current = app.repo.blobs(base, changed);
+    const base = await app.repo.snapshotAsync([app.project.source_dir, ...task.scope.paths], GENERATED);
+    const changed = await app.repo.changedFilesAsync(sourceBase, task.accepted);
+    const [old, accepted, current] = await Promise.all([sourceBase, task.accepted, base].map((rev) => app.repo.blobsAsync(rev, changed)));
     const files: string[] = [], contents: Record<string, Buffer | null> = {};
     for (const file of changed) {
-      const [merged, conflict] = merge3(current[file], old[file], accepted[file]);
+      const [merged, conflict] = await merge3Async(current[file], old[file], accepted[file]);
       if (!conflict) contents[file] = merged;
       else {
         files.push(file);
         // Keep clean hunks even in a file with conflicts. At overlapping
         // hunks keep the latest manuscript as the baseline for human review.
-        const [kept, failed] = merge3(current[file], old[file], accepted[file], true);
+        const [kept, failed] = await merge3Async(current[file], old[file], accepted[file], true);
         contents[file] = failed ? current[file] : kept;
       }
     }
     if (!files.length) return null; // The author may have resolved it meanwhile.
-    const reviewBase = app.repo.commitWith(base, contents, "latex-review: prepare merge review");
+    const reviewBase = await app.repo.commitWithAsync(base, contents, "latex-review: prepare merge review");
     const data: Reconciliation = { id: randomUUID(), round: app.review.latestRound(name)?.number ?? 0, files, sourceBase, sourceAccepted: task.accepted, base, reviewBase, worktreeBefore, ready: false, ...(intent ? { intent } : {}) };
-    for (const file of app.repo.changedFiles(worktreeBefore, reviewBase)) safePath(task.worktree, file);
+    for (const file of await app.repo.changedFilesAsync(worktreeBefore, reviewBase)) safePath(task.worktree, file);
     // Keep the three versions available to the agent and across Git GC.
     for (const [kind, rev] of Object.entries({ original: sourceBase, proposed: task.accepted, current: base, before: worktreeBefore, review: reviewBase }))
-      app.repo.updateRef(`refs/latex-review/${name}/merge/${data.id}/${kind}`, rev);
+      await app.repo.updateRefAsync(`refs/latex-review/${name}/merge/${data.id}/${kind}`, rev);
     app.store.execute("INSERT OR REPLACE INTO reconciliations(task,data) VALUES(?,?)", name, JSON.stringify(data));
     return this.prepare(name, data);
   }
-  prepare(name: string, data: Reconciliation) {
+  async prepare(name: string, data: Reconciliation) {
     if (data.ready) return data;
     const app = this.app, task = app.tasks.get(name);
-    const files = app.repo.changedFiles(data.worktreeBefore, data.reviewBase);
-    const before = app.repo.blobs(data.worktreeBefore, files), after = app.repo.blobs(data.reviewBase, files);
+    const files = await app.repo.changedFilesAsync(data.worktreeBefore, data.reviewBase);
+    const [before, after] = await Promise.all([app.repo.blobsAsync(data.worktreeBefore, files), app.repo.blobsAsync(data.reviewBase, files)]);
     const writes = files.map(file => ({ file, path: safePath(task.worktree, file) }));
     for (const write of writes) {
       const current = readBytes(write.path);
@@ -81,21 +82,22 @@ export class Reconciliations {
     }
     let scope = task.scope;
     if (scope.sections.length) {
-      const outline = buildOutline(revisionReader(app.repo, data.reviewBase, app.project.doc_dir), app.project.main);
+      const outline = buildOutline(await revisionReaderAsync(app.repo, data.reviewBase, app.project.doc_dir), app.project.main);
       const [ranges, sections] = selectedRanges(outline.nodes, resolveSections(outline.nodes, scope.sections.map(section => section.id.replace(/^label:/, ""))));
       scope = { ranges, sections, paths: Object.keys(ranges).sort() };
     }
     for (const write of writes) writeOrDelete(write.path, after[write.file]);
-    app.repo.updateRef(`refs/latex-review/${name}/base`, data.reviewBase);
-    app.repo.updateRef(`refs/latex-review/${name}/accepted`, data.reviewBase);
+    await app.repo.updateRefAsync(`refs/latex-review/${name}/base`, data.reviewBase);
+    await app.repo.updateRefAsync(`refs/latex-review/${name}/accepted`, data.reviewBase);
     app.store.transaction(() => {
       app.store.execute("UPDATE tasks SET base=?,accepted=?,scope=? WHERE name=?", data.reviewBase, data.reviewBase, JSON.stringify(scope), name);
       app.store.execute("UPDATE reconciliations SET data=? WHERE task=?", JSON.stringify({ ...data, ready: true }), name);
     });
     return { ...data, ready: true };
   }
-  recover() {
+  // At start, before any other write.
+  async recover() {
     for (const row of this.app.store.all<{ task: string; data: Reconciliation }>("SELECT * FROM reconciliations"))
-      if (!row.data.ready) try { this.prepare(row.task, row.data); } catch { /* Retry without overwriting intervening edits. */ }
+      if (!row.data.ready) try { await this.prepare(row.task, row.data); } catch { /* Retry without overwriting intervening edits. */ }
   }
 }

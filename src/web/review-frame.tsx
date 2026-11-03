@@ -56,7 +56,7 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .review-complete-actions .commit-button{height:auto;min-height:30px;padding:5px 12px;white-space:nowrap}
     .review-complete-actions .commit-button:disabled{opacity:.5;cursor:default}
     :root[data-papilot-phone] .review-complete-actions{justify-content:flex-start;margin-left:0}
-    :root[data-papilot-phone] .review-complete-actions .commit-state{flex-basis:100%}
+    :root[data-papilot-phone] .review-complete-actions .commit-state:not(.task-save-result){flex-basis:100%}
     :root[data-papilot-phone] .review-complete-actions .commit-button{min-height:40px}
     /* Page images follow the theme like the manuscript's PDF. They are
        transparent: the sheet is the paper, and the before/after rows tint it. */

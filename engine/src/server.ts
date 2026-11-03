@@ -52,9 +52,23 @@ export class App {
     this.confirmations = new Confirmations(
       path.join(this.state, "references-confirmed.json"),
     );
-    this.review.recover();
-    this.delivery.recover();
-    this.reconciliation.recover();
+    // Writes interrupted by a restart are finished first, before any other.
+    this.ready = this.exclusive(async () => {
+      await this.review.recover();
+      await this.delivery.recover();
+      await this.reconciliation.recover();
+    });
+  }
+  /** Settles once writes interrupted by a restart are finished. */
+  ready: Promise<void>;
+  private writing: Promise<unknown> = Promise.resolve();
+  /** Runs `work` after every write that started before it. Decisions,
+   *  deliveries and task changes run Git without blocking the server, so this
+   *  keeps them from interleaving, as when they ran in one piece. */
+  exclusive<T>(work: () => T | Promise<T>): Promise<T> {
+    const result = this.writing.then(() => work());
+    this.writing = result.then(() => undefined, () => undefined);
+    return result;
   }
   get project() {
     const config = path.join(this.root, CONFIG_NAME),
@@ -153,12 +167,14 @@ export function createServer(app: App) {
       csrf: app.csrf,
     }));
     server.get<{ Params: { id: string } }>("/api/jobs/:id", (request) => {
-      const j = app.publisher.job(request.params.id);
+      const j = app.publisher.job(request.params.id),
+        revision = app.publisher.revision(j.id);
       return {
         id: j.id,
         task: j.task,
         status: j.status,
         phase: j.phase,
+        ...(revision ? { revision } : {}),
         ...j.result,
       };
     });
@@ -324,10 +340,10 @@ export function createServer(app: App) {
           },
         },
       },
-      (request) => {
+      async (request) => {
         const d = request.body;
         return app.taskInfo(
-          app.tasks.create(d.name, d.title, d.sections, d.files, d.deferred).name,
+          (await app.tasks.createAsync(d.name, d.title, d.sections, d.files, d.deferred)).name,
         );
       },
     );
@@ -351,6 +367,12 @@ export function createServer(app: App) {
       { schema: { body: { ...objectSchema, additionalProperties: false, properties: { confirmation: { type: "string", maxLength: 100 }, keepCurrent: { type: "boolean" }, mode: { enum: ["workspace", "commit"] }, message: { type: "string", maxLength: 5000 } } } } },
       request => app.delivery.apply(request.params.name, request.body.keepCurrent === true, request.body.mode, request.body.message, request.body.confirmation),
     );
+    // A speculative build of the manuscript compiles what applying the task
+    // would write, so its PDF is ready when the author applies it.
+    server.get<{ Params: { name: string } }>("/api/tasks/:name/preview", async (request) => {
+      const writes = await app.delivery.preview(request.params.name);
+      return { files: writes && Object.fromEntries(Object.entries(writes).map(([file, data]) => [file, data?.toString("base64") ?? null])) };
+    });
     server.post<{ Params: { name: string }; Body: { mode: "workspace" | "branch"; message?: string } }>(
       "/api/tasks/:name/deliver",
       { schema: { body: { ...objectSchema, required: ["mode"], properties: { mode: { enum: ["workspace", "branch"] }, message: { type: "string", maxLength: 5000 } } } } },
@@ -503,6 +525,8 @@ async function run(root: string, port: number, idle: number, owner?: Owner) {
     server = createServer(app);
   let timer: NodeJS.Timeout | undefined;
   try {
+    // Requests see the state that interrupted writes leave once finished.
+    await app.ready.catch(() => undefined);
     try {
       await server.listen({ host: "127.0.0.1", port });
     } catch (error) {

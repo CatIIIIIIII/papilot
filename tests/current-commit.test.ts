@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Fixture, METHOD, fakeRound } from '../engine/tests/ts/helpers.ts';
 
-function accept(app: ReturnType<Fixture['app']>, name: string) {
+async function accept(app: ReturnType<Fixture["app"]>, name: string) {
   const round = fakeRound(app, name);
-  app.review.decide(name, { id: crypto.randomUUID(), round: round.number, action: 'accept', changes: round.units.map(unit => unit.id) });
+  await app.review.decide(name, { id: crypto.randomUUID(), round: round.number, action: 'accept', changes: round.units.map(unit => unit.id) });
 }
 
 test('one task commit updates the current manuscript branch, excludes rejected and unrelated staged/unstaged edits', async () => {
@@ -23,9 +23,9 @@ test('one task commit updates the current manuscript branch, excludes rejected a
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted wording.');
     disk.edit(task, METHOD, 'Detail sentence 2.', 'Rejected wording.');
     const round = fakeRound(app, task.name);
-    app.review.decide(task.name, { id: 'accept', round: round.number, action: 'accept', changes: [round.units[0].id] });
-    app.review.decide(task.name, { id: 'reject', round: round.number, action: 'reject', changes: [round.units[1].id] });
-    const result = app.delivery.apply(task.name, false, 'commit', 'Improve method').delivery!;
+    await app.review.decide(task.name, { id: 'accept', round: round.number, action: 'accept', changes: [round.units[0].id] });
+    await app.review.decide(task.name, { id: 'reject', round: round.number, action: 'reject', changes: [round.units[1].id] });
+    const result = (await app.delivery.apply(task.name, false, 'commit', 'Improve method')).delivery!;
     assert.equal(result.mode, 'commit');
     assert.equal(result.branch, branch);
     assert.equal(disk.repo.rev('HEAD'), result.commit);
@@ -44,10 +44,10 @@ test('one task commit updates the current manuscript branch, excludes rejected a
     assert.equal(removeHashes(disk.repo.text(['diff', '--cached'])), removeHashes(stagedDiff));
     assert.equal(removeHashes(disk.repo.text(['diff'])), removeHashes(unstagedDiff));
     assert.equal(disk.repo.text(['for-each-ref', '--format=%(refname)', 'refs/heads/papilot/']), '');
-    assert.deepEqual(app.delivery.apply(task.name, false, 'commit', 'Retry').delivery, result);
+    assert.deepEqual((await app.delivery.apply(task.name, false, 'commit', 'Retry')).delivery, result);
     disk.edit(task, METHOD, 'Method sentence 10.', 'Later task change.');
-    accept(app, task.name);
-    app.delivery.apply(task.name);
+    await accept(app, task.name);
+    await app.delivery.apply(task.name);
     assert.equal(disk.repo.rev('HEAD'), result.commit, 'later rounds may choose apply without commit');
     assert.match(disk.read(METHOD), /Later task change/);
   } finally { await disk.close(); }
@@ -58,9 +58,9 @@ for (const legacy of [false, true]) test(`commit finishes with a clean manuscrip
   try {
     const task = app.tasks.create('clean', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted text.');
-    accept(app, task.name);
-    const old = legacy ? app.delivery.deliver(task.name, 'branch', 'Old commit') : null;
-    const result = app.delivery.apply(task.name, false, 'commit', 'Reviewed task').delivery!;
+    await accept(app, task.name);
+    const old = legacy ? await app.delivery.deliver(task.name, 'branch', 'Old commit') : null;
+    const result = (await app.delivery.apply(task.name, false, 'commit', 'Reviewed task')).delivery!;
     assert.equal(disk.repo.rev('HEAD'), result.commit);
     assert.equal(disk.repo.text(['status', '--porcelain']), '');
     if (old) assert.equal(disk.repo.rev(old.branch!), old.commit);
@@ -73,18 +73,19 @@ test('conflict review remembers the commit choice and message across restart and
   try {
     const task = app.tasks.create('conflict-commit', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'Method sentence 2.', 'Task proposal.');
-    accept(app, task.name);
+    await accept(app, task.name);
     disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'New published wording.'));
     disk.repo.run(['add', METHOD]); disk.repo.run(['commit', '-m', 'Other author edit']);
     const head = disk.repo.rev('HEAD');
-    const result = app.delivery.apply(task.name, false, 'commit', 'My custom message');
+    const result = await app.delivery.apply(task.name, false, 'commit', 'My custom message');
     assert.deepEqual(result.reconciliation?.intent, { mode: 'commit', message: 'My custom message' });
     assert.equal(disk.repo.rev('HEAD'), head);
     assert.match(disk.read(METHOD), /New published wording/);
     const recovered = disk.app();
+    await recovered.ready;
     disk.edit(task, METHOD, 'New published wording.', 'Reviewed combined wording.');
     accept(recovered, task.name);
-    const saved = recovered.delivery.apply(task.name).delivery!;
+    const saved = (await recovered.delivery.apply(task.name)).delivery!;
     assert.equal(saved.mode, 'commit');
     assert.equal(disk.repo.rev('HEAD'), saved.commit);
     assert.equal(disk.repo.rev('HEAD^'), head);
@@ -100,16 +101,16 @@ test('an overlapping earlier edit needs explicit combined-commit review and can 
     disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'My uncommitted baseline.'));
     const task = app.tasks.create('dependency', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'My uncommitted baseline.', 'Reviewed rewrite.');
-    accept(app, task.name);
+    await accept(app, task.name);
     const head = disk.repo.rev('HEAD'), index = disk.repo.text(['write-tree']), content = disk.read(METHOD);
-    const preview = app.delivery.apply(task.name, false, 'commit', 'Task').commitReview!;
+    const preview = (await app.delivery.apply(task.name, false, 'commit', 'Task')).commitReview!;
     assert.deepEqual(preview.files, [METHOD]);
     assert.match(preview.diff, /Reviewed rewrite/);
     assert.equal(disk.repo.rev('HEAD'), head);
     assert.equal(disk.repo.text(['write-tree']), index);
     assert.equal(disk.read(METHOD), content);
     assert.equal(app.delivery.get(task.name), undefined);
-    app.delivery.apply(task.name);
+    await app.delivery.apply(task.name);
     assert.match(disk.read(METHOD), /Reviewed rewrite/);
   } finally { await disk.close(); }
 });
@@ -119,19 +120,20 @@ for (const phase of ['before-files', 'after-files', 'after-index']) test(`task c
   try {
     const task = app.tasks.create('recover-commit', 'Review', [], ['paper'], true);
     disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted text.');
-    accept(app, task.name);
-    const save = app.delivery.save.bind(app.delivery), run = app.repo.run.bind(app.repo), rename = fs.renameSync;
+    await accept(app, task.name);
+    const save = app.delivery.save.bind(app.delivery), run = app.repo.runAsync.bind(app.repo), rename = fs.renameSync;
     const head = disk.repo.rev('HEAD');
     if (phase === 'after-index') app.delivery.save = (name, data) => { if (data.done) throw new Error('Simulated crash'); save(name, data); };
-    if (phase === 'before-files') app.repo.run = (args, options) => { const result = run(args, options); if (args[0] === 'update-ref' && args.includes('Papilot: commit reviewed task')) throw new Error('Simulated crash'); return result; };
+    if (phase === 'before-files') app.repo.runAsync = async (args, options) => { const result = await run(args, options); if (args[0] === 'update-ref' && args.includes('Papilot: commit reviewed task')) throw new Error('Simulated crash'); return result; };
     if (phase === 'after-files') fs.renameSync = ((from, to) => { if (String(from).endsWith('index.lock')) throw new Error('Simulated crash'); return rename(from, to); }) as typeof fs.renameSync;
-    try { assert.throws(() => app.delivery.apply(task.name, false, 'commit', 'One commit'), /Simulated crash/); }
-    finally { fs.renameSync = rename; app.repo.run = run; app.delivery.save = save; }
+    try { await assert.rejects(async () => app.delivery.apply(task.name, false, 'commit', 'One commit'), /Simulated crash/); }
+    finally { fs.renameSync = rename; app.repo.runAsync = run; app.delivery.save = save; }
     const pending = app.delivery.get(task.name)!;
     assert.equal(pending.done, false);
     assert.equal(disk.repo.rev('HEAD'), pending.commit);
     const recovered = disk.app();
-    const result = recovered.delivery.apply(task.name, false, 'commit', 'Retry').delivery!;
+    await recovered.ready;
+    const result = (await recovered.delivery.apply(task.name, false, 'commit', 'Retry')).delivery!;
     assert.equal(result.commit, pending.commit);
     assert.equal(disk.repo.rev('HEAD^'), head);
     assert.equal(disk.repo.text(['status', '--porcelain']), '');
@@ -142,7 +144,7 @@ for (const race of ['branch', 'head', 'index', 'lock']) test(`task commit preser
   const disk = new Fixture(), app = disk.app();
   try {
     const task = app.tasks.create('race', 'Review', [], ['paper'], true);
-    disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted text.'); accept(app, task.name);
+    disk.edit(task, METHOD, 'Method sentence 2.', 'Accepted text.'); await accept(app, task.name);
     const original = disk.read(METHOD), save = app.delivery.save.bind(app.delivery);
     let expectedHead = '', expectedIndex = '';
     const lock = path.resolve(disk.root, disk.repo.text(['rev-parse', '--git-path', 'index.lock']));
@@ -154,7 +156,7 @@ for (const race of ['branch', 'head', 'index', 'lock']) test(`task commit preser
       expectedHead = disk.repo.rev('HEAD'); expectedIndex = disk.repo.text(['write-tree']);
       if (race === 'lock') fs.writeFileSync(lock, 'Other operation');
     };
-    assert.throws(() => app.delivery.apply(task.name, false, 'commit', 'Task'), /branch changed|branch moved|staged changes changed|Another Git operation/);
+    await assert.rejects(async () => app.delivery.apply(task.name, false, 'commit', 'Task'), /branch changed|branch moved|staged changes changed|Another Git operation/);
     assert.equal(disk.repo.rev('HEAD'), expectedHead);
     if (race === 'lock') { assert.equal(fs.readFileSync(lock, 'utf8'), 'Other operation'); fs.rmSync(lock); }
     assert.equal(disk.repo.text(['write-tree']), expectedIndex);
@@ -169,13 +171,13 @@ for (const staged of [false, true]) test(`confirmed combined commit includes the
     if (staged) disk.repo.run(['add', METHOD]);
     disk.write(METHOD, disk.read(METHOD).replace('Detail sentence 10.', 'Unrelated unstaged text.'));
     const task = app.tasks.create('together', 'Review', [], ['paper'], true);
-    disk.edit(task, METHOD, 'Earlier title.', 'Reviewed final title.'); accept(app, task.name);
+    disk.edit(task, METHOD, 'Earlier title.', 'Reviewed final title.'); await accept(app, task.name);
     const head = disk.repo.rev('HEAD'), original = disk.read(METHOD), index = disk.repo.text(['write-tree']);
-    const preview = app.delivery.apply(task.name, false, 'commit', 'Final title').commitReview!;
+    const preview = (await app.delivery.apply(task.name, false, 'commit', 'Final title')).commitReview!;
     assert.match(preview.diff, /Reviewed final title/);
     assert.doesNotMatch(preview.diff, /Unrelated/);
     assert.equal(disk.repo.rev('HEAD'), head); assert.equal(disk.read(METHOD), original); assert.equal(disk.repo.text(['write-tree']), index);
-    const saved = app.delivery.apply(task.name, false, 'commit', 'Final title', preview.token).delivery!;
+    const saved = (await app.delivery.apply(task.name, false, 'commit', 'Final title', preview.token)).delivery!;
     assert.equal(saved.commit, disk.repo.rev('HEAD'));
     assert.equal(disk.repo.rev('HEAD^'), head);
     assert.match(disk.repo.blob('HEAD', METHOD)!.toString(), /Reviewed final title/);
@@ -191,11 +193,11 @@ test('a combined commit confirmation expires when the manuscript changes', async
   try {
     disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'Earlier title.'));
     const task = app.tasks.create('preview-race', 'Review', [], ['paper'], true);
-    disk.edit(task, METHOD, 'Earlier title.', 'Reviewed final title.'); accept(app, task.name);
-    const preview = app.delivery.apply(task.name, false, 'commit', 'Final title').commitReview!;
+    disk.edit(task, METHOD, 'Earlier title.', 'Reviewed final title.'); await accept(app, task.name);
+    const preview = (await app.delivery.apply(task.name, false, 'commit', 'Final title')).commitReview!;
     disk.write(METHOD, disk.read(METHOD).replace('Detail sentence 19.', 'Changed during preview.'));
     const head = disk.repo.rev('HEAD');
-    const next = app.delivery.apply(task.name, false, 'commit', 'Final title', preview.token).commitReview!;
+    const next = (await app.delivery.apply(task.name, false, 'commit', 'Final title', preview.token)).commitReview!;
     assert.ok(next); assert.notEqual(next.token, preview.token); assert.equal(disk.repo.rev('HEAD'), head);
     assert.equal(app.delivery.get(task.name), undefined);
   } finally { await disk.close(); }
@@ -207,9 +209,9 @@ test('a combined commit does not discard a different version staged by the autho
     disk.write(METHOD, disk.read(METHOD).replace('Method sentence 2.', 'Separate staged title.')); disk.repo.run(['add', METHOD]);
     disk.write(METHOD, disk.read(METHOD).replace('Separate staged title.', 'Earlier working title.'));
     const task = app.tasks.create('staged-version', 'Review', [], ['paper'], true);
-    disk.edit(task, METHOD, 'Earlier working title.', 'Reviewed final title.'); accept(app, task.name);
+    disk.edit(task, METHOD, 'Earlier working title.', 'Reviewed final title.'); await accept(app, task.name);
     const head = disk.repo.rev('HEAD'), index = disk.repo.text(['write-tree']);
-    assert.throws(() => app.delivery.apply(task.name, false, 'commit', 'Title'), /different version/);
+    await assert.rejects(async () => app.delivery.apply(task.name, false, 'commit', 'Title'), /different version/);
     assert.equal(disk.repo.rev('HEAD'), head); assert.equal(disk.repo.text(['write-tree']), index);
   } finally { await disk.close(); }
 });

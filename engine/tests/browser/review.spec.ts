@@ -150,6 +150,23 @@ test("source diff shows TeX and local accept can be undone", async ({
   );
   await expect(page.locator('.change[data-state="accepted"]')).toHaveCount(0);
 });
+test("a decided change offers no decisions, only the way to the next undecided one", async ({
+  page,
+}) => {
+  const first = page.locator(".change.current");
+  await first.getByRole("button", { name: "Accept", exact: true }).click();
+  await expect(page.getByRole("progressbar", { name: "1 of 7 decided", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  const accepted = page.locator('.change[data-state="accepted"]');
+  await accepted.click();
+  await expect(accepted).toHaveClass(/current/);
+  for (const name of ["Accept", "Reject", "Comment"])
+    await expect(accepted.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await expect(accepted.getByRole("button", { name: "Next undecided", exact: true })).toBeVisible();
+  // The review server is shared by every test; leave the round undecided.
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect(page.getByRole("progressbar", { name: "0 of 7 decided", exact: true })).toBeVisible();
+});
 test("Accept all acts once for the full round and one undo restores every change", async ({
   page,
 }) => {
