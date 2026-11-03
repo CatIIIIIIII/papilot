@@ -293,6 +293,9 @@ export class Review {
       loose: render.loose,
       warnings: round.summary.warnings ?? [],
       files: `/files/${name}/${number}/`,
+      ...(round.summary.builds?.length
+        ? { build: { key: round.summary.builds.at(-1)!, targets: round.summary.targets ?? ["full"] } }
+        : {}),
       ...(render.references ? { references: render.references } : {}),
     };
   }

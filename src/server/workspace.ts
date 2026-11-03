@@ -790,6 +790,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     let pending = this.store.task(taskId).pendingBuild!;
     let client: ReviewClient | undefined;
     let reuse = resume;
+    let compiling: string | undefined;
     // Only connection failures are retried. Every submission has a persisted key,
     // so losing its response cannot submit a second build.
     const request = async <T>(work: (client: ReviewClient) => Promise<T>, submitting = false): Promise<T> => {
@@ -820,6 +821,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
           this.store.updateTask(taskId, { pendingBuild: pending });
         }
         const current = await request(client => client.get(`/api/jobs/${pending.job}`));
+        // The round's new version exists; it compiles only some chapters here.
+        if (typeof current.revision === 'string' && current.revision !== compiling) {
+          compiling = current.revision;
+          this.emit('publishing', taskId, compiling);
+        }
         const summary = await request(client => client.get(taskRoute(task.name)));
         this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, job: { ...current, id: pending.job } } });
         if (current.status === 'done' || current.status === 'completed' || current.status === 'succeeded') {

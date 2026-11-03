@@ -87,16 +87,31 @@ it.skipIf(!tex)(
         "the guidance",
         "the patient guidance throughout my research",
       );
+      // A round that compiles only some chapters names its new version
+      // while it runs, so that a host can compile the whole paper meanwhile.
+      const named: string[][] = [];
       const publish = async () => {
-        const job = app.publisher.submit(task.name);
+        const job = app.publisher.submit(task.name),
+          seen = new Set<string>(),
+          watch = setInterval(() => {
+            const revision = app.publisher.revision(job.id);
+            if (revision) seen.add(revision);
+          }, 5);
         await app.publisher.join();
+        clearInterval(watch);
+        named.push([...seen]);
+        expect(app.publisher.revision(job.id)).toBeNull();
         const done = app.publisher.job(job.id);
         expect(done.status, JSON.stringify(done.result)).toBe("done");
         return done.result;
       };
       expect((await publish()).outcome).toBe("published");
       const round = app.review.round(task.name, 1);
+      expect(round.summary.targets).not.toEqual(["full"]);
+      expect(named[0]).toEqual([round.after]);
       const detail = app.review.roundDetail(task.name, 1);
+      // A host can show the chapters the round compiled while the whole paper compiles.
+      expect(detail.build).toEqual({ key: round.summary.builds!.at(-1), targets: round.summary.targets });
       expect(detail.units).toHaveLength(1);
       expect(detail.units[0]).toMatchObject({
         visual: "text",

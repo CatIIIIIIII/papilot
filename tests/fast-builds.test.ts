@@ -112,10 +112,11 @@ test('a background build stops while another build compiles, and someone waiting
   const f = paper({ 'main.tex': document('Text.\n') });
   const bin = path.join(f.base, 'bin'), previousPath = process.env.PATH;
   try {
-    // A latexmk that records its process ID and finishes when told to.
+    // A latexmk that records its process ID and finishes when told to, or
+    // after a minute, so that a test stopped midway leaves nothing running.
     fs.mkdirSync(bin);
     fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX 3.14 (fake)"\n', { mode: 0o755 });
-    fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\necho $$ > "${f.base}/pid-$(basename "$(dirname "$PWD")")"\nwhile [ ! -e "${f.base}/go-$(basename "$(dirname "$PWD")")" ]; do sleep 0.05; done\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\necho $$ > "${f.base}/pid-$(basename "$(dirname "$PWD")")"\ni=0; while [ ! -e "${f.base}/go-$(basename "$(dirname "$PWD")")" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
     process.env.PATH = `${bin}:${previousPath}`;
     const builder = new Builder(loadProject(f.root), f.repo), keyOf = (folder: string) => path.basename(path.dirname(folder));
     const state = (pid: string) => execFileSync('ps', ['-o', 'stat=', '-p', pid]).toString().trim();
@@ -147,6 +148,96 @@ test('a background build stops while another build compiles, and someone waiting
     fs.writeFileSync(path.join(f.base, `go-${pids().find(key => key !== speculative && key !== foreground)}`), '');
     await third;
   } finally { process.env.PATH = previousPath; f.close(); }
+});
+
+test('a build runs at the highest priority of everyone waiting for it, also of those who asked before it started', { skip: process.platform === 'win32' && 'uses POSIX signals', timeout: 60000 }, async () => {
+  const f = paper({ 'main.tex': document('Text.\n') });
+  const bin = path.join(f.base, 'bin'), previousPath = process.env.PATH;
+  try {
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX 3.14 (fake)"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\necho $$ > "${f.base}/pid-$(basename "$(dirname "$PWD")")"\ni=0; while [ ! -e "${f.base}/go-$(basename "$(dirname "$PWD")")" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
+    process.env.PATH = `${bin}:${previousPath}`;
+    const builder = new Builder(loadProject(f.root), f.repo), rev = f.repo.rev('HEAD');
+    const state = (pid: string) => execFileSync('ps', ['-o', 'stat=', '-p', pid]).toString().trim();
+    const waitFor = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(r => setTimeout(r, 25)); assert.ok(check()); };
+    const pidOf = (key: string) => { try { return fs.readFileSync(path.join(f.base, `pid-${key}`), 'utf8').trim(); } catch { return ''; } };
+    const pids = () => fs.readdirSync(f.base).filter(n => n.startsWith('pid-')).map(n => n.slice(4));
+    // Both ask at once, before anything compiles: whichever starts it, it is
+    // the build someone waits for, and another build does not stop it.
+    const speculative = builder.build(rev, ['full'], null, { priority: 'background' });
+    const waiting = builder.build(rev, ['full'], null, { priority: 'foreground' });
+    await waitFor(() => pids().length === 1);
+    const [shared] = pids();
+    const other = builder.build(f.commit({ 'main.tex': document('Other.\n') }));
+    await waitFor(() => pids().length === 2);
+    await new Promise(r => setTimeout(r, 400));
+    assert.doesNotMatch(state(pidOf(shared)), /T/, 'the build that someone waits for keeps compiling');
+    for (const key of pids()) fs.writeFileSync(path.join(f.base, `go-${key}`), '');
+    const [first, again] = await Promise.all([speculative, waiting, other]);
+    assert.equal(first.key, again.key);
+  } finally { process.env.PATH = previousPath; f.close(); }
+});
+
+test('the whole paper of a version compiles ahead, and the review shows each of its passes until the complete PDF is ready', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+  const { preparePaper, nextPass, passPdf, paperPdf } = await import('../src/server/pdf.ts');
+  const f = paper({ 'main.tex': document('\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n') });
+  const teX = slowTeX(f.base);
+  try {
+    const rev = f.repo.rev('HEAD');
+    preparePaper(f.root, rev, 'background');
+    // The reviewer opens the full paper once the first pass is over.
+    for (let i = 0; i < 400 && teX.runs() < 2; i++) await new Promise(r => setTimeout(r, 25));
+    const shown: number[] = [];
+    for (let after = 0; ;) {
+      const next = await nextPass(f.root, rev, after, 60000);
+      if (next.pass === null) break;
+      if (typeof next.pass === 'number') {
+        assert.ok(fs.existsSync(passPdf(f.root, rev, next.pass)));
+        shown.push(next.pass);
+        after = next.pass;
+      }
+    }
+    assert.ok(shown.length >= 1 && shown[0] === 1, `the pass before the reviewer came is shown first: ${shown}`);
+    const pdf = await paperPdf(f.root, rev);
+    assert.ok(fs.existsSync(pdf));
+    const builds = path.join(f.root, '.git/latex-review/cache/builds');
+    assert.equal(fs.readdirSync(builds).filter(name => fs.existsSync(path.join(builds, name, 'result.json'))).length, 1, 'the reviewer waited for the build started ahead');
+    // Once it is complete, the paper is answered at once and its passes stay.
+    assert.deepEqual(await nextPass(f.root, rev, 0, 0), { pass: null });
+    assert.ok(fs.existsSync(passPdf(f.root, rev, shown[0])));
+    assert.throws(() => passPdf(f.root, rev, 99), /Review resource not found/);
+  } finally { teX.restore(); f.close(); }
+});
+
+test('the review full paper shows the round\'s changed chapters at once, then each pass of the whole paper, then the complete PDF', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+  const { nextPaperPass, paperPassPdf, fullPaperPdf } = await import('../src/server/pdf.ts');
+  const f = paper({ 'main.tex': document('\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n') });
+  const teX = slowTeX(f.base);
+  try {
+    const rev = f.repo.rev('HEAD');
+    // The round compiled only its changed chapters; that PDF is in the build cache.
+    const key = 'c'.repeat(32), folder = path.join(f.root, '.git/latex-review/cache/builds', key), chapters = path.join(folder, 'chapters.pdf');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(chapters, '%PDF-1.4 chapters');
+    fs.writeFileSync(path.join(folder, 'result.json'), JSON.stringify({ pdf: chapters }));
+    const connect = async () => ({ get: async () => ({ before: rev, after: rev, build: { key, targets: ['one'] } }) as any });
+    const versions: number[] = [], files: string[] = [];
+    for (let after = 0; ;) {
+      const next = await nextPaperPass(connect, f.root, 'p-task', 1, after, 60000);
+      if (next.pass === null) break;
+      if (typeof next.pass !== 'number') continue;
+      versions.push(next.pass);
+      files.push(await paperPassPdf(connect, f.root, 'p-task', 1, next.pass));
+      after = next.pass;
+    }
+    assert.deepEqual([versions[0], files[0]], [1, chapters], 'the changed chapters come first');
+    assert.ok(versions.length >= 2, `then a pass of the whole paper: ${versions}`);
+    assert.ok(files.slice(1).every(file => file !== chapters && fs.existsSync(file)));
+    assert.ok(fs.existsSync(await fullPaperPdf(connect, f.root, 'p-task', 1, 'after')));
+    // Once the whole paper is there, it is shown right away.
+    assert.deepEqual(await nextPaperPass(connect, f.root, 'p-task', 1, 0, 0), { pass: null });
+  } finally { teX.restore(); f.close(); }
 });
 
 test('a delivery preview is exactly what applying the task writes, with pending changes accepted', async () => {

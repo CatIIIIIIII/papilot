@@ -230,6 +230,20 @@ test('publication reserves the worktree and rejects duplicate builds and review 
   } finally { gate.resolve({ status: 'done' }); f.close(); }
 });
 
+test('while a round compiles its changed chapters, its new version is announced once, so the whole paper compiles meanwhile', async () => {
+  let polls = 0;
+  const f = fixture(async (_method, route) => route.includes('/jobs/')
+    ? ++polls < 3 ? { status: 'running', phase: 'build', revision: 'a1b2c3' } : { status: 'done', outcome: 'published', round: 1 }
+    : route.endsWith('/publish') ? { job: 'job' } : summary);
+  try {
+    const announced: [string, string][] = [];
+    f.workspace.on('publishing', (taskId: string, revision: string) => announced.push([taskId, revision]));
+    await f.workspace.publish(f.task.id);
+    assert.equal(polls, 3);
+    assert.deepEqual(announced, [[f.task.id, 'a1b2c3']]);
+  } finally { f.close(); }
+});
+
 test('publication records each completed run result once and treats no new edits as no result', async () => {
   let round = 2, outcome = 'published';
   const f = fixture(async (_method, route) => route.includes('/jobs/') ? { status: 'done', outcome, round } : route.endsWith('/publish') ? { job: 'job' } : { ...summary, round });

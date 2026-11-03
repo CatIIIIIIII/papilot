@@ -167,12 +167,14 @@ export function createServer(app: App) {
       csrf: app.csrf,
     }));
     server.get<{ Params: { id: string } }>("/api/jobs/:id", (request) => {
-      const j = app.publisher.job(request.params.id);
+      const j = app.publisher.job(request.params.id),
+        revision = app.publisher.revision(j.id);
       return {
         id: j.id,
         task: j.task,
         status: j.status,
         phase: j.phase,
+        ...(revision ? { revision } : {}),
         ...j.result,
       };
     });

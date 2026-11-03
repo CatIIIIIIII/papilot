@@ -889,3 +889,52 @@ test('writing a paper compiles its manuscript at once, and a reviewed deferred t
     assert.equal(predicted.length, 1, 'a task that applies as it is reviewed needs no prediction');
   } finally { await f.close(); }
 });
+
+const latex = (() => {
+  try { execFileSync('latexmk', ['--version'], { stdio: 'ignore' }); execFileSync('pdflatex', ['--version'], { stdio: 'ignore' }); return true; }
+  catch { return false; }
+})();
+test('the review page shows each TeX pass of a round\'s new version in the full paper, then the complete PDF', { skip: !latex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+  const f = await fixture(), base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-paper-')), root = path.join(base, 'paper');
+  const engine = http.createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify(request.url?.endsWith('/rounds/1') ? { task: 'p-paper', round: 1, before: revision, after: revision, units: [], sections: [], loose: [] } : {}));
+  });
+  let revision = '';
+  try {
+    fs.mkdirSync(root);
+    const git = (...args: string[]) => execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@localhost', ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q');
+    fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+    fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\n\\begin{document}\n\\tableofcontents\n\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n\\end{document}\n');
+    git('add', '-A'); git('commit', '-qm', 'Paper');
+    revision = git('rev-parse', 'HEAD');
+    f.store.saveProject({ id: 'paper', name: 'Paper', path: root, createdAt: 1 });
+    f.review.get = async (route: string) => (route.endsWith('/rounds/1') ? { before: revision, after: revision } : {}) as any;
+    await new Promise<void>(resolve => engine.listen(0, '127.0.0.1', resolve));
+    f.review.url = `http://127.0.0.1:${(engine.address() as { port: number }).port}`;
+    // The round names its complete PDF and where its passes are announced.
+    const detail = await f.local.inject({ url: '/review/paper/api/tasks/p-paper/rounds/1', headers: LOCAL });
+    assert.equal(detail.statusCode, 200, detail.body);
+    assert.equal(detail.json().pdf, '/review/paper/pdf/p-paper/1');
+    assert.equal(detail.json().passes, '/review/paper/pdf/p-paper/1/passes');
+    const shown: number[] = [];
+    for (let after = 0; ;) {
+      const next = await f.local.inject({ url: `${detail.json().passes}?after=${after}`, headers: LOCAL });
+      assert.equal(next.statusCode, 200, next.body);
+      if (next.json().pass === null) break;
+      if (typeof next.json().pass !== 'number') continue;
+      after = next.json().pass;
+      const pass = await f.local.inject({ url: `${detail.json().pdf}?pass=${after}`, headers: LOCAL });
+      assert.equal(pass.statusCode, 200, pass.body);
+      assert.match(String(pass.headers['content-type']), /application\/pdf/);
+      shown.push(after);
+    }
+    assert.ok(shown.length >= 1, 'the table of contents takes another pass, whose first one is shown');
+    const complete = await f.local.inject({ url: detail.json().pdf, headers: LOCAL });
+    assert.equal(complete.statusCode, 200, complete.body);
+    assert.equal(complete.rawPayload.subarray(0, 5).toString(), '%PDF-');
+    for (const url of [`${detail.json().pdf}?pass=99`, `${detail.json().pdf}?pass=0`, `${detail.json().passes}?after=-1`])
+      assert.equal((await f.local.inject({ url, headers: LOCAL })).statusCode, 404, url);
+  } finally { engine.close(); await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
+});

@@ -189,6 +189,10 @@ export class Publisher {
   running = new Map<string, Promise<void>>();
   queue: string[] = [];
   stopping = false;
+  // The new version of each running job whose round compiles only some of
+  // its chapters: a host may compile the whole paper meanwhile, without
+  // waiting for or competing with a build of the same files here.
+  private revisions = new Map<string, string>();
   constructor(public app: App) {
     app.store.execute(
       "UPDATE jobs SET status='failed', finished=?, result=? WHERE status IN ('queued','running')",
@@ -240,6 +244,9 @@ export class Publisher {
     const job = this.app.store.one<Job>("SELECT * FROM jobs WHERE id=?", id);
     if (!job) throw new Error("Unknown job " + id);
     return job;
+  }
+  revision(id: string) {
+    return this.revisions.get(id) ?? null;
   }
   current(name: string) {
     return this.app.store.one<Job>(
@@ -331,6 +338,7 @@ export class Publisher {
           : { error: (error as Error).message, next: "Publish again." };
       this.update(job.id, { status: "failed", result, finished: now() });
     } finally {
+      this.revisions.delete(job.id);
       this.running.delete(job.task);
       if (this.pending.get(job.task) === job.id) this.pending.delete(job.task);
       else if (!this.stopping) this.queue.push(this.pending.get(job.task)!);
@@ -395,6 +403,7 @@ export class Publisher {
     this.phase(job, "build");
     const builder = new Builder(project, app.repo),
       targets = await builder.planAsync(before, after, files);
+    if (targets[0] !== "full") this.revisions.set(job.id, after);
     const failed = (what: string) => (error: unknown) => {
       if (error instanceof BuildError)
         throw new PublishError(

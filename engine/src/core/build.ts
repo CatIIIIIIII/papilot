@@ -78,6 +78,12 @@ interface Active {
   followed?: () => void;
 }
 const active = new Set<Active>();
+// Everyone in this process who waits for each build key. A build runs at the
+// highest priority among them and shows its passes to all of them, also to
+// those who asked before it started compiling.
+interface Waiter { priority: BuildPriority; pass?: (preview: PassPreview) => void }
+const waiting = new Map<string, Set<Waiter>>();
+const building = new Map<string, Promise<BuildInfo>>();
 // A background build's compiler stops while any other build of this process
 // compiles, and continues once none does, so speculation never slows down a
 // PDF someone is waiting for. A build that someone waits for is promoted.
@@ -373,39 +379,75 @@ export class Builder {
       folder = path.join(this.cache, key);
     // Someone now waits for a build of this key that may already be running,
     // and sees its passes from now on, starting with the latest one.
-    promote(key, priority);
-    if (options.pass)
-      for (const build of active)
-        if (build.key === key) { build.watchers.add(options.pass); build.followed?.(); }
-    const done = await this.finished(folder);
-    if (done) return done;
-    return withLock(path.join(this.cache, key + ".lock"), async () => {
-      const cached = await this.finished(folder);
-      if (cached) return cached;
-      // A build continues from the completed one with the same targets whose
-      // sources differ least from this one, or a full build from the author's
-      // own latexmk output, as latexmk does when a folder is compiled again:
-      // unchanged files are cloned and LaTeX keeps its state, so it reruns
-      // only as often as the edit requires. Manual recompilation starts
-      // clean, and so does a retry when leftover state broke a build.
-      const start = options.force ? null : (await this.closest(context, targets, tree)) ?? (partial ? null : "author");
-      const run: Active = { key, priority, paused: false, watchers: new Set(options.pass ? [options.pass] : []) };
-      active.add(run);
-      let result: BuildInfo;
-      try {
-        try {
-          result = await this.compile(rev, tree, key, targets, seed, date, start, options.progress, run);
-        } catch (error) {
-          if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
-          result = await this.compile(rev, tree, key, targets, seed, date, null, options.progress, run);
-        }
-      } finally {
-        active.delete(run);
-        schedule();
+    const waiter: Waiter = { priority, pass: options.pass };
+    let waiters = waiting.get(key);
+    if (!waiters) waiting.set(key, (waiters = new Set()));
+    waiters.add(waiter);
+    try {
+      promote(key, priority);
+      if (options.pass)
+        for (const build of active)
+          if (build.key === key) { build.watchers.add(options.pass); build.followed?.(); }
+      // A build of this key under way in this process is awaited directly,
+      // rather than by polling its lock, so its result arrives the moment it
+      // is ready. The lock keeps other processes from building it twice.
+      const ongoing = building.get(key);
+      if (ongoing) {
+        const result = await ongoing.catch(() => null);
+        if (result) return result;
       }
-      await this.remember(targets, { key, context, date: date.SOURCE_DATE_EPOCH, tree });
-      return result;
-    });
+      const attempt = (async () =>
+        (await this.finished(folder)) ??
+        withLock(path.join(this.cache, key + ".lock"), async () =>
+          (await this.finished(folder)) ?? this.compileOnce(rev, tree, key, context, targets, seed, date, partial, options),
+        ))();
+      building.set(key, attempt);
+      try {
+        return await attempt;
+      } finally {
+        if (building.get(key) === attempt) building.delete(key);
+      }
+    } finally {
+      waiters.delete(waiter);
+      if (!waiters.size && waiting.get(key) === waiters) waiting.delete(key);
+    }
+  }
+  private async compileOnce(
+    rev: string,
+    tree: string,
+    key: string,
+    context: string,
+    targets: string[],
+    seed: BuildInfo | null,
+    date: ReturnType<typeof buildDate>,
+    partial: boolean,
+    options: { force?: boolean; progress?: (progress: BuildProgress) => void },
+  ) {
+    // A build continues from the completed one with the same targets whose
+    // sources differ least from this one, or a full build from the author's
+    // own latexmk output, as latexmk does when a folder is compiled again:
+    // unchanged files are cloned and LaTeX keeps its state, so it reruns
+    // only as often as the edit requires. Manual recompilation starts
+    // clean, and so does a retry when leftover state broke a build.
+    const start = options.force ? null : (await this.closest(context, targets, tree)) ?? (partial ? null : "author");
+    const waiters = [...(waiting.get(key) ?? [])],
+      priority = waiters.reduce<BuildPriority>((top, w) => (RANK[w.priority] > RANK[top] ? w.priority : top), "background");
+    const run: Active = { key, priority, paused: false, watchers: new Set(waiters.flatMap((w) => (w.pass ? [w.pass] : []))) };
+    active.add(run);
+    let result: BuildInfo;
+    try {
+      try {
+        result = await this.compile(rev, tree, key, targets, seed, date, start, options.progress, run);
+      } catch (error) {
+        if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
+        result = await this.compile(rev, tree, key, targets, seed, date, null, options.progress, run);
+      }
+    } finally {
+      active.delete(run);
+      schedule();
+    }
+    await this.remember(targets, { key, context, date: date.SOURCE_DATE_EPOCH, tree });
+    return result;
   }
   // A completed build in this folder, whose PDF is still there.
   private async finished(folder: string) {

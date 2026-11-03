@@ -1,6 +1,7 @@
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -89,8 +90,18 @@ const clock = (ms: number) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 };
 
+interface Loaded {
+  pdf: PDFDocumentProxy;
+  width: number;
+  height: number;
+  labels: string[] | null;
+  // An earlier version, shown while the complete PDF compiles.
+  partial: boolean;
+}
+
 export function FullPaper({
   url,
+  passes,
   changes,
   render,
   scrollRoot,
@@ -98,38 +109,77 @@ export function FullPaper({
   onUnavailable,
 }: {
   url: string;
+  passes?: string;
   changes: PlacedChange[];
   render: (block: ChangeBlock, index: number) => ReactNode;
   scrollRoot: RefObject<HTMLElement | null>;
   onReady: () => void;
   onUnavailable: () => void;
 }) {
-  const [loaded, setLoaded] = useState<{ pdf: PDFDocumentProxy; width: number; height: number; labels: string[] | null } | null>(null),
+  const [loaded, setLoaded] = useState<Loaded | null>(null),
     [error, setError] = useState(""),
-    [started] = useState(() => Date.now()),
-    [now, setNow] = useState(() => Date.now());
+    [started, setStarted] = useState(() => Date.now()),
+    [now, setNow] = useState(() => Date.now()),
+    shown = useRef<PDFDocumentProxy | null>(null),
+    announced = useRef(false),
+    // Where the change being reviewed was on screen before a newer version
+    // replaced the pages, so that it stays there.
+    anchor = useRef<{ stop: string; offset: number } | null>(null);
   useEffect(() => {
     let live = true;
+    const stop = new AbortController(),
+      tasks: ReturnType<typeof pdfjs.getDocument>[] = [];
     setLoaded(null);
     setError("");
-    const task = pdfjs.getDocument({ url, enableXfa: false });
-    task.promise.then(
-      async (pdf) => {
-        const first = (await pdf.getPage(1)).getViewport({ scale: 1 }),
-          labels = await pdf.getPageLabels().catch(() => null);
-        if (live) setLoaded({ pdf, width: first.width, height: first.height, labels });
-      },
-      (failure: Error) => {
-        if (live) setError(failure.message);
-      },
-    );
+    setStarted(Date.now());
+    announced.current = false;
+    const open = async (source: string, partial: boolean) => {
+      const task = pdfjs.getDocument({ url: source, enableXfa: false });
+      tasks.push(task);
+      const pdf = await task.promise,
+        first = (await pdf.getPage(1)).getViewport({ scale: 1 }),
+        labels = await pdf.getPageLabels().catch(() => null);
+      if (!live) return;
+      const root = scrollRoot.current,
+        current = root?.querySelector<HTMLElement>(".paper .change.current");
+      anchor.current = root && current?.dataset.stop
+        ? { stop: current.dataset.stop, offset: current.getBoundingClientRect().top - root.getBoundingClientRect().top }
+        : null;
+      setLoaded({ pdf, width: first.width, height: first.height, labels, partial });
+    };
+    void (async () => {
+      // Earlier versions while the complete PDF compiles, such as the
+      // chapters the round compiled and each TeX pass of the whole paper, so
+      // the changes show long before every page number has settled.
+      for (let after = 0; passes && live; ) {
+        const response = await fetch(`${passes}?after=${after}`, { signal: stop.signal }),
+          next = (await response.json()) as { pass?: number | null; error?: string };
+        if (!response.ok) throw new Error(next.error || `HTTP ${response.status}`);
+        if (next.pass === null) break;
+        if (typeof next.pass === "number" && next.pass > after) {
+          after = next.pass;
+          // A version that cannot be shown is skipped for the next one.
+          await open(`${url}${url.includes("?") ? "&" : "?"}pass=${after}`, true).catch(() => undefined);
+        }
+      }
+      if (live) await open(url, false);
+    })().catch((failure: Error) => {
+      if (live) setError(failure.message);
+    });
     return () => {
       live = false;
-      void task.destroy();
+      stop.abort();
+      for (const task of tasks) void task.destroy();
     };
-  }, [url]);
+  }, [url, passes]);
+  // A newer version replaces the one on screen once its pages are in place.
   useEffect(() => {
-    if (loaded || error) return;
+    const previous = shown.current;
+    shown.current = loaded?.pdf ?? null;
+    if (previous && previous !== shown.current) void previous.loadingTask.destroy();
+  }, [loaded]);
+  useEffect(() => {
+    if ((loaded && !loaded.partial) || error) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [loaded, error]);
@@ -142,6 +192,11 @@ export function FullPaper({
         ...plan(loaded.pdf.numPages, loaded.labels, changes),
       },
     [loaded, changes],
+  );
+  const preparing = (
+    <>
+      {t("Preparing the full PDF…")} <span className="paper-clock">{clock(now - started)}</span>
+    </>
   );
   if (error)
     return (
@@ -156,13 +211,36 @@ export function FullPaper({
     return (
       <div className="paper-status" role="status">
         <div className="pulse" />
-        <p>
-          {t("Preparing the full PDF…")} <span className="paper-clock">{clock(now - started)}</span>
-        </p>
+        <p>{preparing}</p>
       </div>
     );
   return (
-    <Pages paper={paper} render={render} scrollRoot={scrollRoot} onReady={onReady} />
+    <>
+      {loaded?.partial && (
+        <div className="paper-updating" role="status">
+          <span className="pulse" />
+          <span>{preparing}</span>
+        </div>
+      )}
+      <Pages
+        paper={paper}
+        render={render}
+        scrollRoot={scrollRoot}
+        onReady={() => {
+          if (!announced.current) {
+            announced.current = true;
+            onReady();
+            return;
+          }
+          // Later versions keep the change being reviewed where it was.
+          const root = scrollRoot.current,
+            kept = anchor.current,
+            current = kept && root?.querySelector<HTMLElement>(`.paper [data-stop="${kept.stop}"]`);
+          if (root && kept && current)
+            root.scrollTop += current.getBoundingClientRect().top - root.getBoundingClientRect().top - kept.offset;
+        }}
+      />
+    </>
   );
 }
 
@@ -181,8 +259,9 @@ function Pages({
     ready = useRef(onReady);
   ready.current = onReady;
   useEffect(() => paint(box.current!, paper, scrollRoot.current), [paper, scrollRoot]);
-  // The pages exist now: the selected change can be scrolled to.
-  useEffect(() => ready.current(), [paper]);
+  // The pages exist now: the selected change can be scrolled to, before
+  // they are painted.
+  useLayoutEffect(() => ready.current(), [paper]);
   const slice = (page: number, top: number, bottom: number) =>
     bottom - top > 0.5 && (
       <div className="paper-context" key={`${page}:${top}`}>
@@ -227,15 +306,18 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
     width = container.clientWidth,
     stopped = false;
   const pages = () => Array.from(container.querySelectorAll<HTMLElement>(".paper-page"));
+  const free = (canvas: HTMLCanvasElement) => {
+    canvas.remove();
+    canvas.width = canvas.height = 0;
+  };
+  // Pages painted from an earlier version of the PDF stay until this one's
+  // replace them, so a newer version comes in without the pages blanking.
   const release = (index: number) => {
     const entry = alive.get(index);
-    if (!entry) return;
     alive.delete(index);
-    entry.task?.cancel();
-    for (const canvas of entry.canvases) {
-      canvas.remove();
-      canvas.width = canvas.height = 0;
-    }
+    entry?.task?.cancel();
+    entry?.canvases.forEach(free);
+    pages()[index]?.querySelectorAll("canvas").forEach(free);
   };
   const pump = () => {
     while (!stopped && running < 2) {
@@ -254,7 +336,7 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
     alive.set(index, entry);
     try {
       const page = await paper.pdf.getPage(index + 1);
-      if (alive.get(index) !== entry) return;
+      if (stopped || alive.get(index) !== entry) return;
       const slices = Array.from(element.querySelectorAll<HTMLElement>(".paper-slice")),
         cssWidth = slices[0]?.clientWidth || element.clientWidth,
         size = page.getViewport({ scale: 1 }),
@@ -265,7 +347,7 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
       source.height = Math.floor(viewport.height);
       entry.task = page.render({ canvas: source, viewport });
       await entry.task.promise;
-      if (alive.get(index) !== entry) return;
+      if (stopped || alive.get(index) !== entry) return;
       for (const slice of slices) {
         const top = Math.round(Number(slice.dataset.top) * scale),
           bottom = Math.min(source.height, Math.round(Number(slice.dataset.bottom) * scale));
@@ -274,12 +356,13 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
         canvas.width = source.width;
         canvas.height = bottom - top;
         canvas.getContext("2d")!.drawImage(source, 0, top, source.width, bottom - top, 0, 0, source.width, bottom - top);
+        slice.querySelectorAll("canvas").forEach(free);
         slice.append(canvas);
         entry.canvases.push(canvas);
       }
       source.width = source.height = 0;
     } catch (failure) {
-      if ((failure as Error)?.name !== "RenderingCancelledException") console.error(failure);
+      if (!stopped && (failure as Error)?.name !== "RenderingCancelledException") console.error(failure);
       if (alive.get(index) === entry) alive.delete(index);
     } finally {
       running--;
@@ -305,7 +388,11 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
   const resized = new ResizeObserver(() => {
     if (Math.abs(container.clientWidth - width) < 1) return;
     width = container.clientWidth;
-    for (const index of [...alive.keys()]) release(index);
+    // Repainted at the new width over the current pages.
+    for (const [index, entry] of [...alive]) {
+      entry.task?.cancel();
+      alive.delete(index);
+    }
     pump();
   });
   resized.observe(container);
@@ -313,6 +400,7 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
     stopped = true;
     observer.disconnect();
     resized.disconnect();
-    for (const index of [...alive.keys()]) release(index);
+    // The canvases stay for the next version, or go with the page.
+    for (const entry of alive.values()) entry.task?.cancel();
   };
 }
