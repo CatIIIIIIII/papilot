@@ -345,6 +345,7 @@ export const zhCN: Record<string, string> = {
   'Settings': '设置', 'Connected': '已连接', 'Reconnecting': '正在重新连接', '{n} active task': '{n} 个活动任务', '{n} active tasks': '{n} 个活动任务',
   'Close task list': '关闭任务列表', 'Show task list': '显示任务列表',
   'Recompile PDF': '重新编译 PDF', 'Open PDF': '打开 PDF',
+  'Share': '分享', 'Export PDF': '导出 PDF', 'Export PDF with notes': '导出带批注的 PDF', 'No notes on this PDF yet': '此 PDF 还没有批注',
   'PDF compiled successfully.': 'PDF 编译成功。', 'Compilation failed. Click to retry.': '编译失败，点击重试。', 'Compilation status unavailable.': '暂时无法确认编译状态。',
   'Manuscript view': '稿件视图', 'Git, {n} changed': 'Git，{n} 处改动',
   'Retry deletion': '重试删除', 'Pause': '暂停', 'View details': '查看详情', 'Workspace view': '工作区视图',

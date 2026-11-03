@@ -969,6 +969,8 @@ body.resizing iframe{pointer-events:none}
   .modal-close{width:44px;height:44px;right:6px;top:6px}
   .toast{top:60px}
 }
+/* The paper's four views and its share button fit a large phone when only the open view keeps its label. */
+@media(max-width:520px){.manuscript-view-selector>button:not([aria-pressed=true])>span{display:none}}
 @media(max-width:400px){.view-selector>button>span{display:none}.view-selector>button{padding:0 11px}.task-state-actions .button-label{display:none}}
 
 @keyframes pulse{50%{opacity:.35}}

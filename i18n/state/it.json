@@ -1639,6 +1639,16 @@
     "textHash": "582c56e7e66211c0f34bf14d74cebc7b6bcd1ea1801dd83216c01636febd26c9",
     "model": "gemini-4-argon-medium"
   },
+  "Export PDF": {
+    "revision": "5714b03e764e25c7908010c93c8c20eb37fdfde3edf0eed02180379f26d887af",
+    "textHash": "5dc92abd220e2fa41e59bf583bbff0bddf760e667fdabd82ccc48850c02ab518",
+    "model": "gemini-4-argon-medium"
+  },
+  "Export PDF with notes": {
+    "revision": "c8564e4ef5f032d8eb1a6c6addddfbad15c74355de7a5220aaa9d57cff8a0b5c",
+    "textHash": "aa5cc1d4cdbc0e4bbd8455c21ac2ca41c2fb404c1676526a5d2a0b2a0c2f3446",
+    "model": "gemini-4-argon-medium"
+  },
   "Failed": {
     "revision": "2e1d1538f76551acff57867e99d25abda1261a4749533144c7483fd97636cb0e",
     "textHash": "d30d221667577f6ce8f992f5ff53ac4ff4c5fb6adf2822c447c6f930e4a9e34b",
@@ -2517,6 +2527,11 @@
   "No models match “{query}”": {
     "revision": "86c95b171e08feabdd90e851ddce044a0fbfe6c39a603a5cd2382c618020059a",
     "textHash": "0f1ef528251a0eaaab02ffc6423208256ba177c90402ecb87af85acdcd824541",
+    "model": "gemini-4-argon-medium"
+  },
+  "No notes on this PDF yet": {
+    "revision": "eb234537641b0042c7f902f3600ef39f95b4f77d8a462744991a8c93197fb9eb",
+    "textHash": "18c866b7c0a870db2c3ea221d061064e52e7c9968b75cd64dfb8e9263d5a8728",
     "model": "gemini-4-argon-medium"
   },
   "No notes yet": {
@@ -3962,6 +3977,11 @@
   "Several TeX files were found. Check the selected main document before continuing.": {
     "revision": "30d2b72eeb320841a549d2a40bad3751eddc6b79d79f51726c4f609d12f0028d",
     "textHash": "538d4dac8ac8d27d7179a41166b38623ec6cf87ac3fa7a26eddbae9b612b7b60",
+    "model": "gemini-4-argon-medium"
+  },
+  "Share": {
+    "revision": "cc0dabf0ba97015a31c9f718ab848a8500b76c0f174c0e6147aa708c1082bf8c",
+    "textHash": "5812e631c3aaaa5a613654f623b7827dbc9855158df903e6e6935a1ccf6e7067",
     "model": "gemini-4-argon-medium"
   },
   "Share your papers and manage the people you work with.": {
