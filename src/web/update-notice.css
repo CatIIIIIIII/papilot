@@ -44,7 +44,6 @@
 .update-channel h4{margin:0;font-size:13px;font-weight:500;line-height:1.5}
 .update-channel p{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--text-2)}
 .update-channel .chip-select{flex:none;max-width:100%;border-radius:8px;font-size:12px;font-weight:400}
-.update-channel .chip-select:focus-within:not(:has(select:focus-visible)){border-color:var(--line-strong);box-shadow:none}
 .update-loading.settings-card{display:flex;align-items:center;flex-wrap:wrap;gap:16px;padding:24px}
 .update-loading p{flex:1 1 220px;margin:0;color:var(--text-2)}
 @media(max-width:480px){

@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **Choices open Papilot's own list.** Theme, accent, language, notifications, update channel, PDF appearance and zoom, the default model, and the LaTeX engine, main file and skill location fields no longer open the system's picker. The list matches Papilot's menus in light and dark mode, marks the current choice, shows theme and accent colours beside their names, groups models by agent, and becomes a sheet on a phone. Arrow keys, Home, End, typed letters, Enter and Escape work as in a system list.
+
 ## [0.8.7] - 2026-11-03
 
 Papilot 0.8.7 prepares the manuscript's PDF while you review, keeps long builds responsive, exports PDFs with notes and makes adding notes to a task feel like sending a message.

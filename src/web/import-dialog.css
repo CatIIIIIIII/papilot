@@ -16,7 +16,7 @@
 .import-steps li.done { border-color: var(--accent); color: var(--text); }
 .import-location { overflow-wrap: anywhere; line-height: 1.6; }
 .import-settings { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 12px; }
-.import-settings select { width: 100%; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 9px; font: inherit; }
+.import-settings .field-select { border-color: var(--line); border-radius: 7px; }
 .import-status { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; }
 .import-status > .spinner { margin-top: 3px; }
 .import-status-body { flex: 1; min-width: 0; display: grid; gap: 8px; }

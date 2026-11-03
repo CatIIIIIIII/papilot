@@ -9,7 +9,7 @@ export function useNoteUndo(undo: () => boolean, frame?: Document | null) {
     const key = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.repeat || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
       const target = event.target as HTMLElement | null;
-      if (target?.isContentEditable || target?.closest?.('input, textarea, select, [role="textbox"]')) return;
+      if (target?.isContentEditable || target?.closest?.('input, textarea, select, [role="textbox"], [role="combobox"]')) return;
       if (documents.some(doc => doc.querySelector('dialog[open], [aria-modal="true"]'))) return;
       if (!current.current()) return;
       event.preventDefault(); event.stopImmediatePropagation();

@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import http from 'node:http';
 import { buildLayer } from './desktop-layer.mjs';
 import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { selectOption, selectedValue } from './select.mjs';
 
 const require = createRequire(import.meta.url);
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-test-'));
@@ -121,7 +122,7 @@ try {
   const mainDialog = page.getByRole('dialog', { name: 'two-mains' });
   await expect(mainDialog).toBeVisible();
   assert.deepEqual(fs.readdirSync(twoMains).sort(), ['a.tex', 'b.tex'], 'Asking for the main file changes nothing');
-  await mainDialog.getByRole('combobox', { name: /^(Main TeX file|TeX 主文件)$/ }).selectOption('b.tex');
+  await selectOption(mainDialog.getByRole('combobox', { name: /^(Main TeX file|TeX 主文件)$/ }), 'b.tex');
   await mainDialog.screenshot({ path: 'test-results/desktop-main-file.png' });
   await mainDialog.getByRole('button', { name: /^(Open paper|打开论文)$/ }).click();
   await opened('two-mains');
@@ -234,8 +235,8 @@ try {
       await view.getByRole('button', { name: /^(Settings|设置)$/ }).click();
       await view.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
       const channel = view.getByRole('combobox', { name: /Update channel|更新通道/ });
-      if (await channel.inputValue() === 'dev') await view.getByRole('button', { name: /^(Check for updates|检查更新)$/ }).click();
-      else await channel.selectOption('dev');
+      if (await selectedValue(channel) === 'dev') await view.getByRole('button', { name: /^(Check for updates|检查更新)$/ }).click();
+      else await selectOption(channel, 'dev');
       await view.getByRole('button', { name: /^(Update now|立即更新)$/ }).click();
       await expect.poll(() => running(address).catch(() => null), { timeout: 120000, message: 'The app restarts on the downloaded layer' }).toBe(built.version);
       // The page reloads itself on the new version.

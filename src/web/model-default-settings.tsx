@@ -1,5 +1,6 @@
 import type { AgentId } from '../shared.ts';
 import type { AgentOption } from './agent-picker.tsx';
+import { ChipSelect } from './chip-select.tsx';
 import { EffortSlider } from './effort-slider.tsx';
 import { t } from './i18n.ts';
 
@@ -30,16 +31,12 @@ export function ModelDefaultSettings({ agents, agent, model, effort, onSelect, o
   return <>
     <div className="settings-row settings-choice">
       <div className="settings-text"><span className="settings-name">{t('Default model')}</span><p>{t('Used for new tasks. Saved in this browser.')}</p></div>
-      <label className="chip-select settings-model-select" title={label}><span className="chip-value">{label}</span>
-        <select aria-label={t('Default model')} value={value} onChange={event => {
-          for (const group of groups) {
-            const choice = group.choices.find(item => JSON.stringify([group.value, item.id]) === event.target.value);
-            if (choice) { onSelect(group.value, choice.id); break; }
-          }
-        }}>
-          {groups.map(group => <optgroup key={group.value} label={group.label}>{group.choices.map(item => <option key={item.id} value={JSON.stringify([group.value, item.id])}>{item.name}</option>)}</optgroup>)}
-        </select>
-      </label>
+      <ChipSelect className="settings-model-select" label={t('Default model')} display={label} value={value} options={groups.flatMap(group => group.choices.map(item => ({ value: JSON.stringify([group.value, item.id]), label: item.name, group: group.label })))} onChange={chosen => {
+        for (const group of groups) {
+          const choice = group.choices.find(item => JSON.stringify([group.value, item.id]) === chosen);
+          if (choice) { onSelect(group.value, choice.id); break; }
+        }
+      }}/>
     </div>
     <div className="settings-row settings-effort">
       {selected?.efforts.length ? <EffortSlider efforts={selected.efforts} value={effort} fallback={selected.defaultEffort} onChange={onEffort}

@@ -9,6 +9,7 @@ import { SkillLibrary } from '../src/server/skill-library.ts';
 import { registerSkillRoutes } from '../src/server/skill-routes.ts';
 import { listedSkill, loadSkills } from '../src/server/skills.ts';
 import { Store } from '../src/server/store.ts';
+import { selectOption, selectOptions } from './select.mjs';
 
 // Real skill HTTP handlers and files, with an otherwise idle simulated paper.
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-skills-ui-'));
@@ -80,7 +81,7 @@ try {
   await expect(dialog.locator('.skill-library-preview')).toContainText('prose');
   await expect(content).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Copy and edit' }).click();
-  await expect(dialog.getByLabel('Save to')).toHaveValue('user');
+  await expect(dialog.getByRole('combobox', { name: 'Save to', exact: true })).toHaveAttribute('data-value', 'user');
   await dialog.getByLabel('Skill ID').fill('house-style');
   await dialog.getByRole('button', { name: 'Source', exact: true }).click();
   await content.fill('---\nname: Draft\ndescription: Draft description\ncustom-field: preserve me\n---\n\nUse short sentences.\n');
@@ -126,7 +127,7 @@ try {
   await dialog.getByRole('button', { name: 'New skill', exact: true }).click();
   await expect(dialog.getByLabel('Skill ID')).toBeFocused();
   await dialog.getByLabel('Skill ID').fill('house-style');
-  await dialog.getByLabel('Save to').selectOption('paper');
+  await selectOption(dialog.getByRole('combobox', { name: 'Save to', exact: true }), 'paper');
   await dialog.getByLabel('Skill name', { exact: true }).fill('Paper style');
   await instructions.fill('Keep this paper concise.');
   await dialog.getByRole('button', { name: 'Choose an icon', exact: true }).click();
@@ -216,8 +217,8 @@ try {
     await expect(chinese.getByRole('button', { name: '新建技能', exact: true })).toBeInViewport();
   }
   await chinese.getByRole('button', { name: '新建技能', exact: true }).click();
-  await expect(chinese.getByLabel('保存到')).toHaveValue('user');
-  await expect(chinese.getByLabel('保存到').locator('option')).toHaveCount(1);
+  await expect(chinese.getByRole('combobox', { name: '保存到', exact: true })).toHaveAttribute('data-value', 'user');
+  await expect(selectOptions(chinese.getByRole('combobox', { name: '保存到', exact: true }))).toHaveCount(1);
   await chinese.getByRole('button', { name: '选择图标', exact: true }).click();
   const chinesePicker = page.getByRole('dialog', { name: '选择图标', exact: true });
   await expect(chinesePicker.getByRole('radio', { name: '书籍', exact: true })).toBeVisible();
