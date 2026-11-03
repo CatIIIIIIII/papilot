@@ -4,6 +4,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
+import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { taskNoteResults } from '../src/server/note-results.ts';
 import { rewriteReviewHtml } from '../src/server/review.ts';
 
@@ -68,7 +69,7 @@ try {
   await frame().locator('.papilot-linked-change[data-stop="1"]').waitFor();
   assert.match(await page.locator('.review-frame').getAttribute('src'), /round=1&history=1/);
   await frame().getByRole('button', { name: 'Show note 2: Clarify the contribution.', exact: true }).click();
-  assert.equal(await sent(1).evaluate(element => element === document.activeElement), true);
+  await expect(sent(1)).toBeFocused();
 
   decisions[1].c1 = 'accepted';
   await frame().locator('body').evaluate(element => element.ownerDocument.defaultView.dispatchEvent(new Event('latex-review:decided')));
@@ -95,7 +96,7 @@ try {
   assert.equal(await page.locator('.review-frame').isVisible(), true);
   await frame().getByRole('button', { name: 'Show note 1: Shorten the opening.', exact: true }).click();
   await sent(0).waitFor({ state: 'visible' });
-  assert.equal(await sent(0).evaluate(element => element === document.activeElement), true);
+  await expect(sent(0)).toBeFocused();
   const noteBox = await sent(0).boundingBox(), composerBox = await page.locator('.composer-wrap').boundingBox(), messagesBox = await page.locator('.messages').boundingBox();
   assert.ok(noteBox.y >= messagesBox.y - 1 && noteBox.y + noteBox.height <= Math.min(messagesBox.y + messagesBox.height, composerBox.y) + 1, 'the complete selected note stays between the header and composer');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);

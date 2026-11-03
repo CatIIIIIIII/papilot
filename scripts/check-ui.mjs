@@ -1210,7 +1210,10 @@ try {
   assert.deepEqual(gitActions.filter(action => typeof action === 'string'), ['push', 'fetch', 'merge', 'finish']);
   Object.assign(gitState, structuredClone(originalGit));
   const pdfToolbar = page.getByRole('toolbar', { name: 'PDF controls' });
-  assert.equal(await page.locator('.manuscript-side-header').getByRole('link', { name: 'Open PDF', exact: true }).getAttribute('href'), '/api/projects/fixture-paper/manuscript.pdf?key=fixture');
+  await page.locator('.manuscript-side-header').getByRole('button', { name: 'Share', exact: true }).click();
+  assert.equal(await page.getByRole('menuitem', { name: 'Open PDF', exact: true }).getAttribute('href'), '/api/projects/fixture-paper/manuscript.pdf?key=fixture');
+  assert.equal(await page.getByRole('menuitem', { name: 'Export PDF', exact: true }).getAttribute('href'), '/api/projects/fixture-paper/manuscript.pdf?key=fixture&download=1');
+  await page.keyboard.press('Escape');
   await pdfToolbar.getByRole('button', { name: 'Recompile PDF', exact: true }).waitFor();
   assert.equal(await page.title(), 'Example paper · Papilot');
   await worktrees.getByRole('button', { name: `Open task: ${task.title}`, exact: true }).click();

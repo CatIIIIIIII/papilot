@@ -194,13 +194,13 @@ try {
   await frame().locator('.review-note-layer').first().waitFor({ state: 'attached' });
   await page.getByRole('button', { name: 'Annotation group color', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Green', exact: true }).click();
-  for (const selector of ['.context .pdf-glyph', '.before .pdf-glyph']) {
+  for (const [index, selector] of ['.context .pdf-glyph', '.before .pdf-glyph'].entries()) {
     await frame().locator(selector).first().evaluate(el => {
       const range = document.createRange(); range.selectNodeContents(el);
       const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
       el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse' }));
     });
-    await page.waitForFunction(() => JSON.parse(localStorage.getItem('papilot:review-notes:review-notes-fixture')).notes.length > 0);
+    await page.waitForFunction(count => JSON.parse(localStorage.getItem('papilot:review-notes:review-notes-fixture'))?.notes.length === count, index + 1);
   }
   await frame().locator('.review-note-tag[data-group="green"]').nth(1).waitFor();
   assert.equal(await noteInput.count(), 0);

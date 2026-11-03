@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-11-03
+
+Papilot 0.8.7 prepares the manuscript's PDF while you review, keeps long builds responsive, exports PDFs with notes and makes adding notes to a task feel like sending a message.
+
 ### Added
 
 - **Export the PDF, with or without your notes.** The paper's Open PDF button is now a Share menu: open the PDF, export it, or export it with your notes. With notes, every highlight and marked region keeps its colour, and each comment sits in a numbered card in a margin beside the page, joined to its mark. Chinese, Japanese and Korean comments are included. The paper's text, links and bookmarks still work. When a page has more comments than its margin can hold, the cut-off ones are printed in full at the end of the PDF and linked to and from their cards.
@@ -282,7 +286,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.6...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.7...HEAD
+[0.8.7]: https://github.com/PapilotAI/papilot/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/PapilotAI/papilot/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/PapilotAI/papilot/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/PapilotAI/papilot/compare/v0.8.3...v0.8.4
