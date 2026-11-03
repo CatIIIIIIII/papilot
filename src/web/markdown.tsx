@@ -1,12 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { MathPlugins } from './math-plugins.ts';
-import { t } from './i18n.ts';
+import { t, useLanguage } from './i18n.ts';
 
 // Host paths are references, not routes on the Papilot web server. Clicking
 // copies the path, including line numbers, even over Tailscale HTTP.
 function FileReference({ path, children }: { path: string; children: ReactNode }) {
+  // The reply around it is memoized, so its label follows the language itself.
+  useLanguage();
   const [copied, setCopied] = useState(false);
   async function copy() {
     let value = path;
@@ -81,25 +83,33 @@ function useMath(wanted: boolean) {
   return wanted ? math : null;
 }
 
+// Defined once: a component created during render is a new element type each
+// time, so React would rebuild every heading, link and table on every render.
+const components: Components = {
+  h1: ({ children }) => <h3>{children}</h3>,
+  h2: ({ children }) => <h4>{children}</h4>,
+  h3: ({ children }) => <h5>{children}</h5>,
+  h4: ({ children }) => <h6>{children}</h6>,
+  h5: ({ children }) => <h6>{children}</h6>,
+  a: ({ href, children, title }) => !href ? <>{children}</> : /^(?:https?:\/\/|mailto:)/i.test(href)
+    ? <a href={href} title={title} target="_blank" rel="noreferrer">{children}</a>
+    : href.startsWith('#') ? <a href={href}>{children}</a> : <FileReference path={href}>{children}</FileReference>,
+  table: ({ children }) => <div className="markdown-table"><table>{children}</table></div>,
+  pre: ({ children }) => <pre tabIndex={0}>{children}</pre>,
+  // Do not load arbitrary images embedded in agent output automatically.
+  img: ({ alt }) => <span>{alt}</span>,
+};
+const urlTransform = (url: string) => /^(?:https?:\/\/|mailto:|#)/i.test(url) || (!/^[a-z][a-z\d+.-]*:/i.test(url) && !url.startsWith('//')) ? url : '';
+const plainPlugins = [remarkGfm];
+
 // Renders agent replies. Raw HTML stays text, only web and mail links open,
 // and mathematics is typeset once KaTeX has loaded (until then it shows as written).
-export function MarkdownView({ text, math }: { text: string; math?: MathPlugins | null }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm, ...(math?.remark || [])]} rehypePlugins={math?.rehype} urlTransform={url => /^(?:https?:\/\/|mailto:|#)/i.test(url) || (!/^[a-z][a-z\d+.-]*:/i.test(url) && !url.startsWith('//')) ? url : ''} components={{
-    h1: ({ children }) => <h3>{children}</h3>,
-    h2: ({ children }) => <h4>{children}</h4>,
-    h3: ({ children }) => <h5>{children}</h5>,
-    h4: ({ children }) => <h6>{children}</h6>,
-    h5: ({ children }) => <h6>{children}</h6>,
-    a: ({ href, children, title }) => !href ? <>{children}</> : /^(?:https?:\/\/|mailto:)/i.test(href)
-      ? <a href={href} title={title} target="_blank" rel="noreferrer">{children}</a>
-      : href.startsWith('#') ? <a href={href}>{children}</a> : <FileReference path={href}>{children}</FileReference>,
-    table: ({ children }) => <div className="markdown-table"><table>{children}</table></div>,
-    pre: ({ children }) => <pre tabIndex={0}>{children}</pre>,
-    // Do not load arbitrary images embedded in agent output automatically.
-    img: ({ alt }) => <span>{alt}</span>,
-  }}>{math ? normalizeMath(text) : text}</ReactMarkdown>;
-}
+export const MarkdownView = memo(function MarkdownView({ text, math }: { text: string; math?: MathPlugins | null }) {
+  const remarkPlugins = useMemo(() => math?.remark ? [remarkGfm, ...math.remark] : plainPlugins, [math]);
+  return <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={math?.rehype} urlTransform={urlTransform} components={components}>{math ? normalizeMath(text) : text}</ReactMarkdown>;
+});
 
-export function Markdown({ text }: { text: string }) {
+// Parsing is the costly part, so a reply renders again only when its text changes.
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return <MarkdownView text={text} math={useMath(hasMath(text))}/>;
-}
+});
