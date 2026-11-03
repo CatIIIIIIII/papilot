@@ -18,7 +18,7 @@ import { DraftAttachments, MessageAttachments, useAttachmentDraft } from './atta
 import { type AttachmentDraft, type UploadAttachment } from './attachment-draft.ts';
 import type { Attachment } from '../shared.ts';
 import { noteLocation } from './note-location.ts';
-import { ReadRequest, canStreamUpdates } from './refresh.ts';
+import { ReadRequest, canStreamUpdates, mergeTimeline } from './refresh.ts';
 import { browserStorage } from './storage.ts';
 import { readPlace, savePlace } from './places.ts';
 import { ModeSwitch, type PdfMode } from './mode-switch.tsx';
@@ -893,10 +893,11 @@ function App() {
   const [timelineError, setTimelineError] = useState({ taskId: '', message: '' });
   const snapshotRef = useRef<Snapshot | null>(null);
   const timelineCache = useRef(new Map<string, TimelineItem[]>());
+  const timelineRevisions = useRef(new Map<string, string>());
   const composers = useRef(new Map<string, ComposerDraft>());
   const answerDrafts = useRef(new Map<string, Record<string, string>>());
   const [snapshotRequest] = useState(() => new ReadRequest<Snapshot & { csrf: string }>());
-  const [timelineRequest] = useState(() => new ReadRequest<{ items: TimelineItem[] }>());
+  const [timelineRequest] = useState(() => new ReadRequest<{ items: TimelineItem[]; revision?: string; partial?: boolean }>());
   const [online, setOnline] = useState(true), [error, setError] = useState('');
   const [connectionError, setConnectionError] = useState('');
   const sidebarRef = useRef<HTMLElement>(null);
@@ -1011,12 +1012,17 @@ function App() {
   const refreshTimeline = useCallback(async (selection: string) => {
     if (selectedRef.current === selection && !timelineCache.current.has(selection)) setItemsLoading(true);
     try {
-      await timelineRequest.run(selection, signal => api('/tasks/' + selection + '/items', undefined, signal), timeline => {
+      // A cached timeline asks only for what changed since it was read.
+      const cached = timelineCache.current.get(selection), since = cached && timelineRevisions.current.get(selection);
+      await timelineRequest.run(selection, signal => api<{ items: TimelineItem[]; revision?: string; partial?: boolean }>('/tasks/' + selection + '/items' + (since ? '?since=' + encodeURIComponent(since) : ''), undefined, signal), timeline => {
+        const current = timelineCache.current.get(selection);
+        const items = timeline.partial && current ? mergeTimeline(current, timeline.items) : timeline.items;
+        if (timeline.revision) timelineRevisions.current.set(selection, timeline.revision); else timelineRevisions.current.delete(selection);
         timelineCache.current.delete(selection);
-        timelineCache.current.set(selection, timeline.items);
+        timelineCache.current.set(selection, items);
         // Bound the in-memory history cache while retaining quick back-and-forth navigation.
         if (timelineCache.current.size > 8) timelineCache.current.delete(timelineCache.current.keys().next().value!);
-        if (selectedRef.current === selection) { setTimeline({ taskId: selection, items: timeline.items }); setTimelineError({ taskId: selection, message: '' }); }
+        if (selectedRef.current === selection) { if (items !== current) setTimeline({ taskId: selection, items }); setTimelineError(error => error.taskId === selection && !error.message ? error : { taskId: selection, message: '' }); }
       });
     } catch (e) { if (selectedRef.current === selection) setTimelineError({ taskId: selection, message: e instanceof Error ? e.message : String(e) }); }
     finally { if (selectedRef.current === selection) setItemsLoading(false); }
