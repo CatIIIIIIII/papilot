@@ -17,6 +17,8 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
   const typed = useRef({ text: '', at: 0 });
   const selected = options.findIndex(option => option.value === value), current = options[selected];
   const enabled = (index: number) => index >= 0 && index < options.length && !options[index].disabled;
+  // A field disabled while its list is open, such as during a save, closes it.
+  useEffect(() => { if (disabled && shown()) close(); }, [disabled]);
   useEffect(() => {
     if (!open) return;
     const dismiss = () => list.current?.hidePopover();
@@ -47,6 +49,9 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
   }
   function show(start = selected) {
     if (disabled || !list.current) return;
+    // Safari leaves focus where it was when a button is clicked, and the list's
+    // keys are handled on the chip.
+    trigger.current?.focus({ preventScroll: true });
     list.current.showPopover(); position(); setOpen(true);
     setActive(enabled(start) ? start : options.findIndex((_, index) => enabled(index)));
   }
@@ -56,7 +61,7 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
   // Closing also ends a typed search, so the next one starts fresh.
   function close() { list.current?.hidePopover(); setOpen(false); typed.current = { text: '', at: 0 }; }
   function pick(index: number) {
-    if (!enabled(index)) return;
+    if (disabled || !enabled(index)) return;
     close(); trigger.current?.focus();
     if (options[index].value !== value) onChange(options[index].value);
   }

@@ -122,6 +122,8 @@ try {
   // without closing Settings, Tab accepts, and a space typed into a search
   // stays part of it instead of closing the list.
   await page.setViewportSize({ width: 1100, height: 844 });
+  // A resize closes an open list, so let the resize land before opening one.
+  await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
   const theme = dialog.getByRole('combobox', { name: 'Theme', exact: true });
   await theme.focus();
   await page.keyboard.press('Enter'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Escape');
