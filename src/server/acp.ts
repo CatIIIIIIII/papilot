@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { AgentId } from '../shared.ts';
 import { Adapter, findExecutable, type Item, type Thread, type Turn } from './agents.ts';
 import { imageType } from './attachments.ts';
+import { readsOnly } from './read-only-command.ts';
 import { VERSION } from './paths.ts';
 
 interface Choice { value: string; name: string }
@@ -25,6 +26,16 @@ function toolKind(tool: any): string {
   return tool.kind || 'other';
 }
 const choices = (option?: ConfigOption): Choice[] => (option?.options || []).flatMap(value => 'options' in value ? value.options : [value]);
+const COMMAND_INPUT = new Set(['command', 'description', 'workdir', 'cwd', 'timeout']);
+// A shell command that only reads files in the task folder runs without
+// asking, as it would in Codex's or Claude's sandbox. Inputs the check does
+// not know (other tool parameters) still ask.
+function readsInFolder(tool: any, cwd: string) {
+  const input = tool.rawInput, workdir = input?.workdir ?? input?.cwd;
+  if (toolKind(tool) !== 'execute' || typeof input?.command !== 'string' || Object.keys(input).some(key => !COMMAND_INPUT.has(key))) return false;
+  if (workdir !== undefined && typeof workdir !== 'string') return false;
+  return readsOnly(input.command, cwd, workdir ? path.resolve(cwd, workdir) : cwd);
+}
 
 // How one ACP agent is launched and kept on manual approvals. modes lists the
 // session modes Papilot accepts, best first: a mode that edits the task
@@ -37,6 +48,8 @@ export interface AcpProfile {
   config?: Record<string, string>;
   authMethods?: string[];
   sessionMeta?: Record<string, unknown>;
+  // Effort levels are reported only for the session's current model.
+  modelEfforts?: boolean;
 }
 export const ACP_PROFILES = {
   // Grok owns authentication and tools. A dedicated process and explicit
@@ -62,8 +75,9 @@ export const ACP_PROFILES = {
     env: () => ({ ...process.env, DSH_PERMISSION_MODE: 'workspace-write' }) },
   // OpenCode runs tools without asking by default. Its highest-precedence
   // config layer makes it ask before shell commands and anything outside the
-  // task worktree, while edits in the worktree go ahead for review.
-  opencode: { id: 'opencode', name: 'OpenCode', bin: 'opencode', binEnv: 'PAPILOT_OPENCODE_BIN', args: ['acp'], modes: ['build'],
+  // task worktree, while edits in the worktree go ahead for review. Papilot
+  // answers for commands that only read files in the worktree (readsInFolder).
+  opencode: { id: 'opencode', name: 'OpenCode', bin: 'opencode', binEnv: 'PAPILOT_OPENCODE_BIN', args: ['acp'], modes: ['build'], modelEfforts: true,
     setup: 'Install OpenCode and connect a provider with opencode auth login, then select Reconnect. Set PAPILOT_OPENCODE_BIN if opencode is not on PATH.',
     env: () => ({ ...process.env, OPENCODE_CONFIG_CONTENT: opencodeConfig(process.env.OPENCODE_CONFIG_CONTENT) }) },
 } satisfies Record<string, AcpProfile>;
@@ -134,6 +148,7 @@ export class AcpAgent extends Adapter {
       if (this.profile.modes.length) this.mode(probe);
       this.config(probe);
       this.readModels(probe, true);
+      if (this.profile.modelEfforts) await this.learnEfforts(probe);
       const sessionCapabilities = this.capabilities.sessionCapabilities || {};
       if (sessionCapabilities.delete) await this.rpc('session/delete', { sessionId: probe.sessionId });
       else if (sessionCapabilities.close) await this.rpc('session/close', { sessionId: probe.sessionId });
@@ -182,12 +197,34 @@ export class AcpAgent extends Adapter {
     if (model) {
       const option = session!.configOptions?.find(option => option.category === 'model' || option.id === 'model');
       if (option) {
-        const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId: option.id, value: model });
+        const result = await this.chooseModel(session!.sessionId, option, model);
         if (result.configOptions) session!.configOptions = result.configOptions;
       } else await this.rpc('session/set_model', { sessionId: session!.sessionId, modelId: model });
     }
     this.readModels(session!);
     return session!;
+  }
+  // The probe session visits every model once so that each model's effort
+  // levels are known before it is chosen. The session is discarded, and
+  // switching it does not change the agent's default model.
+  private async learnEfforts(probe: Session) {
+    const option = probe.configOptions?.find(option => option.category === 'model' || option.id === 'model');
+    for (const choice of choices(option)) {
+      if (choice.value === option!.currentValue) continue;
+      const result = await this.chooseModel(probe.sessionId, option!, choice.value).catch(() => null);
+      if (result?.configOptions) this.readModels({ ...probe, configOptions: result.configOptions });
+    }
+  }
+  // OpenCode 2.0 sometimes answers a model change with the previous model's
+  // options (3 in 120 changes); asking again returns the new model's.
+  private async chooseModel(sessionId: string, option: ConfigOption, value: string) {
+    let result: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      result = await this.rpc('session/set_config_option', { sessionId, configId: option.id, value });
+      const current = result?.configOptions?.find((entry: ConfigOption) => entry.id === option.id)?.currentValue;
+      if (current === undefined || current === value) break;
+    }
+    return result;
   }
   // The accepted mode a session offers, as a session mode or a mode option.
   private mode(session: Session) {
@@ -330,6 +367,8 @@ export class AcpAgent extends Adapter {
     const edit = toolKind(tool) === 'edit';
     const options = message.params.options || [];
     const question = options.filter((option: any) => option.kind === 'allow_once').length > 1;
+    const once = options.find((option: any) => option.kind === 'allow_once');
+    if (!question && once && readsInFolder(tool, live.cwd)) { this.send({ id: message.id, result: { outcome: { outcome: 'selected', optionId: once.optionId } } }); return; }
     this.approvals.set(id, { rpcId: message.id, turn: live.turn, options, question });
     if (question) {
       // A question arrives as a permission request with several one-time

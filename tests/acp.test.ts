@@ -25,7 +25,7 @@ function fixture(onPrompt: (message: any, rpc: ReturnType<typeof peer>) => void 
       else if (method === 'session/new' || method === 'session/load') {
         if (method === 'session/load') rpc.update(params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Historical reply' } });
         rpc.reply(id, { sessionId: params.sessionId || `session-${++serial}`, configOptions, modes: { availableModes: [{ id: 'default' }] } });
-      } else if (method === 'session/set_config_option') rpc.reply(id, { configOptions });
+      } else if (method === 'session/set_config_option') rpc.reply(id, { configOptions: configOptions.map(option => option.id === params.configId ? { ...option, currentValue: params.value } : option) });
       else if (method === 'session/prompt') onPrompt(message, rpc);
       else if (id !== undefined) rpc.reply(id, {});
     });
@@ -401,6 +401,67 @@ test('OpenCode is set to its build mode option and asked to request approval bef
   const merged = JSON.parse(opencodeConfig(JSON.stringify({ model: 'x/y', permission: { webfetch: 'deny', bash: 'allow' } })));
   assert.equal(merged.model, 'x/y'); assert.equal(merged.permission.webfetch, 'deny'); assert.equal(merged.permission.bash, 'ask');
   assert.equal(JSON.parse(opencodeConfig('not json')).permission.shell, 'ask');
+});
+
+test('OpenCode learns each model\'s effort levels when it connects', { timeout: 5000 }, async () => {
+  // OpenCode reports levels only for the session's current model, and they differ by model.
+  const efforts: Record<string, string[]> = { 'opencode/pulse': ['low', 'high', 'max', 'default'], 'google/gemini-3.1-pro': ['low', 'medium', 'high', 'default'], 'opencode/big-pickle': [] };
+  const options = (model: string) => [
+    { id: 'model', category: 'model', currentValue: model, options: Object.keys(efforts).map(value => ({ value, name: value })) },
+    ...(efforts[model].length ? [{ id: 'effort', category: 'thought_level', currentValue: 'default', options: efforts[model].map(value => ({ value, name: value })) }] : []),
+    { id: 'mode', category: 'mode', currentValue: 'build', options: [{ value: 'build', name: 'Build' }] },
+  ];
+  const calls: any[] = [], answered = new Set<string>();
+  let previous = 'opencode/pulse';
+  const launch = () => {
+    const rpc = peer(message => {
+      calls.push(message);
+      const { id, method, params } = message;
+      if (method === 'initialize') rpc.reply(id, { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {}, delete: {} } } });
+      else if (method === 'session/new') rpc.reply(id, { sessionId: 'probe', configOptions: options('opencode/pulse') });
+      else if (method === 'session/set_config_option' && params.configId === 'model') {
+        // Like OpenCode 2.0 at times, the first answer still describes the previous model.
+        rpc.reply(id, { configOptions: options(answered.has(params.value) ? params.value : previous) });
+        answered.add(previous = params.value);
+      } else if (method === 'session/set_config_option') rpc.reply(id, { configOptions: options(previous) });
+      else if (method && id !== undefined) rpc.reply(id, {});
+    });
+    return rpc.child;
+  };
+  const agent = new AcpAgent(ACP_PROFILES.opencode, 'fake-opencode', launch as any);
+  try {
+    await agent.start();
+    const models = (await agent.request('model/list')).data;
+    assert.deepEqual(Object.fromEntries(models.map((model: any) => [model.model, model.supportedReasoningEfforts.map((effort: any) => effort.reasoningEffort)])),
+      { 'opencode/pulse': ['low', 'high', 'max'], 'google/gemini-3.1-pro': ['low', 'medium', 'high'], 'opencode/big-pickle': [] });
+    assert.equal(models.find((model: any) => model.isDefault).model, 'opencode/pulse');
+    assert.ok(calls.some(call => call.method === 'session/delete' && call.params.sessionId === 'probe'), 'the probe session is discarded');
+  } finally { agent.close(); }
+});
+
+test('reads in the task folder run without asking; other commands still ask', { timeout: 5000 }, async () => {
+  const session = { configOptions: [{ id: 'mode', category: 'mode', currentValue: 'build', options: [{ value: 'build', name: 'Build' }] }] };
+  const options = [{ optionId: 'once', kind: 'allow_once', name: 'Allow once' }, { optionId: 'always', kind: 'allow_always', name: 'Always allow' }, { optionId: 'reject', kind: 'reject_once', name: 'Reject' }];
+  const f = profileFixture(ACP_PROFILES.opencode, session, (m, rpc) => {
+    const sessionId = m.params.sessionId;
+    for (const [toolCallId, command] of [['read', "cat -n main.tex | head -80; sed -n '1,80p' sections/*.tex 2>/dev/null"], ['outside', 'cat ../secret.txt']]) {
+      rpc.update(sessionId, { sessionUpdate: 'tool_call', toolCallId, kind: 'execute', title: command, rawInput: { command, description: 'Read' }, status: 'pending' });
+      rpc.send({ id: toolCallId, method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId }, options } });
+    }
+  });
+  try {
+    await f.agent.start();
+    const { thread } = await f.agent.request('thread/start', { cwd: '/paper' });
+    const requested = new Promise<any>(resolve => f.agent.once('request', resolve));
+    await f.agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Read.' }] });
+    const request = await requested; await tick();
+    assert.equal(request.params.command, 'cat ../secret.txt');
+    assert.equal(f.requests.length, 1, 'the read in the folder is not asked');
+    assert.deepEqual(f.calls.find(call => call.id === 'read' && !call.method).result.outcome, { outcome: 'selected', optionId: 'once' });
+    f.agent.respond(request.id, { decision: 'decline' }); await tick();
+    assert.deepEqual(f.calls.find(call => call.id === 'outside' && !call.method).result.outcome, { outcome: 'selected', optionId: 'reject' });
+    f.rpc().reply(f.calls.find(call => call.method === 'session/prompt').id, { stopReason: 'cancelled' });
+  } finally { f.agent.close(); }
 });
 
 test('Qwen prefers its auto-edit mode, and an agent without any accepted mode is refused', { timeout: 5000 }, async () => {
