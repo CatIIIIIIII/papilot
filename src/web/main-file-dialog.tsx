@@ -11,7 +11,7 @@ export function MainFileDialog({ name, candidates, open, onClose }: { name: stri
   const [main, setMain] = useState(candidates[0]), [busy, setBusy] = useState(false), [error, setError] = useState('');
   useEffect(() => {
     const element = dialog.current!, opener = document.activeElement as HTMLElement | null;
-    element.showModal(); element.querySelector('select')?.focus();
+    element.showModal(); element.querySelector<HTMLElement>('[role="combobox"]')?.focus();
     return () => { element.close(); if (opener?.isConnected) opener.focus(); };
   }, []);
   async function submit() {

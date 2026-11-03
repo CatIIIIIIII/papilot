@@ -121,8 +121,9 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
       <span className="chip-value">{display ?? current?.label ?? value}</span>
       <Icon name="chevronDown" size={13}/>
     </button>
-    {/* Clicks pick an option without taking focus from the chip. */}
-    <div ref={list} id={id} popover="auto" role="listbox" aria-label={label} className="action-menu select-list" onMouseDown={event => event.preventDefault()}
+    {/* Clicks pick an option without taking focus from the chip, and are
+        cancelled so a label around the chip does not click it open again. */}
+    <div ref={list} id={id} popover="auto" role="listbox" aria-label={label} className="action-menu select-list" onMouseDown={event => event.preventDefault()} onClick={event => event.preventDefault()}
       onToggle={event => { const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown); if (!shown) setActive(-1); }}>
       {groups ? groups.map(group => <div key={group} role="group" aria-label={group || undefined} className="select-group">
         {group && <div className="select-group-label" aria-hidden="true">{group}</div>}
