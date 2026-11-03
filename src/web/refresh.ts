@@ -22,3 +22,14 @@ export class ReadRequest<T> {
 // HTTP/1 browsers share a small connection pool across tabs. Long-lived event
 // streams can fill that pool and block navigation, assets, and API requests.
 export function canStreamUpdates(protocol: string) { return protocol === 'h2' || protocol === 'h3'; }
+
+// A partial timeline read returns only the items written since the last one.
+// Changed items replace their earlier version in place, new ones join in time
+// order, and every unchanged item keeps its identity so its message is not
+// rendered again.
+export function mergeTimeline<T extends { id: string; createdAt: number }>(items: T[], changed: T[]): T[] {
+  if (!changed.length) return items;
+  const updates = new Map(changed.map(item => [item.id, item]));
+  const merged = items.map(item => { const next = updates.get(item.id); if (next) updates.delete(item.id); return next || item; });
+  return updates.size ? [...merged, ...updates.values()].sort((a, b) => a.createdAt - b.createdAt) : merged;
+}

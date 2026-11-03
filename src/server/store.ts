@@ -1,6 +1,7 @@
 import type { ReviewSnapshot } from './ai-review.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Annotation, Project, Task, Run, TimelineItem } from '../shared.ts';
@@ -53,7 +54,28 @@ export class Store extends EventEmitter {
   saveRun(r: Run) { this.db.prepare('INSERT INTO runs VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,data=excluded.data').run(r.id, r.taskId, r.requestKey, r.status, JSON.stringify(r)); this.emit('change'); }
   runByKey(key: string) { const row = this.db.prepare('SELECT data FROM runs WHERE request_key=?').get(key) as { data: string } | undefined; return row ? JSON.parse(row.data) as Run : undefined; }
   items(taskId: string) { return (this.db.prepare('SELECT data FROM items WHERE task_id=? ORDER BY created,rowid').all(taskId) as { data: string }[]).map(r => JSON.parse(r.data) as TimelineItem); }
-  saveItem(item: TimelineItem) { this.db.prepare('INSERT INTO items VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(item.id, item.taskId, item.createdAt, JSON.stringify(item)); this.emit('change'); }
+  // A running task's view reads its timeline every second, and a command's
+  // output alone can be 40 KB, so a view that has the timeline asks only for
+  // the items written since its revision. Revisions start over with the
+  // process; one from an earlier run gets the whole timeline.
+  private readonly boot = randomUUID().slice(0, 8);
+  private revision = 0;
+  private itemRevisions = new Map<string, Map<string, number>>();
+  itemsSince(taskId: string, since?: string): { items: TimelineItem[]; revision: string; partial?: true } {
+    const revision = `${this.boot}:${this.revision}`, [boot, value] = (since || '').split(':'), after = Number(value);
+    if (boot !== this.boot || !Number.isSafeInteger(after) || after < 0 || after > this.revision) return { items: this.items(taskId), revision };
+    const changed = [...this.itemRevisions.get(taskId) || []].filter(([, at]) => at > after).map(([id]) => id);
+    if (changed.length > 500) return { items: this.items(taskId), revision };
+    const items = changed.length ? (this.db.prepare(`SELECT data FROM items WHERE task_id=? AND id IN (${changed.map(() => '?').join()}) ORDER BY created,rowid`).all(taskId, ...changed) as { data: string }[]).map(r => JSON.parse(r.data) as TimelineItem) : [];
+    return { items, revision, partial: true };
+  }
+  saveItem(item: TimelineItem) {
+    this.db.prepare('INSERT INTO items VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(item.id, item.taskId, item.createdAt, JSON.stringify(item));
+    let revisions = this.itemRevisions.get(item.taskId);
+    if (!revisions) this.itemRevisions.set(item.taskId, revisions = new Map());
+    revisions.set(item.id, ++this.revision);
+    this.emit('change');
+  }
   saveReviewInput(taskId: string, snapshot: ReviewSnapshot) { this.db.prepare('INSERT INTO ai_review_inputs VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET data=excluded.data').run(taskId, JSON.stringify(snapshot)); }
   reviewInput(taskId: string): ReviewSnapshot {
     const row = this.db.prepare('SELECT data FROM ai_review_inputs WHERE task_id=?').get(taskId) as { data: string } | undefined;
@@ -77,6 +99,7 @@ export class Store extends EventEmitter {
     this.transaction(() => {
       this.db.prepare('INSERT INTO deleted_tasks VALUES(?,?) ON CONFLICT(id) DO NOTHING').run(id, Date.now());
       this.db.prepare('DELETE FROM items WHERE task_id=?').run(id);
+      this.itemRevisions.delete(id);
       this.db.prepare('DELETE FROM runs WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM ai_review_inputs WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
