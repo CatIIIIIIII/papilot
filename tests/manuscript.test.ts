@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { anchor, annotationTask, commitChanges, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStatus, mergeConflicts, parseStatus, parseSynctex, pdfWords, settleLines, sourceExcerpt, workingTree } from '../src/server/manuscript.ts';
+import { anchor, annotationTask, commitChanges, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStamp, gitStatus, mergeConflicts, parseStatus, parseSynctex, pdfWords, settleLines, sourceExcerpt, workingTree } from '../src/server/manuscript.ts';
 import { readNotesInstructions } from '../src/notes.ts';
 import type { Annotation } from '../src/shared.ts';
 
@@ -272,4 +272,21 @@ test('a branch that diverged from its upstream merges, and a conflicted merge is
     assert.deepEqual([(await gitStatus(mine)).merging, fs.readFileSync(path.join(mine, 'main.tex'), 'utf8')], [null, 'Intro.\nMine again.\n']);
     await assert.rejects(gitAbortMerge(mine), /No merge is in progress/);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test("Git's state stamp moves with staging and commits but not with reading the status", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-stamp-'));
+  try {
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], { cwd: root });
+    git('init', '-q'); fs.writeFileSync(path.join(root, 'main.tex'), 'one\n'); git('add', 'main.tex'); git('commit', '-qm', 'first');
+    const committed = gitStamp(root);
+    await gitStatus(root);
+    assert.equal(gitStamp(root), committed, 'reading the status leaves the stamp alone');
+    fs.writeFileSync(path.join(root, 'main.tex'), 'two\n'); git('add', 'main.tex');
+    const staged = gitStamp(root);
+    assert.notEqual(staged, committed);
+    git('commit', '-qm', 'second');
+    assert.notEqual(gitStamp(root), staged);
+    assert.equal(gitStamp(path.join(root, 'missing')), '', 'a folder outside Git has no stamp');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
