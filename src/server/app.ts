@@ -447,11 +447,19 @@ export async function buildApp(options: AppOptions) {
     const words = await manuscripts.words(project.id, String(request.query.key || ''), Number(request.query.page));
     return reply.header('Cache-Control', 'private, max-age=31536000, immutable').send(words);
   });
+  const pdfName = (name: string, suffix = '') => (name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'manuscript') + suffix + '.pdf';
   app.get<{ Params: { id: string }; Querystring: { key?: string; download?: string } }>('/api/projects/:id/manuscript.pdf', project(), (request, reply) => {
     const project = store.project(request.params.id), pdf = manuscripts.pdf(project.id, String(request.query.key || ''));
-    const name = (project.name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'manuscript') + '.pdf';
     // Each key names one immutable build, so the viewer can cache and range-read it.
-    return reply.type('application/pdf').header('Content-Disposition', `${request.query.download === '1' ? 'attachment' : 'inline'}; filename="${name}"`).header('Cache-Control', 'private, max-age=31536000, immutable').sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
+    return reply.type('application/pdf').header('Content-Disposition', `${request.query.download === '1' ? 'attachment' : 'inline'}; filename="${pdfName(project.name)}"`).header('Cache-Control', 'private, max-age=31536000, immutable').sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
+  });
+  // The same build with the notes on it, as they are now.
+  app.get<{ Params: { id: string }; Querystring: { key?: string } }>('/api/projects/:id/manuscript/annotated.pdf', project(), async (request, reply) => {
+    const project = store.project(request.params.id), key = String(request.query.key || '');
+    const notes = store.annotations(project.id).filter(note => !note.taskId && !isTaskReviewNote(note) && note.key === key)
+      .map(note => ({ page: note.page, rect: note.rect, rects: note.rects, comment: note.comment, group: note.group, review: Boolean(note.aiReview), author: note.author?.name }));
+    const pdf = await manuscripts.annotatedPdf(project.id, key, notes);
+    return reply.type('application/pdf').header('Content-Disposition', `attachment; filename="${pdfName(project.name, '-annotated')}"`).header('Cache-Control', 'no-store').send(Buffer.from(pdf.buffer, pdf.byteOffset, pdf.byteLength));
   });
   app.post<{ Params: { id: string } }>('/api/requests/:id', { config: { access: { request: 'id' } } }, request => { workspace.answer(request.params.id, request.body as any); return { ok: true }; });
 

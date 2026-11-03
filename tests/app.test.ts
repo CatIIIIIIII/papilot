@@ -256,6 +256,7 @@ test('the public URL lets nothing through without a session, whatever the header
     assert.deepEqual((await f.remote.inject({ url: '/api/health', headers: REMOTE })).json(), { ok: true });
     assert.equal((await f.remote.inject({ url: '/review/thesis/', headers: REMOTE })).statusCode, 401);
     assert.equal((await f.remote.inject({ url: '/api/projects/thesis/manuscript.pdf', headers: REMOTE })).statusCode, 401);
+    assert.equal((await f.remote.inject({ url: '/api/projects/thesis/manuscript/annotated.pdf', headers: REMOTE })).statusCode, 401);
     assert.match(String((await f.remote.inject({ url: '/', headers: REMOTE })).headers['strict-transport-security']), /max-age/);
   } finally { await f.close(); }
 });
@@ -308,6 +309,7 @@ test('an unshared paper answers exactly like one that does not exist', async () 
     await same('paper', { url: '/api/projects/grant/git' }, { url: '/api/projects/nope/git' });
     await same('worktrees and history', { url: '/api/projects/grant/git/overview' }, { url: '/api/projects/nope/git/overview' });
     await same('paper PDF', { url: '/api/projects/grant/manuscript.pdf?key=x' }, { url: '/api/projects/nope/manuscript.pdf?key=x' });
+    await same('annotated PDF', { url: '/api/projects/grant/manuscript/annotated.pdf?key=x' }, { url: '/api/projects/nope/manuscript/annotated.pdf?key=x' });
     await same('notes', { method: 'POST', url: '/api/projects/grant/annotations/send', payload: { id: 'new-task-id-0001' } }, { method: 'POST', url: '/api/projects/nope/annotations/send', payload: { id: 'new-task-id-0001' } });
     await same('review', { url: '/review/grant/api/tasks' }, { url: '/review/nope/api/tasks' });
     await same('task', { url: '/api/tasks/grant-task/items' }, { url: '/api/tasks/nope/items' });
@@ -799,6 +801,31 @@ test('AI review findings stay in their task and copy individually, once, into th
     assert.deepEqual(fs.readFileSync(pdf), originalPdf);
     f.store.deleteTask('thesis-task');
     assert.equal((await get('/api/projects/thesis/manuscript')).json().annotations.length, 2, 'copied notes survive task deletion');
+  } finally { await f.close(); }
+});
+
+test('the annotated PDF carries the paper\'s current notes and nothing else', async () => {
+  const f = await fixture();
+  try {
+    const pdf = path.resolve('examples/papilot-paper/preview/main.pdf');
+    f.manuscripts.pdf = (_id, key) => { if (key !== 'current') throw Object.assign(new Error('This manuscript preview is out of date. Refresh it and try again.'), { statusCode: 404 }); return pdf; };
+    const note = { id: 'mine', projectId: 'thesis', key: 'current', page: 0, rect: [0.15, 0.36, 0.85, 0.55] as [number, number, number, number], comment: 'Trim the abstract.', quote: '', source: null, createdAt: 1 };
+    f.store.saveAnnotation(note);
+    f.store.saveAnnotation({ ...note, id: 'ada', comment: 'Lead with the contribution.', author: { id: f.ada.id, name: 'Ada' } });
+    f.store.saveAnnotation({ ...note, id: 'older', key: 'previous', comment: 'From an earlier build.' });
+    f.store.saveAnnotation({ ...note, id: 'sent', comment: 'Already sent to an agent.', taskId: 'thesis-task' });
+    f.store.saveAnnotation({ ...note, id: 'finding', comment: 'An AI finding of a review task.', aiReview: { taskId: 'thesis-task', agent: 'codex' } });
+    f.store.saveAnnotation({ ...note, id: 'deleted', comment: 'Deleted.', deletedAt: 2 });
+    const response = await f.remote.inject({ url: '/api/projects/thesis/manuscript/annotated.pdf?key=current', headers: f.as });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['content-type'], 'application/pdf');
+    assert.match(String(response.headers['content-disposition']), /^attachment; filename=".+-annotated\.pdf"$/);
+    const mupdf = await import('mupdf');
+    const page = mupdf.Document.openDocument(response.rawPayload, 'application/pdf').loadPage(0).toStructuredText('').asText().replace(/\s+/g, ' ');
+    assert.match(page, /Trim the abstract\./);
+    assert.match(page, /Ada Lead with the contribution\./);
+    for (const hidden of ['earlier build', 'Already sent', 'AI finding', 'Deleted.']) assert.ok(!page.includes(hidden), hidden);
+    assert.equal((await f.remote.inject({ url: '/api/projects/thesis/manuscript/annotated.pdf?key=stale', headers: f.as })).statusCode, 404);
   } finally { await f.close(); }
 });
 
