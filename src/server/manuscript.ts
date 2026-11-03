@@ -12,6 +12,7 @@ import type { Annotation, BuildProblem, BuildProgress, GitFile, GitStatus, Manus
 import { notesInstructions } from '../notes.ts';
 import { ignorePattern } from '../commit.ts';
 import { AnnotationPages, placeAnnotation } from './annotation-placement.ts';
+import { annotatePdf, type ExportNote } from './annotated-pdf.ts';
 import { collectProblems, countProblems, locateProblems, scrubLog, sortProblems, type StoredProblem } from './build-problems.ts';
 
 type Rect = [number, number, number, number];
@@ -637,6 +638,12 @@ export class Manuscripts extends EventEmitter {
     const build = this.builds.get(projectId);
     if (!build?.pdf || build.key !== key) throw Object.assign(new Error('This manuscript preview is out of date. Refresh it and try again.'), { statusCode: 404 });
     return build.pdf;
+  }
+
+  // The PDF with the paper's notes drawn on it, to share with people outside Papilot.
+  async annotatedPdf(projectId: string, key: string, notes: ExportNote[]) {
+    const pdf = this.pdf(projectId, key), { mupdf } = await engine();
+    return annotatePdf(mupdf, fs.readFileSync(pdf), notes);
   }
 
   // A note keeps the text under the marked region and its LaTeX source, so it
