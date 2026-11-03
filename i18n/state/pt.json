@@ -1339,6 +1339,11 @@
     "textHash": "e0ddbefdcce44d5874490c4e75ace0e07d9d3930d45ccbca1a2d082e79386517",
     "model": "gemini-4-argon-medium"
   },
+  "Delete": {
+    "revision": "5f3a72496d77e05aa0da87dcb85c420edaf519ddeb7339ece5b420ab5fc7fcb3",
+    "textHash": "8b19518ff49b2e29b07838e572247a491b4c344d3f6eab61985585d29d06aae6",
+    "model": "gemini-4-argon-medium"
+  },
   "Delete file": {
     "revision": "c6c2768cd6e9ec948a6afdabd2f2bbfc4fde3290d3561cd554bb5d7ffcfca6e5",
     "textHash": "69d1de66e857c16e474513670c054f40ce74af38b3fbbd3b3d835b95760a7eb1",
@@ -1365,7 +1370,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Delete task": {
-    "revision": "1f9ab20c38398f7e386c78b1b062c9ac2dd3f4a42f76d73122eb8e9648f5e615",
+    "revision": "3eeb476718c77dfb0fc961d69536adbd33e8d994c2f1bbfa90db014082314082",
     "textHash": "aaec979fe4cbb9cc7e0508835a9257e1c297cf76b48f4ea116a554da858c8a0f",
     "model": "gemini-4-argon-medium"
   },

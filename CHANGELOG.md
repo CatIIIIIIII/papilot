@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **Delete a finished task in one click.** Once a task's changes are in your manuscript, applied or committed, its review offers Delete beside Archive. It removes the task with its conversation and worktree right away, without asking first; the changes stay in your manuscript. On a narrow phone the two buttons move below the result instead of squeezing it.
+
 ### Changed
 
 - **The manuscript's PDF is ready when you commit a task.** A reviewed task changes the manuscript only when you commit or apply it, and its PDF then compiled only once the manuscript was opened: one to four TeX passes, which on a 324-page paper took one and a half to three minutes. Papilot now compiles what committing the task will produce in the background, as soon as its round is ready and again after each decision, so the PDF is usually there the moment you commit: on that paper, 0.8 s after the commit instead of 94 s. Committing, applying a task, a Git action or a review decision starts the build right away, also when the manuscript is not open, and the PDF view updates as soon as a build starts or ends.

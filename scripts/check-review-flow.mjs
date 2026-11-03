@@ -20,7 +20,7 @@ const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', n
 let latest = 1, serial = 0, undo = null;
 let effectFixture = true, effectRequests = 0;
 const rounds = { 1: { first: 'pending', second: 'pending', third: 'pending', fourth: 'pending' } };
-const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [], archiveRequests = [];
+const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [], archiveRequests = [], deleteRequests = [];
 let gitFiles = [];
 let pushError, conflictOnApply = false, combinedOnCommit = false;
 let timeline = [];
@@ -56,6 +56,11 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
   if (url.pathname === '/api/tasks/question-fixture/items') return route.fulfill({ json: { items: [{ id: 'answer', taskId: 'question-fixture', type: 'assistant', text: 'This equation expresses conservation of mass.', createdAt: 1 }] } });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items: timeline } });
+  if (url.pathname.endsWith('/delete')) {
+    deleteRequests.push(route.request().postDataJSON());
+    snapshot.tasks = snapshot.tasks.filter(item => item.id !== task.id);
+    return route.fulfill({ json: { ok: true } });
+  }
   if (url.pathname.endsWith('/archive')) {
     const body = route.request().postDataJSON(); archiveRequests.push(body);
     task.archivedAt = body.archived ? Date.now() : null;
@@ -448,8 +453,10 @@ try {
   await expect(taskStatus).toHaveText('Applied to manuscript');
   task.review.comments = 1; await sync();
   await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Delete task', exact: true })).toHaveCount(0);
   task.review.comments = 0; await sync();
   await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Delete task', exact: true })).toBeVisible();
   await page.reload();
   await expect(taskStatus).toHaveText('Applied to manuscript');
   assert.equal(archiveRequests.length, 0, 'saving and reloading never archives without a click');
@@ -561,6 +568,16 @@ try {
   await page.getByRole('button', { name: `Task actions for ${task.title}`, exact: true }).click();
   await page.getByRole('menuitem', { name: 'Restore task', exact: true }).click();
   await expect(card.getByRole('button', { name: 'Archive task', exact: true })).toBeVisible();
+  // A task whose result is in the manuscript is deleted at once, without a dialog.
+  await card.getByRole('button', { name: 'Delete task', exact: true }).click();
+  await expect(page.locator(`[data-task="${task.id}"]`)).toHaveCount(0);
+  await expect(page.locator('.review-frame')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  assert.deepEqual(deleteRequests, [{ confirm: true }]);
+  // The fixture's task comes back for the rest of the flow.
+  snapshot.tasks.unshift(task); await sync();
+  await page.locator(`[data-task="${task.id}"] .task-link`).click();
+  await expect(card.getByText('Applied to manuscript', { exact: true })).toBeVisible();
   task.deferred = false; task.delivery = null;
   await page.setViewportSize({ width: 1440, height: 1000 }); await sync();
   console.log('PASS: Both save choices, shared message, legacy branch migration, automatic AI conflict resolution, combined commit confirmation, intent recovery, desktop and mobile');

@@ -1181,14 +1181,18 @@ function App() {
       await refresh(true);
     } catch (e) { setCreateError(e instanceof Error ? e.message : String(e)); } finally { setCreating(false); }
   }
-  async function action(route: string, body: Record<string, unknown> = {}) {
+  async function action(route: string, body: Record<string, unknown> = {}, refreshAfter = true) {
     const key = route.startsWith('/tasks/') ? route.split('/').slice(0, 3).join('/') : route;
     if (actionRequests.current.has(key)) return;
     actionRequests.current.add(key); setPendingActions(new Set(actionRequests.current));
-    try { await api(route, body); await refresh(true); return true; } catch (e) { reportError(e); }
+    try { await api(route, body); if (refreshAfter) await refresh(true); return true; } catch (e) { reportError(e); }
     finally { actionRequests.current.delete(key); setPendingActions(new Set(actionRequests.current)); }
   }
   const taskActionBusy = Boolean(task && pendingActions.has('/tasks/' + task.id));
+  // A task whose result is already in the manuscript is deleted without asking.
+  async function deleteSavedTask(target: Task) {
+    if (await action('/tasks/' + target.id + '/delete', { confirm: true }, false)) taskDeleted(target.id);
+  }
   async function archiveTask(target: Task) {
     const archived = !target.archivedAt;
     if (!await action('/tasks/' + target.id + '/archive', { archived })) return;
@@ -1402,7 +1406,8 @@ function App() {
   // With only the chat in view, the feedback bar moves to the end of the conversation.
   const chatOnly = mobile ? taskTab === 'conversation' : taskLayout === 'conversation';
   const saved = task ? taskSaveStatus(task) : null;
-  const savedResult = (message: string) => <TaskSaved message={message} disabled={taskActionBusy} onArchive={task && saved && !task.archivedAt && taskFinished(task) ? () => void archiveTask(task) : undefined}/>;
+  const savedResult = (message: string) => <TaskSaved message={message} disabled={taskActionBusy} onArchive={task && saved && !task.archivedAt && taskFinished(task) ? () => void archiveTask(task) : undefined}
+    onDelete={task && saved && taskFinished(task) ? () => void deleteSavedTask(task) : undefined}/>;
   const merging = task?.reconciliation;
   const mergeWaiting = Boolean(merging && (!merging.ready || (task?.review?.round ?? 0) <= merging.round));
   const deliveryReady = task?.deferred && task.status === 'reviewing' && !task.pendingReview && task.review?.state === 'done' && !task.review.counts.pending
