@@ -40,6 +40,7 @@ export class Store extends EventEmitter {
   saveProject(p: Project) { this.db.prepare('INSERT INTO projects VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET path=excluded.path,data=excluded.data').run(p.id, p.path, JSON.stringify(p)); this.emit('change'); }
   removeProject(id: string) {
     this.project(id);
+    const tasks = (this.db.prepare('SELECT id FROM tasks WHERE project_id=?').all(id) as { id: string }[]).map(row => row.id);
     this.transaction(() => {
       // Only Papilot records are removed. Never finish review tasks or touch their files.
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
@@ -47,6 +48,7 @@ export class Store extends EventEmitter {
       for (const table of ['tasks', 'annotations', 'members']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
+    for (const task of tasks) this.itemRevisions.delete(task);
     this.emit('change');
   }
   saveTask(t: Task) { t.updatedAt = Date.now(); this.db.prepare('INSERT INTO tasks VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(t.id, t.projectId, JSON.stringify(t)); this.emit('change'); return t; }
@@ -99,11 +101,11 @@ export class Store extends EventEmitter {
     this.transaction(() => {
       this.db.prepare('INSERT INTO deleted_tasks VALUES(?,?) ON CONFLICT(id) DO NOTHING').run(id, Date.now());
       this.db.prepare('DELETE FROM items WHERE task_id=?').run(id);
-      this.itemRevisions.delete(id);
       this.db.prepare('DELETE FROM runs WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM ai_review_inputs WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
     });
+    this.itemRevisions.delete(id);
     this.emit('change');
   }
   transaction<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const result = fn(); this.db.exec('COMMIT'); return result; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
