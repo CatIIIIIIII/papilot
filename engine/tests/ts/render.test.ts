@@ -186,6 +186,29 @@ it("emits vector strips with selectable text and unmarked clean version", () => 
   );
   expect(doc.page(0).text()).toBe("A changed word");
 });
+it("writes strips a browser can parse when a glyph maps to a control character", () => {
+  const raw = new mupdf.PDFDocument(),
+    font = raw.addObject(raw.newDictionary());
+  font.put("Type", raw.newName("Font"));
+  font.put("Subtype", raw.newName("Type1"));
+  font.put("BaseFont", raw.newName("ZapfDingbats"));
+  // ✓ and ✗, whose glyph names mupdf reads as U+0013 and U+0017.
+  const page = raw.addPage(
+    [0, 0, 200, 100],
+    0,
+    { Font: { F1: font } },
+    "BT /F1 12 Tf 30 50 Td (37) Tj ET",
+  );
+  raw.insertPage(-1, page);
+  page.destroy();
+  const buffer = raw.saveToBuffer(""),
+    doc = new PdfDocument(buffer.asUint8Array());
+  buffer.destroy();
+  documents.push(doc);
+  const svg = doc.page(0).svg(0, 100);
+  expect(svg).toContain("<use");
+  expect(svg).not.toMatch(/&#x0*(?:[0-8bcef]|1[0-9a-f]);/i);
+});
 it("keeps a moved float outside the edit and pairs relocated sentences", () => {
   const unchanged = Array.from(
     { length: 6 },

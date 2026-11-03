@@ -245,7 +245,11 @@ export class PdfPage {
     this.raw.run(device, [1, 0, 0, 1, 0, -top]);
     writer.endPage();
     writer.close();
-    const svg = buffer.asString();
+    // mupdf gives every glyph a data-text attribute, which nothing reads.
+    // A glyph whose name maps to a control character (ZapfDingbats' ✗ is
+    // "a23", read as U+0017) is written as a reference XML forbids, and
+    // the browser then drops the whole image.
+    const svg = buffer.asString().replace(/ data-text="[^"]*"/g, "");
     device.destroy();
     writer.destroy();
     buffer.destroy();
