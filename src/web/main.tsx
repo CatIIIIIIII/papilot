@@ -278,6 +278,8 @@ const TimelineEntry = memo(function TimelineEntry({ item, agent, root }: { item:
 
 // Consecutive commands, edits and tool calls fold into one line that opens to the list.
 function ToolGroup({ items, agent, root }: { items: TimelineItem[]; agent: string; root: string }) {
+  // The thread reuses its elements, so the summary follows a language change itself.
+  useLanguage();
   const commands = items.filter(item => item.type === 'command').length, edits = items.filter(item => item.type === 'files');
   const pdfs = items.filter(item => item.type === 'pdf').length;
   const files = [...new Set(edits.flatMap(item => editedFiles(item, root)))], tools = items.length - commands - edits.length - pdfs;
