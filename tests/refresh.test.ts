@@ -91,4 +91,6 @@ test('the store returns only the timeline items written since a revision', () =>
   assert.notEqual(next.revision, first.revision);
   assert.equal(store.itemsSince('t', 'other-run:0').partial, undefined, 'a revision from another run reads everything');
   assert.equal(store.itemsSince('t', 'nonsense').items.length, 3);
+  const boot = first.revision.split(':')[0];
+  for (const malformed of [`${boot}:`, `${boot}:1:x`, `${boot}:-1`, `${boot}:1.5`, `${boot}: 1`]) assert.equal(store.itemsSince('t', malformed).partial, undefined, `${malformed} reads everything`);
 });

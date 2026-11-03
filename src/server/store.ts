@@ -62,8 +62,8 @@ export class Store extends EventEmitter {
   private revision = 0;
   private itemRevisions = new Map<string, Map<string, number>>();
   itemsSince(taskId: string, since?: string): { items: TimelineItem[]; revision: string; partial?: true } {
-    const revision = `${this.boot}:${this.revision}`, [boot, value] = (since || '').split(':'), after = Number(value);
-    if (boot !== this.boot || !Number.isSafeInteger(after) || after < 0 || after > this.revision) return { items: this.items(taskId), revision };
+    const revision = `${this.boot}:${this.revision}`, match = /^([0-9a-f]{8}):(\d{1,15})$/.exec(since || ''), after = match ? Number(match[2]) : NaN;
+    if (!match || match[1] !== this.boot || after > this.revision) return { items: this.items(taskId), revision };
     const changed = [...this.itemRevisions.get(taskId) || []].filter(([, at]) => at > after).map(([id]) => id);
     if (changed.length > 500) return { items: this.items(taskId), revision };
     const items = changed.length ? (this.db.prepare(`SELECT data FROM items WHERE task_id=? AND id IN (${changed.map(() => '?').join()}) ORDER BY created,rowid`).all(taskId, ...changed) as { data: string }[]).map(r => JSON.parse(r.data) as TimelineItem) : [];
