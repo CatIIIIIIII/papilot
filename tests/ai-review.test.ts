@@ -47,9 +47,7 @@ test('location errors distinguish missing IDs, reversed ranges and page boundari
 });
 
 test('a real PDF produces stable line IDs and normalized highlights on the original version', async () => {
-  const manuscripts = new Manuscripts();
-  (manuscripts as any).builds.set('paper', { key: 'original-pdf', pdf: path.resolve('tests/fixtures/outline.pdf'), status: 'ready' });
-  const captured = await manuscripts.reviewSnapshot('paper', 'original-pdf');
+  const captured = await new Manuscripts().snapshotPdf(path.resolve('tests/fixtures/outline.pdf'), 'original-pdf');
   assert.ok(captured.lines.length > 10);
   assert.equal(new Set(captured.lines.map(line => line.id)).size, captured.lines.length);
   for (const line of captured.lines) {
@@ -61,5 +59,4 @@ test('a real PDF produces stable line IDs and normalized highlights on the origi
   const first = captured.lines[0];
   const result = parseAiReview(reply([{ start: first.id, end: first.id, comment: 'Clarify this heading.' }]), captured);
   assert.deepEqual(result.notes[0].rect, first.rect);
-  await assert.rejects(manuscripts.reviewSnapshot('paper', 'stale-pdf'), /out of date/);
 });
