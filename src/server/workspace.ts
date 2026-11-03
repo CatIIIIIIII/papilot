@@ -130,7 +130,7 @@ export class Workspace extends EventEmitter {
       || this.store.tasks().some(task => ['queued', 'running', 'waiting_input', 'building', 'uncertain', 'deleting'].includes(task.status) || task.pendingReview));
   }
   readonly attachments: Attachments;
-  constructor(public store: Store, public codex: AgentRuntime = new Codex(), private concurrency = 2, private connectReview = reviewClient, others: Partial<Record<AgentId, AgentRuntime>> = {}) {
+  constructor(public store: Store, public codex: AgentRuntime = new Codex(), private connectReview = reviewClient, others: Partial<Record<AgentId, AgentRuntime>> = {}) {
     super();
     this.attachments = new Attachments(store);
     this.agents = { codex, claude: others.claude || new ClaudeAgent(), cursor: others.cursor || new CursorAgent(), copilot: others.copilot || new AcpAgent(ACP_PROFILES.copilot), grok: others.grok || new AcpAgent(ACP_PROFILES.grok), antigravity: others.antigravity || new AntigravityAgent(),
@@ -407,7 +407,6 @@ export class Workspace extends EventEmitter {
   private async drain() {
     if (this.closing) return;
     for (const run of this.store.runs().filter(r => r.status === 'queued')) {
-      if (this.active.size >= this.concurrency) break;
       const agent = this.agentOf(this.store.task(run.taskId));
       if (!this.agents[agent].ready || !this.runtimes[agent].authenticated) continue;
       if (this.active.has(run.taskId) || this.reviewWrites.has(run.taskId) || this.publishing.has(run.taskId) || this.store.task(run.taskId).delivery?.pending || BUSY.has(this.store.task(run.taskId).status)) continue;

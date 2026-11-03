@@ -27,7 +27,7 @@ class CaptionAgent extends EventEmitter {
 function fixture() {
   const store = new Store(':memory:'), agent = new CaptionAgent();
   const review: ReviewClient = { url: 'http://unused', token: 'test', get: async () => ({ scope: { files: [] } }) as any, post: async () => ({ worktree: '/tmp' }) as any };
-  const workspace = new Workspace(store, agent as unknown as AgentRuntime, 1, async () => review);
+  const workspace = new Workspace(store, agent as unknown as AgentRuntime, async () => review);
   workspace.runtime.authenticated = true;
   workspace.runtime.models = [
     { id: 'large', name: 'Large', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high' },

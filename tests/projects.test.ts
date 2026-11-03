@@ -24,7 +24,7 @@ function fixture() {
   fs.writeFileSync(path.join(worktree, 'draft.txt'), 'Keep uncommitted work.');
   let taskInfo: any = { task: 'p-task', worktree };
   const calls: string[] = [];
-  const workspace = new Workspace(store, new Agent() as unknown as Codex, 2, async () => ({ url: '', token: '', get: async (route: string) => { calls.push(route); return (route === '/api/tasks' ? { tasks: [] } : taskInfo); }, post: async () => { throw new Error('Removal must never call review cleanup.'); } }), { claude: new Agent() as unknown as Codex, antigravity: new Agent() as unknown as Codex });
+  const workspace = new Workspace(store, new Agent() as unknown as Codex, async () => ({ url: '', token: '', get: async (route: string) => { calls.push(route); return (route === '/api/tasks' ? { tasks: [] } : taskInfo); }, post: async () => { throw new Error('Removal must never call review cleanup.'); } }), { claude: new Agent() as unknown as Codex, antigravity: new Agent() as unknown as Codex });
   store.saveProject({ id: 'paper', name: 'Paper', path: root, createdAt: 1 });
   store.saveProject({ id: 'other', name: 'Other', path: other, createdAt: 2 });
   const task: Task = { id: 'task', projectId: 'paper', name: 'p-task', title: 'Revise', instructions: 'Edit', worktree, threadId: null, turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };

@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tasks no longer wait for each other.** Papilot ran at most two tasks at a time, counted across all agents and papers, so a third task stayed queued with "Waiting for an available Codex session" even when nothing was wrong with that agent. Every task now starts as soon as you send it.
+
 ## [0.8.7] - 2026-11-03
 
 Papilot 0.8.7 prepares the manuscript's PDF while you review, keeps long builds responsive, exports PDFs with notes and makes adding notes to a task feel like sending a message.
