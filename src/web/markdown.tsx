@@ -2,11 +2,13 @@ import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { MathPlugins } from './math-plugins.ts';
-import { t } from './i18n.ts';
+import { t, useLanguage } from './i18n.ts';
 
 // Host paths are references, not routes on the Papilot web server. Clicking
 // copies the path, including line numbers, even over Tailscale HTTP.
 function FileReference({ path, children }: { path: string; children: ReactNode }) {
+  // The reply around it is memoized, so its label follows the language itself.
+  useLanguage();
   const [copied, setCopied] = useState(false);
   async function copy() {
     let value = path;
