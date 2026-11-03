@@ -890,6 +890,7 @@ function App() {
   const snapshotRef = useRef<Snapshot | null>(null);
   const timelineCache = useRef(new Map<string, TimelineItem[]>());
   const timelineRevisions = useRef(new Map<string, string>());
+  const snapshotText = useRef('');
   const composers = useRef(new Map<string, ComposerDraft>());
   const answerDrafts = useRef(new Map<string, Record<string, string>>());
   const [snapshotRequest] = useState(() => new ReadRequest<Snapshot & { csrf: string }>());
@@ -1027,6 +1028,10 @@ function App() {
     try {
       if (fresh) snapshotRequest.cancel();
       await snapshotRequest.run('state', signal => api('/state', undefined, signal), next => {
+        // Most polls find nothing new; an identical snapshot leaves the app as it is.
+        const text = JSON.stringify(next);
+        if (text === snapshotText.current && snapshotRef.current) { setOnline(true); setConnectionError(''); return; }
+        snapshotText.current = text;
         const selection = selectedRef.current, previous = snapshotRef.current;
         const removed = previous?.tasks.find(t => t.id === selection && !next.tasks.some(nextTask => nextTask.id === selection));
         if (removed) setProjectId(removed.projectId);
@@ -1083,6 +1088,8 @@ function App() {
     return () => timelineRequest.cancel();
   }, [selected, refreshTimeline, timelineRequest]);
   const task = state?.tasks.find(t => t.id === selected);
+  // A new list on every render would scroll the chat to its end each time.
+  const taskRequests = useMemo(() => state?.requests.filter(r => r.taskId === selected) || [], [state?.requests, selected]);
   if (task && !composers.current.has(task.id)) composers.current.set(task.id, new ComposerDraft('papilot:draft:' + task.id, browserStorage, uuid));
   const fullPdfUrl = task?.status !== 'deleting' && task?.review?.round ? `/api/tasks/${task.id}/pdf?round=${task.review.round}` : '';
   const project = state?.projects.find(p => p.id === (task?.projectId || projectId)) || state?.projects[0];
@@ -1183,7 +1190,7 @@ function App() {
       snapshotRequest.cancel();
       if (snapshotRef.current) {
         const next = { ...snapshotRef.current, tasks: [...snapshotRef.current.tasks.filter(task => task.id !== created.id), created] };
-        snapshotRef.current = next; setState(next);
+        snapshotRef.current = next; snapshotText.current = ''; setState(next);
       }
       setAddedTask(null);
       if (source?.width) setFlyingTask({ id: created.id, title: created.title, source });
@@ -1229,6 +1236,7 @@ function App() {
     browserStorage.removeItem('papilot:draft:' + id); composers.current.delete(id); timelineCache.current.delete(id);
     setDeleteTarget(null);
     if (selectedRef.current === id) setSelected('');
+    snapshotText.current = '';
     setState(previous => previous ? { ...previous, tasks: previous.tasks.filter(t => t.id !== id), requests: previous.requests.filter(r => r.taskId !== id) } : previous);
     void refresh(true);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(sidebarShown ? '.sidebar .manuscript-link' : '.main .sidebar-toggle')?.focus());
@@ -1242,6 +1250,7 @@ function App() {
     const title = value.trim().replace(/\s+/g, ' ').slice(0, 120);
     setRenaming('');
     if (!title || title === target.title) return;
+    snapshotText.current = '';
     setState(previous => previous ? { ...previous, tasks: previous.tasks.map(t => t.id === target.id ? { ...t, title } : t) } : previous);
     try { await api('/tasks/' + target.id + '/rename', { title }); } catch (e) { reportError(e); }
     await refresh(true);
@@ -1626,7 +1635,7 @@ function App() {
           {task.status === 'failed' && task.review?.job?.status === 'failed' && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
           {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : task.review?.round ? <ReviewFrame key={task.id} task={task} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onSendNotes={async message => { await api('/tasks/' + task.id + '/messages', message); void refresh(true); }}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>}
           {!chatOnly && reviewFeedback(false)}
-        </section><Activity key={task.id} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={state?.requests.filter(r => r.taskId === task.id) || []} refresh={() => void refresh(true)} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
+        </section><Activity key={task.id} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
       : manuscriptOpen && project ? <ManuscriptView key={project.id + project.path} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }} navigation={!mobile ? sidebarToggle : null} project={project} data={manuscriptData.data} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
@@ -1649,6 +1658,7 @@ function App() {
       const paper = editingPaper;
       await api(`/projects/${paper.id}/remove`, {});
       if (task?.projectId === paper.id) setSelected('');
+      snapshotText.current = '';
       setState(previous => previous ? { ...previous, projects: previous.projects.filter(p => p.id !== paper.id), tasks: previous.tasks.filter(t => t.projectId !== paper.id) } : previous);
       await refresh(true);
     }}/>}
