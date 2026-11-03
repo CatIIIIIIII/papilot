@@ -869,7 +869,9 @@ try {
   const newNote = notesPanel;
   await expect(newNote.getByRole('button', { name: 'Add note', exact: true })).toHaveCount(0);
   await expect(newNote.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
-  await expect(newNote.getByRole('button', { name: 'Delete note 1', exact: true })).toBeEnabled();
+  // An empty new note has nothing to discard; Escape or a click elsewhere closes it.
+  await expect(newNote.getByRole('button', { name: 'Delete note 1', exact: true })).toHaveCount(0);
+  await expect(newNote.getByRole('button', { name: 'Close note', exact: true })).toHaveCount(0);
   await expect(newNote.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toBeDisabled();
   await page.screenshot({ path: 'test-results/new-note-inline.png', fullPage: true });
   await noteBox.press('Escape');
@@ -882,6 +884,7 @@ try {
   assert.equal(annotations.length, 0, 'closing an empty note does not create an annotation');
   noteBox = await selectText();
   await noteBox.fill('Discard this draft.');
+  await expect(newNote.getByRole('button', { name: 'Delete note 1', exact: true })).toBeEnabled();
   await newNote.getByRole('button', { name: 'Delete note 1', exact: true }).click();
   await expect(newNote).toHaveCount(0);
   assert.equal(annotations.length, 0, 'the same trash action discards a new note without saving it');
@@ -924,12 +927,15 @@ try {
   await notesPanel.getByRole('alert').waitFor();
   assert.equal(await editingNote.inputValue(), 'Only these words, please.');
   failNoteEdit = false;
-  // Enter sends, like the arrow: the edit is saved and quoted in the chat.
+  // Enter sends, like the arrow: the edit is saved, quoted in the chat, and the popover closes.
   await editingNote.press('Enter');
   await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).waitFor();
   assert.deepEqual(annotations[0], { ...anchor, comment: 'Only these words, please.' });
   await expect(page.getByRole('region', { name: 'Notes in this task' })).toContainText('Only these words, please.');
+  await expect(notesPanel).toHaveCount(0);
+  await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).click();
   await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveText('Included');
   // Editing a note that is already in the chat saves it and keeps it there.
   await notesPanel.getByText('Only these words, please.', { exact: true }).click();
   await editingNote.press('Enter');
@@ -971,7 +977,7 @@ try {
   noteBox = await selectText();
   await noteBox.fill('Shorten this sentence.');
   await noteBox.press('Enter');
-  await expect(notesPanel).toContainText('Shorten this sentence.');
+  await expect(notesPanel).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Notes in this task' })).toContainText('Shorten this sentence.');
   assert.equal(annotations[0].page, 0);
   assert.equal(annotations[0].key, 'fixture');
@@ -979,6 +985,7 @@ try {
   assert.ok(annotations[0].rects.length >= 1 && annotations[0].rects.every(([x0, y0, x1, y1]) => x0 < x1 && y0 < y1 && y1 < 0.5));
   await page.getByRole('button', { name: 'Note 1: Shorten this sentence.', exact: true }).waitFor();
   assert.ok(await page.locator('.note-mark').count() >= 1);
+  await page.getByRole('button', { name: 'Note 1: Shorten this sentence.', exact: true }).click();
   await notesPanel.getByRole('button', { name: 'Delete note 1' }).click();
   await page.getByRole('button', { name: 'Note 1: Shorten this sentence.', exact: true }).waitFor({ state: 'hidden' });
   assert.equal(annotations.length, 0);
@@ -987,16 +994,20 @@ try {
   noteBox = await selectText();
   await noteBox.fill('Quote this new note.');
   await notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true }).click();
-  await expect(notesPanel.getByText('Quote this new note.', { exact: true })).toBeVisible();
+  await expect(notesPanel).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Notes in this task' })).toContainText('Quote this new note.');
   assert.equal(annotations.length, 1);
+  // Taking a note back out keeps its popover open.
+  await page.getByRole('button', { name: 'Note 1: Quote this new note.', exact: true }).click();
   await notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true }).click();
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
+  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await notesPanel.getByText('Quote this new note.', { exact: true }).click();
   await notesPanel.getByRole('textbox', { name: 'Edit note 1', exact: true }).fill('Quote the updated note.');
   await notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Notes in this task' })).toContainText('Quote the updated note.');
   assert.equal(annotations[0].comment, 'Quote the updated note.');
+  await page.getByRole('button', { name: 'Note 1: Quote the updated note.', exact: true }).click();
   await notesPanel.getByRole('button', { name: 'Delete note 1', exact: true }).click();
   await expect(notesPanel).toHaveCount(0);
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);

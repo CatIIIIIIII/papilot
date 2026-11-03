@@ -749,11 +749,6 @@
     "textHash": "e2d416982703c7b33009535ac17265d5b692a72ca49e3b73db8a2f374ca2c6a2",
     "model": "gemini-4-argon-medium"
   },
-  "Clear selection": {
-    "revision": "820932eb3907b996d488c2f1b176ac6ba038844c091ba5769218bbc4fe2eb227",
-    "textHash": "7d49c3703eb94e463f853dede3465c7a28dce46fc29e44df374c25272e02ec01",
-    "model": "gemini-4-argon-medium"
-  },
   "Clear task search": {
     "revision": "aaed021d8f43f5a9938d6a7473435c6245aebb8c1d8ee91f83600dca7277fcfa",
     "textHash": "e489e2bc6adeff1f71c412b52d3402751bbfbe2e2ebe41069d60cbd16831904a",
@@ -1937,6 +1932,11 @@
   "Include {key} in the task": {
     "revision": "26bd8294bb843ef6712d81d0e8dced2f860ebb57839b435c9d5ac8cbb7f1874d",
     "textHash": "0e2fd191473fed17b80e03555a711de83105614f7614d225d469d4727b1de1d0",
+    "model": "gemini-4-argon-medium"
+  },
+  "Included": {
+    "revision": "fcaf22ae1605ac97eee8c4d6b9806ce139daf91e05622eab7f1e15eb479efe48",
+    "textHash": "61fac422a05fc7b5638f98352f91cdabe69e3af59743ec5fcbf94ce3226c6e93",
     "model": "gemini-4-argon-medium"
   },
   "Individual notes": {
@@ -3369,6 +3369,11 @@
     "textHash": "616a9731e22f6d6ca7936666837a15f9b80bb6a833d17c0870929b3e95cd02f8",
     "model": "gemini-4-argon-medium"
   },
+  "Remove all from task": {
+    "revision": "dc3129c0bfcf94b3b345a7bb8459028a8dfd1856bcf5dbce806f107655169a28",
+    "textHash": "766f718335e3a6123596285106a65ae8ddad335b45e2d8d53c558b2086f60cd7",
+    "model": "gemini-4-argon-medium"
+  },
   "Remove attachment {name}": {
     "revision": "cbc18c083701b0bc92a071808ef114e284d5043498d9b2536649328f6bda826e",
     "textHash": "a965b46ac6835974e0acae06ca293a7680dbe6eb9a748bbbe098043d4736e98c",
@@ -3379,13 +3384,8 @@
     "textHash": "2d91195393785760a15bb5081169a66a6dfbf5a6376cb72437ebefbf117122db",
     "model": "gemini-4-argon-medium"
   },
-  "Remove from draft": {
-    "revision": "7da24a691809244bf25a73c96bfe9a79b876c70359332dba700507b837d4ba31",
-    "textHash": "80a1633f69922e8f9aab1bbeae09ec9001334bf0f9702e5bb4984ef783070541",
-    "model": "gemini-4-argon-medium"
-  },
   "Remove note {n} from task": {
-    "revision": "e2fdd16b7679482b9bafe1a0b44765738c036b2e4ba5f90a305085d0c220a03d",
+    "revision": "f54ba07e68916fe680186bab8de795dd31d67fa4c5f63a703845e1a0ec2c20ec",
     "textHash": "36fd1207f8ec01ad5168714c5364c59dd65ee599de360e9aae6b2832bb489a6a",
     "model": "gemini-4-argon-medium"
   },
@@ -3400,7 +3400,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Remove suggestion {n} from task": {
-    "revision": "a52e94032dc5122c9412b0ef85ed24574b2b078c94e4f1cf1633f1acf9eed8f8",
+    "revision": "7cb6278ea92550acc6c8d052aea4ab9a2540bc149d80ec92947f9f1067051e65",
     "textHash": "3baeef118503461538c57d965c5b595529868e7e8d96e4bae462eb99f8de0626",
     "model": "gemini-4-argon-medium"
   },

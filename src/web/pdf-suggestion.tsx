@@ -5,6 +5,7 @@ import { t } from './i18n.ts';
 import './pdf-suggestion.css';
 import { groupName } from './note-groups.tsx';
 import { sendsMessage } from './composer.ts';
+import { noteFromTask, noteToTask } from './note-flight.ts';
 
 export interface PdfNoteActions {
   has: (id: string) => boolean;
@@ -56,8 +57,20 @@ function usePdfNotePosition(card: RefObject<HTMLElement | null>, rect: Annotatio
 export function NoteAttachButton({ number, ai = false, selected, disabled, destination, onClick }: {
   number: number; ai?: boolean; selected: boolean; disabled?: boolean; destination?: 'manuscript'; onClick: () => void;
 }) {
-  const label = destination ? selected ? t('Kept on manuscript') : t('Keep on manuscript') : ai ? t('Include suggestion {n} in this task', { n: number }) : t('Include note {n} in this task', { n: number });
-  return <button type="button" className="icon-button pdf-note-attach" aria-label={label} aria-pressed={destination ? undefined : selected} title={destination ? label : selected ? t('Remove from draft') : t('Quote in chat')} disabled={disabled || Boolean(destination && selected)} onClick={onClick}><Icon name={destination ? selected ? 'bookmarkFilled' : 'bookmark' : 'arrowRightSolid'} size={destination ? 16 : 18}/></button>;
+  if (!destination) return <NoteSendButton quiet number={number} ai={ai} selected={selected} disabled={Boolean(disabled)} busy={false} onClick={onClick}/>;
+  const label = selected ? t('Kept on manuscript') : t('Keep on manuscript');
+  return <button type="button" className="icon-button pdf-note-attach" aria-label={label} title={label} disabled={disabled || selected} onClick={onClick}><Icon name={selected ? 'bookmarkFilled' : 'bookmark'} size={16}/></button>;
+}
+
+// The popover's main action sends the note to the task, like the chat
+// composer's own send button; a note already there says so and offers × to take it back out.
+// Lists use the quiet form: the arrow without its blue disc until hovered.
+function NoteSendButton({ number, ai, selected, disabled, busy, quiet = false, onClick }: {
+  number: number; ai: boolean; selected: boolean; disabled: boolean; busy: boolean; quiet?: boolean; onClick: () => void;
+}) {
+  return <button type="button" className={'note-send' + (quiet ? ' quiet' : '')} aria-label={ai ? t('Include suggestion {n} in this task', { n: number }) : t('Include note {n} in this task', { n: number })} aria-pressed={selected} title={selected ? ai ? t('Remove suggestion {n} from task', { n: number }) : t('Remove note {n} from task', { n: number }) : t('Quote in chat')} disabled={disabled} onClick={onClick}>
+    {busy ? <span className="spinner light"/> : selected ? <>{t('Included')}<Icon name="close" size={12}/></> : <Icon name="arrowRight" size={15}/>}
+  </button>;
 }
 
 // The PDF popover and reading list share the editor and actions. Floating cards
@@ -72,6 +85,10 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
   const card = useRef<HTMLElement>(null), saving = useRef(false);
   const text = useRef<HTMLParagraphElement>(null), input = useRef<HTMLTextAreaElement>(null);
   const editing = draft !== null, ai = Boolean(note.aiReview);
+  // A new note is one line with its send button beside it. Escape or a click
+  // elsewhere closes it (keeping any text), so it shows a discard button only
+  // once there is text to discard.
+  const compose = !inline && !note.id, send = !inline && !destination;
   useEffect(() => { onEditing?.(editing); return () => onEditing?.(false); }, [editing, onEditing]);
   function finish() { onDraftChange(null); requestAnimationFrame(() => text.current?.focus({ preventScroll: true })); }
   function edit() { if (!busy) onDraftChange(note.comment); }
@@ -83,12 +100,17 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
     if (busy || saving.current) return;
     const comment = draft?.trim();
     if (editing && !comment) { if (action === 'close') close(restoreFocus); return; }
+    // Adding a note to the task closes its popover, so the card itself seems
+    // to fly there; taking one out keeps it open for the copy to land on.
+    const adding = action === 'quote' && !destination && !selected;
+    const flight = action === 'quote' && !destination && card.current ? adding ? noteToTask(card.current) : note.id ? noteFromTask(note.id, card.current) : null : null;
     if (editing && comment !== note.comment) {
       saving.current = true;
       try { if (!await onSave(comment!, action)) return; }
       finally { saving.current = false; }
     } else if (action === 'quote') onToggle?.();
-    if (action === 'close') { onDraftChange(null); close(restoreFocus); }
+    flight?.();
+    if (action === 'close' || (adding && !inline)) { onDraftChange(null); close(restoreFocus); }
     else if (editing) finish();
   }
   useEffect(() => {
@@ -123,7 +145,10 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
   const enterAction = !inline && !destination && !selected ? 'quote' : 'keep';
   useLayoutEffect(() => { if (!inline && (!input.current || input.current.disabled)) card.current?.focus({ preventScroll: true }); }, [inline, note.id]);
 
-  return <section ref={card} className={'pdf-note-card ' + (ai ? 'pdf-suggestion' : 'pdf-personal-note') + (inline ? ' pdf-note-inline' : '')} role={inline ? 'group' : 'dialog'} aria-modal={inline ? undefined : false} aria-label={ai ? t('AI suggestion {n}', { n: number }) : t('PDF note {n}', { n: number })} tabIndex={inline ? undefined : -1}>
+  const deleteButton = <button type="button" className="icon-button pdf-note-delete" aria-label={ai ? t('Ignore suggestion {n}', { n: number }) : t('Delete note {n}', { n: number })} title={ai ? t('Ignore') : t('Delete note')} disabled={busy} onClick={onDismiss}><Icon name="trash" size={14}/></button>;
+  const sendButton = send && <NoteSendButton number={number} ai={ai} selected={selected} busy={busy} disabled={busy || (editing && !draft.trim())} onClick={() => void save('quote')}/>;
+
+  return <section ref={card} className={'pdf-note-card ' + (ai ? 'pdf-suggestion' : 'pdf-personal-note') + (inline ? ' pdf-note-inline' : '') + (compose ? ' pdf-note-compose' : '')} role={inline ? 'group' : 'dialog'} aria-modal={inline ? undefined : false} aria-label={ai ? t('AI suggestion {n}', { n: number }) : t('PDF note {n}', { n: number })} tabIndex={inline ? undefined : -1}>
     {header}
     <div className="pdf-note-content"><div className="pdf-suggestion-body">{editing ?
       <textarea ref={input} className="pdf-note-input" aria-label={t('Edit note {n}', { n: number })} placeholder={t('Write a note…')} value={draft} rows={1} maxLength={4000} readOnly={busy} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); void save(enterAction); } }}/>
@@ -132,19 +157,19 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
         if (selection && !selection.isCollapsed && text.current?.contains(selection.anchorNode)) return;
         edit();
       }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); edit(); } }}>{note.comment || (note.group ? t('Highlighted in {group}', { group: groupName(note.group) }) : '')}</p>}
-    </div>{!inline && <button type="button" className="icon-button pdf-note-close" aria-label={ai ? t('Close suggestion') : t('Close note')} title={ai ? t('Close suggestion') : t('Close note')} disabled={busy} onClick={() => void save('close')}>{busy ? <span className="spinner"/> : <Icon name="close" size={14}/>}</button>}</div>
+    </div>{compose ? <div className="pdf-note-compose-tools">{draft?.trim() && deleteButton}{sendButton}</div> : !inline && (ai || !send) && <button type="button" className="icon-button pdf-note-close" aria-label={ai ? t('Close suggestion') : t('Close note')} title={ai ? t('Close suggestion') : t('Close note')} disabled={busy} onClick={() => void save('close')}>{busy ? <span className="spinner"/> : <Icon name="close" size={14}/>}</button>}</div>
     {children}
     {error && <p className="inline-error" role="alert">{error}</p>}
-    <div className="pdf-note-tools">
+    {!compose && <div className="pdf-note-tools">
       {note.aiReview && !destination && <span className="pdf-note-origin" title={t('AI suggestion')}>{AGENT_NAMES[note.aiReview.agent]}</span>}
-      <button type="button" className="icon-button pdf-note-delete" aria-label={ai ? t('Ignore suggestion {n}', { n: number }) : t('Delete note {n}', { n: number })} title={ai ? t('Ignore') : t('Delete note')} disabled={busy} onClick={onDismiss}><Icon name="trash" size={14}/></button>
       <span className="pdf-note-tools-space"/>
       {ai && total > 1 && <div className="pdf-suggestion-navigation"><button type="button" className="icon-button" aria-label={t('Previous suggestion')} title={t('Previous suggestion (←)')} aria-keyshortcuts="ArrowLeft" disabled={busy || index <= 0} onClick={onPrevious}><Icon name="chevronLeft" size={14}/></button><span aria-label={t('{current} of {total}', { current: index + 1, total })}>{index + 1}/{total}</span><button type="button" className="icon-button" aria-label={t('Next suggestion')} title={t('Next suggestion (→)')} aria-keyshortcuts="ArrowRight" disabled={busy || index >= total - 1} onClick={onNext}><Icon name="chevronRight" size={14}/></button></div>}
-      <NoteAttachButton number={number} ai={ai} selected={selected} disabled={busy || (editing && !draft.trim())} destination={destination} onClick={() => {
+      {deleteButton}
+      {send ? sendButton : <NoteAttachButton number={number} ai={ai} selected={selected} disabled={busy || (editing && !draft.trim())} destination={destination} onClick={() => {
         // Keep keyboard navigation available while this button becomes disabled.
         if (destination && !inline) card.current?.focus({ preventScroll: true });
         void save('quote');
-      }}/>
-    </div>
+      }}/>}
+    </div>}
   </section>;
 }

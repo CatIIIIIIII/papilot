@@ -1,4 +1,4 @@
-.pdf-note-card{position:absolute;z-index:5;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:280px;padding:14px 12px 10px 14px;border:1px solid color-mix(in srgb,var(--line-strong) 65%,transparent);border-radius:14px;background:var(--bg);color:var(--text);box-shadow:var(--float),inset 0 1px 0 color-mix(in srgb,var(--bg) 75%,transparent);font:13px/1.5 var(--sans);pointer-events:auto;text-align:left;outline:none}
+.pdf-note-card{position:absolute;z-index:5;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;width:280px;padding:12px 10px 10px 14px;border:1px solid color-mix(in srgb,var(--line-strong) 55%,transparent);border-radius:12px;background:var(--bg);color:var(--text);box-shadow:var(--float),inset 0 1px 0 color-mix(in srgb,var(--bg) 75%,transparent);font:13px/1.5 var(--sans);pointer-events:auto;text-align:left;outline:none}
 .pdf-note-content{display:flex;align-items:stretch;gap:6px;min-height:0}
 .pdf-suggestion-body{flex:1;min-width:0;min-height:0;max-height:inherit;overflow:auto;overscroll-behavior:contain;-webkit-user-select:text;user-select:text}
 .pdf-suggestion-body p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.55 var(--sans)}
@@ -14,7 +14,6 @@
 .pdf-note-tools{display:flex;align-items:center;gap:4px;flex:none;color:var(--text-3)}
 .pdf-note-tools-space{flex:1}
 .pdf-note-origin{margin-left:3px;font-size:10px;color:var(--text-3)}
-.pdf-note-attach[aria-pressed=true] svg{transform:rotate(180deg)}
 .pdf-note-card .pdf-note-delete:hover{color:var(--danger)}
 .pdf-suggestion-navigation{display:flex;align-items:center;gap:1px;margin-left:3px;font-size:10px;color:var(--text-3);flex:none;font-variant-numeric:tabular-nums}
 .pdf-suggestion-navigation>span{min-width:28px;text-align:center}
@@ -27,13 +26,46 @@
 .pdf-note-card.pdf-note-inline{--note-tool:24px;position:relative;z-index:auto;width:100%;gap:4px;padding:8px 10px;box-shadow:none;border-radius:10px}
 .pdf-note-inline:hover,.note-list>li.active>.pdf-note-inline{border-color:var(--line-strong)}
 .note-list>li.stale>.pdf-note-inline{background:var(--bg-subtle)}
-/* In the library, delete and add-to-task share the location row instead of taking a row of their own. */
-.pdf-note-inline .note-head{min-height:var(--note-tool);margin-bottom:0;padding-right:calc(var(--note-tool) * 2 + 6px)}
-.pdf-note-inline .pdf-note-tools{position:absolute;top:8px;right:8px;gap:2px}
-.pdf-note-inline .pdf-note-tools .icon-button{width:var(--note-tool);height:var(--note-tool)}
+/* In the library, delete and add-to-task share the location row instead of taking a row of their own; the row gives them whatever width the button needs. */
+.pdf-note-card.pdf-note-inline{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:6px}
+.pdf-note-inline>*,.pdf-note-inline>.note-card-context>*{grid-column:1/-1}
+.pdf-note-inline>.note-card-context{display:contents}
+.pdf-note-inline>.note-card-context>.note-head{grid-column:1;grid-row:1}
+.pdf-note-inline>.pdf-note-tools{grid-column:2;grid-row:1;align-self:start;gap:2px}
+.pdf-note-inline .note-head{min-height:var(--note-tool);margin-bottom:0}
+.pdf-note-inline .pdf-note-tools .icon-button,.pdf-note-inline .note-send{width:var(--note-tool);height:var(--note-tool)}
+.pdf-note-inline .note-send[aria-pressed=true]{width:auto}
 .pdf-note-inline .pdf-note-origin{display:none}
 @media(pointer:fine){.pdf-note-inline .pdf-suggestion-body p,.pdf-note-inline .pdf-note-input{font-size:13px;line-height:1.5}}
 @media(pointer:coarse){.pdf-note-card.pdf-note-inline{--note-tool:36px}}
 .pdf-note-attach{display:inline-flex;align-items:center;justify-content:center;flex:none;width:26px;height:26px;border-radius:8px;color:var(--text-3)}
 .pdf-note-attach:hover:not(:disabled){color:var(--text);background:var(--bg-hover)}
 @media(pointer:coarse){.pdf-note-attach{width:36px;height:36px}}
+
+/* The popover's send button matches the chat composer's; once the note is in the task it becomes a pill that takes it back out. */
+.note-send{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;width:28px;height:28px;padding:0;border-radius:999px;background:var(--primary);color:#fff;font:500 12px/1 var(--sans);white-space:nowrap;transition:background-color .15s,color .15s,transform .1s}
+.note-send:hover:not(:disabled){background:var(--primary-hover)}
+.note-send:active:not(:disabled){transform:scale(.94)}
+.note-send:disabled{opacity:1;background:var(--bg-active);color:var(--text-3)}
+.note-send:is([aria-pressed=true],.included){width:auto;padding:0 8px 0 11px;background:var(--accent-soft);color:var(--accent)}
+.note-send:is([aria-pressed=true],.included) svg{opacity:.7}
+.note-send:is([aria-pressed=true],.included):hover:not(:disabled){background:var(--accent-soft);color:var(--accent-hover)}
+.note-send:is([aria-pressed=true],.included):hover:not(:disabled) svg{opacity:1}
+.note-send:disabled .spinner,.note-send[aria-pressed=true] .spinner{border-color:var(--line-strong);border-top-color:var(--text-2)}
+.note-send.quiet:not([aria-pressed=true]){background:transparent;color:var(--text-3)}
+.note-send.quiet:not([aria-pressed=true]):hover:not(:disabled){background:var(--primary);color:#fff}
+.note-send.quiet{width:26px;height:26px}
+@media(pointer:coarse){.note-send,.note-send.quiet{width:36px;height:36px}.note-send:is([aria-pressed=true],.included){padding:0 12px 0 14px;font-size:14px}}
+
+/* A new note is a single line that grows; the send button stays at its foot. */
+.pdf-note-card.pdf-note-compose{padding:8px 8px 8px 14px}
+.pdf-note-compose .pdf-note-content{align-items:flex-end;gap:8px}
+.pdf-note-compose .pdf-suggestion-body{padding:3px 0}
+@media(pointer:coarse){.pdf-note-compose .pdf-suggestion-body{padding:6px 0}}
+@keyframes pdf-note-in{from{opacity:0}}
+.pdf-note-card:not(.pdf-note-inline){animation:pdf-note-in .14s cubic-bezier(.2,.8,.2,1)}
+.note-send[aria-pressed=true]{animation:note-chip-in .24s cubic-bezier(.2,.8,.2,1)}
+@keyframes note-chip-in{from{opacity:.3;transform:scale(.8)}}
+.note-send.note-returned,.pdf-note-attach.note-returned{animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
+@media(prefers-reduced-motion:reduce){.pdf-note-card,.note-send,.pdf-note-attach{animation:none!important}}
+.pdf-note-compose-tools{display:flex;align-items:center;gap:2px;flex:none}

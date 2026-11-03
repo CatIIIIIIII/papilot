@@ -8,6 +8,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 - **Export the PDF, with or without your notes.** The paper's Open PDF button is now a Share menu: open the PDF, export it, or export it with your notes. With notes, every highlight and marked region keeps its colour, and each comment sits in a numbered card in a margin beside the page, joined to its mark. Chinese, Japanese and Korean comments are included. The paper's text, links and bookmarks still work. When a page has more comments than its margin can hold, the cut-off ones are printed in full at the end of the PDF and linked to and from their cards.
 
+### Changed
+
+- **Adding a PDF note to a task works like sending a chat message.** A new note is one line that grows as you type, with a blue send arrow beside it like the chat box's; Enter sends it too. The note flies into the **New task** panel, or onto the **New task** tab when another panel is open, and its popover closes. A note already in the task shows **Included ×** at the bottom right, wherever it appears: in its popover, in **My notes** and in the **New task** panel. Clicking it takes the note back out, and the note flies back. **Clear selection** is now **Remove all from task**. Your own notes no longer show a separate close button; Escape or a click elsewhere closes them, and a new note shows its delete button once it has text.
+
 ### Fixed
 
 - **Quitting the desktop app leaves nothing running.** After ⌘Q, the review server of each paper you had worked on kept running for up to 12 hours, so macOS listed Papilot under background activity. The desktop app now owns the review servers it starts, and they stop with it, even if it crashes. A PDF build that was still running is retried when you next open Papilot. In `ps` it is now called "Papilot review server" instead of `node`. Closing the window still keeps the app open, as on any Mac app.
