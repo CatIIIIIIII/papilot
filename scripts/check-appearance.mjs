@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
 import { selectOption } from './select.mjs';
+import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();
@@ -117,6 +118,22 @@ try {
   await rootHas('--bg', '#ffffff');
   await rootHas('--primary', '#2563eb');
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#ffffff');
+  // The theme select follows the select-only combobox pattern: Escape cancels
+  // without closing Settings, Tab accepts, and a space typed into a search
+  // stays part of it instead of closing the list.
+  await page.setViewportSize({ width: 1100, height: 844 });
+  const theme = dialog.getByRole('combobox', { name: 'Theme', exact: true });
+  await theme.focus();
+  await page.keyboard.press('Enter'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Escape');
+  await expect(theme).toHaveAttribute('aria-expanded', 'false');
+  await expect(theme).toHaveAttribute('data-value', 'papilot');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Enter'); await page.keyboard.press('s'); await page.keyboard.press('Tab');
+  await expect(theme).toHaveAttribute('data-value', 'slate');
+  await theme.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('p'); await page.keyboard.press(' ');
+  await expect(theme).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Enter');
+  await expect(theme).toHaveAttribute('data-value', 'papilot');
   await other.evaluate(() => localStorage.setItem('papilot:appearance', '{broken'));
   await rootHas('--bg', '#ffffff');
   await other.close();

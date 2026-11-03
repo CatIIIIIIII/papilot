@@ -8,8 +8,8 @@ export interface SelectOption { value: string; label: string; detail?: string; s
 // list matches the app's menus in every theme, can show swatches, details and
 // groups, and becomes a sheet on a phone. It follows the select-only combobox
 // pattern: focus stays on the chip while the arrow keys, Home, End, Page Up,
-// Page Down and typed letters move through the options, Enter or Space picks
-// one, and Escape closes the list without a change.
+// Page Down and typed letters move through the options, Enter, Space or Tab
+// picks one, and Escape closes the list without a change.
 export function ChipSelect({ label, value, options, onChange, disabled, icon, className = '', display }: { label: string; value: string; options: SelectOption[]; onChange: (value: string) => void; disabled?: boolean; icon?: string; className?: string; display?: string }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null), list = useRef<HTMLDivElement>(null);
@@ -53,7 +53,8 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
   // The list's own state, not React's: its toggle event arrives a moment later,
   // and a key pressed in between must reach the dialog around the chip.
   const shown = () => Boolean(list.current?.matches(':popover-open'));
-  function close() { list.current?.hidePopover(); setOpen(false); }
+  // Closing also ends a typed search, so the next one starts fresh.
+  function close() { list.current?.hidePopover(); setOpen(false); typed.current = { text: '', at: 0 }; }
   function pick(index: number) {
     if (!enabled(index)) return;
     close(); trigger.current?.focus();
@@ -89,8 +90,11 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
     if (event.altKey && event.key === 'ArrowUp' && open) { event.preventDefault(); pick(active); return; }
     // A space while typing is part of the search; otherwise it opens or picks.
     if (event.key.length === 1 && (event.key !== ' ' || Date.now() - typed.current.at < 600) && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      // The key is part of the search even without a match, so a space never
+      // reaches the chip as a click that would close the list.
+      event.preventDefault();
       const index = typeahead(event.key);
-      if (index >= 0) { event.preventDefault(); if (open) setActive(index); else show(index); }
+      if (index >= 0) { if (open) setActive(index); else show(index); }
       return;
     }
     if (!open) {
@@ -102,7 +106,8 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
     if (moves[event.key]) { event.preventDefault(); setActive(moves[event.key]()); }
     else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(active); }
     else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-    else if (event.key === 'Tab') close();
+    // Tab accepts the highlighted option and moves on; Escape is the way to cancel.
+    else if (event.key === 'Tab') { close(); if (enabled(active) && options[active].value !== value) onChange(options[active].value); }
   }
   const option = (item: SelectOption, index: number) => <div key={item.value} id={`${id}-${index}`} data-index={index} data-value={item.value} role="option" aria-selected={index === selected} aria-disabled={item.disabled || undefined}
     className={'select-option' + (index === active ? ' active' : '')} onPointerMove={() => { if (enabled(index) && index !== active) setActive(index); }} onClick={() => pick(index)}>
@@ -124,7 +129,7 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
     {/* Clicks pick an option without taking focus from the chip, and are
         cancelled so a label around the chip does not click it open again. */}
     <div ref={list} id={id} popover="auto" role="listbox" aria-label={label} className="action-menu select-list" onMouseDown={event => event.preventDefault()} onClick={event => event.preventDefault()}
-      onToggle={event => { const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown); if (!shown) setActive(-1); }}>
+      onToggle={event => { const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown); if (!shown) { setActive(-1); typed.current = { text: '', at: 0 }; } }}>
       {groups ? groups.map(group => <div key={group} role="group" aria-label={group || undefined} className="select-group">
         {group && <div className="select-group-label" aria-hidden="true">{group}</div>}
         {options.map((item, index) => (item.group || '') === group && option(item, index))}
