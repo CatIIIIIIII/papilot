@@ -87,7 +87,9 @@ export function gitStamp(root: string) {
   if (!dir) return '';
   const common = path.resolve(dir, readText(path.join(dir, 'commondir')).trim() || '.');
   const branch = readText(path.join(dir, 'HEAD')).match(/^ref: (refs\/\S+)/)?.[1];
-  return [path.join(dir, 'index'), path.join(dir, 'HEAD'), path.join(dir, 'MERGE_HEAD'), path.join(common, 'FETCH_HEAD'), path.join(common, 'packed-refs'), branch && path.join(common, branch)]
+  // FETCH_HEAD belongs to the worktree that fetched, so a linked worktree checks
+  // its own and the main one's.
+  return [path.join(dir, 'index'), path.join(dir, 'HEAD'), path.join(dir, 'MERGE_HEAD'), path.join(dir, 'FETCH_HEAD'), common !== dir && path.join(common, 'FETCH_HEAD'), path.join(common, 'packed-refs'), branch && path.join(common, branch)]
     .map(file => { try { const stat = file && fs.statSync(file); return stat ? `${stat.mtimeMs}:${stat.size}` : '-'; } catch { return '-'; } }).join('|');
 }
 export function mergeInProgress(root: string) {
