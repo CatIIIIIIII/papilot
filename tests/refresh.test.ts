@@ -94,3 +94,15 @@ test('the store returns only the timeline items written since a revision', () =>
   const boot = first.revision.split(':')[0];
   for (const malformed of [`${boot}:`, `${boot}:1:x`, `${boot}:-1`, `${boot}:1.5`, `${boot}: 1`]) assert.equal(store.itemsSince('t', malformed).partial, undefined, `${malformed} reads everything`);
 });
+
+test('removing a paper or deleting a task forgets its timeline revisions', () => {
+  const store = new Store(':memory:'), tracked = () => [...(store as unknown as { itemRevisions: Map<string, unknown> }).itemRevisions.keys()].sort();
+  store.saveProject({ id: 'paper', name: 'Paper', path: '/unused/paper', createdAt: 1 });
+  for (const id of ['kept', 'gone', 'removed']) store.saveTask({ id, projectId: id === 'removed' ? 'other' : 'paper', name: id, title: id, instructions: 'Edit.', worktree: '/unused', threadId: null, turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null });
+  for (const taskId of ['kept', 'gone', 'removed']) store.saveItem({ id: taskId + '-item', taskId, type: 'assistant', text: 'Done.', createdAt: 1 });
+  assert.deepEqual(tracked(), ['gone', 'kept', 'removed']);
+  store.deleteTask('gone');
+  assert.deepEqual(tracked(), ['kept', 'removed']);
+  store.removeProject('paper');
+  assert.deepEqual(tracked(), ['removed'], "another paper's task keeps its revisions");
+});
