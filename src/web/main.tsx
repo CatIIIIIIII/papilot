@@ -265,6 +265,8 @@ function UserMessage({ item, agent }: { item: TimelineItem; agent: string }) {
 
 // Memoized: polling and typing re-render the thread, and unchanged items can skip it.
 const TimelineEntry = memo(function TimelineEntry({ item, agent, root }: { item: TimelineItem; agent: string; root: string }) {
+  // Memoized, so it follows a language change itself rather than through App.
+  useLanguage();
   if (item.type === 'user') return <UserMessage item={item} agent={agent}/>;
   if (item.type === 'assistant') return <article className="message assistant" aria-label={`${agent}, ${time(item.createdAt)}`}><div className="message-body markdown"><Markdown text={item.text}/></div><div className="message-actions"><CopyButton text={item.text}/><time dateTime={new Date(item.createdAt).toISOString()}>{time(item.createdAt)}</time></div></article>;
   const files = item.type === 'files' ? editedFiles(item, root) : [];
@@ -276,6 +278,8 @@ const TimelineEntry = memo(function TimelineEntry({ item, agent, root }: { item:
 
 // Consecutive commands, edits and tool calls fold into one line that opens to the list.
 function ToolGroup({ items, agent, root }: { items: TimelineItem[]; agent: string; root: string }) {
+  // The thread reuses its elements, so the summary follows a language change itself.
+  useLanguage();
   const commands = items.filter(item => item.type === 'command').length, edits = items.filter(item => item.type === 'files');
   const pdfs = items.filter(item => item.type === 'pdf').length;
   const files = [...new Set(edits.flatMap(item => editedFiles(item, root)))], tools = items.length - commands - edits.length - pdfs;
