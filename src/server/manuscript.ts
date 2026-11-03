@@ -79,6 +79,17 @@ function gitDir(root: string) {
     return fs.statSync(dot).isFile() ? path.resolve(root, readText(dot).replace(/^gitdir:\s*/, '').trim()) : dot;
   } catch { return null; }
 }
+// Cheap evidence that Git's own state moved: the index, HEAD, the current
+// branch, a fetch or a merge. Each changes when a commit, stage, checkout,
+// fetch or merge happens, from Papilot or from a terminal.
+export function gitStamp(root: string) {
+  const dir = gitDir(root);
+  if (!dir) return '';
+  const common = path.resolve(dir, readText(path.join(dir, 'commondir')).trim() || '.');
+  const branch = readText(path.join(dir, 'HEAD')).match(/^ref: (refs\/\S+)/)?.[1];
+  return [path.join(dir, 'index'), path.join(dir, 'HEAD'), path.join(dir, 'MERGE_HEAD'), path.join(common, 'FETCH_HEAD'), path.join(common, 'packed-refs'), branch && path.join(common, branch)]
+    .map(file => { try { const stat = file && fs.statSync(file); return stat ? `${stat.mtimeMs}:${stat.size}` : '-'; } catch { return '-'; } }).join('|');
+}
 export function mergeInProgress(root: string) {
   const dir = gitDir(root);
   return Boolean(dir && fs.existsSync(path.join(dir, 'MERGE_HEAD')));
@@ -483,12 +494,16 @@ export class Manuscripts extends EventEmitter {
   // The view polls every second and a half while a build runs; Git's status
   // costs a walk of the working tree, which competes with TeX, so it is
   // read again at most every few seconds then, and after Papilot's own writes.
-  private statuses = new Map<string, { at: number; value: Promise<GitStatus> }>();
-  private gitStatus(root: string, building: boolean) {
-    const cached = this.statuses.get(root);
-    if (building && cached && Date.now() - cached.at < 5000) return cached.value;
+  // Between builds the view polls every five seconds to notice other editors:
+  // the status is read again when the working tree or Git's own state moved,
+  // and at least every half minute for what neither shows, such as a push
+  // from a terminal changing how far the branch is ahead.
+  private statuses = new Map<string, { at: number; value: Promise<GitStatus>; tree?: string; stamp?: string }>();
+  private gitStatus(root: string, building: boolean, tree?: string) {
+    const cached = this.statuses.get(root), age = cached ? Date.now() - cached.at : Infinity, stamp = building ? undefined : gitStamp(root);
+    if (cached && (building ? age < 5000 : tree !== undefined && cached.tree === tree && cached.stamp === stamp && age < 30000)) return cached.value;
     const value = gitStatus(root);
-    this.statuses.set(root, { at: Date.now(), value });
+    this.statuses.set(root, { at: Date.now(), value, tree, stamp });
     value.catch(() => { if (this.statuses.get(root)?.value === value) this.statuses.delete(root); });
     return value;
   }
@@ -497,7 +512,8 @@ export class Manuscripts extends EventEmitter {
     const current = this.builds.get(projectId), building = current?.status === 'building';
     // Polling an in-flight build needs its status, not another source snapshot.
     // Once it finishes, the next read checks for edits made during compilation.
-    const [status, tree] = await Promise.all([this.gitStatus(root, building), building ? current.tree : this.snapshot(root)]);
+    // The snapshot comes first so an unchanged tree can reuse the last status.
+    const tree = building ? current.tree : await this.snapshot(root), status = await this.gitStatus(root, building, building ? undefined : tree);
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
     const { status: state, key, pages, builtAt, error } = build;
