@@ -13,6 +13,9 @@ app="$PWD/release/desktop/$unpacked/papilot"
 PAPILOT_DESKTOP_UPDATE_CHECK=0 PAPILOT_DESKTOP_EXECUTABLE="$app" npm run test:desktop
 cp test-results/desktop-demo-packaged.png test-results/desktop-linux-directory.png
 
+# --dir: a build without installers (npm run desktop:build -- --dir).
+if [[ "${1:-}" == --dir ]]; then exit 0; fi
+
 # Extract-and-run exercises the actual AppImage without depending on FUSE on CI.
 # The binary preflight uses the matching build resources; the launched backend
 # and renderer below come from the AppImage's own temporary extraction.

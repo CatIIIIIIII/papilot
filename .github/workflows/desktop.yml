@@ -1,70 +1,44 @@
 name: Desktop
 
+# Builds the desktop app on native runners and launches it to check that it
+# works. It never publishes: CI, Desktop Dev and Release call it. Run workflow
+# builds every installer for any branch; the quick option instead checks only
+# the unpacked app on Apple silicon and Linux, like most pull requests.
 on:
   workflow_dispatch:
+    inputs:
+      quick:
+        description: Check only the unpacked app on Apple silicon and Linux
+        type: boolean
+        default: false
   workflow_call:
-  # The desktop Dev channel: a nightly build of main (03:00 in UTC+8), or one
-  # started with Run workflow on main.
-  schedule:
-    - cron: '0 19 * * *'
-  push:
-    branches: [main, codex/electron-desktop]
-    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'bin/**', 'skills/**', 'package*.json', '.github/workflows/desktop.yml']
-  pull_request:
-    paths: ['desktop/**', 'scripts/*desktop*', 'src/**', 'engine/**', 'examples/**', 'bin/**', 'skills/**', 'package*.json', '.github/workflows/desktop.yml']
+    inputs:
+      quick:
+        description: Check only the unpacked app on Apple silicon and Linux
+        type: boolean
+        default: false
+      dev:
+        description: Report VERSION-dev.COMMIT, for the Dev channel
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
-# A push to main does not cancel the nightly dev build.
-concurrency:
-  group: desktop-${{ github.ref }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'dev' || 'ci' }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
-
 jobs:
-  # A nightly run without new commits on main has nothing to publish.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      build: ${{ steps.check.outputs.build }}
-    steps:
-      - id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          published=$(gh release download desktop-dev --repo "$GITHUB_REPOSITORY" --pattern desktop.json --output - 2>/dev/null | jq -r '.version // empty' || true)
-          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "${published##*-dev.}" = "$GITHUB_SHA" ]; then
-            echo "desktop-dev already has $published."
-            echo build=false >> "$GITHUB_OUTPUT"
-          else
-            echo build=true >> "$GITHUB_OUTPUT"
-          fi
-
   build:
-    name: ${{ matrix.platform }} ${{ matrix.arch }}
-    needs: changes
-    if: needs.changes.outputs.build == 'true'
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}
+    runs-on: ${{ fromJSON('{"mac-arm64":"macos-15","mac-x64":"macos-15-intel","linux-x64":"ubuntu-22.04"}')[matrix.target] }}
     timeout-minutes: 45
     env:
       # Dev builds: their server and update layer report the commit.
-      PAPILOT_DESKTOP_REVISION: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.sha || '' }}
+      PAPILOT_DESKTOP_REVISION: ${{ inputs.dev && github.sha || '' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            platform: mac
-            arch: arm64
-            executable: mac-arm64/Papilot.app/Contents/MacOS/Papilot
-          - os: macos-15-intel
-            platform: mac
-            arch: x64
-            executable: mac/Papilot.app/Contents/MacOS/Papilot
-          - os: ubuntu-22.04
-            platform: linux
-            arch: x64
-            executable: linux-unpacked/papilot
+        # Intel Macs run the same code on the slowest runner, so quick checks
+        # leave them to full builds.
+        target: ${{ fromJSON(inputs.quick && '["mac-arm64","linux-x64"]' || '["mac-arm64","mac-x64","linux-x64"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -80,29 +54,36 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y libgtk-3-0 libnss3 libxss1 libxtst6 libasound2 libgbm1 libnotify4 libsecret-1-0 libfuse2 xvfb xauth openbox
       - run: npm ci
-      - name: Build the app and installers
+      # Making the installers takes most of a full build. The smoke tests
+      # launch the unpacked app, which --dir builds by itself.
+      - name: Build the app${{ !inputs.quick && ' and installers' || '' }}
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run desktop:build
-      # Papilot's own code for in-place updates of installers with the same shell.
+        run: npm run desktop:build${{ inputs.quick && ' -- --dir' || '' }}
+      # Papilot's own code for in-place updates of installers with the same
+      # shell. The smoke test builds its own copy.
       - name: Build the update layer
+        if: ${{ !inputs.quick }}
         run: node scripts/desktop.mjs layer
       - name: Launch the packaged app and check its backend
         if: runner.os == 'macOS'
+        timeout-minutes: 10
         env:
-          PAPILOT_DESKTOP_EXECUTABLE: ${{ github.workspace }}/release/desktop/${{ matrix.executable }}
+          PAPILOT_DESKTOP_EXECUTABLE: ${{ github.workspace }}/release/desktop/${{ matrix.target == 'mac-x64' && 'mac' || 'mac-arm64' }}/Papilot.app/Contents/MacOS/Papilot
         run: npm run test:desktop
-      - name: Test the Linux directory, AppImage and installed deb
+      - name: Test the Linux directory${{ !inputs.quick && ', AppImage and installed deb' || '' }}
         if: runner.os == 'Linux'
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' bash scripts/check-desktop-linux.sh
+        timeout-minutes: 15
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' bash scripts/check-desktop-linux.sh${{ inputs.quick && ' --dir' || '' }}
       - name: Save installers
+        if: ${{ !inputs.quick }}
         uses: actions/upload-artifact@v4
         with:
-          name: Papilot-${{ matrix.platform }}-${{ matrix.arch }}
+          name: Papilot-${{ matrix.target }}
           path: |
             release/desktop/*.dmg
             release/desktop/*.zip
@@ -111,7 +92,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Save the update layer
-        if: matrix.platform == 'linux'
+        if: ${{ !inputs.quick && matrix.target == 'linux-x64' }}
         uses: actions/upload-artifact@v4
         with:
           name: Papilot-app
@@ -124,31 +105,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-check-${{ matrix.platform }}-${{ matrix.arch }}
+          name: desktop-check-${{ matrix.target }}
           path: test-results/desktop*.png
           if-no-files-found: ignore
           retention-days: 7
-
-  # The tested nightly build updates the rolling desktop-dev prerelease that
-  # desktop apps on the Dev channel check.
-  publish-dev:
-    needs: build
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: desktop-dev-release
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v5
-      - name: Download the tested installers and update layer
-        uses: actions/download-artifact@v4
-        with:
-          pattern: Papilot-*
-          merge-multiple: true
-          path: release/desktop
-      - name: Publish the dev build
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/publish-desktop-dev.mjs release/desktop
