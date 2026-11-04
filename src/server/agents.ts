@@ -75,8 +75,9 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
     if (method === 'thread/start' || method === 'thread/resume') {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
-      this.threads.set(id, { readOnly: params.sandbox === 'read-only', cwd: params.cwd, instructions: params.developerInstructions || '', model: params.model || known?.model || null, started: method === 'thread/resume' || Boolean(known?.started) });
-      return { thread: { id }, model: params.model || null };
+      const model = params.model || known?.model || null;
+      this.threads.set(id, { readOnly: params.sandbox === 'read-only', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      return { thread: { id }, model };
     }
     if (method === 'turn/start') {
       const thread = this.threads.get(String(params.threadId));
@@ -184,7 +185,7 @@ type Launch = (command: string, args: string[], options: { cwd: string; env: Nod
 
 export class ClaudeAgent extends Adapter {
   protected name = 'Claude';
-  protected info: { account: AccountInfo | null; models: ModelInfo[] } = { account: null, models: [] };
+  protected info: { account: AccountInfo | null; models: ModelInfo[]; model: string | null } = { account: null, models: [], model: null };
   private rateLimits = new Map<string, SDKRateLimitInfo>();
   private defaults = new Map<string, string>();
   private approvals = new Map<string, { resolve: (result: PermissionResult) => void; input: Record<string, unknown>; kind: 'tool' | 'question'; questions: string[] }>();
@@ -205,7 +206,7 @@ export class ClaudeAgent extends Adapter {
       const status = await promisify(execFile)(this.cli, ['auth', 'status', '--json'], { timeout: 20000 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout || '{}' }));
       try { this.login = JSON.parse(status.stdout); } catch { this.login = null; }
       // Claude Code's own model list, with versions and efforts; the aliases stand in if it cannot be read.
-      this.info.models = this.login?.loggedIn ? await this.listModels(this.cli).catch(() => []) : [];
+      Object.assign(this.info, this.login?.loggedIn ? await this.listModels(this.cli).catch(() => ({ models: [], model: null })) : { models: [], model: null });
       this.ready = true;
       return;
     }
@@ -217,7 +218,8 @@ export class ClaudeAgent extends Adapter {
     const probe = query({ prompt: idle, options: { cwd: os.homedir(), settingSources: [], ...(env ? { env } : {}) } });
     try {
       const [account, models] = await Promise.all([probe.accountInfo(), probe.supportedModels()]);
-      this.info = { account, models };
+      const context = typeof probe.getContextUsage === 'function' ? await probe.getContextUsage({ detail: 'summary' }).catch(() => null) : null;
+      this.info = { account, models, model: context?.model || null };
       this.ready = true;
     } finally { finish(); probe.close(); }
   }
@@ -226,22 +228,32 @@ export class ClaudeAgent extends Adapter {
   // credentials: Anthropic does not accept a Claude subscription login through the SDK.
   // Claude Code answers an initialize request with its models before any
   // prompt is sent; reading them sends nothing to a model.
-  private async listModels(cli: string): Promise<ModelInfo[]> {
-    const child = this.launch(cli, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none'], { cwd: os.homedir(), env: this.environment() || process.env });
+  private async listModels(cli: string): Promise<{ models: ModelInfo[]; model: string | null }> {
+    const child = this.launch(cli, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none', '--setting-sources', ''], { cwd: os.homedir(), env: this.environment() || process.env });
+    let pending: { id: string; resolve: (value: any) => void; reject: (error: Error) => void } | undefined;
+    const request = (id: string, body: object, timeout: number): Promise<any> => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { pending = undefined; reject(new Error('Claude Code did not report its model settings.')); }, timeout);
+      pending = { id, resolve: value => { clearTimeout(timer); pending = undefined; resolve(value); }, reject: error => { clearTimeout(timer); pending = undefined; reject(error); } };
+      child.stdin!.write(JSON.stringify({ type: 'control_request', request_id: id, request: body }) + '\n');
+    });
+    createInterface({ input: child.stdout! }).on('line', line => {
+      let message: any;
+      try { message = JSON.parse(line); } catch { return; }
+      const response = message.type === 'control_response' ? message.response : null;
+      if (pending && response?.request_id === pending.id) {
+        if (response.subtype === 'error') pending.reject(new Error(response.error || 'Unsupported request.'));
+        else pending.resolve(response.response);
+      }
+    });
+    child.once('error', error => pending?.reject(error));
+    child.once('close', () => pending?.reject(new Error('Claude Code exited before reporting its model settings.')));
+    child.stdin!.on('error', error => pending?.reject(error));
     try {
-      return await new Promise<ModelInfo[]>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Claude Code did not list its models.')), 20000);
-        createInterface({ input: child.stdout! }).on('line', line => {
-          let message: any;
-          try { message = JSON.parse(line); } catch { return; }
-          const response = message.type === 'control_response' ? message.response : null;
-          if (response?.request_id === 'papilot-models') { clearTimeout(timer); Array.isArray(response.response?.models) ? resolve(response.response.models) : reject(new Error(response.error || 'No models.')); }
-        });
-        child.once('error', error => { clearTimeout(timer); reject(error); });
-        child.once('close', () => { clearTimeout(timer); reject(new Error('Claude Code exited before listing its models.')); });
-        child.stdin!.on('error', () => {});
-        child.stdin!.write(JSON.stringify({ type: 'control_request', request_id: 'papilot-models', request: { subtype: 'initialize' } }) + '\n');
-      });
+      const initialized = await request('papilot-models', { subtype: 'initialize' }, 20000);
+      // Summary uses local estimates, without token-count API calls or generation.
+      // Older CLIs can list models without exposing their current selection.
+      const context = await request('papilot-model', { subtype: 'get_context_usage', detail: 'summary' }, 5000).catch(() => null);
+      return { models: Array.isArray(initialized?.models) ? initialized.models : [], model: typeof context?.model === 'string' ? context.model : null };
     } finally { child.kill(); }
   }
   protected account() {
@@ -257,11 +269,16 @@ export class ClaudeAgent extends Adapter {
     return { account: null, requiresOpenaiAuth: true, reason: CLAUDE_KEY };
   }
   protected models() {
-    if (this.cli && !this.info.models.length) return { data: CLAUDE_CLI_MODELS.map(model => ({ model: model.model, displayName: model.displayName, isDefault: false, supportedReasoningEfforts: model.efforts.map(effort => ({ reasoningEffort: effort })), defaultReasoningEffort: null })) };
-    const all = this.info.models, preferred = all.find(model => model.value === 'default');
-    const data = all.filter(model => model.value !== 'default').map(model => ({
+    const all: ModelInfo[] = this.cli && !this.info.models.length
+      ? CLAUDE_CLI_MODELS.map(model => ({ value: model.model, displayName: model.displayName, description: '', supportedEffortLevels: model.efforts as ModelInfo['supportedEffortLevels'] }))
+      : this.info.models.filter(model => model.value !== 'default');
+    // The list's "default" row is a recommendation. Only a reported current
+    // model can mark a default; don't assume Opus when a CLI omits that data.
+    const preferred = all.find(model => model.value === this.info.model || model.resolvedModel === this.info.model);
+    const models: ModelInfo[] = this.info.model && !preferred ? [...all, { value: this.info.model, displayName: this.info.model, description: '' }] : all;
+    const data = models.map(model => ({
       model: model.value, displayName: model.displayName,
-      isDefault: Boolean(preferred?.resolvedModel ? model.resolvedModel === preferred.resolvedModel : model.value === 'opus'),
+      isDefault: preferred ? model === preferred : model.value === this.info.model,
       supportedReasoningEfforts: (model.supportedEffortLevels || []).map(effort => ({ reasoningEffort: effort })),
       defaultReasoningEffort: this.defaults.get(model.value) || null,
     }));
@@ -537,7 +554,10 @@ export function groupModels(listing: string, preferred = '') {
     const base = variant && id.endsWith('-' + level) ? id.slice(0, -level!.length - 1) : id;
     const group = groups.get(base) || { model: base, displayName: variant && id !== base ? variant[1] : name, efforts: [], ids: {}, isDefault: false, defaultEffort: null };
     if (variant && id !== base) { group.efforts.push(level!); group.ids[level!] = id; } else group.ids[''] = id;
-    if (name === preferred) { group.isDefault = true; if (variant && id !== base) group.defaultEffort = level!; }
+    if (name === preferred || id === preferred || base === preferred) {
+      group.isDefault = true;
+      if (variant && id !== base && (name === preferred || id === preferred)) group.defaultEffort = level!;
+    }
     groups.set(base, group);
   }
   for (const group of groups.values()) {

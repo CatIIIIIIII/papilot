@@ -74,6 +74,68 @@ const taskModels = [
   { id: 'small', name: 'Small', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'low' },
 ];
 
+test('Codex defaults come from configuration, including profiles and models outside the catalog', async () => {
+  const f = fixture();
+  let config: any = { model: 'small' }, configFailure = false, catalogFailure = false;
+  (f.codex as any).start = async () => { f.codex.ready = true; };
+  f.codex.handler = async method => {
+    if (method === 'account/read') return { requiresOpenaiAuth: false };
+    if (method === 'config/read') {
+      if (configFailure) throw new RpcResponseError('Unsupported method');
+      return { config };
+    }
+    if (method === 'model/list') {
+      if (catalogFailure) throw new Error('Catalog unavailable');
+      return { data: taskModels.map(m => ({ model: m.id, displayName: m.name, isDefault: m.isDefault })) };
+    }
+    return {};
+  };
+  const reconnect = () => (f.workspace as any).connectAgent('codex');
+  const defaults = () => f.workspace.runtime.models.filter(m => m.isDefault).map(m => m.id);
+  try {
+    await reconnect();
+    assert.deepEqual(defaults(), ['small'], 'configured model overrides the catalog recommendation');
+    assert.deepEqual(f.codex.calls.find(call => call.method === 'config/read')?.params, { includeLayers: false });
+    config = { model: 'deep', profile: 'paper', profiles: { paper: { model: 'small' } } };
+    await reconnect();
+    assert.deepEqual(defaults(), ['small']);
+    config = { model: 'custom-model' };
+    await reconnect();
+    assert.deepEqual(f.workspace.runtime.models.find(m => m.isDefault), { id: 'custom-model', name: 'custom-model', isDefault: true, efforts: [], defaultEffort: null });
+    catalogFailure = true;
+    await reconnect();
+    assert.deepEqual(defaults(), ['custom-model'], 'configuration still works without a catalog');
+    catalogFailure = false; config = { model: null };
+    await reconnect();
+    assert.deepEqual(defaults(), ['deep'], 'the catalog default applies when there is no configured override');
+    configFailure = true;
+    await reconnect();
+    assert.deepEqual(defaults(), [], 'a failed read must not mislabel the catalog recommendation or retain stale defaults');
+    assert.equal(f.workspace.runtime.models.length, 2);
+    assert.equal(f.workspace.runtime.connected, true);
+  } finally { f.close(); }
+});
+
+test('new tasks pin the resolved default and send it to both the thread and turn', async () => {
+  const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/unused' } : summary);
+  try {
+    f.workspace.runtime.models = taskModels.map(m => ({ ...m, isDefault: m.id === 'small' }));
+    const input = { id: 'default-model-task-01', projectId: 'paper', title: 'Revise', instructions: 'Revise.', model: '' };
+    const created = await f.workspace.createTask(input);
+    assert.equal(created.model, 'small');
+    const explicit = await f.workspace.createTask({ ...input, id: 'explicit-model-task-01', model: 'deep' });
+    assert.equal(explicit.model, 'deep');
+    f.workspace.runtime.models = taskModels;
+    f.codex.ready = true;
+    const run = f.store.runs().find(run => run.taskId === created.id)!;
+    (f.workspace as any).active.set(created.id, run);
+    await (f.workspace as any).startRun(run);
+    assert.equal(f.codex.calls.find(call => call.method === 'thread/start' && !call.params.ephemeral)?.params.model, 'small');
+    assert.equal(f.codex.calls.find(call => call.method === 'turn/start' && call.params.clientUserMessageId === run.id)?.params.model, 'small', 'a later default change cannot change the submitted model');
+    assert.equal(f.workspace.updateTaskModel(created.id, { model: '' }).model, 'deep', 'resetting an existing task pins the current default');
+  } finally { f.close(); }
+});
+
 test('task model settings persist, validate capabilities and clear incompatible options', () => {
   const f = fixture();
   try {

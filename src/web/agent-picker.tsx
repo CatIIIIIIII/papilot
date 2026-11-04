@@ -61,7 +61,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   const runtime = current?.runtime, models = runtime?.models || [];
   const selected = model ? models.find(item => item.id === model) : models.find(item => item.isDefault);
   const agentName = current?.label || agent;
-  const modelName = selected?.name || model || agentName;
+  const modelName = selected?.name || model || t('Default model');
   const currentEffort = effort || selected?.defaultEffort;
   const fastMode = agent === 'codex' ? selected?.fastMode : undefined;
   const disconnected = runtime && (!runtime.connected || !runtime.authenticated);
@@ -69,8 +69,10 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   // Every model of every agent; an agent without a model list offers its default.
   const choices = (option: AgentOption): Choice[] => {
     const list = option.runtime?.models || [];
-    return list.length ? list.map(item => ({ key: `${option.value}\n${item.id}`, agent: option, model: item.id, name: item.name, isDefault: item.isDefault, recent: false }))
-      : [{ key: `${option.value}\n`, agent: option, model: '', name: t('Default model'), isDefault: false, recent: false }];
+    return [
+      ...(!list.some(item => item.isDefault) ? [{ key: `${option.value}\n`, agent: option, model: '', name: t('Default model'), isDefault: false, recent: false }] : []),
+      ...list.map(item => ({ key: `${option.value}\n${item.id}`, agent: option, model: item.id, name: item.name, isDefault: item.isDefault, recent: false })),
+    ];
   };
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const matches = (choice: Choice) => terms.every(term => `${choice.agent.label} ${choice.name} ${choice.model}`.toLocaleLowerCase().includes(term));
