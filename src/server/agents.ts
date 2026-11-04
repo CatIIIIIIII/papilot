@@ -442,7 +442,7 @@ export class GlmAgent extends ClaudeAgent {
     if (!endpoint) throw new Error(GLM_KEY);
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(this.env)) if (value !== undefined && !/^(ANTHROPIC_|CLAUDE_CODE_USE_|AWS_BEARER_TOKEN_BEDROCK$)/.test(key)) env[key] = value;
-    return { ...env, ANTHROPIC_BASE_URL: endpoint.url, ANTHROPIC_AUTH_TOKEN: endpoint.token,
+    return { ...env, PATH: agentPath(env), ANTHROPIC_BASE_URL: endpoint.url, ANTHROPIC_AUTH_TOKEN: endpoint.token,
       ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.3', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5.3', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.7',
       API_TIMEOUT_MS: '3000000', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
   }
@@ -474,7 +474,8 @@ export class AntigravityAgent extends Adapter {
   // Some regions need a proxy for Antigravity; PAPILOT_AGY_PROXY applies only to agy.
   private env() {
     const proxy = process.env.PAPILOT_AGY_PROXY;
-    return proxy ? { ...process.env, HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : process.env;
+    const env = { ...process.env, PATH: agentPath() };
+    return proxy ? { ...env, HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : env;
   }
   async start() {
     if (this.ready) return;
