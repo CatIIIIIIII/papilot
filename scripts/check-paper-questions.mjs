@@ -18,7 +18,7 @@ const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', n
 const words = JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'));
 const histories = { paper: [], other: [] }, attempts = [];
 const sessions = Object.fromEntries(['paper', 'other'].map(projectId => [projectId, [{ id: 'default', projectId, ownerId: 'owner', title: '', createdAt: 1, updatedAt: 1 }]]));
-let failPost = false, taskWrites = 0;
+let failPost = false, failDelete = false, taskWrites = 0;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
   if (url.pathname === '/api/state') return json(snapshot);
@@ -31,6 +31,15 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/manuscript/words')) return json(words[Number(url.searchParams.get('page'))]);
   if (url.pathname.endsWith('/items')) return json({ items: [] });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
+  if (/\/question-sessions\/[^/]+\/delete$/.test(url.pathname)) {
+    if (failDelete) { failDelete = false; return route.fulfill({ status: 503, json: { error: 'Could not delete conversation.' } }); }
+    const projectId = url.pathname.split('/')[3], id = url.pathname.split('/').at(-2);
+    if (histories[projectId].some(q => q.sessionId === id && q.status === 'running')) return route.fulfill({ status: 400, json: { error: 'Wait for the answer to finish before deleting this conversation.' } });
+    histories[projectId] = histories[projectId].filter(q => q.sessionId !== id);
+    sessions[projectId] = sessions[projectId].filter(item => item.id !== id);
+    if (!sessions[projectId].length) sessions[projectId].push({ id: 'replacement', projectId, ownerId: 'owner', title: '', createdAt: Date.now(), updatedAt: Date.now() });
+    return json({ sessions: sessions[projectId] });
+  }
   if (url.pathname.endsWith('/question-sessions')) {
     const projectId = url.pathname.split('/')[3];
     if (route.request().method() === 'GET') return json({ sessions: sessions[projectId].map(session => ({ ...session, title: histories[projectId].find(q => q.sessionId === session.id)?.question || '', running: histories[projectId].some(q => q.sessionId === session.id && q.status === 'running') })) });
@@ -146,6 +155,7 @@ try {
   await expect(pane().getByText('hierarchy', { exact: true })).toBeVisible();
   await historyButton().click();
   await expect(pane().getByRole('menuitemradio', { name: 'Explain the experiment.', exact: true })).toBeVisible();
+  await expect(pane().getByRole('menuitem', { name: 'Delete conversation: Explain the experiment.', exact: true })).toBeDisabled();
   await page.screenshot({ path: 'test-results/paper-questions-history.png', fullPage: true, animations: 'disabled' });
   await pane().getByRole('menu').press('Escape');
   const background = histories.paper.find(q => q.sessionId === newSession);
@@ -186,6 +196,41 @@ try {
   await chinese.getByRole('button', { name: '历史会话', exact: true }).click();
   await expect(chinese.getByRole('menu', { name: '历史会话', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/paper-questions-history-zh.png', fullPage: true, animations: 'disabled' });
+  await page.evaluate(() => localStorage.setItem('papilot:language', 'en'));
+  await page.reload(); await page.locator('.manuscript-link').click();
+  await expect(input()).toHaveValue('Unsent follow-up.');
+  await historyButton().click();
+  await pane().getByRole('menuitem', { name: 'Delete conversation: Explain the experiment.', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete conversation?', exact: true });
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await dialog.press('Escape');
+  assert.equal(sessions.paper.length, 2);
+  await historyButton().click();
+  await expect(page.locator('.pdf-container canvas').first()).toBeVisible({ timeout: 15000 });
+  await page.screenshot({ path: 'test-results/paper-questions-delete-menu.png', fullPage: true, animations: 'disabled' });
+  await pane().getByRole('menuitem', { name: 'Delete conversation: Explain the experiment.', exact: true }).click();
+  await page.screenshot({ path: 'test-results/paper-questions-delete-confirm.png', fullPage: true, animations: 'disabled' });
+  failDelete = true;
+  await dialog.getByRole('button', { name: 'Delete conversation', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Could not delete');
+  assert.equal(sessions.paper.length, 2);
+  await dialog.getByRole('button', { name: 'Delete conversation', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(input()).toHaveValue('Unsent follow-up.');
+  assert.equal(await page.evaluate(id => localStorage.getItem(`papilot:questions:owner:paper:thread:${id}:draft`), newSession), null);
+  await historyButton().click();
+  await pane().getByRole('menuitem', { name: 'Delete conversation: What is the main idea?', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Delete conversation', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(input()).toHaveValue('');
+  assert.equal(histories.paper.length, 0);
+  assert.equal(sessions.paper[0].id, 'replacement');
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:questions:owner:paper:draft')), null);
+  await page.reload(); await page.locator('.manuscript-link').click();
+  await expect(input()).toHaveValue('');
+  await historyButton().click();
+  await expect(pane().getByRole('menuitemradio')).toHaveCount(1);
+  await expect(pane().getByRole('menuitemradio')).toHaveText(/New conversation/);
   assert.equal(taskWrites, 0, 'Q&A must not call editing endpoints');
   assert.deepEqual(errors, []);
   console.log('PASS: independent split Q&A, model selection, IME input, idempotent retry, waiting/error states, history and draft persistence, paper switching, concurrent editing and mobile layout.');

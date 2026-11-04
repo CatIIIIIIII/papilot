@@ -152,6 +152,13 @@ export class Store extends EventEmitter {
   questionSessions(projectId: string, ownerId: string) {
     return (this.db.prepare(`SELECT s.data, EXISTS(SELECT 1 FROM paper_questions q WHERE q.project_id=s.project_id AND q.owner_id=s.owner_id AND q.session_id=s.id AND json_extract(q.data,'$.status')='running') AS running FROM paper_question_sessions s WHERE s.project_id=? AND s.owner_id=? ORDER BY s.updated DESC,s.rowid DESC`).all(projectId, ownerId) as { data: string; running: number }[]).map(row => ({ ...JSON.parse(row.data), running: Boolean(row.running) }) as PaperQuestionSession);
   }
+  removeQuestionSession(projectId: string, ownerId: string, id: string) {
+    this.transaction(() => {
+      this.db.prepare('DELETE FROM paper_questions WHERE project_id=? AND owner_id=? AND session_id=?').run(projectId, ownerId, id);
+      this.db.prepare('DELETE FROM paper_question_sessions WHERE project_id=? AND owner_id=? AND id=?').run(projectId, ownerId, id);
+    });
+    this.emit('change');
+  }
   questionSession(projectId: string, ownerId: string, id: string) {
     const row = this.db.prepare('SELECT data FROM paper_question_sessions WHERE project_id=? AND owner_id=? AND id=?').get(projectId, ownerId, id) as { data: string } | undefined;
     return row ? JSON.parse(row.data) as PaperQuestionSession : undefined;

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { AgentId, PaperQuestion } from '../shared.ts';
 import { DEFAULT_QUESTION_SESSION, isAgentId, QUESTION_AGENTS } from '../shared.ts';
 import type { Store } from './store.ts';
@@ -61,12 +62,22 @@ export class PaperQuestions {
     this.store.project(projectId); this.sessionId(id);
     return this.store.ensureQuestionSession(projectId, ownerId, id);
   }
+  removeSession(projectId: string, ownerId: string, id: string) {
+    if (this.closed) throw new Error('The server is shutting down.');
+    this.store.project(projectId); this.sessionId(id);
+    const session = this.store.questionSessions(projectId, ownerId).find(item => item.id === id);
+    if (this.pending.has(JSON.stringify([projectId, ownerId, id])) || session?.running) throw new Error('Wait for the answer to finish before deleting this conversation.');
+    this.store.removeQuestionSession(projectId, ownerId, id);
+    // Use a fresh ID: delayed requests for a deleted conversation must not reopen it.
+    if (!this.store.questionSessions(projectId, ownerId).length) this.store.ensureQuestionSession(projectId, ownerId, randomUUID());
+    return this.store.questionSessions(projectId, ownerId);
+  }
   private sessionId(id: unknown): asserts id is string {
     if (typeof id !== 'string' || !/^[\w-]{1,100}$/.test(id)) throw new Error('Choose a valid question session.');
   }
   private session(projectId: string, ownerId: string, id: string) {
     this.store.project(projectId); this.sessionId(id);
-    if (id === DEFAULT_QUESTION_SESSION) return this.store.ensureQuestionSession(projectId, ownerId, id);
+    if (id === DEFAULT_QUESTION_SESSION && !this.store.questionSessions(projectId, ownerId).length) return this.store.ensureQuestionSession(projectId, ownerId, id);
     const session = this.store.questionSession(projectId, ownerId, id);
     if (!session) throw new Error('Question session not found.');
     return session;

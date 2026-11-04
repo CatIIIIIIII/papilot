@@ -9,6 +9,7 @@ import './paper-questions.css';
 import { AgentPicker } from './agent-picker.tsx';
 import logo from './logo.svg';
 import { ActionMenu } from './action-menu.tsx';
+import { DeleteQuestionSessionDialog } from './question-session-dialog.tsx';
 
 export function QuestionSplit({ children, questions }: { children: ReactNode; questions?: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
@@ -36,6 +37,7 @@ const questionId = () => crypto.randomUUID?.() || Array.from(crypto.getRandomVal
 export function PaperQuestions(props: QuestionProps) {
   const { projectId, userId, api } = props;
   const key = `papilot:questions:${userId}:${projectId}`, route = `/projects/${encodeURIComponent(projectId)}/question-sessions`;
+  const [removing, setRemoving] = useState<PaperQuestionSession | null>(null);
   const [sessions, setSessions] = useState<PaperQuestionSession[]>([]);
   const [selected, setSelected] = useState(() => browserStorage.getItem(key + ':session') || '');
   const [error, setError] = useState(''), [creating, setCreating] = useState(false), [reload, setReload] = useState(0);
@@ -80,6 +82,20 @@ export function PaperQuestions(props: QuestionProps) {
     } catch (error) { if (mounted.current) setError(error instanceof Error ? error.message : String(error)); }
     finally { pending.current = false; if (mounted.current) setCreating(false); }
   }
+  async function remove(id: string) {
+    if (pending.current) throw new Error('Wait for the current operation to finish.');
+    pending.current = true; setCreating(true); revision.current++;
+    try {
+      const result = await api<{ sessions: PaperQuestionSession[] }>(`${route}/${encodeURIComponent(id)}/delete`, {});
+      const storage = id === DEFAULT_QUESTION_SESSION ? key : `${key}:thread:${id}`;
+      for (const suffix of [':draft', ':agent', ':request']) browserStorage.removeItem(storage + suffix);
+      if (mounted.current) {
+        revision.current++; setSessions(result.sessions);
+        if (selected === id) choose(result.sessions[0]?.id || '');
+        setRemoving(null); setError('');
+      }
+    } finally { pending.current = false; if (mounted.current) setCreating(false); }
+  }
   const session = sessions.find(item => item.id === selected);
   return <section className="paper-questions" aria-label={t('Paper Q&A')}>
     <header className="paper-questions-heading"><Icon name="chat" size={15}/><strong>{t('Paper Q&A')}</strong><small className="question-access" title={t('Can run commands and modify files')}>{t('Full access')}</small>
@@ -88,11 +104,13 @@ export function PaperQuestions(props: QuestionProps) {
           id: item.id, label: item.title || t('New conversation'), checked: item.id === selected,
           detail: new Date(item.createdAt).toLocaleString(locale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + (item.running ? ' · ' + t('Thinking…') : ''),
           select: () => choose(item.id),
+          auxiliary: { label: t('Delete conversation: {title}', { title: item.title || t('New conversation') }), icon: 'trash', disabled: item.running, select: () => setRemoving(item) },
         }))}><Icon name="restore" size={17}/></ActionMenu>
         <button type="button" className="icon-button" aria-label={t('New conversation')} title={t('New conversation')} disabled={creating || !sessions.length} onClick={() => void create()}>{creating ? <span className="spinner"/> : <Icon name="plus" size={17}/>}</button>
       </span>
     </header>
     {error && <div className="question-session-error inline-error" role="alert">{errorText(error)} <button type="button" onClick={() => setReload(value => value + 1)}>{t('Retry')}</button></div>}
+    {removing && <DeleteQuestionSessionDialog title={removing.title || t('New conversation')} submit={() => remove(removing.id)} onClose={() => setRemoving(null)}/>}
     {session ? <QuestionConversation key={session.id} {...props} sessionId={session.id}/> : <p className="question-empty">{t('Loading conversation…')}</p>}
   </section>;
 }

@@ -69,3 +69,34 @@ test('sessions isolate prompts, concurrent answers, ownership and deletion', asy
     assert.deepEqual(store.questions('paper', 'owner', 'one'), []);
   } finally { service.close(); store.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('deleting a conversation removes only its history and prevents stale default requests from restoring it', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-session-delete-'));
+  const file = path.join(root, 'state.sqlite');
+  const store = new Store(file);
+  store.saveProject({ id: 'paper', name: 'Paper', path: root, createdAt: 1 });
+  let finish!: (answer: string) => void;
+  const service = new PaperQuestions(store, () => new Promise(resolve => { finish = resolve; }));
+  try {
+    service.sessions('paper', 'owner');
+    service.createSession('paper', 'owner', 'keep');
+    service.createSession('paper', 'guest', 'keep');
+    service.submit('paper', 'owner', { id: 'q', sessionId: 'default', agent: 'codex', question: 'Explain.' });
+    assert.throws(() => service.removeSession('paper', 'owner', 'default'), /Wait for the answer/);
+    for (let n = 0; n < 100 && !finish; n++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.ok(finish); finish('Answer.'); await service.settled();
+    assert.equal(service.removeSession('paper', 'owner', 'default')[0].id, 'keep');
+    assert.equal(store.question('paper', 'owner', 'q'), undefined);
+    assert.throws(() => service.list('paper', 'owner', 'default'), /not found/);
+    assert.throws(() => service.submit('paper', 'owner', { id: 'stale', agent: 'codex', question: 'Stale request.' }), /not found/);
+    service.removeSession('paper', 'owner', 'default'); // Retrying a completed deletion is safe.
+    const remaining = service.removeSession('paper', 'owner', 'keep');
+    assert.equal(remaining.length, 1); assert.notEqual(remaining[0].id, 'default'); assert.notEqual(remaining[0].id, 'keep');
+    assert.ok(store.questionSession('paper', 'guest', 'keep'));
+    assert.throws(() => service.removeSession('missing', 'owner', 'keep'));
+    assert.throws(() => service.removeSession('paper', 'owner', '../invalid'), /valid/);
+  } finally { service.close(); store.close(); }
+  const reopened = new Store(file);
+  try { assert.equal(reopened.questionSession('paper', 'owner', 'default'), undefined); assert.deepEqual(reopened.questions('paper', 'owner', 'default'), []); }
+  finally { reopened.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});

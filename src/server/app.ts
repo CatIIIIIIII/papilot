@@ -126,6 +126,7 @@ export async function buildApp(options: AppOptions) {
   app.get<{ Params: { id: string }; Querystring: { sessionId?: string } }>('/api/projects/:id/questions', project(), request => ({ questions: workspace.questions.list(request.params.id, author(request.viewer)?.id || 'owner', request.query.sessionId) }));
   app.get<{ Params: { id: string } }>('/api/projects/:id/question-sessions', project(), request => ({ sessions: workspace.questions.sessions(request.params.id, author(request.viewer)?.id || 'owner') }));
   app.post<{ Params: { id: string } }>('/api/projects/:id/question-sessions', project(), request => workspace.questions.createSession(request.params.id, author(request.viewer)?.id || 'owner', (request.body as { id: string } | null)?.id!));
+  app.post<{ Params: { id: string; sessionId: string } }>('/api/projects/:id/question-sessions/:sessionId/delete', project(), request => ({ sessions: workspace.questions.removeSession(request.params.id, author(request.viewer)?.id || 'owner', request.params.sessionId) }));
   app.post<{ Params: { id: string } }>('/api/projects/:id/questions', project(), request => workspace.questions.submit(request.params.id, author(request.viewer)?.id || 'owner', request.body as import('./paper-questions.ts').QuestionInput));
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
   app.post<{ Params: { id: string } }>('/api/projects/:id/attachments', { ...project(), bodyLimit: MAX_ATTACHMENT_BYTES }, async request => {

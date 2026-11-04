@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './icons.tsx';
 
 // An href opens in a new tab; with download, it saves the file instead.
-export interface MenuAction { id?: string; label: string; title?: string; detail?: string; hint?: string; indent?: number; select?: () => void; href?: string; download?: boolean; disabled?: boolean; danger?: boolean; checked?: boolean; icon?: string; divider?: boolean; edit?: { label: string; select: () => void } }
+export interface MenuAction { id?: string; label: string; title?: string; detail?: string; hint?: string; indent?: number; select?: () => void; href?: string; download?: boolean; disabled?: boolean; danger?: boolean; checked?: boolean; icon?: string; divider?: boolean; auxiliary?: { label: string; icon: string; disabled?: boolean; select: () => void }; edit?: { label: string; select: () => void } }
 
 // Native popovers escape scrolling containers and handle outside clicks without
 // making the rest of the workspace modal. Each menu keeps its own task identity.
@@ -71,7 +71,8 @@ export function ActionMenu({ label, actions, children, className = 'icon-button 
         const item = action.href && !action.disabled
           ? <a key={action.id || action.label} role="menuitem" title={action.title} href={action.href} {...action.download ? { download: '' } : { target: '_blank', rel: 'noreferrer' }} onClick={close}>{content}</a>
           : <button key={action.id || action.label} type="button" title={action.title} role={action.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={action.checked} disabled={action.disabled} className={action.danger ? 'danger-text' : undefined} data-indent={action.indent || undefined} style={action.indent ? { paddingLeft: 10 + action.indent * 14 } : undefined} onClick={() => { close(); trigger.current?.focus(); action.select?.(); }}>{content}</button>;
-        const row = action.edit ? <div className="menu-item-row" key={action.id || action.label}>{item}<button type="button" role="menuitem" className="icon-button paper-actions" aria-label={action.edit.label} title={action.edit.label} aria-haspopup="dialog" onClick={() => { close(); trigger.current?.focus(); action.edit?.select(); }}><Icon name="pencil" size={15}/></button></div> : item;
+        const accessory = action.auxiliary || (action.edit ? { ...action.edit, icon: 'pencil', disabled: false } : undefined);
+        const row = accessory ? <div className="menu-item-row" key={action.id || action.label}>{item}<button type="button" role="menuitem" className="icon-button paper-actions" aria-label={accessory.label} title={accessory.label} aria-haspopup="dialog" disabled={accessory.disabled} onClick={() => { close(); trigger.current?.focus(); accessory.select(); }}><Icon name={accessory.icon} size={15}/></button></div> : item;
         return action.divider ? [<div key={action.label + '-divider'} role="separator" className="menu-separator"/>, row] : row;
       })}
     </div>

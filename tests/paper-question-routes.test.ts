@@ -48,6 +48,13 @@ test('question routes require project access and CSRF and only return the curren
     assert.equal((await app.inject({ url: request.url + '?sessionId=new-session', headers })).json().questions[0].id, 'q2');
     assert.equal((await app.inject({ url: request.url, headers })).json().questions.length, 1);
     assert.equal((await app.inject({ url: request.url + '?sessionId=missing', headers })).statusCode, 400);
+    const remove = { method: 'POST' as const, url: sessionsUrl + '/new-session/delete', headers, payload: {} };
+    assert.equal((await app.inject({ ...remove, headers: { host: headers.host } })).statusCode, 403);
+    assert.equal((await app.inject(remove)).statusCode, 200);
+    assert.equal((await app.inject(remove)).statusCode, 200);
+    assert.equal(store.question('paper', 'owner', 'q2'), undefined);
+    assert.equal(store.question('paper', 'guest', 'private')?.answer, 'Guest answer');
+    assert.equal((await app.inject({ ...remove, url: '/api/projects/missing/question-sessions/new-session/delete' })).statusCode, 400);
     assert.deepEqual(store.tasks(), []);
   } finally { await app.close(); workspace.close(); store.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });

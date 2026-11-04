@@ -1175,5 +1175,10 @@
   "New conversation": "新對話",
   "What would you like to discuss?": "想討論論文的什麼內容？",
   "Full access": "完整存取",
-  "Can run commands and modify files": "可執行命令和修改檔案"
+  "Can run commands and modify files": "可執行命令和修改檔案",
+  "Delete conversation: {title}": "刪除對話：{title}",
+  "Delete conversation?": "刪除對話？",
+  "Delete conversation": "刪除對話",
+  "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "這將永久刪除此對話及其問題、回答和草稿。已經對論文做出的修改會保留。",
+  "Wait for the answer to finish before deleting this conversation.": "請等待回答結束後再刪除此對話。"
 }
