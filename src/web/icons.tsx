@@ -1,6 +1,8 @@
+import { editorIcons } from '../../engine/src/web/editor-icons.tsx';
+
 const paths: Record<string, React.ReactNode> = {
+  ...editorIcons,
   info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></>,
-  code: <><path d="m8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16"/></>,
   github: <><path d="M9 19c-4.3 1.3-4.3-2.1-6-2.5m12 5v-3.9a3.4 3.4 0 0 0-.9-2.7c3-.3 6.2-1.5 6.2-6.8a5.3 5.3 0 0 0-1.4-3.7 4.9 4.9 0 0 0-.1-3.6s-1.1-.3-3.8 1.4a13.2 13.2 0 0 0-7 0C5.3.5 4.2.8 4.2.8A4.9 4.9 0 0 0 4.1 4.4a5.3 5.3 0 0 0-1.4 3.7c0 5.3 3.2 6.5 6.2 6.8a3.4 3.4 0 0 0-.9 2.7v3.9"/></>,
   keyboard: <><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></>,
   sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></>,
@@ -21,8 +23,6 @@ const paths: Record<string, React.ReactNode> = {
   arrowRight: <path d="M5 12h14m-6-6 6 6-6 6"/>,
   stop: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>,
   updown: <path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>,
-  check: <path d="M20 6 9 17l-5-5"/>,
-  close: <path d="M18 6 6 18M6 6l12 12"/>,
   more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></>,
   external: <><path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></>,
   share: <><path d="M12 3v12M8 7l4-4 4 4"/><path d="M8 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2"/></>,
@@ -37,7 +37,6 @@ const paths: Record<string, React.ReactNode> = {
   tool: <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9Z"/>,
   log: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6m-6 4h4"/></>,
   alert: <><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></>,
-  refresh: <><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></>,
   trash: <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 5v6m4-6v6"/>,
   pause: <><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></>,
   search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>,
@@ -51,13 +50,11 @@ const paths: Record<string, React.ReactNode> = {
   branch: <><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></>,
   commit: <><circle cx="12" cy="12" r="3"/><path d="M3 12h6m6 0h6"/></>,
   // Source control, after an editor's: discard, a remote branch, fetch, pull and push.
-  undo: <><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></>,
   cloud: <path d="M17.5 19H7a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.5 11a4 4 0 0 1-2 8Z"/>,
   fetch: <><circle cx="12" cy="19" r="2.5"/><path d="M12 3v1.5m0 3V9m0 3v1.5M8.5 10.5 12 14l3.5-3.5"/></>,
   pull: <><circle cx="12" cy="19" r="2.5"/><path d="M12 3v11m-3.5-3.5L12 14l3.5-3.5"/></>,
   push: <><circle cx="12" cy="19" r="2.5"/><path d="M12 16.5V3M8.5 6.5 12 3l3.5 3.5"/></>,
   notes: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 8h8M8 12h5"/></>,
-  pencil: <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>,
   pen: <><path d="M16.8 3.8a2.4 2.4 0 0 1 3.4 3.4L7 20.4 3 21l.6-4Z"/><path d="m15.2 5.4 3.4 3.4M3.6 17 7 20.4"/></>,
   copy: <><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
   bookmark: <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/>,

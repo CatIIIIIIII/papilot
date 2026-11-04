@@ -198,6 +198,7 @@ export class Review {
     this.app.viewers.set(name, now());
     return {
       csrf: this.app.csrf,
+      sourceEditing: true,
       task: name,
       title: task.title,
       closed: Boolean(task.closed),

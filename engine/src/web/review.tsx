@@ -19,6 +19,7 @@ import type {
   VisualUnit,
 } from "../types.ts";
 import { PdfStrip } from "./PdfStrip.tsx";
+import { SourceEditor } from "./SourceEditor.tsx";
 import { ChangeMap } from "./ChangeMap.tsx";
 import { placeable, type PlacedChange } from "./paper.ts";
 // pdf.js loads only when the full paper is shown.
@@ -176,6 +177,7 @@ export function ReviewApp({
       (Boolean(pinned) && linkedChange < 0) || new URLSearchParams(location.search).has("history"),
     );
   const paper = useRef<HTMLElement>(null),
+    editedPlace = useRef<{ file: string; line: number; offset: number; paper: boolean } | null>(null),
     epoch = useRef(0),
     scrollUntil = useRef(0),
     // How far into the current change the author had read, restored once
@@ -422,7 +424,7 @@ export function ReviewApp({
           target &&
           (target !== previous.detail?.round ||
             (next.revision && next.revision !== previous.detail?.after)) &&
-          !snapshot.current.composer
+          !snapshot.current.composer && !paper.current?.querySelector('.source-editor[data-dirty="true"]')
         ) {
           const [loadedState, loaded] = await Promise.all([
             api<PageState>(`/state?round=${target}`),
@@ -450,8 +452,14 @@ export function ReviewApp({
             index = nextPending(nextStops, loadedState.decisions, index);
           if (linkedChange >= 0 && nextStops[linkedChange]) index = linkedChange;
           if (index < 0) index = pinned && nextStops.length ? 0 : -1;
+          const edited = editedPlace.current;
+          if (edited) {
+            const candidates = nextStops.flatMap((stop, i) => loaded.units.filter(unit => unit.file === edited.file && stop.units.includes(unit.id)).map(unit => ({ index: i, distance: Math.abs(unit.new_start - edited.line) })));
+            candidates.sort((a, b) => a.distance - b.distance);
+            if (candidates.length) index = candidates[0].index;
+          }
           returning.current =
-            !previous.detail && index >= 0 && saved.round === target && nextStops[index].key === saved.stop && saved.offset
+            edited && index >= 0 ? { index, offset: edited.offset, paper: edited.paper } : !previous.detail && index >= 0 && saved.round === target && nextStops[index].key === saved.stop && saved.offset
               ? { index, offset: saved.offset, paper: Boolean(saved.paper) }
               : null;
           if (
@@ -463,7 +471,8 @@ export function ReviewApp({
           setState(loadedState);
           setDetail(loaded);
           setCurrent(index);
-          setOpenSource(new Set());
+          setOpenSource(new Set(edited && index >= 0 ? [index] : []));
+          editedPlace.current = null;
           if (previous.detail)
             setToast(t("Changes are ready"));
         } else setState(next);
@@ -1087,15 +1096,24 @@ export function ReviewApp({
                 data-state={decisions[unit.id]}
                 key={unit.id}
               >
-                <div className="source-title">
-                  <span>
+                <SourceEditor key={`${detail!.round}:${unit.id}`} task={task} round={detail!.round} change={unit.id} api={api}
+                  editable={Boolean(state?.sourceEditing && !changes && !pinned && unit.kind !== "binary")}
+                  building={Boolean(state?.job && ["queued", "running"].includes(state.job.status))}
+                  locked={!latest ? t("A newer round is available. Reload the page.") : decisions[unit.id] === "rejected" ? t("This change was rejected. Undo that decision before editing it.") : actionLock("accept") || (state?.job && ["queued", "running"].includes(state.job.status) ? t("Wait for the PDF build before editing source.") : null)}
+                  onSaving={saving => { snapshot.current.busy = saving; setBusy(saving); }}
+                  onSaved={next => {
+                    const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${index}"]`);
+                    editedPlace.current = { file: unit.file, line: unit.new_start, offset: article ? past(article) : 0, paper: paperView };
+                    epoch.current++; setState(next);
+                  }}
+                  title={<span className="source-location" title={unit.file}>
                     {unit.file} ·{" "}
                     {t("lines {start}–{end}", {
                       start: unit.new_start,
                       end: unit.new_end,
                     })}
-                  </span>
-                  {known.length > 1 && (
+                  </span>}
+                  actions={known.length > 1 && (
                     <span className="unit-actions">
                       <span className="unit-state">
                         {decisions[unit.id] !== "pending"
@@ -1124,8 +1142,7 @@ export function ReviewApp({
                           </button>
                         ))}
                     </span>
-                  )}
-                </div>
+                  )}>
                 {unit.kind === "binary" ? (
                   <p>{t("Binary file changed.")}</p>
                 ) : (
@@ -1146,6 +1163,7 @@ export function ReviewApp({
                     {t("Long change: the source is shortened.")}
                   </p>
                 )}
+                </SourceEditor>
               </div>
             ))}
           </div>

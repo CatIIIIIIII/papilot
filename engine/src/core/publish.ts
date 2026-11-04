@@ -396,7 +396,22 @@ export class Publisher {
         changes: latest.units.length,
       };
     const files = await app.repo.changedFilesAsync(before, after);
-    if (!files.length) return { outcome: "empty", round: null, changes: 0 };
+    if (!files.length) {
+      // A manual correction can remove the final proposal altogether. Give
+      // it an empty latest round so the viewer cannot keep offering the old
+      // wording for acceptance after it has disappeared from the worktree.
+      if (latest && app.store.one("SELECT id FROM build_requests WHERE job=? AND id LIKE 'source-%'", job.id)) {
+        this.phase(job, "build");
+        const built = await new Builder(project, app.repo).build(before), number = latest.number + 1;
+        await app.exclusive(async () => {
+          if (app.review.lastChange(name) !== decided) throw new Stale();
+          app.store.execute("INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)", name, number, before, after, "[]", JSON.stringify({ renderer: codeVersion(), warnings: [], targets: ["full"], builds: [built.key] }), now());
+          await app.repo.updateRefAsync(`refs/latex-review/${name}/round-${number}`, after);
+        });
+        return { outcome: "empty", round: number, changes: 0 };
+      }
+      return { outcome: "empty", round: null, changes: 0 };
+    }
     const units = await diffUnitsAsync(app.repo, before, after, (f) =>
       isFigure(project, f),
     );

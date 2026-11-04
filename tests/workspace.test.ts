@@ -206,6 +206,44 @@ test('changing settings during thread resume preserves the next turn choice', as
 const pendingReview: PendingReview = { route: '/api/tasks/p-task/decide', body: { id: 'decision-123', action: 'accept', round: 1, changes: ['change-1'] }, previousStatus: 'reviewing' };
 const pageState = { csrf: 'test', task: 'p-task', title: 'Task', closed: false, state: 'reviewing', latest: 1, round: 1, revision: 'revision', decisions: { 'change-1': 'accepted' }, comments: {}, undo: null, job: null };
 
+test('manual source saves track the existing build and never ask AI to repair compilation', async () => {
+  const gate = deferred<{ status: string; error: string }>();
+  const f = fixture(async (_method, route) => route.includes('/jobs/') ? gate.promise : summary);
+  try {
+    const state = { ...pageState, job: { id: 'source-job', status: 'queued' } };
+    await f.workspace.reviewWrite(f.task.id, true, async () => state, { route: '/api/tasks/p-task/source', body: { id: 'source-save' } });
+    assert.equal(f.store.task(f.task.id).status, 'building');
+    assert.equal(f.store.task(f.task.id).pendingReview, null);
+    assert.equal(f.store.task(f.task.id).pendingBuild?.job, 'source-job');
+    assert.equal(f.store.task(f.task.id).pendingBuild?.sendBack, false);
+    await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => {}));
+    gate.resolve({ status: 'failed', error: 'The revised document could not be compiled.' });
+    for (let i = 0; i < 20 && f.store.task(f.task.id).status === 'building'; i++) await tick();
+    assert.equal(f.store.task(f.task.id).status, 'failed');
+    assert.equal(f.store.runs().length, 0);
+    assert.equal(f.calls.some(call => call.route.endsWith('/publish')), false);
+  } finally { f.close(); }
+});
+
+test('recovering a lost source save resumes its build before queued agent work', async () => {
+  const gate = deferred<{ status: string }>();
+  const server = await reviewServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ...pageState, job: { id: 'source-job', status: 'running' } }));
+  });
+  const f = fixture(async (_method, route) => route.includes('/jobs/') ? gate.promise : summary, { reviewUrl: server.url });
+  try {
+    f.store.updateTask(f.task.id, { status: 'uncertain', pendingReview: { route: '/api/tasks/p-task/source', body: { id: 'saved-edit' }, previousStatus: 'reviewing' } });
+    await f.workspace.reconcile(f.task.id);
+    assert.equal(f.store.task(f.task.id).pendingReview, null);
+    assert.equal(f.store.task(f.task.id).status, 'building');
+    assert.equal(f.store.task(f.task.id).pendingBuild?.job, 'source-job');
+    gate.resolve({ status: 'done' });
+    for (let i = 0; i < 20 && f.store.task(f.task.id).status === 'building'; i++) await tick();
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+  } finally { f.close(); await server.close(); }
+});
+
 async function reviewServer(handler: (request: IncomingMessage, response: ServerResponse, body: any) => void | Promise<void>) {
   const calls: { route: string; body: any; token: string | string[] | undefined }[] = [];
   const server = createServer(async (request, response) => {
