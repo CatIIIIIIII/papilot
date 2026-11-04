@@ -15,18 +15,18 @@ export interface ModelDefaultSettingsProps {
 
 // Use the same catalog and saved choices as the new-task composer.
 export function ModelDefaultSettings({ agents, agent, model, effort, onSelect, onEffort }: ModelDefaultSettingsProps) {
-  const groups = agents.map(option => ({
-    ...option,
-    choices: [
-      { id: '', name: t('Model default') },
-      ...(option.runtime?.models || []),
-      ...(option.value === agent && model && !option.runtime?.models.some(item => item.id === model) ? [{ id: model, name: model }] : []),
-    ],
-  }));
+  const groups = agents.map(option => {
+    const models = option.runtime?.models || [], fallback = models.find(item => item.isDefault);
+    return { ...option, choices: [
+      { id: '', name: fallback ? `${fallback.name || fallback.id} · ${t('Default')}` : t('Default model') },
+      ...models,
+      ...(option.value === agent && model && !models.some(item => item.id === model) ? [{ id: model, name: model }] : []),
+    ] };
+  });
   const current = groups.find(item => item.value === agent);
   const models = current?.runtime?.models || [];
-  const selected = models.find(item => item.id === model) || models.find(item => item.isDefault);
-  const label = `${current?.label || agent} · ${current?.choices.find(item => item.id === model)?.name || t('Model default')}`;
+  const selected = model ? models.find(item => item.id === model) : models.find(item => item.isDefault);
+  const label = `${current?.label || agent} · ${current?.choices.find(item => item.id === model)?.name || t('Default model')}`;
   const value = JSON.stringify([agent, model]);
   return <>
     <div className="settings-row settings-choice">
