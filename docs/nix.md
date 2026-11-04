@@ -2,7 +2,7 @@
 
 The flake packages Papilot's CLI, browser interface and Linux Electron desktop, including the review engine. It provides Node.js 24, Git, `which` and full TeX Live. The first build or development shell may download several gigabytes of dependencies. Agent CLIs and their sign-ins are configured separately, as described in the [agent guide](guide.md#agents).
 
-The flake exposes packages for `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. The original CLI package was smoke-tested on `x86_64-linux`; the extended desktop package requires the VM integration check before release. ARM Linux has evaluation coverage only. The pinned Nixpkgs no longer supports Intel macOS. Electron installers are built separately; see [Papilot Desktop](../desktop/README.md).
+The flake exposes packages for `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. The CLI and Electron desktop are exercised by the `x86_64-linux` NixOS VM integration check. ARM Linux has evaluation coverage only. The pinned Nixpkgs no longer supports Intel macOS. Electron installers are built separately; see [Papilot Desktop](../desktop/README.md).
 
 ## Run or install
 
@@ -25,7 +25,7 @@ nix profile install .
 
 The `default` and `papilot` package outputs are the same. The launcher adds its Node.js, Git and TeX Live to the front of `PATH`. Paper repositories and application data remain writable outside the Nix store. Papilot's default data directory is `~/.papilot`.
 
-Papilot's in-app updater can activate npm-installed versions from its data directory. Use Nix to update if you want to keep running the Nix-built version; use a separate `--data` directory when an existing installation has already activated an in-app update.
+Nix installations ignore saved npm and desktop update layers. Update through Nix; the application displays the package manager and disables in-app installation.
 
 ## Develop
 
@@ -43,7 +43,7 @@ The shell supplies the runtime libraries used by Vite's native npm dependencies 
 
 ## Maintain the flake
 
-`flake.lock` pins Nixpkgs. Both npm dependency trees use the versions and integrity hashes in their existing `package-lock.json` files through [`importNpmLock`](https://nixos.org/manual/nixpkgs/unstable/#javascript-buildNpmPackage-importNpmLock); there are no separate npm hashes to update in the Nix expression.
+`flake.lock` pins Nixpkgs. The application, review engine and agent SDK dependency trees use the versions and integrity hashes in their `package-lock.json` files through [`importNpmLock`](https://nixos.org/manual/nixpkgs/unstable/#javascript-buildNpmPackage-importNpmLock); there are no separate npm hashes to update in the Nix expression.
 
 Keep the source and all four lockfiles unchanged to reproduce the build inputs for a given system. Different architectures produce different outputs. To check whether rebuilding the package produces identical output, first build it normally, then rebuild offline against the dependencies already in the Nix store:
 
