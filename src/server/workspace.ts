@@ -726,7 +726,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
       const value = await response.json() as { error?: string };
       if (!confirmedReviewResponse(response.status, value, task.name)) throw new Error('The review engine could not confirm this action. Check again when it is available.');
       await this.refresh(task.id);
-      this.store.updateTask(task.id, { pendingReview: null, status: this.store.runs().some(r => r.taskId === task.id && r.status === 'queued') ? 'queued' : pending.previousStatus, error: response.ok ? null : value.error || 'Check the review result before continuing.' });
+      const sourceBuild = response.ok && pending.route.endsWith('/source');
+      this.store.transaction(() => {
+        this.store.updateTask(task.id, { pendingReview: null, status: this.store.runs().some(r => r.taskId === task.id && r.status === 'queued') ? 'queued' : pending.previousStatus, error: response.ok ? null : value.error || 'Check the review result before continuing.' });
+        if (sourceBuild) this.rememberSourceBuild(task.id, value);
+      });
+      if (sourceBuild) void this.resumeBuild(task.id);
       return this.store.task(task.id);
     } finally { this.reviewWrites.delete(task.id); this.schedule(); }
   }
@@ -750,13 +755,25 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     if (pending) this.store.updateTask(taskId, { pendingReview: { ...pending, previousStatus: task.status } });
     try {
       const result = await operation();
-      if (pending) this.store.updateTask(taskId, { pendingReview: null });
+      const sourceBuild = pending?.route.endsWith('/source') && confirmedReviewResponse(200, result, task.name);
+      this.store.transaction(() => {
+        if (pending) this.store.updateTask(taskId, { pendingReview: null });
+        if (sourceBuild) this.rememberSourceBuild(taskId, result);
+      });
+      if (sourceBuild) void this.resumeBuild(taskId);
       return result;
     } catch (error) {
       if (pending) this.store.updateTask(taskId, { status: 'uncertain', error: 'The review action could not be confirmed. Select Check status before continuing. ' + errorText(error) });
       throw error;
     }
     finally { this.reviewWrites.delete(taskId); this.schedule(); }
+  }
+  // Source saves start a build in the engine. Track that exact job, including
+  // across a lost save response, without handing the author's text to an agent.
+  private rememberSourceBuild(taskId: string, value: unknown) {
+    const job = (value as { job?: { id?: string } } | null)?.job;
+    if (!job?.id) throw new Error('The review engine could not confirm this action. Select Check status before continuing.');
+    this.store.updateTask(taskId, { status: 'building', error: null, pendingBuild: { requestId: randomUUID(), job: job.id, runs: [], sendBack: false, restarts: 0 } });
   }
   // A build is automatic after the agent's run `after` completes. When its
   // edits break the build, the agent gets the error in a new turn, once.

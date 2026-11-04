@@ -150,6 +150,14 @@ Messages and queued runs are saved in `papilot.sqlite` in the data folder. Closi
 
 Turn on **Settings → Notifications** to receive browser notifications while Papilot is in another tab or app. Under **Notify me about**, choose **Push** or **Off** separately for questions, approval requests, reviews ready, tasks finished without changes to review, and task errors. Choices are saved in this browser and kept when the main switch is turned off. Clicking a notification opens the task. Browsers allow notifications only on HTTPS or localhost, so remotely use the Tailscale HTTPS address.
 
+### Edit a passage yourself
+
+In a task review, expand **LaTeX** under a change and select the pencil (**Edit**) beside the filename. The existing source area switches from the diff to editable current source, with syntax highlighting for commands, formulas, brackets and comments. It loads the complete passage even when the displayed diff is shortened. The checkmark (**Save and update PDF**, also ⌘Enter on macOS or Ctrl+Enter elsewhere) saves it in the task's copy, restores the diff view and rebuilds the review without starting an agent. Review and apply the result through the usual task workflow. Closing the editor with **×** returns to the diff and keeps an unfinished draft in this browser, including across reloads; the curved arrow (**Reset to saved source**) replaces the draft with the current saved text. Hover over an icon to see its action.
+
+![Editing LaTeX in the expanded source area, with highlighted commands, formulas, comments and macro parameters](assets/inline-source-editing.png)
+
+Wait for active agent work and PDF builds before saving. Earlier rounds are read-only, and a rejected change must be undone before editing. If another operation changes the source after you opened it, saving refuses to overwrite it and keeps your draft. If compilation fails, reopen **Edit** to repair the saved source; the previous PDF remains available. Manual compilation failures are not sent to an agent automatically.
+
 ## AI review
 
 In **Manuscript → New task**, choose the **AI review** skill from the composer’s **+** menu, or type `/ai-review`. Optionally describe a focus (for example, assumptions, argument structure, or clarity), choose Codex, Claude, or GLM, and send it like any other skill. Papilot builds and preserves a PDF from the task's own manuscript copy, so you don't need to wait for the preview to finish compiling. The reviewer reads its extracted text and produces comments anchored to its actual lines. It runs in read-only mode and cannot publish or apply manuscript edits.

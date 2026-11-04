@@ -433,6 +433,7 @@ export interface Summary {
   next: string;
 }
 export interface PageState {
+  sourceEditing?: boolean;
   csrf: string;
   task: string;
   title: string;
@@ -466,6 +467,23 @@ export interface PageState {
     | (Pick<Job, "id" | "status" | "phase" | "created"> &
         JobResult & { ahead: number })
     | null;
+}
+export interface SourceExcerpt {
+  round: number;
+  change: string;
+  file: string;
+  revision: string;
+  /** Zero-based, half-open line range in the current worktree. */
+  start: number;
+  end: number;
+  text: string;
+}
+export interface SourceEditRequest {
+  id: string;
+  round: number;
+  change: string;
+  revision: string;
+  text: string;
 }
 export interface FeedbackItem {
   id: number;
