@@ -108,7 +108,7 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
     // Adding a note to the task closes its popover, so the card itself seems
     // to fly there; taking one out keeps it open for the copy to land on.
     const adding = action === 'quote' && !destination && !selected;
-    const flight = action === 'quote' && !destination && card.current ? adding ? noteToTask(card.current) : note.id ? noteFromTask(note.id, card.current) : null : null;
+    const flight = action === 'quote' && !destination && !inTask && card.current ? adding ? noteToTask(card.current) : note.id ? noteFromTask(note.id, card.current) : null : null;
     if (editing && comment !== note.comment) {
       saving.current = true;
       try { if (!await onSave(comment!, action)) return; }

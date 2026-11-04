@@ -47,15 +47,15 @@
 .note-send:hover:not(:disabled){background:var(--primary-hover)}
 .note-send:active:not(:disabled){transform:scale(.94)}
 .note-send:disabled{opacity:1;background:var(--bg-active);color:var(--text-3)}
-.note-send:is([aria-pressed=true],.included){width:auto;padding:0 8px 0 11px;background:var(--accent-soft);color:var(--accent)}
-.note-send:is([aria-pressed=true],.included) svg{opacity:.7}
-.note-send:is([aria-pressed=true],.included):hover:not(:disabled){background:var(--accent-soft);color:var(--accent-hover)}
-.note-send:is([aria-pressed=true],.included):hover:not(:disabled) svg{opacity:1}
+.note-send[aria-pressed=true]{width:auto;padding:0 8px 0 11px;background:var(--accent-soft);color:var(--accent)}
+.note-send[aria-pressed=true] svg{opacity:.7}
+.note-send[aria-pressed=true]:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-hover)}
+.note-send[aria-pressed=true]:hover:not(:disabled) svg{opacity:1}
 .note-send:disabled .spinner,.note-send[aria-pressed=true] .spinner{border-color:var(--line-strong);border-top-color:var(--text-2)}
 .note-send.quiet:not([aria-pressed=true]){background:transparent;color:var(--text-3)}
 .note-send.quiet:not([aria-pressed=true]):hover:not(:disabled){background:var(--primary);color:#fff}
 .note-send.quiet{width:26px;height:26px}
-@media(pointer:coarse){.note-send,.note-send.quiet{width:36px;height:36px}.note-send:is([aria-pressed=true],.included){padding:0 12px 0 14px;font-size:14px}}
+@media(pointer:coarse){.note-send,.note-send.quiet{width:36px;height:36px}.note-send[aria-pressed=true]{padding:0 12px 0 14px;font-size:14px}}
 
 /* A new note is a single line that grows; the send button stays at its foot. */
 .pdf-note-card.pdf-note-compose{padding:8px 8px 8px 14px}

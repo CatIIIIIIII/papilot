@@ -24,7 +24,7 @@ function note(id, index, group) {
 let notes = [note('n1', 1), note('n2', 2, 'yellow'), note('n3', 3, 'yellow'), note('n4', 4, 'purple'), note('n5', 5)];
 const otherNote = { ...note('other-note', 6), projectId: 'other' };
 const original = structuredClone(notes), sent = [], attempts = [], items = new Map();
-let failDelete = false, holdDelete = false, releaseDelete, deletedFixture;
+let failDelete = false, holdDelete = false, releaseDelete, deletedFixture, restores = 0;
 let fail = false, hold = false, release, failEdit = false, holdEdit = false, releaseEdit;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
@@ -46,6 +46,7 @@ await page.route('**/api/**', async route => {
     notes = notes.filter(note => note.id !== id); return json({ ok: true });
   }
   if (url.pathname.endsWith('/restore')) {
+    restores++;
     notes.push(deletedFixture); notes.sort((a, b) => a.createdAt - b.createdAt);
     return json({ annotations: notes });
   }
@@ -120,6 +121,22 @@ try {
   await page.keyboard.press('ControlOrMeta+z');
   await expect(deletingCard).toBeVisible();
   await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
+  // Phones have no ⌘Z: the task shows Undo, which also returns the note to the
+  // task, and clears the deletion so a later ⌘Z does not restore it again.
+  await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
+  await expect(deletingCard).toHaveCount(0);
+  const deleted = page.locator('.task-notes-panel .note-dismissed');
+  await expect(deleted).toContainText('Note deleted.');
+  const restoresBefore = restores;
+  await deleted.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(deletingCard).toBeVisible();
+  await expect(deleted).toHaveCount(0);
+  assert.equal(restores, restoresBefore + 1);
+  await page.locator('.note-selection-head span').click();
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.waitForTimeout(300);
+  assert.equal(restores, restoresBefore + 1, 'A later ⌘Z must not replay an undone deletion');
+  assert.equal(notes.filter(note => note.id === 'n1').length, 1);
   await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
   await expect(deletingCard).toHaveCount(0);
   await page.reload();
@@ -501,6 +518,17 @@ try {
   assert.equal(items.get(sent[3].id)[0].meta.notes[0].comment, 'Clarify this passage.\n补充说明。');
   assert.equal(sent[3].instructions, ''); assert.equal(sent[3].groupInstructions, undefined);
   assert.deepEqual(notes, [original[4]]);
+  // Undo belongs to the task draft it was shown in: sending that task clears it,
+  // so it can never add the note to the next one.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await notesReady();
+  await setSelection(check('n5'), true);
+  await page.locator('.task-notes-panel [data-note="n5"]').getByRole('button', { name: /^Delete note/ }).click();
+  await expect(page.locator('.task-notes-panel .note-dismissed')).toContainText('Note deleted.');
+  await prompt().fill('A question after deleting a note.'); await send().click();
+  await expect.poll(() => sent.length).toBe(5);
+  await expect(page.locator('.task-notes-panel .note-dismissed')).toHaveCount(0);
+  assert.equal(sent[4].annotations, undefined);
   assert.deepEqual(errors, []);
   console.log('PASS: notes default to saved only, explicit selection, direct note sends, inline color-group instructions, persistence, failure/retry, partial sends to different agents, retained group drafts, grouped history, plain questions, and mobile controls.');
-} finally { release?.(); releaseEdit?.(); await browser.close(); await server.close(); }
+} finally { release?.(); releaseEdit?.(); releaseDelete?.(); await browser.close(); await server.close(); }
