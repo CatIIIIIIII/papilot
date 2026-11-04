@@ -18,7 +18,7 @@ const copy = (from, names, to = '') => {
 };
 
 fs.rmSync(out, { recursive: true, force: true });
-copy('site', ['style.css']);
+copy('site', ['style.css', 'statistics-preferences.js']);
 if (analytics) copy('site', ['analytics.js']);
 const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // GitHub Pages lets browsers keep every file for ten minutes, so a fresh page
@@ -47,7 +47,7 @@ for (const locale of locales) {
     .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${title.replaceAll('"', '&quot;')}">`)
     .replace(/(<div class="lang-list"[^>]*>)(<\/div>)/, `$1${menu}$2`)
     .replace('<body>', `<body><noscript><nav class="no-js-languages">${locales.map(code => `<a lang="${code}" href="${code === 'en' ? '/' : `/${code}/`}">${names[code]}</a>`).join('')}</nav></noscript>`)
-    .replace(/(\s(?:href|src)=")(style\.css|analytics\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
+    .replace(/(\s(?:href|src)=")(style\.css|analytics\.js|statistics-preferences\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
     .replace(/(\s(?:href|src)=")((?:assets|fonts)\/[^" ]+|favicon.png|apple-touch-icon.png)"/g, '$1/$2"');
   if (locale !== 'en') html = html.replace('https://github.com/cu1ch3n/papilot#readme', `https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.${locale}.md`);
   // Explicit URLs always win. Only the root restores a saved choice; browser
@@ -75,6 +75,7 @@ for (const locale of locales) {
 }
 // The bilingual privacy notice is independent of localization and analytics.
 const privacy = fs.readFileSync(path.join(root, 'site/privacy.html'), 'utf8')
+  .replace('<!-- statistics-preferences -->', `<script defer src="/statistics-preferences.js?v=${version('statistics-preferences.js')}" data-enabled="${!!analytics}"></script>`)
   .replace('href="style.css"', `href="/style.css?v=${version('style.css')}"`);
 fs.mkdirSync(path.join(out, 'privacy'), { recursive: true });
 fs.writeFileSync(path.join(out, 'privacy/index.html'), privacy);

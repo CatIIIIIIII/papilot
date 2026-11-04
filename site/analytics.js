@@ -1,14 +1,7 @@
-// Optional statistics: no provider code or event is sent before an explicit opt-in.
+// Cookieless statistics start by default; privacy-page opt-outs and browser signals are respected.
 (() => {
   if (location.protocol !== 'https:' || !['papilot.ai', 'www.papilot.ai'].includes(location.hostname) || document.documentElement.dataset.languageRedirect) return;
   const config = document.currentScript;
-  const notice = document.getElementById('statistics-notice');
-  const preferences = document.getElementById('statistics-preferences');
-  const allow = document.getElementById('statistics-allow');
-  const decline = document.getElementById('statistics-decline');
-  const withdraw = document.getElementById('statistics-withdraw');
-  const close = document.getElementById('statistics-close');
-  const key = 'papilot-statistics-consent', duration = 180 * 24 * 60 * 60 * 1000;
   const locale = document.documentElement.lang;
   const pagePath = new URL(document.querySelector('link[rel=canonical]').href).pathname;
   const placement = element => element.closest('.topbar') ? 'header' : element.closest('.hero') ? 'hero' : element.closest('.footer') ? 'footer' : 'download';
@@ -37,38 +30,15 @@
     }
     return clean;
   };
-  let preference = null, loaded = false, loading = false, expiryTimer;
+  let loaded = false, loading = false;
   let measurement, collectionStartedAt = Infinity;
   const stopMeasuring = () => { measurement?.(); measurement = null; collectionStartedAt = Infinity; };
-  const valid = value => value?.version === config.dataset.consentVersion && ['granted', 'denied'].includes(value.choice) && Number.isFinite(value.expiresAt) && value.expiresAt > Date.now() && value.expiresAt <= Date.now() + duration;
-  const read = () => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(key));
-      if (valid(saved)) return saved;
-      localStorage.removeItem(key);
-    } catch {}
-    return null;
-  };
-  const granted = () => valid(preference) && preference.choice === 'granted';
-  const show = () => {
-    notice.hidden = false;
-    allow.hidden = granted(); decline.hidden = granted(); withdraw.hidden = !granted();
-    close.hidden = !valid(preference);
-  };
-  const expire = () => {
-    clearTimeout(expiryTimer);
-    if (!valid(preference)) {
-      if (preference) { try { localStorage.removeItem(key); } catch {} }
-      preference = null;
-      stopMeasuring();
-      show();
-    } else expiryTimer = setTimeout(expire, Math.min(preference.expiresAt - Date.now() + 1, 2147483647));
-  };
+  const enabled = () => window.papilotStatistics?.enabled() === true;
 
   // Whitelist each outgoing field. URLs, query strings, click IDs, screen sizes
   // and arbitrary event data from the tracker never reach the collector.
   window.papilotAnalyticsBeforeSend = (type, payload) => {
-    if (!granted() || type !== 'event') return false;
+    if (!enabled() || type !== 'event') return false;
     let referrer = '';
     try { const url = new URL(document.referrer); if (['http:', 'https:'].includes(url.protocol) && url.origin !== location.origin) referrer = url.origin; } catch {}
     const clean = { website: config.dataset.websiteId, hostname: location.hostname, url: pagePath, title: 'Papilot', language: locale, referrer };
@@ -81,12 +51,12 @@
     return clean;
   };
   const track = (name, data) => {
-    if (!granted() || !loaded) return;
+    if (!enabled() || !loaded) return;
     if (name) { data = eventData(name, data); if (!data) return; }
     try { Promise.resolve(window.umami?.track(name, data)).catch(() => {}); } catch {}
   };
   const startMeasuring = () => {
-    if (measurement || !granted() || !loaded) return;
+    if (measurement || !enabled() || !loaded) return;
     collectionStartedAt = performance.now();
     const targets = sections.map(name => [name, document.querySelector(name === 'hero' ? '.hero' : name.startsWith('feature_') ? `[data-scene="${name.slice(8)}"]` : `#${name}`)]);
     const seen = new Set(), visibleSince = new Map(), times = new Set();
@@ -95,7 +65,7 @@
     const depths = new Set(schema.scroll_depth.percent.filter(value => value <= depth()));
     let visibleTime = 0, visibleAt = document.hidden ? null : performance.now(), scrollTimer;
     const measure = () => {
-      if (!granted()) { stopMeasuring(); return; }
+      if (!enabled()) { stopMeasuring(); return; }
       const now = performance.now();
       if (visibleAt !== null) visibleTime += now - visibleAt;
       visibleAt = document.hidden ? null : now;
@@ -123,7 +93,7 @@
     measure();
   };
   const start = () => {
-    if (!granted()) return;
+    if (!enabled()) return;
     if (loaded) { track(); startMeasuring(); return; }
     if (loading) return;
     loading = true;
@@ -134,6 +104,7 @@
     script.dataset.websiteId = config.dataset.websiteId;
     script.dataset.domains = 'papilot.ai,www.papilot.ai';
     script.dataset.autoTrack = 'false';
+    script.dataset.doNotTrack = 'true';
     script.dataset.excludeSearch = 'true';
     script.dataset.excludeHash = 'true';
     script.dataset.beforeSend = 'papilotAnalyticsBeforeSend';
@@ -141,23 +112,6 @@
     script.addEventListener('error', () => { loading = false; script.remove(); });
     document.head.append(script);
   };
-  const choose = choice => {
-    preference = { version: config.dataset.consentVersion, choice, expiresAt: Date.now() + duration };
-    try { localStorage.setItem(key, JSON.stringify(preference)); }
-    catch { try { localStorage.removeItem(key); } catch {} }
-    notice.hidden = true;
-    preferences.focus({ preventScroll: true });
-    expire();
-    if (choice === 'granted') start(); else stopMeasuring();
-  };
-  allow.addEventListener('click', () => choose('granted'));
-  decline.addEventListener('click', () => choose('denied'));
-  withdraw.addEventListener('click', () => choose('denied'));
-  close.addEventListener('click', () => { notice.hidden = true; preferences.focus({ preventScroll: true }); });
-  preferences.addEventListener('click', () => { show(); notice.scrollIntoView({ block: 'start' }); notice.focus({ preventScroll: true }); });
-  document.getElementById('statistics-privacy').href = config.dataset.privacyUrl;
-  preferences.hidden = false;
-
   const destinations = new Map([
     ['https://github.com/PapilotAI/papilot', 'github'], ['https://github.com/cu1ch3n/papilot', 'github'],
     ['https://github.com/PapilotAI/papilot/releases/latest', 'releases'], ['https://www.npmjs.com/package/papilot', 'npm'],
@@ -168,7 +122,7 @@
     ...languages.filter(language => language !== 'en').map(language => [`https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.${language}.md`, 'readme']),
   ]);
   const click = event => {
-    if (!granted() || !event.isTrusted || event.defaultPrevented || (event.type === 'auxclick' ? event.button !== 1 : event.button !== 0)) return;
+    if (!enabled() || !event.isTrusted || event.defaultPrevented || (event.type === 'auxclick' ? event.button !== 1 : event.button !== 0)) return;
     const link = event.target.closest?.('a');
     if (!link) return;
     if (link.matches('[data-download-format]')) {
@@ -184,17 +138,14 @@
     const { name, data, at } = event.detail || {};
     if (Object.hasOwn(schema, name) && Number.isFinite(at) && at >= collectionStartedAt && at <= performance.now()) track(name, data);
   });
-  window.addEventListener('storage', event => {
-    if (event.key !== key && event.key !== null) return;
-    const wasGranted = granted();
-    preference = read();
-    expire();
-    if (valid(preference)) notice.hidden = true;
-    if (!granted()) stopMeasuring();
-    if (!wasGranted && granted()) start();
-  });
-  document.addEventListener('visibilitychange', expire);
-  preference = read();
-  expire();
-  if (granted()) start();
+  let wasEnabled = false;
+  const sync = () => {
+    const active = enabled();
+    if (!active) stopMeasuring();
+    else if (!wasEnabled) start();
+    wasEnabled = active;
+  };
+  window.addEventListener('papilot:statistics-change', sync);
+  document.addEventListener('visibilitychange', sync);
+  sync();
 })();

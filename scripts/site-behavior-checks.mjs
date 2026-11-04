@@ -5,11 +5,16 @@ import assert from 'node:assert/strict';
 export async function checkSiteBehavior(context) {
   const page = await context.newPage();
   const events = name => page.evaluate(name => window.statistics.filter(event => event.name === name), name);
-  const allow = async () => {
-    await page.locator('#statistics-allow').click();
-    await page.waitForFunction(() => window.statistics.some(event => !event.name));
+  const privacy = await context.newPage();
+  await privacy.goto('https://papilot.ai/privacy/');
+  const setEnabled = async enabled => {
+    const button = privacy.locator(enabled ? '#statistics-enable' : '#statistics-disable');
+    if (await button.isVisible()) await button.click();
+    await page.waitForFunction(expected => window.papilotStatistics.enabled() === expected, enabled);
+    if (enabled) await page.waitForFunction(() => window.statistics.some(event => !event.name));
   };
-  const reopen = () => page.locator('#statistics-preferences').click();
+  const allow = () => setEnabled(true);
+  const stop = () => setEnabled(false);
   const downloadLink = async selector => {
     const download = page.waitForEvent('download');
     await page.locator(selector).click();
@@ -17,19 +22,18 @@ export async function checkSiteBehavior(context) {
   };
   try {
     await page.goto('https://papilot.ai/');
-    // A clipboard operation that began before consent must not become an event.
+    await stop();
+    // A clipboard operation that began while disabled must not become an event.
     await page.evaluate(() => { navigator.clipboard.writeText = () => new Promise(resolve => { window.finishCopy = resolve; }); });
     await page.locator('.hero [data-copy]').click();
     await allow();
     await page.evaluate(() => window.finishCopy());
     assert.deepEqual(await events('copy_install'), []);
     await page.locator('.hero [data-copy]').click();
-    await reopen();
-    await page.locator('#statistics-withdraw').click();
-    await reopen();
+    await stop();
     await allow();
     await page.evaluate(() => window.finishCopy());
-    assert.deepEqual(await events('copy_install'), [], 'an old consent period cannot leak a delayed result into a new one');
+    assert.deepEqual(await events('copy_install'), [], 'an old collection period cannot leak a delayed result into a new one');
 
     await page.locator('.nav a[href="#features"]').click();
     assert.deepEqual((await events('navigation')).at(-1).data, { locale: 'en', target: 'features', placement: 'header' });
@@ -79,12 +83,12 @@ export async function checkSiteBehavior(context) {
     const base = new Date();
     await page.clock.install({ time: base });
     await page.goto('https://papilot.ai/');
+    await page.waitForFunction(() => window.statistics.some(event => !event.name));
     await page.clock.pauseAt(new Date(base.getTime() + 1000));
     await page.evaluate(() => {
       window.testHidden = false;
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.testHidden });
     });
-    await allow();
     await page.clock.runFor(2000);
     assert.equal((await events('section_view')).filter(event => event.data.section === 'hero').length, 1);
     await page.clock.runFor(11000);
@@ -108,24 +112,23 @@ export async function checkSiteBehavior(context) {
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
     await page.clock.runFor(500);
     assert.equal((await events('scroll_depth')).length, 4, 'scroll milestones are not repeated');
-    await reopen();
-    await page.locator('#statistics-withdraw').click();
+    await page.clock.resume();
+    await stop();
     const afterWithdrawal = await page.evaluate(() => window.statistics.length);
     await page.clock.fastForward(180000);
     assert.equal(await page.evaluate(() => window.statistics.length), afterWithdrawal, 'withdrawal stops timed and exposure events');
 
-    // A late opt-in starts from the current viewport, without backfilling depth.
+    // A late re-enable starts from the current viewport, without backfilling depth.
     await page.clock.resume();
     await page.evaluate(() => localStorage.clear());
+    await page.goto('https://papilot.ai/');
+    await stop();
     await page.goto('https://papilot.ai/');
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
     const before = await page.evaluate(() => window.statistics.length);
     await page.clock.fastForward(20000);
-    assert.equal(await page.evaluate(() => window.statistics.length), before, 'scrolling and waiting before consent produce no events');
-    // Keep the current viewport while activating the focused permission control.
-    await page.locator('#statistics-allow').evaluate(button => button.focus({ preventScroll: true }));
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(() => window.statistics.some(event => !event.name));
+    assert.equal(await page.evaluate(() => window.statistics.length), before, 'scrolling and waiting while disabled produce no events');
+    await allow();
     await page.clock.runFor(2500);
     assert.deepEqual(await events('scroll_depth'), [], 'already passed depths are not replayed');
     assert.equal((await events('section_view')).some(event => event.data.section === 'hero'), false, 'offscreen sections are not replayed');

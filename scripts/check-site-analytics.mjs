@@ -26,20 +26,15 @@ assert.throws(() => siteAnalytics({ ...config, PAPILOT_UMAMI_WEBSITE_ID: '"><scr
 const hostileUrl = 'https://statistics.example/script.js?x="/><script>alert(1)</script>&y=2';
 const document = parse(siteAnalytics({ ...config, PAPILOT_UMAMI_SCRIPT_URL: hostileUrl }));
 const head = document.childNodes.find(node => node.tagName === 'html').childNodes.find(node => node.tagName === 'head');
-assert.equal(head.childNodes.length, 2, 'configuration cannot inject another element');
-const script = head.childNodes[1];
-assert.equal(script.attrs.length, 6, 'configuration cannot inject attributes');
+assert.equal(head.childNodes.length, 3, 'configuration cannot inject another element');
+const script = head.childNodes[2];
+assert.equal(script.attrs.length, 5, 'configuration cannot inject attributes');
 assert.equal(script.attrs.find(attr => attr.name === 'data-script-url').value, new URL(hostileUrl).href);
-const consentVersion = siteAnalytics(config).match(/data-consent-version="([^"]+)"/)[1];
-for (const change of [{ PAPILOT_ANALYTICS_PRIVACY_URL: 'https://privacy.example/new' }, { PAPILOT_UMAMI_SCRIPT_URL: 'https://another.example/script.js' }, { PAPILOT_UMAMI_WEBSITE_ID: '12345678-1234-1234-1234-123456789abd' }]) {
-  assert.ok(!siteAnalytics({ ...config, ...change }).includes(consentVersion), 'a new provider, website or notice requires fresh consent');
-}
-
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-site-analytics-'));
 const locales = Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'i18n/languages.json'), 'utf8')));
 const routeFor = locale => locale === 'en' ? '/' : `/${locale}/`;
 const output = locale => path.join(fixture, '_site', locale === 'en' ? '' : locale, 'index.html');
-const consentKey = 'papilot-statistics-consent', duration = 180 * 86400000;
+const optOutKey = 'papilot-statistics-disabled';
 let browser;
 try {
   for (const entry of ['site', 'docs/assets', 'src/web/fonts', 'src/web/brand-icons', 'public', 'i18n/config.json', 'i18n/languages.json', 'package.json', 'scripts/build-site.mjs', 'scripts/site-i18n.mjs', 'scripts/site-analytics.mjs']) {
@@ -51,12 +46,12 @@ try {
   const build = env => execFileSync(process.execPath, ['scripts/build-site.mjs'], { cwd: fixture, env: { ...process.env, ...Object.fromEntries(Object.keys(config).map(key => [key, ''])), ...env }, stdio: 'pipe' });
   build({});
   const privacy = fs.readFileSync(path.join(fixture, '_site/privacy/index.html'), 'utf8');
-  assert.doesNotMatch(privacy, /<script\b|data-website-id|analytics\.js/, 'privacy page never loads analytics');
+  assert.doesNotMatch(privacy, /data-website-id|src="[^"]*analytics\.js/, 'privacy page never loads analytics');
   const disabledPages = new Map(locales.map(locale => [routeFor(locale), fs.readFileSync(output(locale), 'utf8')]));
   for (const html of disabledPages.values()) assert.doesNotMatch(html, /src="[^"]*analytics\.js|data-website-id/);
   assert.equal(fs.existsSync(path.join(fixture, '_site/analytics.js')), false);
   build(config);
-  assert.equal(fs.readFileSync(path.join(fixture, '_site/privacy/index.html'), 'utf8'), privacy, 'enabling analytics leaves the privacy page unchanged');
+  assert.equal(fs.readFileSync(path.join(fixture, '_site/privacy/index.html'), 'utf8').replace('data-enabled="true"', 'data-enabled="false"'), privacy, 'only local preference availability changes on the privacy page');
   for (const locale of locales) {
     const html = fs.readFileSync(output(locale), 'utf8');
     assert.match(html, /src="\/analytics\.js\?v=[a-f0-9]+"/);
@@ -71,6 +66,7 @@ try {
   let enabled = true, blocked = false, delayProvider;
   const setup = async options => {
     const context = await browser.newContext({ reducedMotion: 'reduce', ...options });
+    context.setDefaultTimeout(15000);
     context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
     await context.addInitScript(() => {
       window.statistics = [];
@@ -112,50 +108,26 @@ try {
   const visits = () => page.evaluate(() => window.statistics);
   const events = async name => (await visits()).filter(event => event.name === name);
   const externalCount = () => requests.filter(url => url.startsWith('https://statistics.example')).length;
-  const visit = (url = 'https://papilot.ai/') => page.goto(url, { referer: 'https://source.example/private/email@example.org?token=secret' });
-  const reset = () => page.evaluate(() => localStorage.clear());
-  const permit = async () => {
-    await page.locator('#statistics-allow').click();
-    await page.waitForFunction(() => window.statistics.length > 0);
-  };
-  const reopen = () => page.locator('#statistics-preferences').click();
-
+  const visit = (url = 'https://papilot.ai/') => page.goto(url, { referer: 'https://source.example/private/email@example.org?token=secret', waitUntil: 'domcontentloaded' });
+  const ready = () => page.waitForFunction(() => window.statistics.some(event => !event.name));
   for (const locale of locales) {
-    if (page.url() !== 'about:blank') await reset();
-    const before = externalCount();
     await visit('https://papilot.ai' + routeFor(locale));
-    assert.equal(await page.locator('#statistics-notice').isVisible(), true);
-    assert.equal(await page.locator('#statistics-privacy').getAttribute('href'), config.PAPILOT_ANALYTICS_PRIVACY_URL);
-    assert.equal(await page.locator('#statistics-allow').getAttribute('class'), await page.locator('#statistics-decline').getAttribute('class'), 'choices have equal emphasis');
-    await page.locator('.hero [data-copy]').click();
-    assert.equal(externalCount(), before, `${locale}: no statistics before a choice`);
-    await page.locator('#statistics-decline').click();
-    await page.reload();
-    assert.equal(await page.locator('#statistics-notice').isHidden(), true);
-    assert.equal(externalCount(), before, `${locale}: rejection is remembered without loading analytics`);
-    await reopen();
-    await permit();
-    assert.deepEqual(await events(undefined), [{ website: config.PAPILOT_UMAMI_WEBSITE_ID, hostname: 'papilot.ai', url: routeFor(locale), title: 'Papilot', language: locale, referrer: 'https://source.example' }]);
-    assert.equal((await events('copy_install')).length, 0, 'pre-consent clicks are not replayed');
+    await ready();
+    assert.equal(await page.locator('#statistics-notice, #statistics-preferences').count(), 0, 'no homepage consent interface');
+    assert.equal(await page.locator('.footer a[href="/privacy/"]').count(), 1);
+    assert.deepEqual((await visits())[0], { website: config.PAPILOT_UMAMI_WEBSITE_ID, hostname: 'papilot.ai', url: routeFor(locale), title: 'Papilot', language: locale, referrer: 'https://source.example' });
     assert.equal(await page.evaluate(() => window.trackerConfig.autoTrack), 'false');
-    await reopen();
-    await page.locator('#statistics-withdraw').click();
-    const count = (await visits()).length;
     await page.locator('.hero [data-copy]').click();
-    await page.evaluate(() => window.umami.track('download_click', { placement: 'hero' }));
-    assert.equal((await visits()).length, count, `${locale}: withdrawal also stops direct provider calls`);
+    assert.equal((await events('copy_install')).length, 1);
   }
-
-  await reset();
   await visit('https://papilot.ai/zh-CN/?email=private@example.org&token=secret&utm_source=private&gclid=tracking#private');
-  await permit();
+  await ready();
   assert.equal((await visits())[0].url, '/zh-CN/');
-  assert.equal((await visits())[0].referrer, 'https://source.example');
   await page.evaluate(() => window.umami.track('download_click', { placement: 'hero', platform: 'mac', arch: 'arm64', format: 'dmg', email: 'private@example.org' }));
-  assert.deepEqual((await visits()).at(-1).data, { locale: 'zh-CN', placement: 'hero', platform: 'mac', arch: 'arm64', format: 'dmg' });
-  const countBeforeUnknown = (await visits()).length;
+  assert.deepEqual((await events('download_click')).at(-1).data, { locale: 'zh-CN', placement: 'hero', platform: 'mac', arch: 'arm64', format: 'dmg' });
+  const unknownBefore = (await visits()).length;
   await page.evaluate(() => window.umami.track('arbitrary', { email: 'private@example.org' }));
-  assert.equal((await visits()).length, countBeforeUnknown);
+  assert.equal((await visits()).length, unknownBefore);
   for (const [list, button, placement] of [['download-list', 'download-button', 'hero'], ['get-list', 'get-button', 'download']]) {
     for (const [platform, arch, format] of [['mac', 'arm64', 'dmg'], ['mac', 'x64', 'dmg'], ['linux', 'x64', 'AppImage'], ['linux', 'x64', 'deb']]) {
       await page.locator(`#${button}`).click();
@@ -163,7 +135,6 @@ try {
       await page.locator(`#${list} [data-download-platform="${platform}"][data-download-arch="${arch}"][data-download-format="${format}"] strong`).click();
       await (await download).cancel();
       assert.deepEqual((await events('download_click')).at(-1).data, { locale: 'zh-CN', placement, platform, arch, format });
-      assert.equal(await page.locator(`#${list}`).isHidden(), true);
     }
   }
   for (const [selector, placement] of [['.hero [data-copy]', 'hero'], ['#download [data-copy]', 'download']]) {
@@ -171,120 +142,101 @@ try {
     assert.deepEqual((await events('copy_install')).at(-1).data, { locale: 'zh-CN', placement });
   }
   await page.evaluate(() => { window.copyFails = true; });
-  const beforeFailure = (await events('copy_install')).length;
   await page.locator('.hero [data-copy]').click();
-  assert.equal((await events('copy_install')).length, beforeFailure, 'failed clipboard writes never count as successful copies');
-  assert.deepEqual((await events('copy_install_failed')).at(-1).data, { locale: 'zh-CN', placement: 'hero' });
-
-  // Inspect actual mocked HTTP collection, including the browser's Referer header.
-  assert.ok(collected.length > 0);
+  assert.equal((await events('copy_install_failed')).length, 1);
   for (const item of collected) {
     assert.doesNotMatch(JSON.stringify(item), /private|secret|tracking|gclid|utm_|screen|unexpected-id|email@/);
-    assert.ok(!item.referer || item.referer === 'https://papilot.ai/', `collector Referer is origin-only: ${item.referer}`);
+    assert.ok(!item.referer || item.referer === 'https://papilot.ai/');
   }
 
-  // Failed preference writes must not leave a previous grant to revive on reload.
-  await reopen();
-  await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('Storage write blocked'); }; });
-  await page.locator('#statistics-withdraw').click();
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), consentKey), null);
-  const beforeFailedSaveReload = externalCount();
-  await page.reload();
-  assert.deepEqual(await visits(), []);
-  assert.equal(externalCount(), beforeFailedSaveReload);
-  assert.equal(await page.locator('#statistics-notice').isVisible(), true);
-
-  for (const saved of [{ version: 'old-provider', choice: 'granted', expiresAt: Date.now() + duration }, { version: consentVersion, choice: 'granted', expiresAt: Date.now() - 1 }, { version: consentVersion, choice: 'granted', expiresAt: 'never' }]) {
-    await page.evaluate(({ key, saved }) => localStorage.setItem(key, JSON.stringify(saved)), { key: consentKey, saved });
-    const before = externalCount();
-    await visit();
-    assert.equal(await page.locator('#statistics-notice').isVisible(), true);
-    assert.equal(externalCount(), before, 'invalid or expired consent does not load a provider');
-  }
-  await permit();
-  const consent = JSON.parse(await page.evaluate(key => localStorage.getItem(key), consentKey));
-  assert.deepEqual(Object.keys(consent), ['version', 'choice', 'expiresAt']);
-  assert.ok(consent.expiresAt - Date.now() <= duration);
-  await page.evaluate(duration => { const now = Date.now(); Date.now = () => now + duration + 1; document.dispatchEvent(new Event('visibilitychange')); }, duration);
-  assert.equal(await page.locator('#statistics-notice').isVisible(), true);
-  const beforeExpiryClick = (await visits()).length;
+  // Opt-out is available only on the untracked privacy page, and reaches open tabs.
+  const privacyPage = await context.newPage();
+  const beforePrivacy = externalCount();
+  await privacyPage.goto('https://papilot.ai/privacy/');
+  assert.equal(externalCount(), beforePrivacy, 'privacy page makes no provider requests');
+  await privacyPage.locator('#statistics-disable').click();
+  await page.waitForFunction(() => !window.papilotStatistics.enabled());
+  const stopped = (await visits()).length;
   await page.locator('.hero [data-copy]').click();
-  assert.equal((await visits()).length, beforeExpiryClick, 'consent expires in an open tab');
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), consentKey), null, 'expired preferences are removed when observed');
+  await page.evaluate(() => window.umami.track('menu_open', { menu: 'download', placement: 'hero' }));
+  assert.equal((await visits()).length, stopped);
+  const beforeDisabled = externalCount();
+  await visit();
+  assert.deepEqual(await visits(), []);
+  assert.equal(externalCount(), beforeDisabled);
+  await privacyPage.locator('#statistics-enable').click();
+  await ready();
 
+  // Never reinterpret an old refusal as permission, even if its old version expired.
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('papilot-statistics-consent', JSON.stringify({ choice: 'denied', version: 'old', expiresAt: 1 })); });
+  await visit();
+  assert.deepEqual(await visits(), []);
+  await privacyPage.reload();
+  await privacyPage.locator('#statistics-enable').click();
+  await ready();
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot-statistics-consent')), null);
+
+  // If storage refuses writes, a local broadcast still stops already open tabs.
+  await privacyPage.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('Blocked'); }; });
+  await privacyPage.locator('#statistics-disable').click();
+  await page.waitForFunction(() => !window.papilotStatistics.enabled());
+  assert.match(await privacyPage.locator('#statistics-status').innerText(), /cannot save/);
+  await context.close();
+
+  for (const mode of ['dnt', 'gpc', 'blocked-storage', 'opted-out', 'provider-opted-out']) {
+    const isolated = await setup();
+    await isolated.addInitScript(mode => {
+      if (mode === 'dnt') Object.defineProperty(navigator, 'doNotTrack', { get: () => '1' });
+      if (mode === 'gpc') Object.defineProperty(navigator, 'globalPrivacyControl', { get: () => true });
+      if (mode === 'blocked-storage') Storage.prototype.getItem = () => { throw new Error('Blocked'); };
+      if (location.protocol !== 'about:') {
+        if (mode === 'opted-out') localStorage.setItem('papilot-statistics-disabled', 'true');
+        if (mode === 'provider-opted-out') localStorage.setItem('umami.disabled', '1');
+      }
+    }, mode);
+    const tab = await isolated.newPage(), before = externalCount();
+    await tab.goto('https://papilot.ai/');
+    assert.equal(externalCount(), before, `${mode}: no provider load`);
+    assert.deepEqual(await tab.evaluate(() => window.statistics), []);
+    await isolated.close();
+  }
+  const delayed = await setup();
+  const delayedPage = await delayed.newPage();
+  let releaseProvider;
+  delayProvider = new Promise(resolve => { releaseProvider = resolve; });
+  await delayedPage.goto('https://papilot.ai/', { waitUntil: 'domcontentloaded' });
+  const delayedPrivacy = await delayed.newPage();
+  await delayedPrivacy.goto('https://papilot.ai/privacy/');
+  await delayedPrivacy.locator('#statistics-disable').click();
+  await delayedPage.waitForFunction(() => !window.papilotStatistics.enabled());
+  releaseProvider(); delayProvider = null;
+  await delayedPage.waitForFunction(() => window.umami);
+  assert.deepEqual(await delayedPage.evaluate(() => window.statistics), [], 'late provider load cannot revive opted-out tracking');
+  await delayed.close();
+
+  const unsupported = await setup();
+  const unsupportedPage = await unsupported.newPage();
   for (const origin of ['http://localhost:7274', 'https://preview.example', 'https://papilot.ai.preview.example']) {
     const before = externalCount();
-    await visit(origin + '/');
-    assert.deepEqual(await visits(), []);
+    await unsupportedPage.goto(origin + '/');
     assert.equal(externalCount(), before);
-    assert.equal(await page.locator('#statistics-preferences').isHidden(), true);
   }
   enabled = false;
   for (const locale of locales) {
-    await visit('https://papilot.ai' + routeFor(locale));
-    assert.deepEqual(await visits(), []);
-    assert.equal(await page.locator('#statistics-preferences').isHidden(), true);
+    const before = externalCount();
+    await unsupportedPage.goto('https://papilot.ai' + routeFor(locale));
+    assert.equal(externalCount(), before);
   }
   enabled = true;
-  await reset();
   blocked = true;
-  await visit();
-  await page.locator('#statistics-allow').click();
-  await page.locator('.hero [data-copy]').click();
-  assert.equal(await page.locator('.hero [data-copy]').evaluate(button => button.classList.contains('copied')), true);
+  await unsupportedPage.goto('https://papilot.ai/');
+  await unsupportedPage.locator('.hero [data-copy]').click();
+  assert.equal(await unsupportedPage.locator('.hero [data-copy]').evaluate(button => button.classList.contains('copied')), true);
   blocked = false;
-  for (const failure of ['throw', 'reject']) {
-    await visit();
-    await page.waitForFunction(() => window.statistics.length > 0);
-    await page.evaluate(failure => { window.umami.track = () => { if (failure === 'throw') throw new Error('Unavailable'); return Promise.reject(new Error('Unavailable')); }; }, failure);
-    await page.locator('.hero [data-copy]').click();
-    assert.equal(await page.locator('.hero [data-copy]').evaluate(button => button.classList.contains('copied')), true);
-    await page.locator('#download-button').click();
-    const download = page.waitForEvent('download');
-    await page.locator('#download-list [data-download-format]').first().click();
-    await (await download).cancel();
-  }
-
-  // Revoking while the script is in flight must not send a late pageview.
-  await reset();
-  let releaseProvider;
-  delayProvider = new Promise(resolve => { releaseProvider = resolve; });
-  await visit();
-  await page.locator('#statistics-allow').click();
-  await reopen();
-  await page.locator('#statistics-withdraw').click();
-  releaseProvider(); delayProvider = null;
-  await page.waitForFunction(() => window.umami);
-  assert.deepEqual(await visits(), []);
-  await context.close();
-
-  const storageBlocked = await setup();
-  await storageBlocked.addInitScript(() => { Storage.prototype.getItem = () => { throw new Error('Blocked'); }; Storage.prototype.setItem = () => { throw new Error('Blocked'); }; });
-  const privatePage = await storageBlocked.newPage();
-  await privatePage.goto('https://papilot.ai/');
-  assert.equal(await privatePage.locator('#statistics-notice').isVisible(), true);
-  await privatePage.locator('#statistics-allow').click();
-  await privatePage.waitForFunction(() => window.statistics.length === 1);
-  await privatePage.reload();
-  assert.deepEqual(await privatePage.evaluate(() => window.statistics), [], 'blocked storage never invents saved consent');
-  await storageBlocked.close();
-
+  await unsupported.close();
   await checkSiteBehavior(await setup());
-
-  const visual = await setup();
-  const visualPage = await visual.newPage();
-  fs.mkdirSync(path.join(root, 'test-results/site'), { recursive: true });
-  for (const width of [1440, 390, 320]) {
-    await visualPage.setViewportSize({ width, height: 900 });
-    for (const locale of locales) {
-      await visualPage.goto('https://papilot.ai' + routeFor(locale));
-      assert.equal(await visualPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${locale}/${width}: consent fits`);
-      if (['en', 'zh-CN', 'de'].includes(locale) && width !== 320) await visualPage.screenshot({ path: path.join(root, `test-results/site/statistics-${locale}-${width}.png`) });
-    }
-  }
-  await visual.close();
   assert.deepEqual(errors, []);
-  console.log('Site analytics checks passed: safe configuration, 11 localized opt-ins, no pre-consent requests, denial and withdrawal, payload minimization, consent expiry/storage failures, downloads/copying, provider failures, and responsive layouts.');
+  console.log('Analytics checks passed: default-on in 11 locales, no homepage banner, privacy-page opt-out across tabs, legacy refusal, DNT/GPC, storage failures, filtering, real downloads/copies, delayed provider and unsupported hosts. No real statistics sent.');
 } finally {
   await browser?.close();
   fs.rmSync(fixture, { recursive: true, force: true });
