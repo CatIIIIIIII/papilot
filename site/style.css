@@ -657,6 +657,21 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .statistics-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
 .statistics-actions .button{min-width:110px;max-width:100%;height:auto;min-height:44px;padding:9px 20px;white-space:normal;text-align:center}
 .statistics-notice[hidden],.statistics-actions [hidden],#statistics-preferences[hidden]{display:none}
+/* The bilingual notice is readable without JavaScript or any analytics. */
+.privacy-nav{display:flex;gap:20px;margin-left:auto;font-size:14px}
+.privacy-page{width:min(100% - 32px,800px);margin-inline:auto;padding:48px 0 64px}
+.privacy-heading{padding-bottom:32px;border-bottom:1px solid var(--line)}
+.privacy-page h1{font-size:clamp(32px,5vw,48px);line-height:1.2;margin-bottom:20px}
+.privacy-page h2{font-size:30px;line-height:1.3;margin-bottom:24px}
+.privacy-page h3{font:600 18px/1.5 var(--sans);margin-bottom:10px;color:var(--text)}
+.privacy-page p,.privacy-page li{font-size:16px;line-height:1.8;color:var(--text-2);overflow-wrap:anywhere}
+.privacy-page p+p,.privacy-page ul+p{margin-top:12px}
+.privacy-page .privacy-date{font-size:14px;color:var(--text-3);margin-bottom:14px}
+.privacy-page article{padding-top:40px;scroll-margin-top:16px}
+.privacy-page article+article{margin-top:48px;border-top:1px solid var(--line)}
+.privacy-page section+section{margin-top:32px}
+.privacy-page ul{padding-left:24px;margin-top:12px}
+.privacy-page li+li{margin-top:6px}
 
 @media(max-width:960px){
   .eras{grid-template-columns:minmax(0,1fr);max-width:560px;margin-inline:auto}

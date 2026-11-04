@@ -73,8 +73,13 @@ for (const locale of locales) {
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'index.html'), html);
 }
+// The bilingual privacy notice is independent of localization and analytics.
+const privacy = fs.readFileSync(path.join(root, 'site/privacy.html'), 'utf8')
+  .replace('href="style.css"', `href="/style.css?v=${version('style.css')}"`);
+fs.mkdirSync(path.join(out, 'privacy'), { recursive: true });
+fs.writeFileSync(path.join(out, 'privacy/index.html'), privacy);
 const sitemapAlternates = [...locales, 'x-default'].map(locale => `<xhtml:link rel="alternate" hreflang="${locale}" href="${urlFor(locale === 'x-default' ? 'en' : locale)}"/>`).join('');
-fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${locales.map(locale => `<url><loc>${urlFor(locale)}</loc>${sitemapAlternates}</url>`).join('')}</urlset>\n`);
+fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${locales.map(locale => `<url><loc>${urlFor(locale)}</loc>${sitemapAlternates}</url>`).join('')}<url><loc>${site}privacy/</loc></url></urlset>\n`);
 fs.writeFileSync(path.join(out, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${site}sitemap.xml\n`);
 copy('public', ['favicon.png', 'apple-touch-icon.png']);
 copy('docs/assets', ['logo.svg', 'social-preview.png'], 'assets');
@@ -84,15 +89,15 @@ copy('src/web/fonts', fs.readdirSync(path.join(root, 'src/web/fonts')).filter(na
 
 // Resolve each reference against its actual page URL, including nested pages.
 const missing = [];
-for (const locale of locales) {
-  const html = fs.readFileSync(path.join(out, locale === 'en' ? '' : locale, 'index.html'), 'utf8');
+for (const page of [...locales.map(locale => locale === 'en' ? '' : locale), 'privacy']) {
+  const html = fs.readFileSync(path.join(out, page, 'index.html'), 'utf8');
   const refs = [...html.matchAll(/\s(?:src|href|poster)="([^"]*)"/g)].map(match => match[1]);
   refs.push(...[...html.matchAll(/\scontent="([^"]*)"/g)].map(match => match[1]).filter(value => value.startsWith(site)));
   for (const ref of refs) {
-    const url = new URL(ref, urlFor(locale));
+    const url = new URL(ref, site + (page ? page + '/' : ''));
     if (url.origin !== new URL(site).origin) continue;
     const file = path.join(out, decodeURIComponent(url.pathname), url.pathname.endsWith('/') ? 'index.html' : '');
-    if (!fs.existsSync(file)) missing.push(`${locale}: ${ref}`);
+    if (!fs.existsSync(file)) missing.push(`${page || 'en'}: ${ref}`);
   }
 }
 for (const name of ['style.css']) {

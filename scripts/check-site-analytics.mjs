@@ -50,10 +50,13 @@ try {
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(fixture, 'node_modules'), 'dir');
   const build = env => execFileSync(process.execPath, ['scripts/build-site.mjs'], { cwd: fixture, env: { ...process.env, ...Object.fromEntries(Object.keys(config).map(key => [key, ''])), ...env }, stdio: 'pipe' });
   build({});
+  const privacy = fs.readFileSync(path.join(fixture, '_site/privacy/index.html'), 'utf8');
+  assert.doesNotMatch(privacy, /<script\b|data-website-id|analytics\.js/, 'privacy page never loads analytics');
   const disabledPages = new Map(locales.map(locale => [routeFor(locale), fs.readFileSync(output(locale), 'utf8')]));
   for (const html of disabledPages.values()) assert.doesNotMatch(html, /src="[^"]*analytics\.js|data-website-id/);
   assert.equal(fs.existsSync(path.join(fixture, '_site/analytics.js')), false);
   build(config);
+  assert.equal(fs.readFileSync(path.join(fixture, '_site/privacy/index.html'), 'utf8'), privacy, 'enabling analytics leaves the privacy page unchanged');
   for (const locale of locales) {
     const html = fs.readFileSync(output(locale), 'utf8');
     assert.match(html, /src="\/analytics\.js\?v=[a-f0-9]+"/);
