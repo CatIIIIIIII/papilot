@@ -88,18 +88,25 @@ async function switchPaper(name) {
 }
 try {
   await page.goto(origin);
-  // Removing from a task preserves the PDF annotation; trash deletes it everywhere.
+  // A task's notes are the same cards as My notes, except that × replaces
+  // "Included ×": it keeps the annotation; trash deletes it everywhere, and ⌘Z
+  // brings it back into the task.
   await notesReady(); await setSelection(check('n1'), true);
   const deletingCard = page.locator('.new-task-panel [data-note="n1"]');
+  await expect(deletingCard.locator('.pdf-note-card.pdf-note-inline')).toHaveCount(1);
+  await expect(deletingCard.getByRole('button', { name: 'Edit note 1', exact: true })).toBeVisible();
+  await expect(deletingCard.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveCount(0);
+  await expect(deletingCard.getByText('Included', { exact: true })).toHaveCount(0);
   await deletingCard.getByRole('button', { name: 'Remove note 1 from task', exact: true }).click();
   await expect(deletingCard).toHaveCount(0);
   assert.ok(notes.some(note => note.id === 'n1'));
+  await expect(check('n1')).toHaveAttribute('aria-pressed', 'false');
   await setSelection(check('n1'), true);
   await page.getByRole('button', { name: 'My notes', exact: true }).click();
   await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
   failDelete = true;
   await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
-  await expect(page.locator('.task-notes-panel [role=alert]')).toHaveText('Could not delete the note.');
+  await expect(deletingCard.getByRole('alert')).toHaveText('Could not delete the note.');
   await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
   await expect(deletingCard).toBeVisible();
   failDelete = false; holdDelete = true;
@@ -110,7 +117,7 @@ try {
   releaseDelete();
   await expect(deletingCard).toHaveCount(0);
   await expect(page.locator('.pdf-container [data-note="n1"]')).toHaveCount(0);
-  await page.locator('.task-note-deleted').getByRole('button', { name: 'Undo', exact: true }).click();
+  await page.keyboard.press('ControlOrMeta+z');
   await expect(deletingCard).toBeVisible();
   await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
   await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
@@ -198,29 +205,35 @@ try {
   await expect(send()).toBeDisabled();
   await instruction('Purple').fill('Shorten this wording.');
   await expect(send()).toBeEnabled();
-  // Included notes remain editable without removing them from the task.
+  // Included notes are edited in place exactly like My notes: the text or ✏️
+  // opens the editor; Enter, Escape or a click elsewhere saves.
   const taskCard = page.locator('.task-notes-panel [data-note="n1"]');
   const editTaskNote = () => taskCard.getByRole('button', { name: 'Edit note 1', exact: true });
+  const taskText = () => taskCard.locator('.note-edit-trigger');
   const taskEditor = taskCard.getByRole('textbox', { name: 'Edit note 1', exact: true });
   await editTaskNote().focus(); await page.keyboard.press('Enter');
   await expect(taskEditor).toBeFocused();
   await expect(taskEditor).toHaveValue('Revise n1.');
+  await expect(editTaskNote()).toHaveCount(0);
+  await expect(taskCard.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+  await expect(taskCard.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(send()).toBeDisabled();
   await expect(page.locator('.task-notes-panel').getByRole('button', { name: 'Remove all from task', exact: true })).toBeDisabled();
-  await taskEditor.fill('Discard this draft.');
-  await taskCard.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(editTaskNote()).toBeFocused();
-  assert.equal(notes[0].comment, 'Revise n1.');
-  await editTaskNote().click();
   await taskEditor.fill('   ');
-  await expect(taskCard.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await expect(taskCard.getByRole('button', { name: 'Remove note 1 from task', exact: true })).toBeDisabled();
+  await taskEditor.press('Escape');
+  await expect(taskEditor).toHaveCount(0);
+  await expect(taskText()).toBeFocused();
+  assert.equal(notes[0].comment, 'Revise n1.');
+  await taskText().click();
+  await expect(taskEditor).toBeFocused();
   await taskEditor.fill('Edited from the task panel.');
   await taskEditor.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
   await taskEditor.dispatchEvent('keydown', { key: 'Escape', isComposing: true });
   await expect(taskEditor).toHaveValue('Edited from the task panel.');
   assert.equal(notes[0].comment, 'Revise n1.');
   failEdit = true;
-  await taskCard.getByRole('button', { name: 'Save', exact: true }).click();
+  await taskEditor.press('Enter');
   await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
   await expect(taskEditor).toHaveValue('Edited from the task panel.');
   await expect(send()).toBeDisabled();
@@ -228,51 +241,107 @@ try {
   await taskEditor.press('Enter');
   await expect.poll(() => Boolean(releaseEdit)).toBe(true);
   await expect(taskEditor).toHaveAttribute('readonly', '');
-  await expect(taskCard.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  await expect(taskCard.getByRole('button', { name: 'Delete note 1', exact: true })).toBeDisabled();
   await expect(send()).toBeDisabled();
   releaseEdit();
   await expect(taskEditor).toHaveCount(0);
-  await expect(taskCard.locator('.task-note-edit')).toHaveText('Edited from the task panel.');
+  await expect(taskCard.getByRole('alert')).toHaveCount(0);
+  await expect(taskText()).toHaveText('Edited from the task panel.');
   await expect(check('n1')).toHaveAttribute('aria-pressed', 'true');
   await expect(send()).toBeEnabled();
   assert.equal(notes[0].comment, 'Edited from the task panel.');
+  // The library shows the same text; both lists are one note.
+  await expect(page.locator('.notes-panel [data-note="n1"] .note-edit-trigger')).toHaveText('Edited from the task panel.');
   await page.reload(); await notesReady();
-  await expect(taskCard.locator('.task-note-edit')).toHaveText('Edited from the task panel.');
+  await expect(taskText()).toHaveText('Edited from the task panel.');
   await editTaskNote().click();
-  await taskEditor.fill('Another draft.'); await taskEditor.press('Escape');
-  await expect(taskCard.locator('.task-note-edit')).toHaveText('Edited from the task panel.');
+  await taskEditor.fill('Saved by Escape.'); await taskEditor.press('Escape');
+  await expect(taskText()).toHaveText('Saved by Escape.');
+  assert.equal(notes[0].comment, 'Saved by Escape.');
+  await editTaskNote().click();
+  await taskEditor.fill('Saved by clicking elsewhere.');
+  await page.screenshot({ path: 'test-results/task-note-edit.png', fullPage: true, animations: 'disabled' });
+  await prompt().click();
+  await expect(taskEditor).toHaveCount(0);
+  await expect(taskText()).toHaveText('Saved by clicking elsewhere.');
+  assert.equal(notes[0].comment, 'Saved by clicking elsewhere.');
+  // The editor is only the text: the rest of the same card counts as elsewhere.
+  for (const part of ['.note-quote-text', '.note-where']) {
+    await editTaskNote().click();
+    await taskEditor.fill(`Saved by clicking ${part}.`);
+    await taskCard.locator(part).click();
+    await expect(taskEditor).toHaveCount(0);
+    await expect(taskText()).toHaveText(`Saved by clicking ${part}.`);
+    assert.equal(notes[0].comment, `Saved by clicking ${part}.`);
+  }
   await editTaskNote().click();
   await taskEditor.fill('Revise n1.');
-  await taskCard.getByRole('button', { name: 'Save', exact: true }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: 'test-results/task-note-edit.png', fullPage: true, animations: 'disabled' });
-  await taskCard.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(taskCard.locator('.task-note-edit')).toHaveText('Revise n1.');
-  // Closing the library's editor must not unlock an unsaved task-panel draft.
+  await taskEditor.press('Enter');
+  await expect(taskText()).toHaveText('Revise n1.');
+  await expect(taskText()).toBeFocused();
+  assert.equal(notes[0].comment, 'Revise n1.');
+  // Editing in the task, then starting in the library, saves the task's draft
+  // first; the composer waits until the library's editor closes too.
   await editTaskNote().click();
+  await taskEditor.fill('Saved when the library editor opens.');
   const otherCard = page.locator('.notes-panel [data-note="n5"]');
   await otherCard.locator('.note-edit-trigger').click();
-  await otherCard.getByRole('textbox', { name: 'Edit note 5', exact: true }).press('Enter');
+  await expect(taskEditor).toHaveCount(0);
+  assert.equal(notes[0].comment, 'Saved when the library editor opens.');
   await expect(send()).toBeDisabled();
-  await taskCard.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await otherCard.getByRole('textbox', { name: 'Edit note 5', exact: true }).press('Enter');
   await expect(send()).toBeEnabled();
+  // While the task's save is still on its way, the same note opened in My notes
+  // starts from the new text and never writes the old one back.
+  const libraryN1 = page.locator('.notes-panel [data-note="n1"]');
+  const libraryN1Editor = libraryN1.getByRole('textbox', { name: 'Edit note 1', exact: true });
+  await editTaskNote().click();
+  await taskEditor.fill('Newer text from the task.');
+  releaseEdit = undefined; holdEdit = true;
+  await libraryN1.locator('.note-edit-trigger').click();
+  await expect.poll(() => Boolean(releaseEdit)).toBe(true);
+  await expect(libraryN1Editor).toHaveValue('Newer text from the task.');
+  releaseEdit();
+  await expect(taskText()).toHaveText('Newer text from the task.');
+  await page.mouse.click(130, 400);
+  await expect(libraryN1Editor).toHaveCount(0);
+  await expect(libraryN1.locator('.note-edit-trigger')).toHaveText('Newer text from the task.');
+  assert.equal(notes[0].comment, 'Newer text from the task.');
+  // A failed save puts the old text back everywhere and keeps the draft.
+  await editTaskNote().click();
+  await taskEditor.fill('This save fails.');
+  failEdit = true;
+  await taskEditor.press('Enter');
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+  await expect(taskEditor).toHaveValue('This save fails.');
+  await expect(libraryN1.locator('.note-edit-trigger')).toHaveText('Newer text from the task.');
+  failEdit = false;
+  await taskEditor.press('Escape');
+  await expect(taskText()).toHaveText('This save fails.');
+  assert.equal(notes[0].comment, 'This save fails.');
+  // Saving and taking a note out of the task in one click, as in My notes.
+  await editTaskNote().click();
+  await taskEditor.fill('Revise n1.');
+  await taskCard.getByRole('button', { name: 'Remove note 1 from task', exact: true }).click();
+  await expect(taskCard).toHaveCount(0);
+  await expect(check('n1')).toHaveAttribute('aria-pressed', 'false');
+  assert.equal(notes[0].comment, 'Revise n1.');
+  await setSelection(check('n1'), true);
   // Cards are keyboard operable; editing and locating a note do not change
   // whether that note will be sent.
   await check('n1').focus(); await page.keyboard.press('Space');
   await expect(check('n1')).toHaveAttribute('aria-pressed', 'false');
   await page.keyboard.press('Enter');
   await expect(check('n1')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('.notes-panel [data-note="n1"]').getByRole('button', { name: 'Edit note 1', exact: true }).click();
   const libraryCard = page.locator('.notes-panel [data-note="n1"]');
+  await libraryCard.getByRole('button', { name: 'Edit note 1: Revise n1.', exact: true }).click();
   const libraryEditor = libraryCard.getByRole('textbox', { name: 'Edit note 1', exact: true });
   await expect(libraryEditor).toBeFocused();
-  await expect(libraryCard.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
-  await expect(libraryCard.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
+  await expect(libraryCard.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+  await expect(libraryCard.getByRole('button', { name: 'Edit note 1', exact: true })).toHaveCount(0);
+  await expect(libraryCard.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(libraryCard.getByRole('button', { name: 'Add to task', exact: true })).toHaveCount(0);
   await expect(check('n1')).toHaveAttribute('aria-pressed', 'true');
-  await libraryEditor.fill('Discard this library draft.');
-  await libraryCard.getByRole('button', { name: 'Cancel', exact: true }).click();
-  assert.equal(notes[0].comment, 'Revise n1.');
-  await libraryCard.getByRole('button', { name: 'Edit note 1', exact: true }).click();
   await libraryEditor.fill('Edited directly in the note library.');
   failEdit = true;
   await libraryEditor.press('Enter');
@@ -280,11 +349,12 @@ try {
   await expect(libraryEditor).toHaveValue('Edited directly in the note library.');
   assert.equal(notes[0].comment, 'Revise n1.');
   failEdit = false;
-  await libraryCard.getByRole('button', { name: 'Save', exact: true }).click();
+  await libraryEditor.press('Escape');
   await expect(libraryEditor).toHaveCount(0);
   await expect(libraryCard.getByRole('button', { name: 'Edit note 1: Edited directly in the note library.', exact: true })).toBeFocused();
   assert.equal(notes[0].comment, 'Edited directly in the note library.');
-  await libraryCard.getByText('Edited directly in the note library.', { exact: true }).click();
+  await libraryCard.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await expect(libraryEditor).toBeFocused();
   await libraryEditor.fill('Revise n1.');
   await check('n1').click();
   await expect(libraryEditor).toHaveCount(0);
@@ -415,11 +485,12 @@ try {
   await page.getByRole('group', { name: 'Manuscript view' }).getByRole('button', { name: 'New task', exact: true }).click();
   await expect(page.getByText('Added to task: 1', { exact: true })).toBeVisible();
   const mobileTaskCard = page.locator('.task-notes-panel [data-note="n6"]');
-  await mobileTaskCard.getByRole('button', { name: /^Edit note/ }).click();
+  await mobileTaskCard.getByRole('button', { name: /^Edit note \d+$/ }).click();
   await mobileTaskCard.getByRole('textbox', { name: /^Edit note/ }).fill('Clarify this passage.\n补充说明。');
   await page.screenshot({ path: 'test-results/task-note-edit-mobile.png', fullPage: true, animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
-  await mobileTaskCard.getByRole('button', { name: 'Save', exact: true }).click();
+  // Phones keep Enter for new lines; tapping elsewhere saves.
+  await page.getByText('Added to task: 1', { exact: true }).click();
   await expect(mobileTaskCard.getByRole('textbox')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/note-selection-mobile.png', fullPage: true, animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);

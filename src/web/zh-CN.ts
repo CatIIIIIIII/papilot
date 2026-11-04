@@ -293,7 +293,6 @@ export const zhCN: Record<string, string> = {
   '{selected} / {total} locations selected': '已选 {selected} / {total} 处',
   'Collapse {group} notes': '收起{group}批注', 'Expand {group} notes': '展开{group}批注',
   'Select all {group} notes for this task': '本轮选中全部{group}批注', 'Include note {n} in this task': '本轮发送批注 {n}',
-  'Remove from task': '移出任务',
   'Remove all from task': '全部移出',
   'Add overall instructions (optional)': '补充整体修改要求（选填）', 'Address {n} PDF notes': '处理 {n} 条 PDF 批注',
   'Page {n}': '第 {n} 页', 'PDF notes': 'PDF 批注', 'Show note {n} on the page': '在页面上显示批注 {n}', 'Delete note {n}': '删除批注 {n}', 'Delete note': '删除批注',

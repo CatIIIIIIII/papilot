@@ -3,7 +3,7 @@ import { GroupCard, GroupInstruction } from './note-groups.tsx';
 import { useNoteSelection } from './note-selection.tsx';
 import { useGroupInstructions } from './group-instructions.ts';
 import { NoteQuote } from './note-content.tsx';
-import { NoteAttachButton, PdfNoteCard } from './pdf-suggestion.tsx';
+import { NoteAttachButton, PdfNoteCard, TaskRemoveButton } from './pdf-suggestion.tsx';
 import { StrictMode, Suspense, createContext, lazy, memo, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
@@ -635,18 +635,16 @@ interface NoteActions {
   sending: boolean;
 }
 
-interface NotesHandle { save: () => Promise<boolean> }
-function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, controller }: { notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAnnotate: (region: boolean) => void; controller: React.Ref<NotesHandle> }) {
-  const list = useRef<HTMLElement>(null);
+// My notes and the task's notes edit in place the same way: one draft per
+// note, saved with Enter, Escape or a click elsewhere; errors stay beside it.
+function useNoteCards(notes: Annotation[], actions: NoteActions, onEditing: (editing: boolean) => void) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const draftValues = useRef(drafts);
   const [dismissed, setDismissed] = useState<Annotation | null>(null);
   const pending = useRef(new Map<string, Promise<boolean>>());
   const [busyIds, setBusyIds] = useState<string[]>([]), [errors, setErrors] = useState<Record<string, string>>({});
-  const editing = Object.keys(drafts).length > 0, busy = busyIds.length > 0, locked = busy || actions.sending;
-  const onEditing = actions.onEditing;
+  const editing = Object.keys(drafts).length > 0, busy = busyIds.length > 0;
   useEffect(() => { onEditing(editing || busy); return () => onEditing(false); }, [editing, busy, onEditing]);
-  useEffect(() => { if (active) list.current?.querySelector(`[data-note="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);
   useEffect(() => { if (dismissed && notes.some(note => note.id === dismissed.id)) setDismissed(null); }, [notes, dismissed]);
   useEffect(() => { for (const id of Object.keys(draftValues.current)) if (!notes.some(note => note.id === id)) draft(id, null); }, [notes]);
   const clearError = (id: string) => setErrors(current => { const next = { ...current }; delete next[id]; return next; });
@@ -663,33 +661,46 @@ function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, co
     pending.current.set(id, operation); setBusyIds([...pending.current.keys()]);
     return operation;
   }
-  const saveNote = (note: Annotation, comment: string, quote = false) => change(note.id, async () => {
-    await actions.edit(note, comment); draft(note.id, null);
-    if (quote) toggle(note);
+  const save = (note: Annotation, comment: string, then?: () => void) => change(note.id, async () => {
+    await actions.edit(note, comment); draft(note.id, null); then?.();
   });
-  useImperativeHandle(controller, () => ({ save: async () => {
+  async function saveAll() {
     if (actions.sending || (await Promise.all([...pending.current.values()])).some(saved => !saved)) return false;
     for (const [id, value] of Object.entries(draftValues.current)) {
       const note = notes.find(note => note.id === id), comment = value.trim();
-      if (note && comment && comment !== note.comment) { if (!await saveNote(note, comment)) return false; }
+      if (note && comment && comment !== note.comment) { if (!await save(note, comment)) return false; }
       else draft(id, null);
     }
     return true;
-  } }));
+  }
+  const remove = (note: Annotation) => change(note.id, async () => { await actions.remove(note); draft(note.id, null); if (note.aiReview) setDismissed(note); });
+  const restore = (then?: (note: Annotation) => void) => dismissed && change(dismissed.id, async () => { await actions.restore(dismissed); then?.(dismissed); setDismissed(null); });
+  // The same card in both lists; `onToggle` adds the note to the task or takes it out.
+  const card = (note: Annotation, index: number, { currentKey, active, inTask, onShow, onToggle }: { currentKey?: string; active?: string; inTask?: boolean; onShow: (note: Annotation) => void; onToggle: () => void }) => <li key={note.id} data-note={note.id} data-selected={actions.selection.has(note.id)} className={(note.aiReview ? 'review-suggestion ' : '') + (active === note.id ? 'active ' : '') + (note.key !== currentKey ? 'stale' : '')}>
+    <PdfNoteCard inline inTask={inTask} note={note} number={index + 1} index={0} total={1} selected={actions.selection.has(note.id)} busy={actions.sending || busyIds.includes(note.id)} error={errors[note.id] || ''}
+      draft={drafts[note.id] ?? null} onDraftChange={value => { draft(note.id, value); if (value !== null && drafts[note.id] === undefined) clearError(note.id); }}
+      header={<div className="note-card-context"><div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}{note.aiReview ? ' · ' + AGENT_LABELS[note.aiReview.agent] : note.author ? ' · ' + t('from {name}', { name: note.author.name }) : ''}</span></div><NoteQuote text={note.quote}/></div>}
+      onToggle={onToggle} onDismiss={() => void remove(note)}
+      onSave={(comment, action) => save(note, comment, action === 'quote' ? onToggle : undefined)}>
+      {note.key !== currentKey && <NotePlacementWarning/>}
+    </PdfNoteCard>
+  </li>;
+  return { editing, busy, errors, dismissed, change, saveAll, restore, card };
+}
+
+interface NotesHandle { save: () => Promise<boolean> }
+function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, controller }: { notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAnnotate: (region: boolean) => void; controller: React.Ref<NotesHandle> }) {
+  const list = useRef<HTMLElement>(null);
+  const cards = useNoteCards(notes, actions, actions.onEditing);
+  const { editing, errors, dismissed, change } = cards, locked = cards.busy || actions.sending;
+  useEffect(() => { if (active) list.current?.querySelector(`[data-note="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);
+  useImperativeHandle(controller, () => ({ save: cards.saveAll }));
   const selectionLocked = locked || editing;
   const toggle = (note: Annotation) => actions.selection.set([note.id], !actions.selection.has(note.id));
   const selectCard = (note: Annotation, index: number) => <NoteAttachButton number={index + 1} ai={Boolean(note.aiReview)} selected={actions.selection.has(note.id)} disabled={selectionLocked} onClick={() => toggle(note)}/>;
   const ownNotes = notes.filter(note => !note.aiReview), ownSelected = ownNotes.filter(note => actions.selection.has(note.id)).length;
   const unplacedSuggestions = notes.filter(note => note.aiReview && note.key !== currentKey);
-  const renderNote = (note: Annotation, index: number) => <li key={note.id} data-note={note.id} data-selected={actions.selection.has(note.id)} className={(note.aiReview ? 'review-suggestion ' : '') + (active === note.id ? 'active ' : '') + (note.key !== currentKey ? 'stale' : '')}>
-    <PdfNoteCard inline note={note} number={index + 1} index={0} total={1} selected={actions.selection.has(note.id)} busy={actions.sending || busyIds.includes(note.id)} error={errors[note.id] || ''}
-      draft={drafts[note.id] ?? null} onDraftChange={value => { draft(note.id, value); if (value !== null && drafts[note.id] === undefined) clearError(note.id); }}
-      header={<div className="note-card-context"><div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}{note.aiReview ? ' · ' + AGENT_LABELS[note.aiReview.agent] : note.author ? ' · ' + t('from {name}', { name: note.author.name }) : ''}</span></div><NoteQuote text={note.quote}/></div>}
-      onToggle={() => toggle(note)} onDismiss={() => void change(note.id, async () => { await actions.remove(note); draft(note.id, null); if (note.aiReview) setDismissed(note); })}
-      onSave={(comment, action) => saveNote(note, comment, action === 'quote')}>
-      {note.key !== currentKey && <NotePlacementWarning/>}
-    </PdfNoteCard>
-  </li>;
+  const renderNote = (note: Annotation, index: number) => cards.card(note, index, { currentKey, active, onShow, onToggle: () => toggle(note) });
   return <section ref={list} className="notes-panel" aria-label={t('PDF notes')}>
     <div className="draft-notes-head">
       <div className="note-entry-actions">
@@ -714,90 +725,37 @@ function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, co
     <ol className="note-list">{notes.map((note, index) => !note.aiReview && !note.group && renderNote(note, index))}</ol>
     </section>}
     {unplacedSuggestions.length > 0 && <section className="note-section" aria-label={t('Unplaced suggestions')}><h3>{t('Unplaced suggestions')}</h3><ol className="note-list">{notes.map((note, index) => note.aiReview && note.key !== currentKey && renderNote(note, index))}</ol></section>}
-    {dismissed && <div className="note-dismissed" role="status">{t('Suggestion ignored.')} <button type="button" disabled={selectionLocked} onClick={() => void change(dismissed.id, async () => { await actions.restore(dismissed); setDismissed(null); })}>{t('Undo')}</button></div>}
+    {dismissed && <div className="note-dismissed" role="status">{t('Suggestion ignored.')} <button type="button" disabled={selectionLocked} onClick={() => void cards.restore()}>{t('Undo')}</button></div>}
     {Object.entries(errors).filter(([id]) => !notes.some(note => note.id === id && !note.group)).map(([id, error]) => <p key={id} className="inline-error" role="alert">{error}</p>)}
   </section>;
 }
 
 // The composer receives only attachments the author explicitly chose in the PDF.
+// Each one is the same card as in My notes: click the text or ✏️ to edit it,
+// 🗑 deletes it (⌘Z brings it back), and × takes it out of the task.
 function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]; currentKey?: string; actions: NoteActions; onShow: (note: Annotation) => void }) {
   const panel = useRef<HTMLElement>(null);
-  const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
-  const [saving, setSaving] = useState(false), [error, setError] = useState('');
-  const pending = useRef(false);
-  const [deleted, setDeleted] = useState<Annotation | null>(null);
-  useEffect(() => { if (deleted && notes.some(note => note.id === deleted.id)) setDeleted(null); }, [notes, deleted]);
-  const editing = draft !== null, locked = actions.sending || saving || editing;
-  const onEditing = actions.onTaskEditing;
-  useEffect(() => { onEditing(editing || saving); return () => onEditing(false); }, [editing, saving, onEditing]);
-  useEffect(() => {
-    if (draft && (!notes.some(note => note.id === draft.id) || !actions.selection.has(draft.id))) { setDraft(null); setError(''); }
-  }, [notes, draft, actions.selection]);
-  const finish = (id: string) => {
-    setDraft(null); setError('');
-    requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>(`[data-note="${CSS.escape(id)}"] .task-note-edit-control`)?.focus({ preventScroll: true }));
-  };
-  async function save(note: Annotation) {
-    if (!draft || draft.id !== note.id || !draft.text.trim() || actions.sending || pending.current) return;
-    const comment = draft.text.trim();
-    if (comment === note.comment) { finish(note.id); return; }
-    pending.current = true; setSaving(true); setError('');
-    try { await actions.edit(note, comment); finish(note.id); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { pending.current = false; setSaving(false); }
-  }
-  async function deleteNote(note: Annotation) {
-    if (locked || pending.current) return;
-    pending.current = true; setSaving(true); setError('');
-    try { await actions.remove(note); setDeleted(note); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { pending.current = false; setSaving(false); }
-  }
-  async function undoDelete() {
-    if (!deleted || locked || pending.current) return;
-    pending.current = true; setSaving(true); setError('');
-    try { await actions.restore(deleted); actions.selection.set([deleted.id], true); setDeleted(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { pending.current = false; setSaving(false); }
-  }
   const chosen = notes.filter(note => actions.selection.has(note.id));
-  if (!chosen.length && !deleted && !error) return null;
+  // A note that leaves the task takes its draft with it, so the composer never
+  // stays locked by an editor that is no longer on screen.
+  const cards = useNoteCards(chosen, actions, actions.onTaskEditing);
+  const locked = cards.busy || actions.sending, selectionLocked = locked || cards.editing;
+  if (!chosen.length && !cards.dismissed) return null;
   // Notes listed in My notes fly back there; placed AI suggestions stay on the page.
   const putBack = (list: Annotation[]) => {
     returnNotes(list.filter(note => !note.aiReview || note.key !== currentKey).flatMap(note => panel.current?.querySelector<HTMLElement>(`[data-note="${CSS.escape(note.id)}"]`) || []));
     actions.selection.set(list.map(note => note.id), false);
   };
-  const remove = (note: Annotation, index: number) => {
-    const label = note.aiReview ? t('Remove suggestion {n} from task', { n: index + 1 }) : t('Remove note {n} from task', { n: index + 1 });
-    return <button type="button" className="note-send included" aria-label={label} title={label} disabled={locked} onClick={() => putBack([note])}>{t('Remove from task')}<Icon name="close" size={12}/></button>;
-  };
+  // A location in a color group carries the group's instruction, not its own;
+  // × sits top right, as on the cards below.
   const reference = (note: Annotation, index: number) => <li key={note.id} data-note={note.id} className="task-note-reference">
-    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey || locked} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span>{!note.aiReview && <button type="button" className="icon-button task-note-edit-control" aria-label={t('Edit note {n}', { n: index + 1 })} title={t('Edit note')} disabled={locked} onClick={() => { setError(''); setDraft({ id: note.id, text: note.comment }); }}><Icon name="compose" size={14}/></button>}{!note.aiReview && <button type="button" className="icon-button task-note-delete-control" aria-label={t('Delete note {n}', { n: index + 1 })} title={t('Delete note')} disabled={locked} onClick={() => void deleteNote(note)}><Icon name="trash" size={14}/></button>}</div>
+    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span><TaskRemoveButton number={index + 1} ai={Boolean(note.aiReview)} disabled={selectionLocked} onClick={() => putBack([note])}/></div>
     <NoteQuote text={note.quote}/>
-    {/* Removing from the task keeps the annotation; the trash button deletes it. */}
-    {draft?.id === note.id ? <div className="task-note-editor">
-      <textarea autoFocus className="pdf-note-input" aria-label={t('Edit note {n}', { n: index + 1 })} value={draft.text} rows={3} maxLength={4000} readOnly={saving || actions.sending}
-        onChange={event => setDraft({ id: note.id, text: event.target.value })} onKeyDown={event => {
-          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!saving) finish(note.id); }
-          else if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); event.stopPropagation(); void save(note); }
-        }}/>
-      {error && <p className="inline-error" role="alert">{error}</p>}
-      <div className="task-note-editor-actions">
-        <button type="button" className="button ghost compact" disabled={saving || actions.sending} onClick={() => finish(note.id)}>{t('Cancel')}</button>
-        <button type="button" className="button compact" disabled={saving || actions.sending || !draft.text.trim()} onClick={() => void save(note)}>{saving ? <span className="spinner"/> : t('Save')}</button>
-      </div>
-    </div> : <p className="task-note-comment">{note.aiReview ? note.comment : <button type="button" className="task-note-edit note-edit-trigger" title={t('Edit note')} disabled={locked} onClick={() => {
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && panel.current?.querySelector(`[data-note="${CSS.escape(note.id)}"] .task-note-edit`)?.contains(selection.anchorNode)) return;
-      setError(''); setDraft({ id: note.id, text: note.comment });
-    }}>{note.comment || t('Edit note')}</button>}{remove(note, index)}</p>}
+    {note.comment && <p className="task-note-comment">{note.comment}</p>}
     {note.key !== currentKey && <NotePlacementWarning/>}
   </li>;
   return <section ref={panel} className="task-notes-panel" aria-label={t('Notes in this task')}>
-    {deleted && <div className="task-note-deleted" role="status">{t('Note deleted.')}<button type="button" className="button ghost compact" disabled={locked} onClick={() => void undoDelete()}>{t('Undo')}</button></div>}
-    {!draft && error && <p className="inline-error" role="alert">{error}</p>}
-    <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={locked} onClick={() => putBack(chosen)}>{t('Remove all from task')}</button></div>
+    {chosen.length > 0 && <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={selectionLocked} onClick={() => putBack(chosen)}>{t('Remove all from task')}</button></div>}
     {noteGroups(notes).map(({ group, entries }) => {
       const selected = entries.filter(({ note }) => actions.selection.has(note.id));
       return selected.length > 0 && <GroupCard key={group} group={group} count={selected.length}>
@@ -805,7 +763,8 @@ function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]
         <ol className="task-note-list">{selected.map(({ note, index }) => reference(note, index))}</ol>
       </GroupCard>;
     })}
-    <ol className="task-note-list">{notes.map((note, index) => !note.group && actions.selection.has(note.id) && reference(note, index))}</ol>
+    <ol className="task-note-list task-note-cards">{notes.map((note, index) => !note.group && actions.selection.has(note.id) && cards.card(note, index, { currentKey, inTask: true, onShow, onToggle: () => putBack([note]) }))}</ol>
+    {cards.dismissed && <div className="note-dismissed" role="status">{t('Suggestion ignored.')} <button type="button" disabled={selectionLocked} onClick={() => void cards.restore(note => actions.selection.set([note.id], true))}>{t('Undo')}</button></div>}
   </section>;
 }
 
@@ -1020,7 +979,9 @@ function App() {
   const [activeNote, setActiveNote] = useState('');
   const [noteGroup, setNoteGroup] = useState<NoteGroup | null>(null);
   const [marking, setMarking] = useState(0);
-  const annotationUndo = useRef<{ kind: 'add' | 'remove'; note: Annotation }[]>([]);
+  // A deleted note that was in the task returns to it when undone.
+  const annotationUndo = useRef<{ kind: 'add' | 'remove'; note: Annotation; selected?: boolean }[]>([]);
+  const noteEdits = useRef(new Map<string, number>());
   const undoingAnnotation = useRef(false);
   useEffect(() => { setNoteGroup(null); annotationUndo.current = []; }, [projectId]);
   const [pdfNoteEditing, setNoteEditing] = useState(false), [taskNoteEditing, setTaskNoteEditing] = useState(false);
@@ -1442,16 +1403,29 @@ function App() {
         else setRegion(false);
       } finally { setMarking(value => value - 1); }
     },
+    // The new text shows everywhere at once, so the same note opened in another
+    // list while this saves starts from it rather than writing the old text back.
+    // The reply settles it unless a newer edit of that note has started since.
     async edit(note, comment) {
-      const saved = await api<Annotation>(`/projects/${note.projectId}/annotations/${note.id}`, { comment });
-      withNotes(list => list.map(item => item.id === note.id ? saved : item));
+      const version = (noteEdits.current.get(note.id) || 0) + 1, before = note.comment;
+      const latest = () => noteEdits.current.get(note.id) === version;
+      noteEdits.current.set(note.id, version);
+      withNotes(list => list.map(item => item.id === note.id ? { ...item, comment } : item));
+      try {
+        const saved = await api<Annotation>(`/projects/${note.projectId}/annotations/${note.id}`, { comment });
+        if (latest()) withNotes(list => list.map(item => item.id === note.id ? saved : item));
+      } catch (error) {
+        if (latest()) withNotes(list => list.map(item => item.id === note.id ? { ...item, comment: before } : item));
+        throw error;
+      }
     },
     async remove(note) {
+      const selected = noteSelection.has(note.id);
       await api(`/projects/${note.projectId}/annotations/${note.id}/delete`, {});
       noteSelection.set([note.id], false);
       withNotes(list => list.filter(item => item.id !== note.id));
       setActiveNote(id => id === note.id ? '' : id);
-      annotationUndo.current.push({ kind: 'remove', note });
+      annotationUndo.current.push({ kind: 'remove', note, selected });
     },
     async restore(note) {
       const restored = await api<{ annotations: Annotation[] }>(`/projects/${note.projectId}/annotations/${note.id}/restore`, {});
@@ -1476,6 +1450,7 @@ function App() {
           withNotes(list => list.filter(item => item.id !== note.id));
         } else {
           await noteActions.restore(note);
+          if (entry.selected) noteSelection.set([note.id], true);
           requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-note="${note.id}"] .note-edit-trigger`)?.focus());
         }
         annotationUndo.current = annotationUndo.current.filter(item => item !== entry);

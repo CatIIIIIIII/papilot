@@ -25,7 +25,7 @@
 
 .pdf-note-card.pdf-note-inline{--note-tool:24px;position:relative;z-index:auto;width:100%;gap:4px;padding:8px 10px;box-shadow:none;border-radius:10px}
 .pdf-note-inline:hover,.note-list>li.active>.pdf-note-inline{border-color:var(--line-strong)}
-.note-list>li.stale>.pdf-note-inline{background:var(--bg-subtle)}
+:is(.note-list,.task-note-cards)>li.stale>.pdf-note-inline{background:var(--bg-subtle)}
 /* In the library, delete and add-to-task share the location row instead of taking a row of their own; the row gives them whatever width the button needs. */
 .pdf-note-card.pdf-note-inline{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:6px}
 .pdf-note-inline>*,.pdf-note-inline>.note-card-context>*{grid-column:1/-1}
