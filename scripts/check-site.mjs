@@ -1,4 +1,4 @@
-// Verify the passive desktop-size UI films, using an isolated static server.
+// Verify the landing page's windows and layout, using an isolated static server.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,154 +17,148 @@ const browser = process.env.PAPILOT_BROWSER_ENGINE === 'webkit'
   : await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
 const errors = [], requests = [];
 fs.mkdirSync('test-results/site', { recursive: true });
-try {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'no-preference' });
-  const page = await context.newPage();
+const watch = page => {
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('request', request => requests.push(request.url()));
-  const time = new Date('2026-01-01T00:00:00Z');
-  await page.clock.install({ time });
-  await page.clock.pauseAt(new Date(time.getTime() + 1000));
+  page.setDefaultTimeout(20000);
+};
+const hero = '.hero .app-window', change = `${hero} .review-change`;
+const stateOf = page => page.locator(change).getAttribute('data-state');
+try {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+  const page = await context.newPage();
+  watch(page);
   await page.goto(`${origin}/?lang=en`);
   await page.evaluate(() => document.fonts.ready);
-  const hero = page.locator('#demo-hero');
-  const current = root => root.locator('[data-scene]:not([hidden])');
-  const state = root => current(root).evaluate(el => [el.dataset.scene, el.dataset.phase]);
-  const show = async root => {
-    await root.evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
-    await root.evaluate(el => new Promise(resolve => {
-      const observer = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting) { observer.disconnect(); resolve(); }
-      });
-      observer.observe(el);
-    }));
-  };
-  assert.equal(await page.locator('[data-demo]').count(), 5);
-  assert.equal(await page.locator('.ui-demo button, .ui-demo input, .ui-demo textarea, .ui-demo a, .ui-demo [tabindex], .ui-demo [role=tab]').count(), 0);
+
+  // The first screen is the headline, the window and the downloads; the
+  // arrow sits on it and the agents start just below.
+  const fold = await page.evaluate(() => ({
+    cue: document.querySelector('.scroll-cue').getBoundingClientRect().bottom,
+    agents: document.querySelector('#agents').getBoundingClientRect().top,
+    inner: innerHeight,
+  }));
+  assert.ok(fold.cue <= fold.inner && fold.agents >= fold.inner - 1, 'the first screen holds the hero');
   assert.equal(await page.locator('video').count(), 0);
-  assert.equal(await page.locator('.ui-demo math').count() > 0, true);
-  await show(hero);
-  assert.deepEqual(await state(hero), ['annotate', '0']);
-  await page.clock.runFor(1900);
-  assert.deepEqual(await state(hero), ['annotate', '1']);
-  await page.clock.runFor(1500);
-  assert.equal(await current(hero).locator('.typed-copy').evaluate(el => getComputedStyle(el).visibility), 'visible');
-  await hero.screenshot({ animations: 'disabled', path: 'test-results/site/hero-desktop.png' });
-  // Clicking/hovering does not take control of the demo or stop its playback.
-  await hero.click({ position: { x: 300, y: 200 } });
-  await page.clock.runFor(2700);
-  assert.deepEqual(await state(hero), ['annotate', '3']);
-  assert.equal(await current(hero).locator('.agent-receipt').isVisible(), true);
-  await page.clock.runFor(1600);
-  assert.deepEqual(await state(hero), ['review', '0']);
-  await page.clock.runFor(3700);
-  assert.deepEqual(await state(hero), ['review', '2']);
-  assert.equal(await current(hero).locator('.diff-before').isVisible(), false);
-  assert.equal(await current(hero).locator('.accepted').isVisible(), true);
-  await hero.screenshot({ animations: 'disabled', path: 'test-results/site/hero-review.png' });
-  await page.clock.runFor(2900);
-  assert.deepEqual(await state(hero), ['read', '0']);
-  await page.clock.runFor(4700);
-  assert.deepEqual(await state(hero), ['read', '2']);
-  await page.clock.runFor(1000);
-  assert.equal(await current(hero).locator('.zoom-large').isVisible(), true);
-  await hero.screenshot({ animations: 'disabled', path: 'test-results/site/hero-read.png' });
-  await page.clock.runFor(1300);
-  assert.deepEqual(await state(hero), ['commit', '0']);
-  await page.clock.runFor(6000);
-  assert.deepEqual(await state(hero), ['commit', '4']);
-  assert.equal(await current(hero).locator('.committed-label').isVisible(), true);
-  await hero.screenshot({ animations: 'disabled', path: 'test-results/site/hero-commit.png' });
-  await page.clock.runFor(1600);
-  assert.deepEqual(await state(hero), ['annotate', '0']);
 
-  // All four feature frames also play automatically, rather than waiting on a click.
-  for (const kind of ['annotate', 'review', 'read', 'commit']) {
-    const root = page.locator(`#demo-${kind}`);
-    await show(root);
-    const before = await state(root);
-    await page.clock.runFor(3000);
-    assert.notDeepEqual(await state(root), before, `${kind} must autoplay`);
-    await root.screenshot({ animations: 'disabled', path: `test-results/site/${kind}-desktop.png` });
+  // The navbar leads to this page's own sections.
+  const anchors = await page.locator('.nav a').evaluateAll(links => links.map(link => link.getAttribute('href')));
+  assert.ok(anchors.length >= 3 && anchors.every(href => href.startsWith('#')));
+  for (const href of anchors) assert.equal(await page.locator(href).count(), 1, href);
+
+  // A round plays by itself: the plain sentence, a boxed note, the diff, and
+  // the accepted sentence, without the headline or the window moving.
+  assert.equal(await stateOf(page), 'idle');
+  const still = async () => page.evaluate(sel => [document.querySelector('h1').getBoundingClientRect().top, document.querySelector(sel).getBoundingClientRect().height], hero);
+  const start = await still();
+  await page.waitForFunction(sel => document.querySelector(sel).dataset.state === 'pending', change);
+  assert.deepEqual(await still(), start);
+  assert.equal(await page.locator(`${hero} .chat-bubble`).isVisible(), true);
+  await page.locator(hero).screenshot({ path: 'test-results/site/hero-diff.png' });
+  await page.waitForFunction(sel => document.querySelector(sel).dataset.state === 'accepted', change);
+  await page.waitForTimeout(700);
+  assert.deepEqual(await still(), start);
+  assert.equal(await page.locator(`${change} .review-head`).isVisible(), false, 'a decided change has no header');
+  await page.locator(hero).screenshot({ path: 'test-results/site/hero-accepted.png' });
+
+  // Touching the window stops the round on the diff; decisions leave plain
+  // text that reopens on a click, and LaTeX shows the source.
+  await page.reload();
+  await page.locator(change).click();
+  assert.equal(await page.locator(hero).evaluate(el => el.classList.contains('playing')), false);
+  assert.equal(await stateOf(page), 'pending');
+  await page.locator(`${change} .review-accept`).click();
+  await page.locator(`${change} .before`).waitFor({ state: 'hidden' });
+  await page.locator(`${change} .review-head`).waitFor({ state: 'hidden' });
+  await page.locator(change).click();
+  await page.locator(`${change} .review-reject`).click();
+  await page.locator(`${change} .after`).waitFor({ state: 'hidden' });
+  await page.locator(change).click();
+  assert.equal(await stateOf(page), 'pending');
+  await page.locator(`${change} .review-latex`).click();
+  assert.equal(await page.locator(`${change} .review-source`).isVisible(), true);
+
+  // Every agent shows at once; on screen they arrive, then one at a time lights up.
+  const grid = page.locator('.agent-grid');
+  assert.equal(await grid.locator('li').count(), 11);
+  await grid.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('.agent-grid.arrived'));
+  const view = await page.evaluate(() => innerHeight);
+  for (const box of await grid.locator('li').evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()))) assert.ok(box.top > 0 && box.bottom < view, 'every agent is in view at once');
+
+  // The older ways keep their colour while they are read, lose it as they
+  // scroll past, and Papilot's comes in on the same scroll.
+  const progress = () => page.evaluate(() => [...document.querySelectorAll('.era')].map(card => +(card.style.getPropertyValue(card.classList.contains('ours') ? '--new' : '--old') || 0)));
+  const scrollEras = fraction => page.evaluate(f => scrollTo(0, document.querySelector('.era.old').getBoundingClientRect().top + scrollY - innerHeight * f), fraction);
+  await scrollEras(.3);
+  await page.waitForTimeout(300);
+  assert.deepEqual(await progress(), [0, 0, 0], 'colour while the older ways are read');
+  await scrollEras(-.25);
+  await page.waitForTimeout(300);
+  const [first, second, ours] = await progress();
+  assert.ok(first > .9 && second > .9 && ours > .9, 'grey once scrolled past, with Papilot\'s in view');
+
+  // The feature windows are pictures: named, with nothing to focus inside,
+  // and each plays its round once on screen, at a fixed height.
+  const scenes = page.locator('.scene');
+  assert.equal(await scenes.count(), 3);
+  assert.equal(await page.locator('.scene-art :is(a, button, input, textarea, [tabindex])').evaluateAll(nodes => nodes.filter(node => !node.closest('[inert]')).length), 0);
+  for (const name of ['notes', 'revise', 'record']) {
+    const scene = page.locator(`[data-scene=${name}]`);
+    assert.equal(await scene.getAttribute('role'), 'img');
+    assert.ok(await scene.getAttribute('aria-label'));
+    await scene.scrollIntoViewIfNeeded();
+    await page.mouse.move(1, 1);
+    const height = (await scene.boundingBox()).height;
+    await page.waitForFunction(sel => document.querySelector(sel).classList.contains('playing'), `[data-scene=${name}]`);
+    await page.waitForTimeout(5000);
+    assert.equal((await scene.boundingBox()).height, height, `${name} keeps its height`);
+    assert.equal(await scene.locator('.app-cursor').isVisible(), true, `${name} plays`);
+    await scene.screenshot({ path: `test-results/site/${name}-desktop.png` });
   }
-  // Offscreen examples retain their place and resume from it.
-  const beforeOffscreen = await state(hero);
-  await page.clock.runFor(10000);
-  assert.deepEqual(await state(hero), beforeOffscreen);
 
-  // Every viewport retains the native 1000:700 window, 660:340 panes and 46px
-  // toolbar, scaled uniformly. No mobile mini-layout or internal scrollbars.
-  for (const width of [1440, 768, 390, 320]) {
-    await page.setViewportSize({ width, height: 1000 });
-    for (const [lang, name] of Object.entries(languages)) {
-      await page.locator('#lang-button').click();
-      await Promise.all([page.waitForURL(origin + route(lang)), page.getByRole('menuitemradio', { name, exact: true }).click()]);
-      assert.equal(await page.evaluate(() => document.documentElement.lang), lang);
-      await show(hero);
-      const geometry = await hero.evaluate(el => {
-        const panel = el.querySelector('[data-scene]:not([hidden])');
-        const w = el.clientWidth;
-        return {
-          ratio: el.offsetWidth / el.offsetHeight,
-          pane: panel.querySelector('.app-side').getBoundingClientRect().width / w,
-          toolbar: panel.querySelector('.workspace-toolbar').getBoundingClientRect().height / w,
-        };
-      });
-      assert.ok(Math.abs(geometry.ratio - 1000 / 700) < 0.01);
-      assert.ok(Math.abs(geometry.pane - 0.34) < 0.002);
-      assert.ok(Math.abs(geometry.toolbar - 0.046) < 0.002);
-      // The demo controls must scale and center together, including at phone
-      // widths where a text glyph's line box used to exceed its checkbox.
-      for (const kind of ['annotate', 'review', 'read', 'commit']) {
-        const root = page.locator(`#demo-${kind}`);
-        const controls = await root.evaluate(el => [...el.querySelectorAll('.page-nav,.file-check,.note-check')].map(control => {
-          const box = control.getBoundingClientRect();
-          const glyph = control.querySelector('svg')?.getBoundingClientRect();
-          return { name: control.className, width: box.width, height: box.height, glyph: glyph && {
-            width: glyph.width, height: glyph.height,
-            dx: glyph.x + glyph.width / 2 - box.x - box.width / 2,
-            dy: glyph.y + glyph.height / 2 - box.y - box.height / 2,
-          } };
-        }));
-        for (const control of controls) {
-          const label = `${kind} ${control.name} at ${width}px (${lang})`;
-          assert.ok(control.glyph?.width > 0 && control.glyph?.height > 0, `${label}: visible vector icon`);
-          assert.ok(Math.abs(control.glyph.dx) < 0.1 && Math.abs(control.glyph.dy) < 0.1, `${label}: centered icon`);
-          assert.ok(control.glyph.width < control.width && control.glyph.height < control.height, `${label}: icon fits inside control`);
-          if (control.name.includes('check')) assert.ok(Math.abs(control.width - control.height) < 0.1, `${label}: square checkbox`);
-        }
-      }
-      const scrollports = await page.evaluate(() => [...document.querySelectorAll('.ui-demo, .ui-demo *')].filter(el => {
-        const s = getComputedStyle(el);
-        return /^(auto|scroll)$/.test(s.overflowX) || /^(auto|scroll)$/.test(s.overflowY);
-      }).map(el => el.className));
-      assert.deepEqual(scrollports, []);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      if (width === 1440) {
-        await page.emulateMedia({ reducedMotion: 'reduce' });
-        assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s', lang);
-        await page.emulateMedia({ reducedMotion: 'no-preference' });
-      }
-      if (width === 390) await hero.screenshot({ animations: 'disabled', path: `test-results/site/hero-mobile-${lang}.png` });
-      if (width === 390) await page.locator('#demo-commit').screenshot({ animations: 'disabled', path: `test-results/site/commit-mobile-${lang}.png` });
-    }
-  }
-  // Reduced motion removes animation, while the film still advances without
-  // needing a play control (all states remain native, readable HTML).
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  const beforeReduced = await state(hero);
-  await page.clock.runFor(3000);
-  assert.notDeepEqual(await state(hero), beforeReduced);
-  assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s');
+  // Reduced motion: nothing plays; the hero shows the sent note and the
+  // diff, and the ticker stands still.
+  const calm = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const calmPage = await calm.newPage();
+  watch(calmPage);
+  await calmPage.goto(origin + '/');
+  await calmPage.waitForTimeout(3000);
+  assert.equal(await calmPage.locator('.playing').count(), 0);
+  assert.equal(await stateOf(calmPage), 'pending');
+  assert.equal(await calmPage.locator('.agent-grid.waiting').count(), 0, 'the agents stand in colour');
+  assert.equal(await calmPage.locator('.era.old').evaluateAll(cards => cards.every(card => card.style.getPropertyValue('--old') === '1')), true, 'the older ways are simply grey');
+  await calmPage.locator(`${change} .review-accept`).click();
+  assert.equal(await calmPage.locator(`${change} .before`).isVisible(), false, 'decisions are immediate');
+  await calm.close();
 
-  const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  // Dark mode follows the system, the toggle switches and remembers, and the
+  // app windows stay light either way.
+  const night = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+  const nightPage = await night.newPage();
+  watch(nightPage);
+  await nightPage.goto(origin + '/');
+  const surface = () => nightPage.evaluate(() => [getComputedStyle(document.body).backgroundColor, getComputedStyle(document.querySelector('.hero .review-page')).backgroundColor]);
+  assert.deepEqual(await surface(), ['rgb(17, 18, 20)', 'rgb(255, 255, 255)']);
+  assert.equal(await nightPage.locator('#theme-button').getAttribute('aria-pressed'), 'true');
+  await nightPage.locator('#theme-button').click();
+  assert.deepEqual(await surface(), ['rgb(255, 255, 255)', 'rgb(255, 255, 255)']);
+  await nightPage.reload();
+  assert.equal(await nightPage.locator('#theme-button').getAttribute('aria-pressed'), 'false', 'the choice is kept');
+  await nightPage.screenshot({ path: 'test-results/site/light-chosen.png' });
+  await nightPage.locator('#theme-button').click();
+  await nightPage.screenshot({ path: 'test-results/site/dark.png' });
+  await night.close();
+
+  // Without JavaScript every window shows where its round ends.
+  const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
   const staticPage = await noJs.newPage();
   await staticPage.goto(origin);
-  assert.equal(await staticPage.locator('#demo-hero .paper-sheet').first().isVisible(), true);
-  assert.equal(await staticPage.locator('.ui-demo button, .ui-demo input').count(), 0);
-  await staticPage.locator('#demo-hero').screenshot({ animations: 'disabled', path: 'test-results/site/no-js-mobile.png' });
+  for (const selector of [`${change} .before`, `${change} .after`, `${hero} .chat-bubble`, '[data-scene=record] .git-pushed']) assert.equal(await staticPage.locator(selector).isVisible(), true, selector);
+  await staticPage.locator(hero).screenshot({ path: 'test-results/site/no-js.png' });
   await noJs.close();
+
   // Every URL is already localized without JavaScript, with reciprocal SEO links.
   const sitemap = fs.readFileSync('_site/sitemap.xml', 'utf8');
   assert.match(fs.readFileSync('_site/robots.txt', 'utf8'), /Sitemap: https:\/\/papilot.ai\/sitemap.xml/);
@@ -185,11 +179,13 @@ try {
       assert.equal((sitemap.match(new RegExp(`hreflang="${alt}"`, 'g')) || []).length, Object.keys(languages).length);
       assert.ok(sitemap.includes(`hreflang="${alt}" href="${href}"`));
     }
-    assert.equal(await staticVisitor.locator('#demo-hero .paper-sheet').first().isVisible(), true);
     assert.deepEqual(await staticVisitor.locator('main [lang]').evaluateAll(nodes => [...new Set(nodes.map(node => node.lang))]), [locale]);
     assert.equal(await staticVisitor.locator('.no-js-languages a').count(), Object.keys(languages).length);
   }
   await staticContext.close();
+
+  // The language menu switches pages; browser language never redirects, a
+  // saved choice does at the root, and an explicit URL wins.
   const preferenceContext = await browser.newContext({ locale: 'ja-JP' });
   const visitor = await preferenceContext.newPage();
   await visitor.goto(origin);
@@ -205,31 +201,49 @@ try {
   assert.equal(await visitor.locator('#lang-list').isHidden(), true);
   await preferenceContext.close();
 
-  // Capture the requested layouts and assert buttons, menus and cards fit.
-  for (const locale of ['zh-CN', 'ja', 'de', 'sv']) {
-    for (const width of [390, 1440]) {
-      await page.setViewportSize({ width, height: 1000 });
+  // Both download menus open on their own, end with All downloads, stay
+  // inside the window (opening upward without room below) and close with Escape.
+  for (const [width, height] of [[1440, 900], [1280, 760], [390, 664]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(origin + '/');
+    for (const [button, list] of [['#download-button', '#download-list'], ['#get-button', '#get-list']]) {
+      await page.locator(button).scrollIntoViewIfNeeded();
+      await page.locator(button).click();
+      assert.equal(await page.locator('.download-list:visible').count(), 1, `${list} opens alone`);
+      const box = await page.locator(list).boundingBox();
+      assert.ok(box.y >= 0 && box.y + box.height <= height, `${list} inside the window at ${width}×${height}`);
+      assert.equal(await page.locator(`${list} [role=menuitem]`).last().getAttribute('href'), 'https://github.com/PapilotAI/papilot/releases/latest');
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator(list).isHidden(), true, `${list} closes`);
+    }
+  }
+
+  // Every language fits at every width: no sideways scroll, the first screen
+  // still holds the hero, and buttons, menus, cards and windows fit.
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
+    for (const locale of Object.keys(languages)) {
       await page.goto(origin + route(locale));
       await page.evaluate(() => document.fonts.ready);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${locale}/${width}: no sideways scroll`);
       await page.locator('#download-button').click();
-      for (const selector of ['#download-button', '#download-list', '.agent-card']) {
+      for (const selector of ['#download-button', '#download-list', '.era', '.app-window']) {
         const boxes = await page.locator(selector).evaluateAll(nodes => nodes.map(el => ({ width: el.clientWidth, scroll: el.scrollWidth, left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right })));
         for (const box of boxes) {
           assert.ok(box.scroll <= box.width + 1, `${locale}/${width}: ${selector} contents fit`);
           assert.ok(box.left >= 0 && box.right <= width + 1, `${locale}/${width}: ${selector} within viewport`);
         }
       }
-      await page.screenshot({ animations: 'disabled', path: `test-results/site/${locale}-${width}-download.png` });
       await page.keyboard.press('Escape');
-      await page.locator('#agents').screenshot({ animations: 'disabled', style: '.topbar{visibility:hidden!important}', path: `test-results/site/${locale}-${width}-agents.png` });
-      await page.emulateMedia({ reducedMotion: 'reduce' });
-      await show(hero);
-      assert.equal(await current(hero).locator('.paper-content').first().evaluate(el => getComputedStyle(el).transitionDuration), '0s');
+      if (width === 390 || width === 1440) {
+        await page.screenshot({ path: `test-results/site/${locale}-${width}-hero.png` });
+        await page.locator('#why').screenshot({ style: '.topbar{visibility:hidden!important}', path: `test-results/site/${locale}-${width}-why.png` });
+      }
     }
   }
   assert.deepEqual(errors, []);
   assert.equal(requests.some(url => /\.(mp4|gif|jpe?g)|feature-.*\.png/.test(url)), false);
-  console.log('Site checks passed: automatic complete workflow and feature loops; no controls or inner scrollbars; native desktop proportions at 320/390/768/1440px; all language URLs and SEO; reduced motion; no-JS; assets; saved language; download and card layouts.');
+  console.log('Site checks passed: first screen, the hero round and takeover, feature windows, reduced motion, no-JS, all language URLs and SEO, saved language, both download menus, and layouts at 320/390/768/1440px.');
 } finally {
   await browser.close();
   await server.close();
