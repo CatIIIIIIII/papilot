@@ -13,6 +13,8 @@ Thanks for helping. Papilot is young, so every bug report, idea and pull request
 
 You need Node.js 22.22+, Git and a full TeX distribution. An agent is only needed to run real tasks; the tests never start one.
 
+With [Nix](../docs/nix.md), run `nix develop` inside the checkout to provide these tools, then follow the npm steps below.
+
 ```sh
 git clone https://github.com/PapilotAI/papilot && cd papilot
 npm ci
