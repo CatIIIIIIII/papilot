@@ -1,10 +1,9 @@
-// Builds the static landing page with native, progressively enhanced UI demos.
-// Only Node is needed: the sample manuscript is HTML + MathML, not a PDF/video.
+// Builds the static landing page. Only Node is needed: its windows are
+// drawn in HTML and CSS, not screenshots or video.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { translatedSite } from './site-i18n.mjs';
-import { renderDemo } from '../site/demo-templates.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 // The build empties this folder first, so it takes no folder argument that
@@ -17,7 +16,7 @@ const copy = (from, names, to = '') => {
 };
 
 fs.rmSync(out, { recursive: true, force: true });
-copy('site', ['style.css', 'demos.css', 'demos.js']);
+copy('site', ['style.css']);
 const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // GitHub Pages lets browsers keep every file for ten minutes, so a fresh page
 // could meet a stylesheet or script cached from the previous release. Their
@@ -31,19 +30,20 @@ if (JSON.stringify(Object.keys(names)) !== JSON.stringify(locales)) throw new Er
 const urlFor = locale => site + (locale === 'en' ? '' : `${locale}/`);
 const ogLocales = { en: 'en_US', 'zh-CN': 'zh_CN', 'zh-Hant': 'zh_TW', ja: 'ja_JP', ko: 'ko_KR', de: 'de_DE', fr: 'fr_FR', es: 'es_ES', pt: 'pt_BR', it: 'it_IT', sv: 'sv_SE' };
 const alternates = locales.map(locale => `<link rel="alternate" hreflang="${locale}" href="${urlFor(locale)}">`).join('\n') + `\n<link rel="alternate" hreflang="x-default" href="${site}">`;
-const expanded = source.replace(/<!-- demo:(\w+) -->/g, (_, kind) => renderDemo(kind));
 for (const locale of locales) {
   const translations = locale === 'en' ? {} : JSON.parse(fs.readFileSync(path.join(root, `site/locales/${locale}.json`), 'utf8'));
   const menu = locales.map(code => `<a href="${code === 'en' ? '/' : `/${code}/`}" role="menuitemradio" lang="${code}" aria-checked="${code === locale}" tabindex="-1">${names[code]}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></a>`).join('');
-  let html = translatedSite(expanded, translations, locale)
+  const translated = translatedSite(source, translations, locale);
+  const title = translated.match(/<title>([^<]*)<\/title>/)[1];
+  let html = translated
     .replaceAll('{{version}}', release)
     .replace(/<link rel="alternate"[^>]*>/g, '')
     .replace(/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${urlFor(locale)}">\n${alternates}`)
     .replace(/<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${urlFor(locale)}">\n<meta property="og:locale" content="${ogLocales[locale]}">`)
-    .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${(translations['Papilot · A Cursor-like workspace for your papers'] || 'Papilot · A Cursor-like workspace for your papers').replaceAll('"', '&quot;')}">`)
+    .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${title.replaceAll('"', '&quot;')}">`)
     .replace(/(<div class="lang-list"[^>]*>)(<\/div>)/, `$1${menu}$2`)
     .replace('<body>', `<body><noscript><nav class="no-js-languages">${locales.map(code => `<a lang="${code}" href="${code === 'en' ? '/' : `/${code}/`}">${names[code]}</a>`).join('')}</nav></noscript>`)
-    .replace(/(\s(?:href|src)=")(style\.css|demos\.css|demos\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
+    .replace(/(\s(?:href|src)=")(style\.css)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
     .replace(/(\s(?:href|src)=")((?:assets|fonts)\/[^" ]+|favicon.png|apple-touch-icon.png)"/g, '$1/$2"');
   if (locale !== 'en') html = html.replace('https://github.com/cu1ch3n/papilot#readme', `https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.${locale}.md`);
   // Explicit URLs always win. Only the root restores a saved choice; browser
@@ -86,7 +86,7 @@ for (const locale of locales) {
     if (!fs.existsSync(file)) missing.push(`${locale}: ${ref}`);
   }
 }
-for (const name of ['style.css', 'demos.css']) {
+for (const name of ['style.css']) {
   const css = fs.readFileSync(path.join(out, name), 'utf8');
   for (const [, ref] of css.matchAll(/url\("?([^"\)]*)"?\)/g)) {
     const url = new URL(ref, site + name);

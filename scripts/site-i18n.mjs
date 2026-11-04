@@ -7,7 +7,7 @@ function visit(node, fn) {
 const attr = (node, name) => node.attrs?.find(item => item.name === name)?.value;
 const attributeNames = ['alt', 'aria-label', 'title', 'content'];
 
-// Use the built English page, including demo UI, as the translation source.
+// Use the English page as the translation source.
 export function siteMessages(html) {
   const messages = new Map();
   const add = (source, context) => { if (source?.trim()) messages.set(source, context); };
@@ -16,7 +16,7 @@ export function siteMessages(html) {
     for (const name of attributeNames) if (attr(node, `data-zh-${name}`) !== undefined) add(attr(node, name), `Website ${name} attribute; plain text.`);
     if (node.tagName === 'title') add(serialize(node), 'Website page title.');
   });
-  return [...messages].map(([source, context]) => ({ source, occurrences: [{ file: 'site/index.html + site/demo-templates.mjs', line: 1, context }] }));
+  return [...messages].map(([source, context]) => ({ source, occurrences: [{ file: 'site/index.html', line: 1, context }] }));
 }
 
 export function translatedSite(html, translations, locale = 'zh-Hant') {
