@@ -10,6 +10,7 @@ import { CONFIG_NAME, loadProject, type Project } from "./core/config.ts";
 import { Store } from "./core/store.ts";
 import { Tasks } from "./core/tasks.ts";
 import { Review } from "./core/review.ts";
+import { SourceEdits } from "./core/source-edit.ts";
 import { Reconciliations } from "./core/reconcile.ts";
 import { Deliveries } from "./core/delivery.ts";
 import { more, PublishError, Publisher } from "./core/publish.ts";
@@ -17,7 +18,7 @@ import { view, type ViewRequest } from "./core/view.ts";
 import { acquireLock, now, readJson, writeJson } from "./core/files.ts";
 import { stopAll } from "./core/process.ts";
 import { checkInputs, Confirmations, ReferenceChecker } from "./core/verify.ts";
-import type { ActionKind } from "./types.ts";
+import type { ActionKind, SourceEditRequest } from "./types.ts";
 export class App {
   root: string;
   repo: Repo;
@@ -29,6 +30,7 @@ export class App {
   activity = now();
   tasks: Tasks;
   review: Review;
+  sourceEdits: SourceEdits;
   delivery: Deliveries;
   reconciliation: Reconciliations;
   publisher: Publisher;
@@ -43,6 +45,7 @@ export class App {
     this.store = new Store(path.join(this.state, "state.sqlite3"));
     this.tasks = new Tasks(this);
     this.review = new Review(this);
+    this.sourceEdits = new SourceEdits(this);
     this.delivery = new Deliveries(this);
     this.reconciliation = new Reconciliations(this);
     this.publisher = new Publisher(this);
@@ -190,6 +193,18 @@ export function createServer(app: App) {
             ? Number(request.query.round)
             : undefined,
         ),
+    );
+    server.get<{ Params: { name: string }; Querystring: { round: number; change: string } }>(
+      "/api/tasks/:name/source",
+      { schema: { querystring: { type: "object", required: ["round", "change"], properties: { round: { type: "integer", minimum: 1 }, change: { type: "string", pattern: "^c[0-9]+$" } } } } },
+      request => app.sourceEdits.read(request.params.name, request.query.round, request.query.change),
+    );
+    server.post<{ Params: { name: string }; Body: SourceEditRequest }>(
+      "/api/tasks/:name/source",
+      { schema: { body: { type: "object", additionalProperties: false, required: ["id", "round", "change", "revision", "text"], properties: {
+        id: { type: "string", pattern: "^[A-Za-z0-9-]{1,80}$" }, round: { type: "integer", minimum: 1 }, change: { type: "string", pattern: "^c[0-9]+$" }, revision: { type: "string", pattern: "^[a-f0-9]{64}$" }, text: { type: "string", maxLength: 200000 },
+      } } } },
+      request => app.sourceEdits.save(request.params.name, request.body),
     );
     server.get<{ Params: { name: string }; Querystring: { after?: string } }>(
       "/api/tasks/:name/feedback",

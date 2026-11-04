@@ -572,7 +572,7 @@ export async function buildApp(options: AppOptions) {
         if (!equals(String(request.headers['x-review-token'] || ''), client.token)) return reply.code(403).send({ error: 'This review page has expired. Refresh it and try again.' });
       }
       const reviewTask = request.method === 'POST' ? store.tasks().find(t => t.projectId === project.id && t.name === route.split('/')[3]) : undefined;
-      const writesFiles = route.endsWith('/undo') || (route.endsWith('/decide') && (request.body as any)?.action !== 'comment');
+      const writesFiles = route.endsWith('/source') || route.endsWith('/undo') || (route.endsWith('/decide') && (request.body as any)?.action !== 'comment');
       if (request.method === 'POST' && writesFiles) string((request.body as any)?.id, 'Review action ID', 80);
       const forward = async () => {
         const search = new URL(request.url, 'http://localhost').search;

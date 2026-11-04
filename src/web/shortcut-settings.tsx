@@ -89,7 +89,7 @@ export function ShortcutSettings() {
       <dl>
         <div><dt>{t('Copy selected PDF text')}</dt><dd><kbd>{mac ? '⌘C' : 'Ctrl+C'}</kbd></dd></div>
         <div><dt>{t('Undo typing, a deleted note, or the last review decision, depending on focus.')}</dt><dd><kbd>{mac ? '⌘Z' : 'Ctrl+Z'}</kbd></dd></div>
-        <div><dt>{t('Send the review comment being written.')}</dt><dd><kbd>{mac ? '⌘↩' : 'Ctrl+Enter'}</kbd></dd></div>
+        <div><dt>{t('Send the review comment being written.')}</dt><dd><kbd>↵</kbd></dd></div>
         <div><dt>{t('Close the current editor or cancel region selection.')}</dt><dd><kbd>Esc</kbd></dd></div>
       </dl>
     </section>

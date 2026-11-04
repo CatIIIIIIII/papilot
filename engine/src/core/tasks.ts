@@ -206,7 +206,7 @@ export class Tasks {
           name,
         );
         app.store.execute("DELETE FROM tasks WHERE name=?", name);
-        for (const table of ["rounds", "actions", "messages", "jobs", "deliveries", "reconciliations"])
+        for (const table of ["rounds", "actions", "messages", "jobs", "deliveries", "reconciliations", "source_edits"])
           app.store.execute(`DELETE FROM ${table} WHERE task=?`, name);
         app.store.execute(
           "INSERT INTO tasks(name,title,worktree,base,accepted,scope,created,deferred) VALUES(?,?,?,?,?,?,?,?)",

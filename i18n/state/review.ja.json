@@ -1248,10 +1248,5 @@
     "revision": "87f17ee4e0385e137cc0a487f5bbc7a91c21a1d046eec649f1bffb40819aad20",
     "textHash": "b5b91f26d3e7f9528f5edeca7c4dc81d0cec155f075f58b1ba165059c09306e0",
     "model": "gemini-4-argon-medium"
-  },
-  "⌘↵ send · Esc cancel": {
-    "revision": "7dff5d171a4cb8d700066ce1c31e48962699c273f26405320bb9f37895b9d82d",
-    "textHash": "150d302d4e83659cbfe9d80f7af55aead0a5e03b1e16fd43fc5f51158bb65dcd",
-    "model": "gemini-4-argon-medium"
   }
 }
