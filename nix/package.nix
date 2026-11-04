@@ -96,6 +96,12 @@ buildNpmPackage {
     npm --prefix engine prune --omit=dev --ignore-scripts
     cp -r engine/node_modules "$out/lib/node_modules/papilot/engine/"
     cp -r nix-agent-runtime "$out/lib/node_modules/papilot/"
+    # npm retains both optional Linux libc variants. Nixpkgs uses glibc;
+    # the SDK selects the glibc helper and the musl copy must not be patched
+    # with a glibc interpreter or shipped as an unusable alternate runtime.
+    ${lib.optionalString stdenv.hostPlatform.isLinux ''
+      rm -rf "$out/lib/node_modules/papilot/nix-agent-runtime/node_modules/@anthropic-ai/"*-musl
+    ''}
     mkdir -p "$out/lib/node_modules/papilot/.desktop"
     cp -r .desktop/app "$out/lib/node_modules/papilot/.desktop/"
     cp -r desktop "$out/lib/node_modules/papilot/desktop"
@@ -123,6 +129,9 @@ buildNpmPackage {
     export PAPILOT_DATA="$TMPDIR/papilot-install-check"
     test "$("$out/bin/papilot" --version)" = "${(lib.importJSON ../package.json).version}"
     "$out/bin/papilot" doctor --json
+    ${lib.optionalString stdenv.hostPlatform.isLinux ''
+      "$out/lib/node_modules/papilot/nix-agent-runtime/node_modules/@anthropic-ai/claude-agent-sdk-linux-${if stdenv.hostPlatform.isAarch64 then "arm64" else "x64"}/claude" --version
+    ''}
     runHook postInstallCheck
   '';
 
