@@ -48,7 +48,7 @@ function fixture(reviewHandler?: (method: string, route: string, body?: unknown)
     return summary;
   };
   const review: ReviewClient = { url: options.reviewUrl || 'http://unused', token: 'test', get: route => invoke('GET', route), post: (route, body) => invoke('POST', route, body) };
-  const workspace = new Workspace(store, codex as unknown as Codex, 2, async () => review, options.claude ? { claude: options.claude as unknown as Codex } : {});
+  const workspace = new Workspace(store, codex as unknown as Codex, async () => review, options.claude ? { claude: options.claude as unknown as Codex } : {});
   const task: Task = { id: 'task-id', projectId: 'paper', name: 'p-task', title: 'Task', instructions: 'Edit the introduction.', worktree: '/unused', threadId: 'thread', turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };
   store.saveProject({ id: task.projectId, name: 'Paper', path: '/unused', createdAt: 1 });
   store.saveTask(task);
@@ -375,7 +375,7 @@ test('shutdown during polling leaves a durable job that a new workspace resumes'
   f.store.close();
   const store = new Store(file);
   const review: ReviewClient = { url: 'http://unused', token: '', get: async <T>(route: string) => (route.includes('/jobs/') ? { status: 'done' } : summary) as T, post: async () => { throw new Error('Must not republish'); } };
-  const workspace = new Workspace(store, new FakeCodex() as unknown as Codex, 2, async () => review);
+  const workspace = new Workspace(store, new FakeCodex() as unknown as Codex, async () => review);
   try {
     store.recover();
     assert.equal(store.task(f.task.id).pendingBuild?.job, 'durable-job');
@@ -829,6 +829,25 @@ test('checking a lost review response replays its original identity exactly once
   } finally { f.close(); await server.close(); }
 });
 
+test('every queued task starts at once, with no limit on how many run together', async () => {
+  const f = fixture();
+  try {
+    const ids = [f.task.id];
+    for (let i = 1; i < 5; i++) {
+      const task = { ...f.task, id: `task-${i}`, name: `p-task-${i}`, threadId: `thread-${i}` };
+      f.store.saveTask(task);
+      (f.workspace as any).loaded.add(task.threadId);
+      ids.push(task.id);
+    }
+    for (const id of ids) await f.workspace.enqueue(id, 'Revise this section.', `request-${id}`, false);
+    f.codex.ready = true;
+    await (f.workspace as any).drain();
+    await tick();
+    assert.deepEqual(ids.map(id => f.store.task(id).status), Array(5).fill('running'));
+    assert.equal(f.codex.calls.filter(call => call.method === 'turn/start').length, 5);
+  } finally { f.close(); }
+});
+
 test('concurrent review status checks cannot replay the decision twice', async () => {
   const received = deferred<void>(), release = deferred<void>();
   const server = await reviewServer(async (_request, response) => {
@@ -1019,7 +1038,7 @@ test('lost finish responses stay reserved across restart and retry confirms clos
     assert.equal(reopened.task(f.task.id).status, 'deleting');
     assert.match(reopened.task(f.task.id).error!, /restarted during deletion/);
     const review: ReviewClient = { url: 'http://unused', token: 'test', get: async <T>() => ({ ...pageState, closed }) as T, post: async () => { finishCalls++; throw new Error('A closed task must not be finished again.'); } };
-    workspace = new Workspace(reopened, new FakeCodex() as unknown as Codex, 2, async () => review);
+    workspace = new Workspace(reopened, new FakeCodex() as unknown as Codex, async () => review);
     await assert.rejects(workspace.enqueue(f.task.id, 'Do not resume.', 'next', false));
     await workspace.deleteTask(f.task.id);
     assert.equal(reopened.tasks().length, 0);
@@ -1832,7 +1851,7 @@ test('agents that are not found on the host are neither started nor offered, and
   (codex as any).start = async () => { codex.ready = true; };
   const qwen = new Detected();
   const others = Object.fromEntries((['claude', 'cursor', 'copilot', 'grok', 'antigravity', 'kimi', 'glm', 'deepseek', 'opencode'] as const).map(id => [id, Object.assign(new Detected(), { found: false })]));
-  const workspace = new Workspace(store, codex as unknown as Codex, 2, async () => { throw new Error('unused'); }, { ...others, qwen } as any);
+  const workspace = new Workspace(store, codex as unknown as Codex, async () => { throw new Error('unused'); }, { ...others, qwen } as any);
   try {
     await workspace.connect();
     assert.equal(qwen.starts, 0);

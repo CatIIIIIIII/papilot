@@ -4,6 +4,11 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tasks no longer wait for a global slot.** Papilot ran at most two tasks at a time, counted across all agents and papers, so a third task stayed queued with "Waiting for an available Codex session" even when that agent was idle. Connected, signed-in agents can now start every eligible queued task. Each task still waits for its own active turn, build, review work or delivery, and PDF builds retain their worker limit.
+- **Chinese, Japanese and Korean text shows in the PDF view.** Text in fonts that a PDF embeds without a Unicode map, such as the Fandol fonts xeCJK uses by default, was blank in the manuscript and in a review's full paper, while the changes view showed it. Papilot now ships the character maps that pdf.js needs to read these fonts and loads only the one a PDF uses.
+
 ## [0.8.8] - 2026-11-04
 
 Papilot 0.8.8 keeps conversations responsive, brings consistent choice lists and comment cards to the workspace, starts AI reviews without waiting for the manuscript preview, and introduces a redesigned website with interactive demos.

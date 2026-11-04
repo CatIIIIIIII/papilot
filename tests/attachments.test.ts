@@ -25,7 +25,7 @@ async function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-files-test-'));
   const store = new Store(path.join(dir, 'state.sqlite')), agent = new Agent();
   const review = { url: 'http://unused', token: '', get: async () => ({ cursor: 0, feedback: [] }) as any, post: async () => ({ worktree: dir }) as any };
-  const workspace = new Workspace(store, agent, 2, async () => review, { claude: new Agent(), antigravity: new Agent() });
+  const workspace = new Workspace(store, agent, async () => review, { claude: new Agent(), antigravity: new Agent() });
   const project = { id: 'paper', path: dir, name: 'Paper', createdAt: 1 };
   store.saveProject(project); store.saveProject({ ...project, id: 'other', path: path.join(dir, 'other') });
   const task: Task = { id: 'task-attachments-1', projectId: 'paper', name: 'p-test', title: 'Task', titleSource: 'manual', instructions: 'Edit.', worktree: dir, threadId: null, turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };

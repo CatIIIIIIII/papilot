@@ -37,7 +37,7 @@ async function fixture() {
   fs.writeFileSync(path.join(dist, 'index.html'), '<html>app</html>');
   fs.writeFileSync(path.join(dist, '.env'), 'SECRET=1');
   const review: ReviewClient = { url: 'http://127.0.0.1:9', token: 'review-token', get: async () => ({}) as any, post: async () => ({}) as any };
-  const workspace = new Workspace(store, new FakeAgent() as unknown as Codex, 2, async () => review, Object.fromEntries(AGENT_IDS.filter(id => id !== 'codex').map(id => [id, new FakeAgent() as unknown as Codex])));
+  const workspace = new Workspace(store, new FakeAgent() as unknown as Codex, async () => review, Object.fromEntries(AGENT_IDS.filter(id => id !== 'codex').map(id => [id, new FakeAgent() as unknown as Codex])));
   workspace.runtimes.codex.account = 'owner@example.com';
   const accounts = new Accounts(store, ORIGIN, passkeys);
   store.saveProject({ id: 'thesis', name: 'Thesis', path: '/unused/thesis', createdAt: 1 });
