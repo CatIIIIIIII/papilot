@@ -121,6 +121,7 @@
     "@babel/types": "^8.0.10"
   },
   "overrides": {
-    "katex": "$katex"
+    "katex": "$katex",
+    "minimatch@>=7 <11.0.1": "^11.0.4"
   }
 }
