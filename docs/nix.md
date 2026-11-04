@@ -71,3 +71,34 @@ pkgs.callPackage ./nix/package.nix {
   tex = pkgs.texliveBasic.withPackages (ps: [ ps.latexmk ps.synctex ]);
 }
 ```
+
+## Desktop and package management
+
+On Linux the default flake package includes `papilot` and `papilot-desktop`,
+plus a Papilot application menu entry. `.#papilot-cli` provides only the CLI
+and browser interface; `.#papilot-desktop` provides the Electron launcher.
+Darwin's default remains the CLI/browser package.
+
+The desktop uses Nixpkgs Electron 45 and a separate Node 24 runtime. Chromium's
+sandbox and renderer isolation stay enabled. User data remains writable in the
+normal desktop data directory; application files stay in the Nix store.
+
+Nix installations never install Codex or SDKs at runtime and never activate npm
+or desktop update layers. Update through your Nix configuration or
+`nix profile upgrade`. Agent CLIs are optional: install only the agents you use
+and sign in separately. Explicit `PAPILOT_*_BIN` paths take priority; PATH and
+user/system Nix profiles are searched before other known installation folders.
+Wrapper executable paths are preserved.
+
+The locked SDK runtime is in `nix/runtime`; it is built independently of the
+application and review-engine npm trees. Linux native helpers are patched at
+build time. The `checks.x86_64-linux.desktop-vm` check boots a NixOS desktop,
+launches Papilot with a minimal PATH, and checks SQLite, PDF/SyncTeX compilation,
+read-only store files and writable user data. ARM Linux runtime validation is
+still required; evaluation is not a native execution test.
+
+Real agent testing is deliberately opt-in and never runs in normal CI:
+`PAPILOT_LIVE_AGENT=codex node --import tsx scripts/check-live-agent.mjs`.
+The current harness also supports `claude`, verifies subscription authentication,
+and refuses API-key/cloud-provider credentials. Results include protocol model
+choices and are saved beside a disposable paper and isolated database.
