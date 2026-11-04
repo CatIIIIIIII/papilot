@@ -66,6 +66,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit && tsc -p desktop/tsconfig.json --noEmit",
     "test": "tsx --test tests/*.test.ts",
+    "test:source-edit": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-source-edit.mjs",
     "setup:review": "npm --prefix engine ci && npm --prefix engine run build",
     "demo": "tsx scripts/demo.ts",
     "doctor": "node bin/papilot.mjs doctor",

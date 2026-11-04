@@ -1,5 +1,17 @@
 // Simplified Chinese for the review viewer, keyed by the English text.
 export const zhCN: Record<string, string> = {
+  "Edit": "编辑",
+  "Loading source…": "正在读取源码…",
+  "Edit LaTeX source": "编辑 LaTeX 源码",
+  "Saving…": "正在保存…",
+  "Save and update PDF": "保存并更新 PDF",
+  "Reset to saved source": "恢复已保存的源码",
+  "Source saved. Updating the PDF…": "源码已保存，正在更新 PDF…",
+  "Wait for the PDF build before editing source.": "请等待 PDF 构建完成后再编辑源码。",
+  "This change was rejected. Undo that decision before editing it.": "这处改动已被拒绝，请先撤销该决定再编辑。",
+  "The source changed while you were editing. Copy your draft before resetting to the saved source.": "编辑期间源码发生了变化。请复制保留需要的草稿，再恢复已保存的源码重新修改。草稿已保留。",
+  "A newer round is available. Reload the page.": "有新一轮修改，请重新加载页面。",
+  "This passage changed outside its displayed range. Rebuild the review and try again.": "这段源码的变化超出了显示范围，请重新构建审阅后再试。",
   "Merge review": "合并审阅",
   "Your manuscript is unchanged until you save the merged result.": "保存合并结果前，论文保持不变。",
   "Wait for the merge suggestion before changing review decisions.": "请等待合并建议生成后再审核。",

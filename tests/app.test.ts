@@ -881,6 +881,38 @@ test('changing a relocated paper path recovers its preserved review PDF without 
   } finally { await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
 });
 
+test('inline source writes use the review token and reserve the task while its PDF rebuilds', async () => {
+  const f = await fixture();
+  let writes = 0;
+  const engine = http.createServer((_request, response) => {
+    writes++;
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ task: 'p-thesis-task', csrf: 'review-token', closed: false, decisions: {}, job: { id: 'source-job', status: 'running' } }));
+  });
+  await new Promise<void>(resolve => engine.listen(0, '127.0.0.1', resolve));
+  f.review.url = `http://127.0.0.1:${(engine.address() as { port: number }).port}`;
+  let finish!: (value: any) => void;
+  const job = new Promise(resolve => { finish = resolve; });
+  f.review.get = async route => (route.includes('/jobs/') ? await job : {}) as any;
+  const url = '/review/thesis/api/tasks/p-thesis-task/source';
+  try {
+    assert.equal((await f.local.inject({ method: 'POST', url, headers: LOCAL, payload: { id: 'source-edit' } })).statusCode, 403);
+    f.store.updateTask('thesis-task', { status: 'running' });
+    const headers = { ...LOCAL, 'x-review-token': 'review-token' };
+    assert.equal((await f.local.inject({ method: 'POST', url, headers, payload: { id: 'source-edit' } })).statusCode, 400);
+    assert.equal(writes, 0);
+    f.store.updateTask('thesis-task', { status: 'reviewing' });
+    const response = await f.local.inject({ method: 'POST', url, headers, payload: { id: 'source-edit' } });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(writes, 1);
+    assert.equal(f.store.task('thesis-task').status, 'building');
+    assert.equal(f.store.task('thesis-task').pendingBuild?.job, 'source-job');
+    assert.match(response.json().decisionLock, /PDF build/);
+    finish({ status: 'done' });
+    for (let i = 0; i < 20 && f.store.task('thesis-task').status === 'building'; i++) await new Promise(resolve => setImmediate(resolve));
+  } finally { finish({ status: 'done' }); engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); await f.close(); }
+});
+
 test('writing a paper compiles its manuscript at once, and a reviewed deferred task compiles what applying it will write', async () => {
   const f = await fixture();
   try {
