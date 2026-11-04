@@ -13,6 +13,7 @@ on:
       - i18n/languages.json
       - src/web/brand-icons/**
       - scripts/site-i18n.mjs
+      - scripts/site-analytics.mjs
       - package.json
       - package-lock.json
       - .github/workflows/pages.yml
@@ -44,6 +45,10 @@ jobs:
       - run: npm ci --ignore-scripts
       # Render the native UI examples and translated markup at build time.
       - run: node scripts/build-site.mjs
+        env:
+          PAPILOT_UMAMI_SCRIPT_URL: ${{ vars.PAPILOT_UMAMI_SCRIPT_URL }}
+          PAPILOT_UMAMI_WEBSITE_ID: ${{ vars.PAPILOT_UMAMI_WEBSITE_ID }}
+          PAPILOT_ANALYTICS_PRIVACY_URL: ${{ vars.PAPILOT_ANALYTICS_PRIVACY_URL }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

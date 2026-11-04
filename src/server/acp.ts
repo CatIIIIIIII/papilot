@@ -25,6 +25,7 @@ function toolKind(tool: any): string {
   return tool.kind || 'other';
 }
 const choices = (option?: ConfigOption): Choice[] => (option?.options || []).flatMap(value => 'options' in value ? value.options : [value]);
+const sessionModel = (session: Session) => session.configOptions?.find(option => option.category === 'model' || option.id === 'model')?.currentValue || session.models?.currentModelId || null;
 
 // How one ACP agent is launched and kept on manual approvals. modes lists the
 // session modes Papilot accepts, best first: a mode that edits the task
@@ -151,8 +152,9 @@ export class AcpAgent extends Adapter {
       const resumed = method === 'thread/resume';
       const session = await this.session(resumed ? String(params.threadId) : null, params.cwd, params.model);
       const known = this.threads.get(session.sessionId);
-      this.threads.set(session.sessionId, { cwd: params.cwd, instructions: params.developerInstructions || '', model: params.model || known?.model || null, started: resumed });
-      return { thread: { id: session.sessionId }, model: params.model || this.defaultModel };
+      const model = params.model || sessionModel(session) || known?.model || null;
+      this.threads.set(session.sessionId, { cwd: params.cwd, instructions: params.developerInstructions || '', model, started: resumed });
+      return { thread: { id: session.sessionId }, model };
     }
     return super.request(method, params);
   }
@@ -184,7 +186,10 @@ export class AcpAgent extends Adapter {
       if (option) {
         const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId: option.id, value: model });
         if (result.configOptions) session!.configOptions = result.configOptions;
-      } else await this.rpc('session/set_model', { sessionId: session!.sessionId, modelId: model });
+      } else {
+        await this.rpc('session/set_model', { sessionId: session!.sessionId, modelId: model });
+        if (session!.models) session!.models.currentModelId = model;
+      }
     }
     this.readModels(session!);
     return session!;
@@ -211,7 +216,7 @@ export class AcpAgent extends Adapter {
     const thinking = session.configOptions?.find(option => option.category === 'thought_level' || option.id === 'thinking');
     // A "default" level is the model default Papilot already offers.
     const levels = choices(thinking).filter(choice => choice.value !== 'default'), level = thinking?.currentValue === 'default' ? null : thinking?.currentValue || null;
-    const current = model?.currentValue || session.models?.currentModelId || null;
+    const current = sessionModel(session);
     if (initial) this.defaultModel = current;
     const available = model ? choices(model) : (session.models?.availableModels || []).map(model => ({ value: model.modelId, name: model.name }));
     for (const option of available) {

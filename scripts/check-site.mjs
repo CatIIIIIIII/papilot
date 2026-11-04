@@ -150,7 +150,8 @@ try {
   // Every URL is already localized without JavaScript, with reciprocal SEO links.
   const sitemap = fs.readFileSync('_site/sitemap.xml', 'utf8');
   assert.match(fs.readFileSync('_site/robots.txt', 'utf8'), /Sitemap: https:\/\/papilot.ai\/sitemap.xml/);
-  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length);
+  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length + 1);
+  assert.ok(sitemap.includes('<loc>https://papilot.ai/privacy/</loc>'));
   const staticContext = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   const staticVisitor = await staticContext.newPage();
   for (const [locale] of Object.entries(languages)) {

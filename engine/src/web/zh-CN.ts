@@ -190,7 +190,7 @@ export const zhCN: Record<string, string> = {
   // Comments and help
   "Comment on change {n}": "评论修改 {n}",
   "What should the agent change here?": "希望智能体在这里做什么修改？",
-  "⌘↵ send · Esc cancel": "⌘↵ 发送 · Esc 取消",
+  "↵ send · Esc cancel": "↵ 发送 · Esc 取消",
   Cancel: "取消",
   Send: "发送",
   "J / K or → / ←": "J / K 或 → / ←",

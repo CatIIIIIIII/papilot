@@ -32,6 +32,7 @@ export function TaskModelPicker({ task, runtime, disabled, reconnecting, onRecon
     });
   }
   return <AgentPicker agents={[{ value: agent, label: AGENT_NAMES[agent], runtime }]} agent={agent}
+    allowUnknownDefault={!choice.model}
     model={choice.model || ''} effort={choice.effort || ''} fast={Boolean(choice.serviceTier && choice.serviceTier !== 'default')}
     disabled={disabled} reconnecting={reconnecting} onReconnect={onReconnect} description={pending.current ? t('Saving…') : t('Changes apply to the next turn.')}
     onSelect={(_agent, id) => {

@@ -261,5 +261,5 @@
   "{sources} could not be reached.": "{sources} konnte nicht erreicht werden.",
   "{source} has this work with other details. Compare them below.": "In {source} ist dieses Werk mit abweichenden Angaben verzeichnet. Vergleichen Sie diese unten.",
   "{staged} of {total} staged": "{staged} von {total} vorgemerkt",
-  "⌘↵ send · Esc cancel": "⌘↵ senden · Esc abbrechen"
+  "↵ send · Esc cancel": "↵ senden · Esc abbrechen"
 }
