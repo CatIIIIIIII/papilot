@@ -30,8 +30,7 @@
   scroll-behavior:smooth;scroll-padding-top:80px;
 }
 @media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}}
-/* Dark mode follows the system until the toggle chooses. The app windows
-   are pictures of the app, which is light, so they keep the light colours. */
+/* Dark mode follows the system until the toggle chooses. */
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
   --bg:#111214;--bg-subtle:#17181b;--bg-muted:#1f2024;--bg-hover:#26272b;
   --line:#2a2b30;--line-strong:#3a3b41;--line-hover:#4a4b52;
@@ -55,12 +54,20 @@
   color-scheme:dark;
 }
 .app-window,.mini{
-  --bg:#ffffff;--bg-subtle:#fafafa;--bg-muted:#f4f4f4;--bg-hover:#efefef;
-  --line:#ebebeb;--line-strong:#d6d6d6;--line-hover:#c4c4c4;
-  --text:#171717;--text-2:#525252;--text-3:#8a8a8a;
-  --accent:#2563eb;--accent-hover:#1d4ed8;--accent-soft:#eff6ff;--accent-line:#bfdbfe;
-  --green:#15803d;--red:#b91c1c;
-  color-scheme:light;color:#171717;
+  /* Use the workspace palette in the page's resolved color scheme, including
+     system changes and the no-script page. PDF ink stays softer in the dark. */
+  --bg:light-dark(#ffffff,#26272b);--bg-subtle:light-dark(#fafafa,#2a2b2f);--bg-muted:light-dark(#f4f4f4,#303135);--bg-hover:light-dark(#efefef,#37383c);
+  --canvas:light-dark(#eceef1,#1e1f22);--line:light-dark(#ebebeb,#38393e);--line-strong:light-dark(#d6d6d6,#4b4c52);--line-hover:light-dark(#c4c4c4,#63646b);
+  --text:light-dark(#171717,#ececee);--text-2:light-dark(#525252,#c2c3c9);--text-3:light-dark(#8a8a8a,#9c9da5);
+  --accent:light-dark(#2563eb,#8ab4ff);--accent-hover:light-dark(#1d4ed8,#b2ceff);--accent-soft:light-dark(#eff6ff,#2b3651);--accent-line:light-dark(#bfdbfe,#445c85);
+  --button:#2563eb;--button-hover:#1d4ed8;
+  --green:light-dark(#15803d,#7bd5a0);--red:light-dark(#b91c1c,#ff9696);--green-soft:light-dark(#f0fdf4,#243a2f);--red-soft:light-dark(#fef2f2,#46292e);
+  --pdf-page:light-dark(#ffffff,#292929);--pdf-text:light-dark(#171717,#d6d6d6);
+  --before:light-dark(#fbeeee,#432c30);--before-edge:light-dark(#d17c82,#d18a91);--after:light-dark(#eef8f1,#28392d);--after-edge:light-dark(#68ab82,#7bb58e);
+  --deleted:light-dark(#f3cdd0,#683a42);--inserted:light-dark(#c9e8d3,#355b41);
+  --accept:light-dark(#1d7448,#7bd5a0);--reject:light-dark(#b0313b,#ff9696);--comment:light-dark(#356aa0,#8ab4ff);
+  --figure-blue:light-dark(#bed0f4,#5675a8);--figure-orange:light-dark(#f2cfae,#b1835e);
+  color:var(--text);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg)}
@@ -171,54 +178,54 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
    agent in the composer keeps changing, since any of them can do the work.
    The PDF keeps its height while a change resolves, so the first screen
    never shifts; the page simply runs on below. */
-.app-window{position:relative;display:flex;flex-direction:column;width:min(100%,980px);overflow:hidden;border:1px solid #d9d9d9;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.05),0 30px 64px -30px rgb(15 23 42/.34);text-align:left}
+.app-window{position:relative;display:flex;flex-direction:column;width:min(100%,980px);overflow:hidden;border:1px solid var(--line-strong);border-radius:12px;background:var(--bg);box-shadow:0 1px 2px rgb(15 23 42/.05),0 30px 64px -30px rgb(15 23 42/.34);text-align:left}
 /* No title bar: like the app, the window controls sit on its content. */
 .app-bar{position:absolute;top:0;left:0;z-index:3;display:flex;align-items:center;height:38px;padding:0 16px;pointer-events:none}
 .app-bar .lights{gap:8px}
 .app-bar .lights i{width:12px;height:12px;box-shadow:inset 0 0 0 .5px rgb(0 0 0/.16)}
 .app-body{display:grid;grid-template-columns:minmax(0,1fr) 272px}
-.app-pdf{display:flex;flex-direction:column;padding:44px 28px 0;background:#eceef1}
-.app-chat{display:flex;flex-direction:column;justify-content:space-between;gap:16px;padding:18px 14px 14px;border-left:1px solid #e4e4e4;background:#fff;user-select:none;-webkit-user-select:none}
+.app-pdf{display:flex;flex-direction:column;padding:44px 28px 0;background:var(--canvas)}
+.app-chat{display:flex;flex-direction:column;justify-content:space-between;gap:16px;padding:18px 14px 14px;border-left:1px solid var(--line);background:var(--bg);user-select:none;-webkit-user-select:none}
 .chat-thread{display:flex;flex-direction:column;gap:16px}
 .chat-thread>*{transition:opacity .28s,transform .28s cubic-bezier(.25,.8,.25,1)}
 /* The sent note, as the chat shows it: a heading, the note's number beside
    what it marks and the comment. */
-.chat-bubble{align-self:flex-end;width:88%;padding:10px 13px 9px;border-radius:16px 16px 5px 16px;background:#f2f2f2;font:14px/1.5 var(--sans);color:#171717}
-.chat-note-head{display:flex;align-items:center;gap:6px;margin-bottom:7px;font-size:12.5px;font-weight:500;color:#525252}
-.chat-note-head svg{flex:none;width:13px;height:13px;color:#8a8a8a}
+.chat-bubble{align-self:flex-end;width:88%;padding:10px 13px 9px;border-radius:16px 16px 5px 16px;background:var(--bg-muted);font:14px/1.5 var(--sans);color:var(--text)}
+.chat-note-head{display:flex;align-items:center;gap:6px;margin-bottom:7px;font-size:12.5px;font-weight:500;color:var(--text-2)}
+.chat-note-head svg{flex:none;width:13px;height:13px;color:var(--text-3)}
 .chat-quote{display:flex;align-items:center;gap:8px;margin-bottom:5px}
-.chat-quote em{font-size:13px;color:#8a8a8a}
+.chat-quote em{font-size:13px;color:var(--text-3)}
 .chat-quote b,.chat-attached b{flex:none;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--accent-soft);color:var(--accent);font:500 11px/18px var(--sans);text-align:center}
 .chat-reply{padding:0 4px}
 .chat-lines{display:grid;gap:10px;animation:chat-in .3s ease-out}
-.chat-lines i,.chat-input i{display:block;height:7px;border-radius:4px;background:#ececec}
+.chat-lines i,.chat-input i{display:block;height:7px;border-radius:4px;background:var(--line)}
 .chat-dots{display:none;gap:5px;padding:4px 0}
-.chat-dots i{width:7px;height:7px;border-radius:50%;background:#c8c8c8;animation:chat-dot 1.1s ease-in-out infinite}
+.chat-dots i{width:7px;height:7px;border-radius:50%;background:var(--line-hover);animation:chat-dot 1.1s ease-in-out infinite}
 .chat-dots i:nth-child(2){animation-delay:.15s}
 .chat-dots i:nth-child(3){animation-delay:.3s}
-@keyframes chat-dot{30%{background:#8a8a8a;transform:translateY(-2px)}}
+@keyframes chat-dot{30%{background:var(--text-3);transform:translateY(-2px)}}
 @keyframes chat-in{from{opacity:0;transform:translateY(6px)}}
 /* The round's steps: an empty chat, a request the agent is working on, and
    the request answered. Without script the chat shows the last. */
 .app-chat[data-step=empty] .chat-thread>:not(.chat-old){opacity:0;transform:translateY(8px)}
 .app-chat[data-step=sent] .chat-dots{display:flex}
 .app-chat[data-step=sent] .chat-reply:not(.chat-old) .chat-lines{display:none}
-.chat-composer{padding:12px 8px 8px 12px;border:1px solid #d6d6d6;border-radius:14px}
+.chat-composer{padding:12px 8px 8px 12px;border:1px solid var(--line-strong);border-radius:14px}
 .chat-input{display:flex;align-items:center;min-width:0;min-height:24px;overflow:hidden;white-space:nowrap}
 .chat-input i{flex:none;width:58%}
 /* A note added to the task waits in the composer until it is sent. */
-.chat-attached{display:none;align-items:center;gap:6px;min-width:0;height:24px;padding:0 9px 0 3px;border-radius:7px;background:var(--accent-soft);font:12.5px/1 var(--sans);color:#1e3a8a;animation:chat-in .25s ease-out}
+.chat-attached{display:none;align-items:center;gap:6px;min-width:0;height:24px;padding:0 9px 0 3px;border-radius:7px;background:var(--accent-soft);font:12.5px/1 var(--sans);color:var(--accent);animation:chat-in .25s ease-out}
 .chat-attached span{overflow:hidden;text-overflow:ellipsis}
 .chat-attached.on{display:inline-flex}
 .chat-input.filled i{display:none}
 .chat-agent.busy i::before{animation:busy 1s ease-in-out infinite}
 @keyframes busy{50%{opacity:.3}}
 .chat-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px}
-.chat-agent{gap:7px;min-width:0;font:500 13px/1 var(--sans);color:#3f3f3f;white-space:nowrap}
+.chat-agent{gap:7px;min-width:0;font:500 13px/1 var(--sans);color:var(--text-2);white-space:nowrap}
 .chat-agent b{overflow:hidden;font-weight:500;text-overflow:ellipsis}
 .chat-agent.agent i{width:26px;height:26px;border-radius:8px}
 .chat-agent.agent i::before{width:16px;height:16px}
-.chat-send{display:grid;flex:none;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;transition:transform .12s}
+.chat-send{display:grid;flex:none;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--button);color:#fff;transition:transform .12s}
 .chat-send.pressed{transform:scale(.86)}
 .chat-send svg{width:15px;height:15px}
 /* A pointer that plays one decision while nobody has touched the window. */
@@ -228,24 +235,24 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 @media(hover:hover){.app-window:hover .app-cursor{opacity:0}}
 .app-cursor svg{display:block;width:100%;height:100%;fill:#111;stroke:#fff;stroke-width:1.5;stroke-linejoin:round;transform-origin:25% 10%;transition:transform .12s}
 .app-cursor.down svg{transform:scale(.84)}
-.review-accept.pressed{background:#e1eee5}
+.review-accept.pressed{background:var(--green-soft)}
 /* A box drawn on the page opens a one-line note with its send button, as in
    the app's PDF view; the box is dashed until the note is sent, then carries
    the note's number. */
-.demo-box{position:absolute;z-index:3;display:none;border:1.5px solid var(--accent);border-radius:3px;background:rgb(37 99 235/.07);transition:opacity .2s;transform-origin:0 0}
+.demo-box{position:absolute;z-index:3;display:none;border:1.5px solid var(--accent);border-radius:3px;background:color-mix(in srgb,var(--accent) 7%,transparent);transition:opacity .2s;transform-origin:0 0}
 .demo-box.open{display:block}
 .demo-box.draft{border-style:dashed}
 .demo-box.gone{opacity:0}
-.demo-box[data-n]:not(.draft)::before{content:attr(data-n);position:absolute;top:-10px;left:-10px;min-width:19px;height:19px;padding:0 4px;border-radius:6px;background:var(--accent);color:#fff;font:600 11px/19px var(--sans);text-align:center}
-.demo-note{position:absolute;z-index:4;display:none;align-items:center;gap:8px;padding:5px 5px 5px 14px;border:1px solid #e3e3e3;border-radius:14px;background:#fff;box-shadow:0 14px 32px -12px rgb(15 23 42/.36);font:14px/1.5 var(--sans);color:#171717;transform-origin:0 0}
+.demo-box[data-n]:not(.draft)::before{content:attr(data-n);position:absolute;top:-10px;left:-10px;min-width:19px;height:19px;padding:0 4px;border-radius:6px;background:var(--button);color:#fff;font:600 11px/19px var(--sans);text-align:center}
+.demo-note{position:absolute;z-index:4;display:none;align-items:center;gap:8px;padding:5px 5px 5px 14px;border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 14px 32px -12px rgb(15 23 42/.36);font:14px/1.5 var(--sans);color:var(--text);transform-origin:0 0}
 .demo-note.open{display:flex;animation:pop .16s ease-out}
 @keyframes pop{from{opacity:0;transform:translateY(-3px) scale(.96)}}
 .demo-note-input{flex:1;min-width:0;overflow:hidden;white-space:nowrap}
-.demo-note-hint{color:#a3a3a3}
+.demo-note-hint{color:var(--text-3)}
 .demo-note.filled .demo-note-hint{display:none}
-.demo-note-typed::after{content:"";display:inline-block;width:1.5px;height:1.1em;margin:0 1px;vertical-align:-.2em;background:#171717;animation:caret 1s steps(1) infinite}
+.demo-note-typed::after{content:"";display:inline-block;width:1.5px;height:1.1em;margin:0 1px;vertical-align:-.2em;background:var(--text);animation:caret 1s steps(1) infinite}
 @keyframes caret{50%{opacity:0}}
-.demo-note-send{display:grid;flex:none;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;transition:transform .12s}
+.demo-note-send{display:grid;flex:none;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--button);color:#fff;transition:transform .12s}
 .demo-note-send svg{width:15px;height:15px}
 .demo-note-send.pressed{transform:scale(.86)}
 
@@ -254,9 +261,9 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
    before and after (a coloured edge and a corner label on each) and its LaTeX
    source on request. Deciding resolves it as the viewer does: the side that
    goes folds away, and the one that stays loses its marks. */
-.review-page{display:flex;flex:1;flex-direction:column;padding-top:26px;--before:#fbeeee;--before-edge:#d17c82;--after:#eef8f1;--after-edge:#68ab82;--accept:#1d7448;--reject:#b0313b;--comment:#356aa0;border:1px solid #e0e0e0;border-bottom:0;background:#fff;box-shadow:0 1px 3px rgb(15 23 42/.06);font:400 clamp(15px,1.5vw,18px)/1.55 var(--serif);color:#171717}
+.review-page{display:flex;flex:1;flex-direction:column;padding-top:26px;border:1px solid var(--line);border-bottom:0;background:var(--pdf-page);box-shadow:0 1px 3px rgb(15 23 42/.06);font:400 clamp(15px,1.5vw,18px)/1.55 var(--serif);color:var(--pdf-text)}
 .sheet-lines{display:grid;align-content:start;gap:11px;padding:0 48px 0 40px}
-.sheet-lines i{height:7px;border-radius:4px;background:#ececec}
+.sheet-lines i{height:7px;border-radius:4px;background:var(--line)}
 .sheet-lines:first-child{margin-bottom:22px}
 .review-change+.sheet-lines{margin-top:22px}
 .sheet-lines.fill{flex:1 1 0;min-height:44px;overflow:hidden}
@@ -264,32 +271,34 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
    their numbers, and figures, drawn like the bars so the page reads as a
    paper without saying anything. */
 .sheet-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:0 48px 0 40px}
-.sheet-head b{font:700 14px/1 var(--serif);color:#8f8f8f}
-.sheet-head i{height:10px;border-radius:5px;background:#d6d6d6}
-.sheet-eq{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;padding:4px 56px;font:16px/1 var(--serif);color:#a6a6a6}
+.sheet-head b{font:700 14px/1 var(--serif);color:var(--text-3)}
+.sheet-head i{height:10px;border-radius:5px;background:var(--line-strong)}
+.sheet-eq{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;padding:4px 56px;font:16px/1 var(--serif);color:var(--text-3)}
 .sheet-lines+.sheet-eq{margin-top:4px}
 .sheet-eq+.review-change{margin-top:16px}
-.sheet-eq>i,.frac>i{display:block;height:8px;border-radius:4px;background:#dcdcdc}
+.sheet-eq>i,.frac>i{display:block;height:8px;border-radius:4px;background:var(--line-strong)}
 .frac{display:grid;justify-items:center;gap:4px}
-.frac>b{display:block;justify-self:stretch;height:1.2px;background:#c8c8c8}
-.sheet-eq em{position:absolute;right:22px;font-size:12.5px;font-style:normal;color:#b3b3b3}
+.frac>b{display:block;justify-self:stretch;height:1.2px;background:var(--line-hover)}
+.sheet-eq em{position:absolute;right:22px;font-size:12.5px;font-style:normal;color:var(--text-3)}
 /* Figures. The opening page pictures its own sentence: a faded source file,
    LaTeX, and the page it typesets, kept quiet so the change above stays the
    subject. The Git scene's page has a TikZ-style automaton. Both sit over a
    caption bar. */
 .sheet-fig{display:block;padding:0 6%}
 .sheet-lines>.sheet-fig{margin-block:16px 6px}
-.sheet-fig>i{display:block;width:40%;height:7px;margin:10px auto 0;border-radius:4px;background:#ececec}
+.sheet-fig>i{display:block;width:40%;height:7px;margin:10px auto 0;border-radius:4px;background:var(--line)}
 .fig-flow{display:flex;align-items:stretch;justify-content:center;gap:16px}
 .fig-panel{display:flex;flex-direction:column;align-items:center;gap:6px}
 .fig-panel>:first-child{margin-block:auto}
-.fig-panel>b{font:400 10.5px/1 var(--mono);color:#a3a9b3}
+.fig-panel>b{font:400 10.5px/1 var(--mono);color:var(--text-3)}
 .fig-source>svg{opacity:.55}
 .fig-file{display:block;width:46px;height:56px}
-.fig-file text{font:7px var(--mono);fill:#8a929e}
-.fig-step{display:flex;flex-direction:column;align-items:center;align-self:center;gap:2px;padding-bottom:16px;font:12px/1 var(--serif);color:#a9afb8}
+.fig-file path{stroke:var(--line-strong)}
+.fig-file path:first-child{fill:var(--bg-subtle)}
+.fig-file text{font:7px var(--mono);fill:var(--text-3)}
+.fig-step{display:flex;flex-direction:column;align-items:center;align-self:center;gap:2px;padding-bottom:16px;font:12px/1 var(--serif);color:var(--text-3)}
 .fig-arrow{display:block;width:32px;height:12px}
-.fig-page{display:flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid #e6e8eb;border-radius:2px;background:#fff;box-shadow:0 1px 4px rgb(15 23 42/.06);font:16px/1 var(--serif);color:#3f444c}
+.fig-page{display:flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid var(--line);border-radius:2px;background:var(--bg);box-shadow:0 1px 4px rgb(15 23 42/.06);font:16px/1 var(--serif);color:var(--text-2)}
 .fig-page var{font-style:italic}
 .fig-page sup{font-size:.62em;line-height:0;vertical-align:.55em}
 .fig-op{display:flex;flex-direction:column;align-items:center;gap:1px}
@@ -299,8 +308,10 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .fig-frac>span{padding:1px 3px}
 .fig-frac>span:first-child{border-bottom:1px solid currentColor}
 .fig-auto{display:block;width:100%;height:80px;overflow:visible}
-.fig-auto .q{font:italic 12px var(--serif);fill:#2f3540;text-anchor:middle}
-.fig-auto .e{font:italic 11px var(--serif);fill:#4b5260;text-anchor:middle}
+.fig-auto [stroke]{stroke:var(--text-2)}
+.fig-auto circle:not([fill=none]){fill:var(--pdf-page)}
+.fig-auto .q{font:italic 12px var(--serif);fill:var(--pdf-text);text-anchor:middle}
+.fig-auto .e{font:italic 11px var(--serif);fill:var(--text-2);text-anchor:middle}
 /* An inference rule: premises over a line, the rule's name beside it, the
    conclusion below. */
 .rule{display:inline-grid;grid-template-columns:auto auto;align-items:center;column-gap:8px;text-indent:0;white-space:nowrap;vertical-align:middle}
@@ -309,22 +320,22 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .rule-conclusion{grid-column:1;padding-top:3px;text-align:center}
 .after .second,.scene-rule{display:block;text-align:center;text-indent:0}
 .after .second ins{display:inline-block;padding:6px 12px}
-.review-change{position:relative;cursor:pointer;border-block:1px solid #e5e5e5;transition:border-color .35s,box-shadow .35s}
-.review-change.current{cursor:auto;box-shadow:inset 0 0 0 1px #9fc0ea}
+.review-change{position:relative;cursor:pointer;border-block:1px solid var(--line);transition:border-color .35s,box-shadow .35s}
+.review-change.current{cursor:auto;box-shadow:inset 0 0 0 1px var(--accent-line)}
 /* Before anyone asks, the change is only its first side, as plain text, and
    once decided it is only the side that stays: no header, no frame. Clicking
    a decided change opens it for review again. */
 .review-change:not([data-state=pending]){border-color:transparent;box-shadow:none}
 .review-change:is([data-state=accepted],[data-state=rejected]){cursor:pointer}
-.review-head{display:flex;align-items:center;gap:2px;min-height:40px;padding:4px 6px 4px 14px;border-bottom:1px solid #e5e5e5;background:#fafafa;font:13px/1.4 var(--sans);color:#666;white-space:nowrap}
-.review-number{margin-right:auto;color:#171717}
+.review-head{display:flex;align-items:center;gap:2px;min-height:40px;padding:4px 6px 4px 14px;border-bottom:1px solid var(--line);background:var(--bg-subtle);font:13px/1.4 var(--sans);color:var(--text-2);white-space:nowrap}
+.review-number{margin-right:auto;color:var(--text)}
 .review-head :is(button,a){display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 8px;border-radius:7px;font-weight:500;text-decoration:none;transition:background-color .15s}
-.review-head :is(button,a):hover{background:#efefef;text-decoration:none}
+.review-head :is(button,a):hover{background:var(--bg-hover);text-decoration:none}
 .review-head svg{width:14px;height:14px;flex:none}
 .review-accept{color:var(--accept)}
 .review-reject{color:var(--reject)}
 .review-comment{color:var(--comment)}
-.review-latex{color:#525252}
+.review-latex{color:var(--text-2)}
 .review-latex[aria-expanded=true]{font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .review-side{position:relative;padding:18px 48px 14px 40px;border-left:2px solid;transition:background-color .35s,border-color .35s}
 .folding{overflow:hidden}
@@ -333,22 +344,22 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .review-label{position:absolute;top:8px;right:10px;font:500 11px/1 var(--sans);letter-spacing:.06em;color:var(--before-edge);transition:opacity .3s}
 .after .review-label{color:var(--after-edge)}
 .review-page :is(del,ins){padding:0 1px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-.review-side del{background:#f3cdd0;color:inherit;text-decoration:line-through;text-decoration-color:var(--reject);text-decoration-thickness:1.5px}
-.review-side ins{background:#c9e8d3;text-decoration:none}
+.review-side del{background:var(--deleted);color:inherit;text-decoration:line-through;text-decoration-color:var(--reject);text-decoration-thickness:1.5px}
+.review-side ins{background:var(--inserted);text-decoration:none}
 .review-side :is(del,ins){transition:background-color .35s,text-decoration-color .35s}
 .review-change:not([data-state=pending]) .review-head:not(.folding),.review-change[data-state=idle] .after:not(.folding),.review-change[data-state=accepted] .before:not(.folding),.review-change[data-state=rejected] .after:not(.folding){display:none}
-.review-change:not([data-state=pending]) .review-side:not(.folding){background:#fff;border-left-color:transparent}
+.review-change:not([data-state=pending]) .review-side:not(.folding){background:var(--pdf-page);border-left-color:transparent}
 .review-change:not([data-state=pending]) .review-side:not(.folding) .review-label{opacity:0}
 .review-change:not([data-state=pending]) .review-side:not(.folding) ins{background:transparent}
 .review-change:not([data-state=pending]) .review-side:not(.folding) del{background:transparent;text-decoration-color:transparent}
 .instant,.instant *{transition:none!important}
 /* The source, as the viewer shows it: file and lines, then one word diff. */
-.review-source{padding:10px 14px 12px;border-top:1px solid #e5e5e5;cursor:auto}
+.review-source{padding:10px 14px 12px;border-top:1px solid var(--line);cursor:auto}
 .review-source[hidden]{display:none}
-.review-source-title{margin-bottom:6px;font:11.5px var(--mono);color:#555}
-.review-source pre{padding:9px 12px;border:1px solid #e5e5e5;border-radius:5px;font:12.5px/1.65 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:#2b2f33}
-.review-source del{background:#fadfe1;color:#8e1d28;text-decoration:line-through;text-decoration-color:#c9636b}
-.review-source ins{background:#d6f0df;color:#11603a;text-decoration:none}
+.review-source-title{margin-bottom:6px;font:11.5px var(--mono);color:var(--text-2)}
+.review-source pre{padding:9px 12px;border:1px solid var(--line);border-radius:5px;font:12.5px/1.65 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.review-source del{background:var(--red-soft);color:var(--red);text-decoration:line-through;text-decoration-color:var(--reject)}
+.review-source ins{background:var(--green-soft);color:var(--green);text-decoration:none}
 .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:40px}
 .install{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 6px 0 18px;border:1px solid var(--line-strong);border-radius:999px;background:var(--bg)}
 .install code{font-size:15.5px;color:var(--text);white-space:nowrap}
@@ -463,14 +474,14 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
   .era.ours .mini-comment i{width:20px;height:20px}
   .era.ours .mini-comment svg{width:11px;height:11px}
 }
-.mini{display:flex;flex-direction:column;height:100%;border:1px solid #e3e3e3;border-bottom:0;border-radius:10px 10px 0 0;background:#fff;box-shadow:0 14px 32px -18px rgb(15 23 42/.28);overflow:hidden;user-select:none;-webkit-user-select:none}
-.mini-bar{display:flex;gap:5px;flex:none;height:20px;align-items:center;padding:0 9px;border-bottom:1px solid #ececec}
+.mini{display:flex;flex-direction:column;height:100%;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--bg);box-shadow:0 14px 32px -18px rgb(15 23 42/.28);overflow:hidden;user-select:none;-webkit-user-select:none}
+.mini-bar{display:flex;gap:5px;flex:none;height:20px;align-items:center;padding:0 9px;border-bottom:1px solid var(--line)}
 .mini-bar i{width:7px;height:7px;border-radius:50%;background:#ff5f57}
 .mini-bar i:nth-child(2){background:#febc2e}
 .mini-bar i:nth-child(3){background:#28c840}
 .mini-body{display:grid;flex:1;min-height:0}
 .mini-body>*{min-width:0;overflow:hidden}
-.mini-body>*+*{border-left:1px solid #ececec}
+.mini-body>*+*{border-left:1px solid var(--line)}
 .split{grid-template-columns:1.15fr .85fr}
 .diff{grid-template-columns:1.45fr .55fr}
 .only{grid-template-columns:minmax(0,1fr)}
@@ -480,44 +491,44 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .mini-ai svg{width:9px;height:9px}
 .mini-source pre{font:9px/1.6 var(--mono);color:var(--text-2);white-space:pre}
 .mini-source b{font-weight:400;color:var(--accent)}
-.mini-source em{font-style:normal;color:#b45309}
+.mini-source em{font-style:normal;color:light-dark(#b45309,#eac584)}
 .mini-source del,.mini-source ins{display:block;margin-left:-9px;padding-left:9px;text-decoration:none}
-.mini-source del{background:#fdecec;color:#b42318}
-.mini-source ins{background:#e9f7ee;color:#15803d}
+.mini-source del{background:var(--red-soft);color:var(--red)}
+.mini-source ins{background:var(--green-soft);color:var(--green)}
 .mini-source del::before{content:"− "}
 .mini-source ins::before{content:"+ "}
 .mini-source ins b{color:inherit}
-.mini-pdf{position:relative;padding:10px 10px 0;background:#f2f2f2}
-.mini-page{display:flex;flex-direction:column;gap:5px;height:100%;padding:12px 12px 0;background:#fff;box-shadow:0 0 0 1px #e6e6e6;font:9.5px/1.4 var(--serif);color:#1a1a1a}
+.mini-pdf{position:relative;padding:10px 10px 0;background:var(--bg-muted)}
+.mini-page{display:flex;flex-direction:column;gap:5px;height:100%;padding:12px 12px 0;background:var(--pdf-page);box-shadow:0 0 0 1px var(--line);font:9.5px/1.4 var(--serif);color:var(--pdf-text)}
 .mini-page strong{margin-bottom:2px;font-size:10px}
 .mini-eq{align-self:center;margin:3px 0;font-size:10px;white-space:nowrap}
-.bar{display:block;flex:none;height:4px;border-radius:2px;background:#e2e2e2}
+.bar{display:block;flex:none;height:4px;border-radius:2px;background:var(--line)}
 .bar.short{width:58%}
 .only .mini-pdf{padding:12px 64px 0}
 .only .mini-page{padding:14px 18px 0}
 /* Papilot's drawing: a page with one change under review, its Comment
    chosen and a comment beside it. */
-.mini-heading{display:flex;align-items:center;gap:6px;margin-bottom:2px;font:700 9.5px/1 var(--serif);color:#8f8f8f}
-.mini-heading .bar{width:34%;height:5px;background:#d6d6d6}
+.mini-heading{display:flex;align-items:center;gap:6px;margin-bottom:2px;font:700 9.5px/1 var(--serif);color:var(--text-3)}
+.mini-heading .bar{width:34%;height:5px;background:var(--line-strong)}
 .bar.mid{width:78%}
-.mini-review{display:grid;margin:4px -12px;border-block:1px solid #e5e5e5;box-shadow:inset 0 0 0 1px #9fc0ea}
-.mini-head{display:flex;align-items:center;gap:8px;height:18px;padding:0 8px;border-bottom:1px solid #e9e9e9;background:#fafafa}
-.mini-head>.bar{width:18%;height:4px;background:#cfcfcf}
+.mini-review{display:grid;margin:4px -12px;border-block:1px solid var(--line);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.mini-head{display:flex;align-items:center;gap:8px;height:18px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg-subtle)}
+.mini-head>.bar{width:18%;height:4px;background:var(--line-strong)}
 .mini-acts{display:flex;gap:5px;margin-left:auto}
 .mini-acts i{display:grid;place-items:center;width:13px;height:13px;border-radius:3px}
 .mini-acts svg{width:9px;height:9px}
-.mini-acts .ok{color:#1d7448}
-.mini-acts .no{color:#b0313b}
-.mini-acts .talk{color:#356aa0;background:#e3ecf7}
+.mini-acts .ok{color:var(--accept)}
+.mini-acts .no{color:var(--reject)}
+.mini-acts .talk{color:var(--comment);background:var(--accent-soft)}
 .mini-side{display:grid;gap:5px;padding:7px 12px;border-left:2px solid}
-.mini-side.before{border-left-color:#d17c82;background:#fbeeee}
-.mini-side.before .bar{background:#efc6ca}
-.mini-side.after{border-left-color:#68ab82;background:#eef8f1}
-.mini-side.after .bar{background:#bfe2cb}
-.mini-comment{display:flex;align-items:center;gap:6px;align-self:flex-end;width:46%;margin:-8px -26px 4px 0;padding:6px 6px 6px 9px;border:1px solid #e3e3e3;border-radius:9px;background:#fff;box-shadow:0 10px 22px -12px rgb(15 23 42/.4)}
+.mini-side.before{border-left-color:var(--before-edge);background:var(--before)}
+.mini-side.before .bar{background:var(--deleted)}
+.mini-side.after{border-left-color:var(--after-edge);background:var(--after)}
+.mini-side.after .bar{background:var(--inserted)}
+.mini-comment{display:flex;align-items:center;gap:6px;align-self:flex-end;width:46%;margin:-8px -26px 4px 0;padding:6px 6px 6px 9px;border:1px solid var(--line);border-radius:9px;background:var(--bg);box-shadow:0 10px 22px -12px rgb(15 23 42/.4)}
 .mini-comment>span{display:grid;flex:1;gap:4px}
-.mini-comment .bar{background:#dcdcdc}
-.mini-comment i{display:grid;flex:none;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--accent);color:#fff}
+.mini-comment .bar{background:var(--line-strong)}
+.mini-comment i{display:grid;flex:none;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--button);color:#fff}
 .mini-comment svg{width:9px;height:9px}
 /* Scrolling on, the older ways lose their colour (--old runs from 0 to 1 as
    they pass the top of the window) and Papilot's comes in (--new). Only the
@@ -553,63 +564,63 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .scene-text{position:relative;margin:0 26px 16px;text-wrap:pretty}
 /* A figure: a bar chart with its legend in the top left, and a caption. */
 .scene-figure{display:block;margin:0 26px 18px;padding:10px 14px 8px}
-.figure-plot{position:relative;display:flex;align-items:flex-end;gap:9%;height:92px;padding:0 7%;border-left:1.5px solid #cfcfcf;border-bottom:1.5px solid #cfcfcf}
-.figure-plot b{flex:1;border-radius:2px 2px 0 0;background:#bed0f4}
-.figure-plot b:nth-child(odd){background:#f2cfae}
+.figure-plot{position:relative;display:flex;align-items:flex-end;gap:9%;height:92px;padding:0 7%;border-left:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong)}
+.figure-plot b{flex:1;border-radius:2px 2px 0 0;background:var(--figure-blue)}
+.figure-plot b:nth-child(odd){background:var(--figure-orange)}
 .figure-legend{position:absolute;top:2px;left:10px;display:grid;gap:4px}
-.figure-legend i{display:block;width:40px;height:6px;border-radius:3px;background:linear-gradient(90deg,#bed0f4 0 9px,transparent 9px 13px,#e4e4e4 13px)}
-.figure-legend i+i{background:linear-gradient(90deg,#f2cfae 0 9px,transparent 9px 13px,#e4e4e4 13px)}
-.figure-caption{display:block;width:38%;height:7px;margin:10px auto 0;border-radius:4px;background:#ececec}
+.figure-legend i{display:block;width:40px;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--figure-blue) 0 9px,transparent 9px 13px,var(--line) 13px)}
+.figure-legend i+i{background:linear-gradient(90deg,var(--figure-orange) 0 9px,transparent 9px 13px,var(--line) 13px)}
+.figure-caption{display:block;width:38%;height:7px;margin:10px auto 0;border-radius:4px;background:var(--line)}
 /* Earlier messages are bars; review feedback waits in a bar above the
    composer until it is sent. */
 .chat-bubble.chat-old{display:grid;gap:8px;width:70%;padding:11px 13px}
-.chat-old i,.chat-old .chat-lines i{display:block;height:7px;border-radius:4px;background:#e2e2e2}
-.chat-reply.chat-old .chat-lines i{background:#ececec}
-.chat-pending{display:none;align-items:center;gap:7px;padding:7px 7px 7px 10px;border:1px solid #e6e6e6;border-radius:10px;background:#fafafa;font:12px/1.3 var(--sans);color:#525252;animation:chat-in .25s ease-out}
+.chat-old i,.chat-old .chat-lines i{display:block;height:7px;border-radius:4px;background:var(--line)}
+.chat-reply.chat-old .chat-lines i{background:var(--line)}
+.chat-pending{display:none;align-items:center;gap:7px;padding:7px 7px 7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg-subtle);font:12px/1.3 var(--sans);color:var(--text-2);animation:chat-in .25s ease-out}
 .chat-pending.on{display:flex}
 .chat-pending>svg{flex:none;width:14px;height:14px;color:var(--accent)}
 .chat-pending>span{flex:1;min-width:0}
-.chat-pending b{display:inline-flex;flex:none;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:999px;background:var(--accent);color:#fff;font-weight:500;transition:background-color .1s}
+.chat-pending b{display:inline-flex;flex:none;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:999px;background:var(--button);color:#fff;font-weight:500;transition:background-color .1s}
 .chat-pending b svg{width:12px;height:12px}
-.chat-pending b.pressed{background:var(--accent-hover)}
-.review-comment.pressed,.review-head button.pressed{background:#efefef}
+.chat-pending b.pressed{background:var(--button-hover)}
+.review-comment.pressed,.review-head button.pressed{background:var(--bg-hover)}
 /* A revision replaces the first attempt in place. */
 .after[data-version="1"] .second,.after[data-version="2"] .first{display:none}
 /* Git: the branch, what is staged with its message and Commit, the history,
    and Push. The change waiting to be committed is marked in the margin. */
-.app-git{display:flex;flex-direction:column;gap:12px;min-width:0;padding:14px 12px 12px;border-left:1px solid #e4e4e4;background:#fff;font:12.5px/1.4 var(--sans);color:#3f3f3f;user-select:none;-webkit-user-select:none}
+.app-git{display:flex;flex-direction:column;gap:12px;min-width:0;padding:14px 12px 12px;border-left:1px solid var(--line);background:var(--bg);font:12.5px/1.4 var(--sans);color:var(--text-2);user-select:none;-webkit-user-select:none}
 .app-git code{padding:0;border-radius:0;background:none;font:11.5px var(--mono);white-space:nowrap}
 .git-branch{display:flex;align-items:center;gap:6px;font-weight:500}
-.git-branch svg{width:14px;height:14px;color:#8a8a8a}
-.git-staged{display:grid;gap:9px;padding:10px;border:1px solid #e6e6e6;border-radius:10px}
-.git-title{font-size:11.5px;font-weight:600;color:#8a8a8a}
+.git-branch svg{width:14px;height:14px;color:var(--text-3)}
+.git-staged{display:grid;gap:9px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.git-title{font-size:11.5px;font-weight:600;color:var(--text-3)}
 .git-file{display:flex;align-items:center;gap:6px}
-.git-file b{margin-left:auto;font:500 11.5px var(--mono);color:#15803d}
-.git-file s{color:#b42318;text-decoration:none}
-.git-message{display:flex;align-items:center;gap:4px;min-height:32px;padding:0 4px 0 9px;border:1px solid #d6d6d6;border-radius:8px}
-.git-typed{overflow:hidden;color:#171717;white-space:nowrap;text-overflow:ellipsis}
-.git-hint{flex:1;color:#a3a3a3;white-space:nowrap}
+.git-file b{margin-left:auto;font:500 11.5px var(--mono);color:var(--green)}
+.git-file s{color:var(--red);text-decoration:none}
+.git-message{display:flex;align-items:center;gap:4px;min-height:32px;padding:0 4px 0 9px;border:1px solid var(--line-strong);border-radius:8px}
+.git-typed{overflow:hidden;color:var(--text);white-space:nowrap;text-overflow:ellipsis}
+.git-hint{flex:1;color:var(--text-3);white-space:nowrap}
 .git-message.filled .git-hint{display:none}
 .git-message.filled .git-typed{flex:1}
 .git-message.busy .git-hint{animation:busy 1s ease-in-out infinite}
 .git-spark{display:grid;flex:none;place-items:center;width:24px;height:24px;margin-left:auto;border-radius:6px;color:var(--accent);transition:background-color .1s}
 .git-spark svg{width:13px;height:13px}
 .git-spark.pressed{background:var(--accent-soft)}
-.git-commit{display:flex;align-items:center;justify-content:center;height:30px;border-radius:999px;background:var(--accent);color:#fff;font-weight:500;transition:background-color .1s}
-.git-commit.pressed{background:var(--accent-hover)}
+.git-commit{display:flex;align-items:center;justify-content:center;height:30px;border-radius:999px;background:var(--button);color:#fff;font-weight:500;transition:background-color .1s}
+.git-commit.pressed{background:var(--button-hover)}
 .git-log{display:grid;gap:11px;padding:2px 2px 0}
 .git-row{display:flex;align-items:center;gap:8px;min-width:0}
-.git-row>i{flex:none;width:9px;height:9px;border:2px solid #cfcfcf;border-radius:50%}
-.git-row>b{height:7px;border-radius:4px;background:#ececec}
-.git-row>code{flex:none;margin-left:auto;color:#a3a3a3}
-.git-msg{min-width:0;overflow:hidden;color:#171717;white-space:nowrap;text-overflow:ellipsis}
+.git-row>i{flex:none;width:9px;height:9px;border:2px solid var(--line-strong);border-radius:50%}
+.git-row>b{height:7px;border-radius:4px;background:var(--line)}
+.git-row>code{flex:none;margin-left:auto;color:var(--text-3)}
+.git-msg{min-width:0;overflow:hidden;color:var(--text);white-space:nowrap;text-overflow:ellipsis}
 .git-new>i{border-color:var(--accent);background:var(--accent)}
 .git-push{display:flex;align-items:center;margin-top:auto}
-.git-push-button{display:inline-flex;align-items:center;height:28px;padding:0 13px;border:1px solid #d6d6d6;border-radius:999px;font-weight:500;transition:background-color .1s}
-.git-push-button.pressed{background:#efefef}
-.git-pushed{display:inline-flex;align-items:center;gap:6px;color:#15803d;animation:chat-in .25s ease-out}
+.git-push-button{display:inline-flex;align-items:center;height:28px;padding:0 13px;border:1px solid var(--line-strong);border-radius:999px;font-weight:500;transition:background-color .1s}
+.git-push-button.pressed{background:var(--bg-hover)}
+.git-pushed{display:inline-flex;align-items:center;gap:6px;color:var(--green);animation:chat-in .25s ease-out}
 .git-pushed svg{width:14px;height:14px}
-.scene-edited::before{content:"";position:absolute;top:3px;bottom:3px;left:-14px;width:3px;border-radius:2px;background:#68ab82;transition:opacity .3s}
+.scene-edited::before{content:"";position:absolute;top:3px;bottom:3px;left:-14px;width:3px;border-radius:2px;background:var(--after-edge);transition:opacity .3s}
 .scene[data-step=staged] .git-new:not(.folding),.scene[data-step]:not([data-step=staged]) .git-staged:not(.folding),.scene[data-step=pushed] .git-push-button,.scene[data-step]:not([data-step=pushed]) .git-pushed{display:none}
 .scene[data-step=staged] .git-push{visibility:hidden}
 .scene[data-step]:not([data-step=staged]) .scene-edited::before{opacity:0}
@@ -666,7 +677,7 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
   .app-bar .lights i{width:10px;height:10px}
   .app-body{grid-template-columns:minmax(0,1fr)}
   .app-pdf{padding:30px 12px 0}
-  .hero .app-chat{padding:8px;border-left:0;border-top:1px solid #e4e4e4}
+  .hero .app-chat{padding:8px;border-left:0;border-top:1px solid var(--line)}
   .hero .chat-thread{display:none}
   .hero .chat-composer{display:flex;align-items:center;gap:10px;padding:5px 5px 5px 8px;border-radius:999px}
   .hero .chat-input{flex:1;order:2}
@@ -704,7 +715,7 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
   .feature h3{font-size:28px}
   .scene .app-body{grid-template-columns:minmax(0,1fr);grid-template-rows:394px 304px;height:auto}
   .scene .app-pdf{padding-top:32px}
-  .scene :is(.app-chat,.app-git){min-height:0;overflow:hidden;border-left:0;border-top:1px solid #e4e4e4}
+  .scene :is(.app-chat,.app-git){min-height:0;overflow:hidden;border-left:0;border-top:1px solid var(--line)}
   .scene .review-side{padding:22px 18px 12px}
   .scene .sheet-lines,.scene .sheet-head{padding:0 16px}
   .scene .scene-text{margin-inline:16px}
