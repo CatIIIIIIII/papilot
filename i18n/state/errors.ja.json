@@ -724,6 +724,11 @@
     "textHash": "05e861db5225640863b27c48995a315435361ceb8124cc434ad5d2673989fe38",
     "model": "gemini-4-argon-medium"
   },
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": {
+    "revision": "1a5950e64cf5ea2a59742e226369f2ada94204d4a6717fa06693ef69f48b6d3f",
+    "textHash": "29329b07817c8a7933d8bdff8b40127164b3751959d2bf15fc7ec139fc062f97",
+    "model": "gemini-4-argon-medium"
+  },
   "The new version could not be installed. Check the connection and available disk space, then retry.": {
     "revision": "5a504e7377dcd7690d882ac2a4d99fca87cd68c93c67424f7183fd6a9eb56d31",
     "textHash": "5da13d4e28cbc8affa1fe7caeb961fb9f44909c1911644cc0827069d07f1a934",
@@ -1132,11 +1137,6 @@
   "Wait for the current Git operation before sending more instructions.": {
     "revision": "58a43a2b01639c9978841fd6f079f834ebde635c225e76cca23aae63caf10345",
     "textHash": "ef4939c82e4d485cc44a2a2e8cc3016bfaa29380d3f359d346ee2d719a8fb92d",
-    "model": "gemini-4-argon-medium"
-  },
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": {
-    "revision": "69ee15eab7a72ebb1ae20579bbb3996b8219208cc4c557e0d70e18c02929bd7f",
-    "textHash": "9b361c2d9c957dd75802d00414e63f78e27778d95953114b020991baa736b4cc",
     "model": "gemini-4-argon-medium"
   },
   "Wait for the current delivery before sending more instructions.": {

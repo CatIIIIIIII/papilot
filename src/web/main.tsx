@@ -1185,7 +1185,8 @@ function App() {
       try { previous = JSON.parse(browserStorage.getItem('papilot:new-task-request') || '{}'); } catch { /* Invalid saved request. */ }
       formTaskId.current = previous?.signature === signature && previous.id ? previous.id : uuid();
       browserStorage.setItem('papilot:new-task-request', JSON.stringify({ signature, id: formTaskId.current }));
-      const created = await api<Task>('/tasks', { ...body, id: formTaskId.current }, undefined, reviewing ? 120000 : 30000);
+      // AI review compiles the task's manuscript copy before it answers.
+      const created = await api<Task>('/tasks', { ...body, id: formTaskId.current }, undefined, reviewing ? 600000 : 30000);
       const source = input?.getBoundingClientRect();
       browserStorage.removeItem('papilot:new-task-request');
       newFiles.draft.clear(files); formTaskId.current = uuid(); setNewDraft(''); setNewSkill(null); setTaskSearch(''); setShowArchived(false);

@@ -152,7 +152,7 @@ Turn on **Settings → Notifications** to receive browser notifications while Pa
 
 ## AI review
 
-In **Manuscript → New task**, choose the **AI review** skill from the composer’s **+** menu, or type `/ai-review`. Optionally describe a focus (for example, assumptions, argument structure, or clarity), choose Codex, Claude, or GLM, and send it like any other skill. Compile the current manuscript first. Papilot builds and preserves a PDF from the task's own manuscript copy. The reviewer reads its extracted text and produces comments anchored to its actual lines. It runs in read-only mode and cannot publish or apply manuscript edits.
+In **Manuscript → New task**, choose the **AI review** skill from the composer’s **+** menu, or type `/ai-review`. Optionally describe a focus (for example, assumptions, argument structure, or clarity), choose Codex, Claude, or GLM, and send it like any other skill. Papilot builds and preserves a PDF from the task's own manuscript copy, so you don't need to wait for the preview to finish compiling. The reviewer reads its extracted text and produces comments anchored to its actual lines. It runs in read-only mode and cannot publish or apply manuscript edits.
 
 Open **AI suggestions** in the task's PDF toolbar to read findings beside the relevant passages. With a suggestion open and the PDF focused, **← / →** move between findings, and **Esc** or a click outside closes the card. Comments aim for one short, actionable sentence anchored to a specific sentence or equation, usually 1–3 lines; the conversation shows only a brief summary. Opening the PDF keeps the review task available.
 

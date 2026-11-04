@@ -311,13 +311,13 @@ async function pageSizes(mupdf: any, pdf: string) {
 }
 
 async function engine() {
-  const [{ Builder }, { Repo, gitBinary }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
+  const [{ Builder, BuildError }, { Repo, gitBinary }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
     import(pathToFileURL(path.join(ENGINE, 'src/core/build.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/core/git.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/render/pdf.ts')).href),
   ]);
-  return { Builder, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
+  return { Builder, BuildError, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
 }
 
 // `synctex edit` maps a PDF position (big points from the top-left corner) to
@@ -719,13 +719,17 @@ export class Manuscripts extends EventEmitter {
   }
 
   // Compile the task's frozen source tree, then retain its PDF outside the build cache.
+  // A preview build of the same tree is shared, not repeated.
   async captureReview(root: string, worktree: string, taskId: string): Promise<ReviewSnapshot> {
-    const { Builder, Repo, loadProject } = await engine();
+    const { Builder, BuildError, Repo, loadProject } = await engine();
     const tree = await workingTree(worktree);
-    const result = await new Builder(loadProject(root), new Repo(root)).build(tree, ['full']);
-    const pdf = await this.preserveReviewPdf(root, taskId, result.pdf);
-    const key = createHash('sha256').update(fs.readFileSync(pdf)).digest('hex').slice(0, 16);
-    return { ...await this.snapshotPdf(pdf, key), pdf };
+    let result;
+    try { result = await new Builder(loadProject(root), new Repo(root)).build(tree, ['full']); }
+    catch (error) { throw error instanceof BuildError ? new Error('The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.') : error; }
+    const key = createHash('sha256').update(fs.readFileSync(result.pdf)).digest('hex').slice(0, 16);
+    const snapshot = await this.snapshotPdf(result.pdf, key);
+    // The task does not exist yet, so a PDF kept by an earlier failed attempt is replaced.
+    return { ...snapshot, pdf: await this.preserveReviewPdf(root, taskId, result.pdf, true) };
   }
 
   private async reviewPdfPath(root: string, taskId: string) {
@@ -738,11 +742,11 @@ export class Manuscripts extends EventEmitter {
     return fs.existsSync(pdf) ? pdf : null;
   }
 
-  async preserveReviewPdf(root: string, taskId: string, source: string) {
+  async preserveReviewPdf(root: string, taskId: string, source: string, replace = false) {
     const pdf = await this.reviewPdfPath(root, taskId), folder = path.dirname(pdf);
     fs.mkdirSync(folder, { recursive: true });
     // A retry always uses the original task copy, even after its build cache is pruned.
-    if (!fs.existsSync(pdf)) { const temporary = path.join(folder, 'review.tmp'); fs.copyFileSync(source, temporary); fs.renameSync(temporary, pdf); }
+    if (replace || !fs.existsSync(pdf)) { const temporary = path.join(folder, 'review.tmp'); fs.copyFileSync(source, temporary); fs.renameSync(temporary, pdf); }
     return pdf;
   }
 
@@ -780,11 +784,7 @@ export class Manuscripts extends EventEmitter {
     } finally { original.close(); current.close(); }
   }
 
-  async reviewSnapshot(projectId: string, key: string): Promise<ReviewSnapshot> {
-    return this.snapshotPdf(this.pdf(projectId, key), key);
-  }
-
-  private async snapshotPdf(pdf: string, key: string): Promise<ReviewSnapshot> {
+  async snapshotPdf(pdf: string, key: string): Promise<ReviewSnapshot> {
     const { PdfDocument } = await engine();
     const document = new PdfDocument(pdf), lines: ReviewSnapshot['lines'] = [];
     let length = 0;

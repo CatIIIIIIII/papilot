@@ -134,6 +134,7 @@
   "That page is not part of the manuscript.": "Esa página no forma parte del manuscrito.",
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": "La revisión de IA no devolvió anotaciones válidas. Pídele que lo intente de nuevo con el formato JSON requerido.",
   "The AI review response is incomplete or too long. Ask the reviewer to retry.": "La respuesta de la revisión de IA está incompleta o es demasiado larga. Pide al revisor que lo intente de nuevo.",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "No se pudo conectar con el servicio de comparación de PDF. Los cambios están guardados. Selecciona «Comprobar estado» para recuperar la compilación existente.",
   "The PDF copy for this review is unavailable. Start a new AI review.": "La copia del PDF de esta revisión no está disponible. Inicia una nueva revisión de IA.",
   "The PDF is building. Wait for this build to finish.": "El PDF se está compilando. Espera a que termine esta compilación.",
   "The PDF snapshot for this review is unavailable. Start a new AI review.": "La instantánea del PDF para esta revisión no está disponible. Inicia una nueva revisión con IA.",
@@ -144,6 +145,7 @@
   "The downloaded package does not match the requested release.": "El paquete descargado no coincide con la versión solicitada.",
   "The downloaded release is incomplete.": "La versión descargada está incompleta.",
   "The manuscript changed while copying this suggestion. Try again.": "El manuscrito cambió mientras se copiaba esta sugerencia. Vuelve a intentarlo.",
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": "No se pudo compilar el manuscrito para la revisión con IA. Corrige los errores que se muestran en la vista previa del manuscrito e inténtalo de nuevo.",
   "The new version could not be installed. Check the connection and available disk space, then retry.": "No se pudo instalar la nueva versión. Comprueba la conexión y el espacio disponible en disco, y vuelve a intentarlo.",
   "The new version did not pass its startup check. Your current version is still running.": "La nueva versión no superó la comprobación de inicio. Tu versión actual sigue en ejecución.",
   "The new version did not restart successfully.": "La nueva versión no se reinició correctamente.",
@@ -226,7 +228,6 @@
   "Wait for repository preparation to finish.": "Espera a que termine la preparación del repositorio.",
   "Wait for task creation to finish before deleting it.": "Espera a que termine la creación de la tarea antes de eliminarla.",
   "Wait for the current Git operation before sending more instructions.": "Espera a que termine la operación actual de Git antes de enviar más instrucciones.",
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": "Espera a que termine de compilarse el PDF actual y luego ejecuta la habilidad de revisión de IA.",
   "Wait for the current delivery before sending more instructions.": "Espera al envío actual antes de enviar más instrucciones.",
   "Wait for the current manuscript PDF to finish compiling, then copy the suggestion again.": "Espera a que termine de compilarse el PDF del manuscrito actual y vuelve a copiar la sugerencia.",
   "Wait for the current review action before building a review.": "Espera a que termine la acción de revisión actual antes de generar una revisión.",
@@ -236,6 +237,5 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Espera a que terminen las acciones de la tarea y de la revisión antes de elegir un destino.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Espera a que termine la compilación del PDF de este artículo antes de cambiar su ruta o eliminarlo.",
   "ZIP links and special files are not supported.": "No se admiten enlaces ni archivos especiales en el ZIP.",
-  "npm is unavailable to Papilot.": "npm no está disponible para Papilot.",
-  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "No se pudo conectar con el servicio de comparación de PDF. Los cambios están guardados. Selecciona «Comprobar estado» para recuperar la compilación existente."
+  "npm is unavailable to Papilot.": "npm no está disponible para Papilot."
 }
