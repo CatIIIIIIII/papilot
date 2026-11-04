@@ -85,7 +85,7 @@
   "What Matters in a Paper Is the Idea and the Story": "写文档，重要的是想法和故事",
   "What should change here?": "这里应该怎么改？",
   "What should the agent change here?": "希望智能体在这里做什么修改？",
-  "With your permission, Umami measures visits and download clicks, processing your IP address and device information. No analytics loads until you allow it.": "经你允许后，Umami 会统计访问和下载点击，并处理你的 IP 地址及设备信息。允许之前不会加载统计服务。",
+  "With your permission, Umami measures visits, clicks, scrolling and time spent on this page, processing your IP address and device information. No analytics loads until you allow it.": "经你允许后，Umami 会统计访问、点击、滚动和页面停留时间，并处理你的 IP 地址及设备信息。允许之前不会加载统计服务。",
   "Write T-Abs as a rule": "T-Abs 写成推导规则",
   "Write this as an inference rule": "这里写成推导规则",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> by Hand": "手写 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>",

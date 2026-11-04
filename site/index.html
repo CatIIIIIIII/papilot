@@ -59,7 +59,7 @@
 <section class="statistics-notice" id="statistics-notice" aria-labelledby="statistics-title" tabindex="-1" hidden>
   <div class="wrap">
     <h2 id="statistics-title"><span lang="en">Website statistics</span><span lang="zh-CN">网站统计</span></h2>
-    <p><span lang="en">With your permission, Umami measures visits and download clicks, processing your IP address and device information. No analytics loads until you allow it.</span><span lang="zh-CN">经你允许后，Umami 会统计访问和下载点击，并处理你的 IP 地址及设备信息。允许之前不会加载统计服务。</span></p>
+    <p><span lang="en">With your permission, Umami measures visits, clicks, scrolling and time spent on this page, processing your IP address and device information. No analytics loads until you allow it.</span><span lang="zh-CN">经你允许后，Umami 会统计访问、点击、滚动和页面停留时间，并处理你的 IP 地址及设备信息。允许之前不会加载统计服务。</span></p>
     <p><span lang="en">Your choice is saved for 180 days. Change it anytime in Statistics preferences.</span><span lang="zh-CN">你的选择会保存 180 天，可随时在「统计偏好」中更改。</span> <a id="statistics-privacy" rel="noreferrer"><span lang="en">Privacy notice</span><span lang="zh-CN">隐私声明</span></a></p>
     <div class="statistics-actions">
       <button class="button secondary" id="statistics-decline" type="button"><span lang="en">Decline</span><span lang="zh-CN">拒绝</span></button>
@@ -496,30 +496,38 @@ progress and preservation.</pre></div>
 </footer>
 
 <script>
+// Only real input handlers emit these fixed actions; demo animations do not.
+function siteAction(event, name, data = {}) {
+  if (event.isTrusted) document.dispatchEvent(new CustomEvent('papilot:site-action', { detail: { name, data, at: event.timeStamp } }));
+}
 for (const button of document.querySelectorAll('[data-copy]')) {
-  button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(button.dataset.copy); } catch { return; }
+  button.addEventListener('click', async event => {
+    const placement = button.closest('.hero') ? 'hero' : 'download';
+    try { await navigator.clipboard.writeText(button.dataset.copy); }
+    catch { siteAction(event, 'copy_install_failed', { placement }); return; }
     button.classList.add('copied');
-    button.dispatchEvent(new Event('papilot:install-copied', { bubbles: true }));
+    siteAction(event, 'copy_install', { placement });
     setTimeout(() => button.classList.remove('copied'), 1600);
   });
 }
 
 // The build emits real links; JavaScript only adds menu interaction and persistence.
 const menu = document.querySelector('.lang-menu'), menuButton = document.getElementById('lang-button'), list = document.getElementById('lang-list');
-for (const item of list.children) item.addEventListener('click', () => {
+for (const item of list.children) item.addEventListener('click', event => {
   try { localStorage.setItem('papilot-lang', item.lang); } catch {}
+  if (item.lang !== document.documentElement.lang) siteAction(event, 'language_change', { language: item.lang });
 });
-function openMenu() {
+function openMenu(event) {
   list.hidden = false; menuButton.setAttribute('aria-expanded', 'true');
   (list.querySelector('[aria-checked=true]') || list.firstElementChild).focus();
+  siteAction(event, 'menu_open', { menu: 'language', placement: 'header' });
 }
 function closeMenu(focus) {
   if (list.hidden) return;
   list.hidden = true; menuButton.setAttribute('aria-expanded', 'false');
   if (focus) menuButton.focus();
 }
-menuButton.addEventListener('click', () => list.hidden ? openMenu() : closeMenu());
+menuButton.addEventListener('click', event => list.hidden ? openMenu(event) : closeMenu());
 list.addEventListener('keydown', event => {
   const items = [...list.children], at = items.indexOf(document.activeElement);
   if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); }
@@ -544,19 +552,20 @@ for (const download of document.querySelectorAll('.download')) {
     if (intel) mac.insertBefore(mac.querySelector('[data-arch=x86]'), mac.querySelector('[data-arch=arm]'));
   });
   const items = () => [...downloads.querySelectorAll('[role=menuitem]')];
-  const open = () => {
+  const open = event => {
     downloads.hidden = false; button.setAttribute('aria-expanded', 'true');
     const box = button.getBoundingClientRect(), need = downloads.offsetHeight + 16;
     download.classList.toggle('up', innerHeight - box.bottom < need && box.top > need);
     items()[0].focus();
+    siteAction(event, 'menu_open', { menu: 'download', placement: download.closest('.hero') ? 'hero' : 'download' });
   };
   const close = focus => {
     if (downloads.hidden) return;
     downloads.hidden = true; button.setAttribute('aria-expanded', 'false');
     if (focus) button.focus();
   };
-  button.addEventListener('click', () => downloads.hidden ? open() : close());
-  button.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); open(); } });
+  button.addEventListener('click', event => downloads.hidden ? open(event) : close());
+  button.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); if (downloads.hidden) open(event); } });
   downloads.addEventListener('keydown', event => {
     const all = items(), at = all.indexOf(document.activeElement);
     if (event.key === 'Escape') { event.preventDefault(); close(true); }
@@ -765,16 +774,17 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
     if (state === 'accepted' || state === 'rejected') change.tabIndex = 0; else change.removeAttribute('tabindex');
   };
   for (const [name, state] of [['accept', 'accepted'], ['reject', 'rejected']]) {
-    change.querySelector(`.review-${name}`).addEventListener('click', () => { settle(state); change.focus(); });
+    change.querySelector(`.review-${name}`).addEventListener('click', event => { settle(state); change.focus(); siteAction(event, 'demo_interaction', { action: name }); });
   }
-  const reopen = () => { settle('pending'); accept.focus(); };
-  change.addEventListener('click', event => { if (change.tabIndex === 0 && !event.target.closest('a, button')) reopen(); });
+  const reopen = event => { settle('pending'); accept.focus(); siteAction(event, 'demo_interaction', { action: 'reopen' }); };
+  change.addEventListener('click', event => { if (change.tabIndex === 0 && !event.target.closest('a, button')) reopen(event); });
   change.addEventListener('keydown', event => {
-    if (event.target === change && change.tabIndex === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reopen(); }
+    if (event.target === change && change.tabIndex === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reopen(event); }
   });
-  latex.addEventListener('click', () => {
+  latex.addEventListener('click', event => {
     source.hidden = !source.hidden;
     latex.setAttribute('aria-expanded', String(!source.hidden));
+    siteAction(event, 'demo_interaction', { action: source.hidden ? 'source_close' : 'source_open' });
   });
   const hold = () => instantly([change], () => {
     const state = change.dataset.state, open = !source.hidden;
@@ -1034,10 +1044,11 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
   const button = document.getElementById('theme-button'), system = matchMedia('(prefers-color-scheme: dark)'), root = document.documentElement;
   const dark = () => root.dataset.theme ? root.dataset.theme === 'dark' : system.matches;
   const sync = () => button.setAttribute('aria-pressed', String(dark()));
-  button.addEventListener('click', () => {
+  button.addEventListener('click', event => {
     root.dataset.theme = dark() ? 'light' : 'dark';
     try { localStorage.setItem('papilot-theme', root.dataset.theme); } catch {}
     sync();
+    siteAction(event, 'theme_change', { theme: root.dataset.theme });
   });
   system.addEventListener('change', sync);
   sync(); button.hidden = false;

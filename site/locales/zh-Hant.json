@@ -85,7 +85,7 @@
   "What Matters in a Paper Is the Idea and the Story": "文件的核心在於觀點與敘事",
   "What should change here?": "這裡要怎麼修改？",
   "What should the agent change here?": "智慧代理應該如何修改這裡？",
-  "With your permission, Umami measures visits and download clicks, processing your IP address and device information. No analytics loads until you allow it.": "經你允許後，Umami 會統計造訪和下載點擊，並處理你的 IP 位址及裝置資訊。允許之前不會載入統計服務。",
+  "With your permission, Umami measures visits, clicks, scrolling and time spent on this page, processing your IP address and device information. No analytics loads until you allow it.": "經你允許後，Umami 會統計造訪、點擊、捲動和頁面停留時間，並處理你的 IP 位址及裝置資訊。允許之前不會載入統計服務。",
   "Write T-Abs as a rule": "將 T-Abs 寫成規則",
   "Write this as an inference rule": "這裡寫成推導規則",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> by Hand": "手動編寫 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>",

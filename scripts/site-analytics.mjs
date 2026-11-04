@@ -16,6 +16,6 @@ export function siteAnalytics(env = process.env) {
   if (notice.protocol !== 'https:' || notice.username || notice.password) throw new Error('PAPILOT_ANALYTICS_PRIVACY_URL must use HTTPS without credentials.');
   const attribute = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   // Increase the leading version if the purposes or consent wording change.
-  const consentVersion = '1-' + createHash('sha256').update(JSON.stringify([url.href, website, notice.href])).digest('hex').slice(0, 16);
+  const consentVersion = '2-' + createHash('sha256').update(JSON.stringify([url.href, website, notice.href])).digest('hex').slice(0, 16);
   return `<meta name="referrer" content="strict-origin"><script defer src="analytics.js" data-script-url="${attribute(url.href)}" data-website-id="${attribute(website)}" data-privacy-url="${attribute(notice.href)}" data-consent-version="${consentVersion}"></script>`;
 }

@@ -331,7 +331,24 @@ The landing page at [papilot.ai](https://papilot.ai/) lives in `site/`. English 
 
 Website statistics are optional and disabled without configuration. The [Umami](https://docs.umami.is/docs/collect-data) integration requires explicit visitor consent before loading the provider's script or sending analytics. Allow and reject are presented together, and visitors can change their choice through the footer's analytics preferences. The browser remembers either choice for 180 days; this is our preference lifetime, not a statutory retention period or the provider's data retention. Choices are bound to the configured script URL, website UUID, and privacy notice URL; changes require a new choice. Increment the consent version in `scripts/site-analytics.mjs` when purposes or consent wording change, including material notice changes at the same URL. Refusing statistics leaves downloads and the rest of the page available. Activity before consent is not replayed later.
 
-After consent, pageviews identify the localized page, and referring sites are reduced to their origin. Query parameters, fragments, UTM tags, advertising click IDs, and source-page paths are excluded. `download_click` records an installer link click with `platform`, `arch`, `format`, `placement` (`hero` or `download`) and page `locale`; it does not establish a completed download or installation. Opening a menu or following “All downloads” does not count. `copy_install` records successful clipboard writes with placement and locale. No account identifiers, replay, or heatmap features are enabled. Language redirects are not counted as an extra visit, and no attribution information is cached in browser storage. Consequently, some external sources are lost during a language redirect.
+After consent, pageviews identify the localized page, and referring sites are reduced to their origin. Query parameters, fragments, UTM tags, advertising click IDs, and source-page paths are excluded. Interaction events use fixed categories rather than link URLs, visible text, or arbitrary DOM attributes. Each event includes the page locale; available properties distinguish the control's location and action:
+
+| Event | Records |
+| --- | --- |
+| `navigation` | Navigation to a page section or the homepage through the site's links. |
+| `outbound_click` | Clicks to GitHub, releases, npm, documentation, changelog, license, discussions, or TeX distributions, identified by a fixed destination category. |
+| `menu_open` | Opening a download or language menu. |
+| `download_click` | Choosing a specific installer, with platform, architecture, package format, and button location. |
+| `copy_install` | Successfully copying an installation command, without its contents. |
+| `copy_install_failed` | An unsuccessful copy attempt, without clipboard contents or error messages. |
+| `language_change` | Selecting a language, identified by its locale code. |
+| `theme_change` | Choosing light or dark appearance. |
+| `demo_interaction` | Using the interactive hero demo: accepting, rejecting, reopening, or showing/hiding LaTeX source. |
+| `section_view` | A main section or individual feature demonstration remains at least half visible for one second; sections taller than the viewport use half the viewport height. |
+| `scroll_depth` | Newly reached scroll milestones at 25%, 50%, 75%, and 100%. |
+| `engaged_time` | Visible-page time milestones at 15, 30, 60, and 120 seconds after statistics starts. Hidden-page time is excluded; this measures visibility, not actual attention. |
+
+Opening a download menu and following “All downloads” are separate from installer clicks. A download click does not establish a completed download or installation. Automatic demo animations do not count as user actions. Section, depth, and time milestones are deduplicated within a period of enabled collection on a page; previously reached scroll milestones are not replayed when consent is granted. Withdrawal disconnects exposure monitoring and timers, and clears their in-memory progress. No input contents, clipboard contents, selected text, account identifiers, replay, or heatmap features are collected by these events. Language redirects are not counted as an extra visit, and no attribution information is cached in browser storage. Consequently, some external sources are lost during a language redirect.
 
 Cookieless does not mean that no personal data is processed or that consent is unnecessary. Umami processes IP addresses and User-Agent information for visitor identifiers and approximate location; infrastructure logs may also contain IP addresses. See its [metric definitions](https://docs.umami.is/docs/metric-definitions). The site's consent mechanism and payload filtering are technical controls, not a certification of GDPR or ePrivacy compliance. Consent exemptions depend on the applicable rules and actual configuration; see the [CNIL's audience measurement guidance](https://www.cnil.fr/fr/cookies-solutions-pour-les-outils-de-mesure-daudience).
 

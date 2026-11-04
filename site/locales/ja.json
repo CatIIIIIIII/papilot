@@ -85,7 +85,7 @@
   "What Matters in a Paper Is the Idea and the Story": "論文で大切なのはアイデアとストーリー",
   "What should change here?": "ここをどう変更しますか？",
   "What should the agent change here?": "エージェントにここをどう変更させますか？",
-  "With your permission, Umami measures visits and download clicks, processing your IP address and device information. No analytics loads until you allow it.": "同意いただいた場合、Umami が訪問数とダウンロードのクリックを計測し、IP アドレスと端末情報を処理します。同意するまで統計サービスは読み込まれません。",
+  "With your permission, Umami measures visits, clicks, scrolling and time spent on this page, processing your IP address and device information. No analytics loads until you allow it.": "同意いただいた場合、Umami が訪問、クリック、スクロール、このページの滞在時間を計測し、IP アドレスと端末情報を処理します。同意するまで統計サービスは読み込まれません。",
   "Write T-Abs as a rule": "T-Absを規則として記述",
   "Write this as an inference rule": "ここは推論規則で書いて",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> by Hand": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>を手作業で記述",

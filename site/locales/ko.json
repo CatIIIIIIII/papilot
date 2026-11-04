@@ -85,7 +85,7 @@
   "What Matters in a Paper Is the Idea and the Story": "논문에서 중요한 것은 아이디어와 스토리입니다",
   "What should change here?": "여기를 어떻게 수정할까요?",
   "What should the agent change here?": "에이전트가 여기를 어떻게 수정할까요?",
-  "With your permission, Umami measures visits and download clicks, processing your IP address and device information. No analytics loads until you allow it.": "동의하시면 Umami가 방문 및 다운로드 클릭을 측정하며 IP 주소와 기기 정보를 처리합니다. 동의하기 전에는 통계 서비스를 불러오지 않습니다.",
+  "With your permission, Umami measures visits, clicks, scrolling and time spent on this page, processing your IP address and device information. No analytics loads until you allow it.": "동의하시면 Umami가 방문, 클릭, 스크롤 및 이 페이지에 머문 시간을 측정하며 IP 주소와 기기 정보를 처리합니다. 동의하기 전에는 통계 서비스를 불러오지 않습니다.",
   "Write T-Abs as a rule": "T-Abs를 규칙으로 작성",
   "Write this as an inference rule": "여기는 추론 규칙으로 써 주세요",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> by Hand": "수작업으로 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 작성",

@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { chromium, webkit } from '../engine/node_modules/playwright/index.mjs';
 import { parse } from 'parse5';
 import { siteAnalytics } from './site-analytics.mjs';
+import { checkSiteBehavior } from './site-behavior-checks.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const config = {
@@ -106,6 +107,7 @@ try {
   const context = await setup();
   const page = await context.newPage();
   const visits = () => page.evaluate(() => window.statistics);
+  const events = async name => (await visits()).filter(event => event.name === name);
   const externalCount = () => requests.filter(url => url.startsWith('https://statistics.example')).length;
   const visit = (url = 'https://papilot.ai/') => page.goto(url, { referer: 'https://source.example/private/email@example.org?token=secret' });
   const reset = () => page.evaluate(() => localStorage.clear());
@@ -130,7 +132,8 @@ try {
     assert.equal(externalCount(), before, `${locale}: rejection is remembered without loading analytics`);
     await reopen();
     await permit();
-    assert.deepEqual(await visits(), [{ website: config.PAPILOT_UMAMI_WEBSITE_ID, hostname: 'papilot.ai', url: routeFor(locale), title: 'Papilot', language: locale, referrer: 'https://source.example' }]);
+    assert.deepEqual(await events(undefined), [{ website: config.PAPILOT_UMAMI_WEBSITE_ID, hostname: 'papilot.ai', url: routeFor(locale), title: 'Papilot', language: locale, referrer: 'https://source.example' }]);
+    assert.equal((await events('copy_install')).length, 0, 'pre-consent clicks are not replayed');
     assert.equal(await page.evaluate(() => window.trackerConfig.autoTrack), 'false');
     await reopen();
     await page.locator('#statistics-withdraw').click();
@@ -156,19 +159,19 @@ try {
       const download = page.waitForEvent('download');
       await page.locator(`#${list} [data-download-platform="${platform}"][data-download-arch="${arch}"][data-download-format="${format}"] strong`).click();
       await (await download).cancel();
-      assert.deepEqual((await visits()).at(-1).data, { locale: 'zh-CN', placement, platform, arch, format });
+      assert.deepEqual((await events('download_click')).at(-1).data, { locale: 'zh-CN', placement, platform, arch, format });
       assert.equal(await page.locator(`#${list}`).isHidden(), true);
     }
   }
   for (const [selector, placement] of [['.hero [data-copy]', 'hero'], ['#download [data-copy]', 'download']]) {
     await page.locator(selector).click();
-    assert.equal((await visits()).at(-1).name, 'copy_install');
-    assert.deepEqual((await visits()).at(-1).data, { locale: 'zh-CN', placement });
+    assert.deepEqual((await events('copy_install')).at(-1).data, { locale: 'zh-CN', placement });
   }
   await page.evaluate(() => { window.copyFails = true; });
-  const beforeFailure = (await visits()).length;
+  const beforeFailure = (await events('copy_install')).length;
   await page.locator('.hero [data-copy]').click();
-  assert.equal((await visits()).length, beforeFailure, 'failed clipboard writes never count');
+  assert.equal((await events('copy_install')).length, beforeFailure, 'failed clipboard writes never count as successful copies');
+  assert.deepEqual((await events('copy_install_failed')).at(-1).data, { locale: 'zh-CN', placement: 'hero' });
 
   // Inspect actual mocked HTTP collection, including the browser's Referer header.
   assert.ok(collected.length > 0);
@@ -262,6 +265,8 @@ try {
   await privatePage.reload();
   assert.deepEqual(await privatePage.evaluate(() => window.statistics), [], 'blocked storage never invents saved consent');
   await storageBlocked.close();
+
+  await checkSiteBehavior(await setup());
 
   const visual = await setup();
   const visualPage = await visual.newPage();
