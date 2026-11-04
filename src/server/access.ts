@@ -81,7 +81,7 @@ export class Limiter {
 // appends the client's address last. An IPv6 client counts by its /64, since
 // one host can use any address in it.
 export function clientAddress(request: FastifyRequest) {
-  const address = String(request.headers['x-forwarded-for'] || '').split(',').map(part => part.trim()).filter(Boolean).at(-1)?.replace(/%.*$/, '') || '';
+  const address = String(request.headers['x-forwarded-for'] || '').split(',').map(part => part.trim()).filter(Boolean).at(-1)?.split('%', 1)[0] || '';
   if (!address) return 'unknown';
   const v4 = address.match(/(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (v4 || !address.includes(':')) return v4 ? v4[1] : address;
