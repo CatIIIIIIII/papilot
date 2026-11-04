@@ -18,12 +18,19 @@
       packages = forAllSystems (
         system:
         let
-          papilot = (pkgsFor system).callPackage ./nix/package.nix { };
+          pkgs = pkgsFor system;
+          papilot-cli = pkgs.callPackage ./nix/package.nix { };
+          papilot-desktop = pkgs.callPackage ./nix/desktop.nix { papilot = papilot-cli; };
+          papilot = if pkgs.stdenv.hostPlatform.isLinux then pkgs.symlinkJoin {
+            name = "papilot-${papilot-cli.version}";
+            paths = [ papilot-cli papilot-desktop ];
+            meta = papilot-cli.meta;
+          } else papilot-cli;
         in
         {
-          inherit papilot;
+          inherit papilot papilot-cli;
           default = papilot;
-        }
+        } // (pkgsFor system).lib.optionalAttrs (pkgsFor system).stdenv.hostPlatform.isLinux { inherit papilot-desktop; }
       );
 
       devShells = forAllSystems (
@@ -56,6 +63,8 @@
 
       checks = forAllSystems (system: {
         package = self.packages.${system}.papilot;
+      } // (pkgsFor system).lib.optionalAttrs (system == "x86_64-linux") {
+        desktop-vm = import ./nix/vm-test.nix { pkgs = pkgsFor system; papilot = self.packages.${system}.papilot; };
       });
 
       formatter = forAllSystems (system: (pkgsFor system).nixfmt);

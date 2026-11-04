@@ -9,9 +9,13 @@
   which,
   texliveFull,
   tex ? texliveFull,
+  autoPatchelfHook,
+  openssl,
+  zlib,
 }:
 
 let
+  agentDeps = importNpmLock { npmRoot = ./runtime; };
   engineDeps = importNpmLock { npmRoot = ../engine; };
 in
 buildNpmPackage {
@@ -57,7 +61,8 @@ buildNpmPackage {
   npmPackFlags = [ "--ignore-scripts" ];
   npmPruneFlags = [ "--ignore-scripts" ];
 
-  nativeBuildInputs = [ makeWrapper ];
+  nativeBuildInputs = [ makeWrapper ] ++ lib.optionals stdenv.hostPlatform.isLinux [ autoPatchelfHook ];
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [ stdenv.cc.cc.lib openssl zlib ];
 
   env = {
     ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
@@ -76,13 +81,30 @@ buildNpmPackage {
       npmConfigHook
     )
     npm --prefix engine run build
+    mkdir -p nix-agent-runtime
+    cp ${./runtime/package.json} nix-agent-runtime/package.json
+    cp ${./runtime/package-lock.json} nix-agent-runtime/package-lock.json
+    (
+      npmDeps=${agentDeps}
+      npmRoot=nix-agent-runtime
+      npmConfigHook
+    )
+    npm run desktop:compile
   '';
 
   postInstall = ''
     npm --prefix engine prune --omit=dev --ignore-scripts
     cp -r engine/node_modules "$out/lib/node_modules/papilot/engine/"
+    cp -r nix-agent-runtime "$out/lib/node_modules/papilot/"
+    mkdir -p "$out/lib/node_modules/papilot/.desktop"
+    cp -r .desktop/app "$out/lib/node_modules/papilot/.desktop/"
+    cp -r desktop "$out/lib/node_modules/papilot/desktop"
+    cat > "$out/lib/node_modules/papilot/.desktop/app/package.json" <<'EOF'
+    {"name":"papilot-desktop","type":"module","main":"main.js"}
+    EOF
 
     wrapProgram "$out/bin/papilot" \
+      --set PAPILOT_INSTALL_METHOD nix \
       --prefix PATH : ${
         lib.makeBinPath [
           nodejs_24
@@ -92,6 +114,8 @@ buildNpmPackage {
         ]
       }
   '';
+
+  passthru.runtimePath = lib.makeBinPath [ nodejs_24 git which tex ];
 
   doInstallCheck = true;
   installCheckPhase = ''

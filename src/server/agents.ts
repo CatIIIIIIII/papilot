@@ -35,24 +35,8 @@ export interface AgentRuntime extends EventEmitter {
 
 export { AGENT_NAMES };
 
-// Where agent CLIs install themselves. A background service's PATH often
-// lacks these folders, so a CLI not on PATH is looked for here too.
-export function agentDirs(env: NodeJS.ProcessEnv = process.env) {
-  const home = env.HOME || os.homedir();
-  return ['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)).concat('/opt/homebrew/bin', '/usr/local/bin');
-}
-// The executable a command name resolves to on PATH or in an agent folder (or the path itself), or null.
-export function findExecutable(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  const windows = process.platform === 'win32';
-  const extensions = windows ? ['', ...(env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')] : [''];
-  const usable = (file: string) => {
-    try { if (!fs.statSync(file).isFile()) return false; fs.accessSync(file, windows ? fs.constants.F_OK : fs.constants.X_OK); return true; } catch { return false; }
-  };
-  const candidates = command.includes('/') || (windows && command.includes('\\')) ? [path.resolve(command)]
-    : [...new Set([...(env.PATH || '').split(path.delimiter).filter(Boolean), ...agentDirs(env)])].map(dir => path.join(dir, command));
-  for (const candidate of candidates) for (const extension of extensions) if (usable(candidate + extension)) return candidate + extension;
-  return null;
-}
+import { agentDirs, findExecutable } from '../../bin/agent-paths.mjs';
+export { agentDirs, findExecutable };
 
 export interface Thread { readOnly?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
@@ -132,6 +116,10 @@ const PACKAGES = path.join(DATA, 'agents');
 export async function loadPackage(name: string, version: string, label: string, ready: () => void = () => {}): Promise<any> {
   try { return await import(name); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ERR_MODULE_NOT_FOUND') throw error; }
+  if (process.env.PAPILOT_INSTALL_METHOD === 'nix') {
+    const entry = createRequire(path.join(ROOT, 'nix-agent-runtime/package.json')).resolve(name);
+    return import(pathToFileURL(entry).href);
+  }
   const prefix = PACKAGES, resolve = () => createRequire(path.join(prefix, 'package.json')).resolve(name);
   let entry: string;
   try { entry = resolve(); } catch {
@@ -145,7 +133,7 @@ export async function loadPackage(name: string, version: string, label: string, 
 // The file a package loaded from: Papilot's own dependencies, or the copy
 // fetched on first use.
 export function packageFile(name: string) {
-  for (const from of [import.meta.url, path.join(PACKAGES, 'package.json')]) {
+  for (const from of [import.meta.url, ...(process.env.PAPILOT_INSTALL_METHOD === 'nix' ? [path.join(ROOT, 'nix-agent-runtime/package.json')] : [path.join(PACKAGES, 'package.json')])]) {
     try { return createRequire(from).resolve(name); } catch { /* Not installed there. */ }
   }
   return null;

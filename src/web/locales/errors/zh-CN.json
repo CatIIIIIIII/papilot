@@ -224,6 +224,7 @@
   "Too many open Papilot tabs. Close one and try again.": "打开的 Papilot 标签页过多，请关闭一个后重试。",
   "Unknown Git action.": "未知的 Git 操作。",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "未使用的附件已达 500 MB。请先从草稿中移除附件，再继续上传。",
+  "Updates are managed by Nix.": "更新由 Nix 管理。",
   "Upload a file as binary data.": "请以二进制数据形式上传文件。",
   "Wait for repository preparation to finish.": "请等待仓库准备完成。",
   "Wait for task creation to finish before deleting it.": "删除任务前，请先等待任务创建完成。",

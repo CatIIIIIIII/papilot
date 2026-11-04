@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${CHECK_RESULT:-}" == success ]] || exit 1
-case "${GITHUB_EVENT_NAME:-}" in
+event=${GITHUB_EVENT_NAME:-}
+if [[ "$event" == push && "${GITHUB_REF:-}" != refs/heads/main ]]; then event=workflow_call; fi
+case "$event" in
   pull_request|push)
     [[ "${CHANGES_RESULT:-}" == success ]] || exit 1
     case "${DESKTOP_SCOPE:-}" in

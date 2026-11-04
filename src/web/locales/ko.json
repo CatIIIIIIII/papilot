@@ -963,6 +963,7 @@
   "Update ready": "업데이트 준비 완료",
   "Update to {version}": "{version} 버전으로 업데이트",
   "Updates": "업데이트",
+  "Updates are managed by Nix.": "업데이트는 Nix에서 관리합니다.",
   "Updating…": "업데이트 중…",
   "Upload failed. Please retry.": "업로드에 실패했습니다. 다시 시도해 주세요.",
   "Uploading…": "업로드 중…",

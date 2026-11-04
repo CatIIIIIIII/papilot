@@ -963,6 +963,7 @@
   "Update ready": "Actualización lista",
   "Update to {version}": "Actualizar a {version}",
   "Updates": "Actualizaciones",
+  "Updates are managed by Nix.": "Nix gestiona las actualizaciones.",
   "Updating…": "Actualizando…",
   "Upload failed. Please retry.": "Error al subir. Inténtalo de nuevo.",
   "Uploading…": "Subiendo…",
