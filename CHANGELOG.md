@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-11-04
+
+Papilot 0.8.9 displays CJK text from PDFs whose fonts lack Unicode maps and removes the global two-task concurrency limit.
+
 ### Fixed
 
 - **Tasks no longer wait for a global slot.** Papilot ran at most two tasks at a time, counted across all agents and papers, so a third task stayed queued with "Waiting for an available Codex session" even when that agent was idle. Connected, signed-in agents can now start every eligible queued task. Each task still waits for its own active turn, build, review work or delivery, and PDF builds retain their worker limit.
@@ -306,7 +310,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.8...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.9...HEAD
+[0.8.9]: https://github.com/PapilotAI/papilot/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/PapilotAI/papilot/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/PapilotAI/papilot/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/PapilotAI/papilot/compare/v0.8.5...v0.8.6
