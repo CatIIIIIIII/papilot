@@ -1951,7 +1951,7 @@ try {
   const papers = await browser.newContext({ locale: 'en-US', colorScheme: 'light', viewport: { width: 1440, height: 900 } });
   const papersPage = await papers.newPage();
   const paperState = { ...snapshot, projects: [...snapshot.projects, otherPaper], tasks: [otherTask], requests: [] };
-  await papersPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/state') ? paperState : { items: [], build: { status: 'building' }, git: { files: [] } } }));
+  await papersPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/state') ? paperState : { items: [], questions: [], sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }], build: { status: 'building' }, git: { files: [] } } }));
   await papersPage.goto(origin);
   await papersPage.getByRole('heading', { name: otherTask.title }).waitFor();
   assert.equal(await papersPage.getByRole('button', { name: /^Paper:/ }).getAttribute('aria-label'), 'Paper: Second paper');
@@ -1994,7 +1994,7 @@ try {
   const restrictedPage = await restricted.newPage();
   const restrictedErrors = [];
   restrictedPage.on('pageerror', error => restrictedErrors.push(error.message));
-  await restrictedPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/state') ? { ...snapshot, tasks: [secondTask], requests: [] } : { items: [] } }));
+  await restrictedPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/state') ? { ...snapshot, tasks: [secondTask], requests: [] } : { items: [], questions: [], sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } }));
   await restrictedPage.goto(origin);
   const restrictedInput = restrictedPage.getByRole('textbox', { name: 'Instructions for Codex' });
   await restrictedInput.fill('A usable draft with storage disabled.');
