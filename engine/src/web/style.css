@@ -1878,3 +1878,6 @@ body {
 .comparison .change.current{box-shadow:0 0 0 2px var(--accent);border-radius:4px}
 .comparison .fold{margin:0;background:var(--frame)}
 @media(max-width:680px){.comparison{--comparison-gap:12px}.comparison-head{position:static}}
+
+/* Resolved source editors stay in History; do not expose a toggle for a hidden editor. */
+.comparison .reviewed-change>.change-head>.link:not(.undo):not(.copy-reference){display:none}
