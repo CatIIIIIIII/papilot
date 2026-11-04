@@ -630,6 +630,7 @@ interface NoteActions {
   remove: (note: Annotation) => Promise<void>;
   restore: (note: Annotation) => Promise<void>;
   onEditing: (editing: boolean) => void;
+  onTaskEditing: (editing: boolean) => void;
   onReviewBusy: (busy: boolean) => void;
   sending: boolean;
 }
@@ -721,6 +722,28 @@ function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, co
 // The composer receives only attachments the author explicitly chose in the PDF.
 function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]; currentKey?: string; actions: NoteActions; onShow: (note: Annotation) => void }) {
   const panel = useRef<HTMLElement>(null);
+  const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
+  const [saving, setSaving] = useState(false), [error, setError] = useState('');
+  const pending = useRef(false);
+  const editing = draft !== null, locked = actions.sending || saving || editing;
+  const onEditing = actions.onTaskEditing;
+  useEffect(() => { onEditing(editing || saving); return () => onEditing(false); }, [editing, saving, onEditing]);
+  useEffect(() => {
+    if (draft && (!notes.some(note => note.id === draft.id) || !actions.selection.has(draft.id))) { setDraft(null); setError(''); }
+  }, [notes, draft, actions.selection]);
+  const finish = (id: string) => {
+    setDraft(null); setError('');
+    requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>(`[data-note="${CSS.escape(id)}"] .task-note-edit-control`)?.focus({ preventScroll: true }));
+  };
+  async function save(note: Annotation) {
+    if (!draft || draft.id !== note.id || !draft.text.trim() || actions.sending || pending.current) return;
+    const comment = draft.text.trim();
+    if (comment === note.comment) { finish(note.id); return; }
+    pending.current = true; setSaving(true); setError('');
+    try { await actions.edit(note, comment); finish(note.id); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { pending.current = false; setSaving(false); }
+  }
   const chosen = notes.filter(note => actions.selection.has(note.id));
   if (!chosen.length) return null;
   // Notes listed in My notes fly back there; placed AI suggestions stay on the page.
@@ -730,18 +753,34 @@ function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]
   };
   const remove = (note: Annotation, index: number) => {
     const label = note.aiReview ? t('Remove suggestion {n} from task', { n: index + 1 }) : t('Remove note {n} from task', { n: index + 1 });
-    return <button type="button" className="note-send included" aria-label={label} title={label} disabled={actions.sending} onClick={() => putBack([note])}>{t('Included')}<Icon name="close" size={12}/></button>;
+    return <button type="button" className="note-send included" aria-label={label} title={label} disabled={locked} onClick={() => putBack([note])}>{t('Included')}<Icon name="close" size={12}/></button>;
   };
   const reference = (note: Annotation, index: number) => <li key={note.id} data-note={note.id} className="task-note-reference">
-    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span></div>
+    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey || locked} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span>{!note.aiReview && <button type="button" className="icon-button task-note-edit-control" aria-label={t('Edit note {n}', { n: index + 1 })} title={t('Edit note')} disabled={locked} onClick={() => { setError(''); setDraft({ id: note.id, text: note.comment }); }}><Icon name="compose" size={14}/></button>}</div>
     <NoteQuote text={note.quote}/>
     {/* Same control and place as the PDF popover: bottom right, "Included ×". It
         floats at the end of the comment, so only the last line makes room. */}
-    <p className="task-note-comment">{note.comment}{remove(note, index)}</p>
+    {draft?.id === note.id ? <div className="task-note-editor">
+      <textarea autoFocus className="pdf-note-input" aria-label={t('Edit note {n}', { n: index + 1 })} value={draft.text} rows={3} maxLength={4000} readOnly={saving || actions.sending}
+        onChange={event => setDraft({ id: note.id, text: event.target.value })} onKeyDown={event => {
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!saving) finish(note.id); }
+          else if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); event.stopPropagation(); void save(note); }
+        }}/>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      <div className="task-note-editor-actions">
+        <button type="button" className="button ghost compact" disabled={saving || actions.sending} onClick={() => finish(note.id)}>{t('Cancel')}</button>
+        <button type="button" className="button compact" disabled={saving || actions.sending || !draft.text.trim()} onClick={() => void save(note)}>{saving ? <span className="spinner"/> : t('Save')}</button>
+      </div>
+    </div> : <p className="task-note-comment">{note.aiReview ? note.comment : <button type="button" className="task-note-edit note-edit-trigger" title={t('Edit note')} disabled={locked} onClick={() => {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && panel.current?.querySelector(`[data-note="${CSS.escape(note.id)}"] .task-note-edit`)?.contains(selection.anchorNode)) return;
+      setError(''); setDraft({ id: note.id, text: note.comment });
+    }}>{note.comment || t('Edit note')}</button>}{remove(note, index)}</p>}
     {note.key !== currentKey && <NotePlacementWarning/>}
   </li>;
   return <section ref={panel} className="task-notes-panel" aria-label={t('Notes in this task')}>
-    <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={actions.sending} onClick={() => putBack(chosen)}>{t('Remove all from task')}</button></div>
+    <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={locked} onClick={() => putBack(chosen)}>{t('Remove all from task')}</button></div>
     {noteGroups(notes).map(({ group, entries }) => {
       const selected = entries.filter(({ note }) => actions.selection.has(note.id));
       return selected.length > 0 && <GroupCard key={group} group={group} count={selected.length}>
@@ -967,7 +1006,8 @@ function App() {
   const annotationUndo = useRef<{ kind: 'add' | 'remove'; note: Annotation }[]>([]);
   const undoingAnnotation = useRef(false);
   useEffect(() => { setNoteGroup(null); annotationUndo.current = []; }, [projectId]);
-  const [noteEditing, setNoteEditing] = useState(false);
+  const [pdfNoteEditing, setNoteEditing] = useState(false), [taskNoteEditing, setTaskNoteEditing] = useState(false);
+  const noteEditing = pdfNoteEditing || taskNoteEditing;
   const [reviewNoteBusy, setReviewNoteBusy] = useState(false);
   const [manuscript, setManuscript] = useState<{ projectId: string; data: Manuscript | null; error: string }>({ projectId: '', data: null, error: '' });
   const manuscriptRequest = useRef(0);
@@ -1400,6 +1440,7 @@ function App() {
       withNotes(() => restored.annotations); setActiveNote(note.id);
     },
     onEditing: setNoteEditing,
+    onTaskEditing: setTaskNoteEditing,
     onReviewBusy: setReviewNoteBusy,
     sending: creating || reviewNoteBusy,
   };

@@ -164,6 +164,8 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
       {note.aiReview && !destination && <span className="pdf-note-origin" title={t('AI suggestion')}>{AGENT_NAMES[note.aiReview.agent]}</span>}
       <span className="pdf-note-tools-space"/>
       {ai && total > 1 && <div className="pdf-suggestion-navigation"><button type="button" className="icon-button" aria-label={t('Previous suggestion')} title={t('Previous suggestion (←)')} aria-keyshortcuts="ArrowLeft" disabled={busy || index <= 0} onClick={onPrevious}><Icon name="chevronLeft" size={14}/></button><span aria-label={t('{current} of {total}', { current: index + 1, total })}>{index + 1}/{total}</span><button type="button" className="icon-button" aria-label={t('Next suggestion')} title={t('Next suggestion (→)')} aria-keyshortcuts="ArrowRight" disabled={busy || index >= total - 1} onClick={onNext}><Icon name="chevronRight" size={14}/></button></div>}
+      {!ai && !editing && <button type="button" className="icon-button pdf-note-edit-control" aria-label={t('Edit note {n}', { n: number })} title={t('Edit note')} disabled={busy} onClick={edit}><Icon name="compose" size={14}/></button>}
+      {!ai && editing && <><button type="button" className="button ghost compact" disabled={busy} onClick={finish}>{t('Cancel')}</button><button type="button" className="button compact" disabled={busy || !draft.trim()} onClick={() => void save('keep')}>{t('Save')}</button></>}
       {deleteButton}
       {send ? sendButton : <NoteAttachButton number={number} ai={ai} selected={selected} disabled={busy || (editing && !draft.trim())} destination={destination} onClick={() => {
         // Keep keyboard navigation available while this button becomes disabled.
