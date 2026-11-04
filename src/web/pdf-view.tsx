@@ -562,7 +562,6 @@ export const PdfView = forwardRef<PdfHandle, {
     } catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); return false; }
     finally { setNoteBusy(false); }
   }
-  const section = props.outline[props.section];
   const presets = zooms(), zoomLabel = presets.find(option => option.value === zoom.value) ? zoom.value : String(Math.round(zoom.scale * 100) / 100);
   const zoomOptions = presets.some(option => option.value === zoomLabel) ? presets : [...presets, { value: zoomLabel, label: `${Math.round(zoom.scale * 100)}%` }];
 
@@ -579,7 +578,7 @@ export const PdfView = forwardRef<PdfHandle, {
   }}>
     <div className="pdf-toolbar" role="toolbar" aria-label={t('PDF controls')}>
       {props.lead}
-      <div className="pdf-section" title={section?.title}>{section?.title && <span className="pdf-section-title">{section.title}</span>}</div>
+      <div className="pdf-toolbar-spacer"/>
       <div className="pdf-pager">
         <button type="button" className="icon-button" aria-label={t('Previous page')} disabled={page <= 1} onClick={() => tools.current?.viewer.previousPage()}><Icon name="chevronUp" size={16}/></button>
         <input aria-label={t('Page number')} inputMode="numeric" value={pageInput} onChange={e => setPageInput(e.target.value.replace(/\D/g, ''))} onFocus={e => e.currentTarget.select()} onBlur={() => setPageInput(String(page))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); goToPage(); e.currentTarget.blur(); } }}/>

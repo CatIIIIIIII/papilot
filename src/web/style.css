@@ -234,8 +234,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .review-tools .icon-button{width:30px;height:30px}
 .review-tools [aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
 .review-tools .commit-staged{height:28px;padding:0 9px;font-size:13px;border-radius:7px;gap:6px}
-/* The PDF page leads its toolbar with PDF or Changes: in the PDF view before
-   the section title, in the changes review over the start of its bar. */
+/* The PDF / Changes switch leads both the PDF toolbar and the changes bar. */
 .pdf-modes{display:inline-grid;grid-template-columns:repeat(2,1fr);gap:2px;padding:2px;border:1px solid var(--line-strong);border-radius:9px;background:var(--bg-active);flex-shrink:0}
 .pdf-modes>button{display:flex;align-items:center;justify-content:center;gap:5px;height:26px;padding:0 9px;border-radius:6px;font-size:13px;font-weight:500;color:var(--text-2);white-space:nowrap;transition:background-color .15s,color .15s,box-shadow .15s}
 .pdf-modes>button:hover{color:var(--text);background:var(--bg-hover)}
@@ -246,7 +245,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .pdf-modes.labeled>button{width:auto;padding:0 10px}.pdf-modes.labeled>button>span{display:inline}
 .review-lead{min-height:44px;display:flex;align-items:center;gap:4px;padding-left:8px;flex-shrink:0}
 /* Before the first PDF exists, use the same toolbar sizing and responsive
-   modes as the viewer. Only the section spacer grows, never the icon gaps. */
+   modes as the viewer. Only the toolbar spacer grows, never the icon gaps. */
 .manuscript-lead{container-type:inline-size}
 .review-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:24px;text-align:center;color:var(--text-2);font-size:14px;line-height:1.6;overflow:auto;background:var(--canvas)}
 .review-loading p{max-width:340px}
@@ -621,8 +620,7 @@ body.resizing iframe{pointer-events:none}
 /* pdf.js viewer: toolbar, find bar, pages and the note layer above each page */
 .pdf-view{flex:1;min-height:0;display:flex;flex-direction:column;container-type:inline-size}
 .pdf-toolbar{display:flex;align-items:center;gap:6px;height:46px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
-.pdf-section{flex:1;display:flex;align-items:center;min-width:0;height:32px;padding:0 10px;color:var(--text);text-align:left}
-.pdf-section-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 15px/1.3 var(--serif)}
+.pdf-toolbar-spacer{flex:1;min-width:0}
 .pdf-pager,.pdf-zoom{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .pdf-pager{font-size:13px;color:var(--text-2)}
 .pdf-pager input{width:44px;height:28px;padding:0 4px;text-align:center;border:1px solid var(--line-strong);border-radius:7px;font-size:13px;font-variant-numeric:tabular-nums;outline:none}
@@ -631,7 +629,7 @@ body.resizing iframe{pointer-events:none}
 .pdf-zoom{padding:0 4px;border-left:1px solid var(--line);border-right:1px solid var(--line)}
 .pdf-toolbar .icon-button{width:30px;height:30px}
 .pdf-toolbar .icon-button.active,.pdf-find .icon-button.active{background:var(--accent-soft);color:var(--accent)}
-@container (max-width:760px){.pdf-toolbar .pdf-zoom{display:none}.pdf-toolbar .pdf-section{padding:0}}
+@container (max-width:760px){.pdf-toolbar .pdf-zoom{display:none}}
 @container (max-width:620px){.pdf-pager>.icon-button{display:none}}
 @container (max-width:400px){.pdf-toolbar .pdf-modes>button{padding:0 6px}.pdf-pages{min-width:24px;padding-left:2px}}
 .pdf-find{display:flex;align-items:center;gap:6px;height:44px;padding:0 8px 0 14px;border-bottom:1px solid var(--line);background:var(--bg-subtle);flex-shrink:0}
@@ -960,8 +958,6 @@ body.resizing iframe{pointer-events:none}
   .manuscript-pages{flex:1;display:flex;flex-direction:column}
   .pdf-toolbar{gap:2px;padding:0 4px}
   .pdf-zoom{display:none}
-  /* The PDF / Changes switch takes the section title's place. */
-  .pdf-modes~.pdf-section{flex:1;padding:0;visibility:hidden}
   .pdf-modes>button{width:36px;height:32px;padding:0}
   .pdf-modes>button>span{display:none}
   .pdf-toolbar .icon-button{width:40px;height:40px}
