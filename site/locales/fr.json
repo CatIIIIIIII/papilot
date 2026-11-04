@@ -3,6 +3,7 @@
   "1 review update not sent yet": "1 mise à jour de révision non envoyée",
   "2 notes on the PDF": "2 annotations sur le PDF",
   "<del>The type of <span class=\"math\">λ<i>x</i>. <i>e</i></span> is determined by the types of <i>x</i> and its body <i>e</i>.</del>": "<del>Le type de <span class=\"math\">λ<i>x</i>. <i>e</i></span> est déterminé par les types de <i>x</i> et de son corps <i>e</i>.</del>",
+  "<ins>If <i>e</i> has type <i>τ</i>₂ in the context Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, then <span class=\"math\">λ<i>x</i>. <i>e</i></span> has type <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins>": "<ins>Si <i>e</i> a le type <i>τ</i>₂ dans le contexte Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, alors <span class=\"math\">λ<i>x</i>. <i>e</i></span> a le type <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins>",
   "A Modern <ins>Agentic</ins> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> Editor": "Un éditeur <ins>agentique</ins> moderne pour <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>",
   "A comment on a change goes back to the agent, which rewrites it as the T-Abs typing rule before it is accepted": "Un commentaire sur une modification est renvoyé à l'agent, qui la réécrit sous la forme de la règle de typage T-Abs avant qu'elle ne soit acceptée",
   "A paper is written to be read, so every change has to be right. However many there are, each one is shown typeset, and nothing that hasn't been accepted reaches the paper. If one isn't right yet, comment on it and the agent revises it.": "Un article est écrit pour être lu : chaque modification doit donc être juste. Quel qu'en soit le nombre, chacune s'affiche mise en page, et rien n'intègre l'article sans avoir été accepté. Si une modification ne convient pas encore, commentez-la et l'agent la révise.",
@@ -51,6 +52,7 @@
   "Page 2 · main.tex:31": "Page 2 · main.tex:31",
   "Papilot · A Modern Agentic LaTeX Editor": "Papilot · Un éditeur LaTeX agentique moderne",
   "Point at What Should Change": "Pointez ce qui doit changer",
+  "Privacy notice": "Politique de confidentialité",
   "Push": "Pousser",
   "Pushed to the remote.": "Poussé vers le dépôt distant.",
   "Reject": "Rejeter",
@@ -83,6 +85,5 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "En <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>je lis</del> le code <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><del> et cherche dans</del> le PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "En <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>pourquoi lire</ins> le code <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><ins> ? Je lis</ins> le PDF<ins> ! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "En \\LaTeX{}, <del>je lis</del><ins>pourquoi lire</ins> le code \\LaTeX{}<del> et cherche dans</del><ins> ? Je lis</ins> le PDF<del> 😭</del><ins> ! 😎</ins>",
-  "line 6": "ligne 6",
-  "<ins>If <i>e</i> has type <i>τ</i>₂ in the context Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, then <span class=\"math\">λ<i>x</i>. <i>e</i></span> has type <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins>": "<ins>Si <i>e</i> a le type <i>τ</i>₂ dans le contexte Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, alors <span class=\"math\">λ<i>x</i>. <i>e</i></span> a le type <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins>"
+  "line 6": "ligne 6"
 }
