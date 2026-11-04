@@ -1,7 +1,12 @@
 name: CI
 
+# Pull requests and main run the checks. A pull request that can change the
+# desktop app also launches it: the unpacked app on Apple silicon and Linux,
+# or every installer when it changes the installer itself. Desktop Dev
+# (nightly) and Release build and test every installer before publishing.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -9,13 +14,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # A new push to a pull request replaces its run; every commit on main keeps its own.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -40,3 +47,60 @@ jobs:
       - run: npm run site
       - name: Pack
         run: npm pack --ignore-scripts --dry-run
+
+  # Which desktop check the pull request needs, from the files it changes.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.scope.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The pull request's merge commit and the base it merges into.
+          fetch-depth: 2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: scope
+        run: |
+          scope=none
+          while IFS= read -r file; do
+            case "$file" in
+              # Never part of the app. Markdown is text, as in the shell fingerprint.
+              *.md | LICENSE | docs/* | site/* | tests/* | i18n/* | .github/ISSUE_TEMPLATE/* | .github/workflows/pages.yml | \
+              scripts/build-site.mjs | scripts/check-site.mjs | scripts/site-* | scripts/i18n.ts | scripts/i18n/*) ;;
+              # How installers are made and tested.
+              scripts/desktop-layer.mjs | scripts/check-desktop-linux.sh | .github/workflows/desktop.yml) scope=installers ;;
+              *) if [ "$scope" = none ]; then scope=quick; fi ;;
+            esac
+          done < <(git diff --name-only --no-renames HEAD^1 HEAD)
+          # The installer's contents changed: Electron, Node, Codex, production
+          # dependencies or desktop/, as the Dev channel decides on new installers.
+          if [ "$scope" = quick ]; then
+            git worktree add -q --detach "$RUNNER_TEMP/base" HEAD^1
+            node --input-type=module -e "
+              import { shellFingerprint } from '$PWD/scripts/desktop-layer.mjs';
+              process.exit(shellFingerprint('$RUNNER_TEMP/base') === shellFingerprint('.') ? 0 : 1);
+            " || scope=installers
+          fi
+          echo "Desktop check: $scope"
+          echo "desktop=$scope" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop != 'none'
+    uses: ./.github/workflows/desktop.yml
+    with:
+      quick: ${{ needs.changes.outputs.desktop == 'quick' }}
+
+  # The check to require: it passes when every job above passed or was not needed.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [check, changes, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail when a job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

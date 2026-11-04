@@ -16,10 +16,6 @@ concurrency:
 
 jobs:
   desktop:
-    # The reusable workflow's dev publishing job (skipped for tags) declares
-    # contents: write; its build jobs keep read-only tokens.
-    permissions:
-      contents: write
     uses: ./.github/workflows/desktop.yml
     secrets: inherit
 
