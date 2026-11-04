@@ -18,8 +18,8 @@ export function EffortSlider({ efforts, value, fallback, onChange, label = t('Re
   const valueLabel = current ? effortName(current) : t('Model default');
   // Unknown provider levels get the ordinary accent, without implying Ultra.
   const level = current ? (levels.includes(current) ? current : 'custom') : 'default';
-  const centre = (step: number) => `calc(15px + ${efforts.length > 1 ? step / (efforts.length - 1) : 1} * (100% - 30px))`;
-  const style = { '--effort-position': centre(index), '--effort-fill-width': `calc(30px + ${share} * (100% - 30px))` } as CSSProperties;
+  const centre = (step: number) => `calc(9px + ${efforts.length > 1 ? step / (efforts.length - 1) : 1} * (100% - 18px))`;
+  const style = { '--effort-position': centre(index), '--effort-fill-width': `calc(18px + ${share} * (100% - 18px))` } as CSSProperties;
   return <div className="agent-effort" data-effort={level} style={style}>
     <div className="effort-head"><span>{label}</span><strong key={valueLabel} className="effort-value">{valueLabel}</strong></div>
     {description && <p className="effort-description" id={descriptionId}>{description}</p>}
@@ -31,7 +31,7 @@ export function EffortSlider({ efforts, value, fallback, onChange, label = t('Re
       </span>
       {efforts.map((item, step) => step !== index && <span key={item} aria-hidden="true" className={'effort-stop' + (current && step < index ? ' on' : '')} style={{ left: centre(step) }}/>)}
       <span className="effort-thumb" aria-hidden="true">
-        {level === 'ultra' && <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M10 1.5 12.4 7.6 18.5 10 12.4 12.4 10 18.5 7.6 12.4 1.5 10 7.6 7.6Z"/></svg>}
+        {level === 'ultra' && <svg viewBox="0 0 20 20" width="10" height="10" fill="currentColor"><path d="M10 1.5 12.4 7.6 18.5 10 12.4 12.4 10 18.5 7.6 12.4 1.5 10 7.6 7.6Z"/></svg>}
       </span>
       <input type="range" min={0} max={efforts.length - 1} step={1} value={index} aria-label={label} aria-valuetext={valueLabel} aria-describedby={description ? descriptionId : undefined} disabled={efforts.length < 2}
         onChange={event => onChange(efforts[Number(event.target.value)])}/>
