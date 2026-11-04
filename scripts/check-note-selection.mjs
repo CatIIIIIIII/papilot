@@ -24,6 +24,7 @@ function note(id, index, group) {
 let notes = [note('n1', 1), note('n2', 2, 'yellow'), note('n3', 3, 'yellow'), note('n4', 4, 'purple'), note('n5', 5)];
 const otherNote = { ...note('other-note', 6), projectId: 'other' };
 const original = structuredClone(notes), sent = [], attempts = [], items = new Map();
+let failDelete = false, holdDelete = false, releaseDelete, deletedFixture;
 let fail = false, hold = false, release, failEdit = false, holdEdit = false, releaseEdit;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
@@ -37,6 +38,17 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/manuscript/words')) return json(words[Number(url.searchParams.get('page'))]);
   if (url.pathname.endsWith('/items')) return json({ items: items.get(url.pathname.split('/')[3]) || [] });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
+  if (url.pathname.endsWith('/delete')) {
+    if (failDelete) return route.fulfill({ status: 503, json: { error: 'Could not delete the note.' } });
+    if (holdDelete) { holdDelete = false; await new Promise(resolve => { releaseDelete = resolve; }); }
+    const id = url.pathname.split('/').at(-2);
+    deletedFixture = notes.find(note => note.id === id);
+    notes = notes.filter(note => note.id !== id); return json({ ok: true });
+  }
+  if (url.pathname.endsWith('/restore')) {
+    notes.push(deletedFixture); notes.sort((a, b) => a.createdAt - b.createdAt);
+    return json({ annotations: notes });
+  }
   if (/\/annotations\/[^/]+$/.test(url.pathname)) {
     if (failEdit) return route.fulfill({ status: 503, json: { error: 'Could not save the note.' } });
     if (holdEdit) { holdEdit = false; await new Promise(resolve => { releaseEdit = resolve; }); }
@@ -76,6 +88,40 @@ async function switchPaper(name) {
 }
 try {
   await page.goto(origin);
+  // Removing from a task preserves the PDF annotation; trash deletes it everywhere.
+  await notesReady(); await setSelection(check('n1'), true);
+  const deletingCard = page.locator('.new-task-panel [data-note="n1"]');
+  await deletingCard.getByRole('button', { name: 'Remove note 1 from task', exact: true }).click();
+  await expect(deletingCard).toHaveCount(0);
+  assert.ok(notes.some(note => note.id === 'n1'));
+  await setSelection(check('n1'), true);
+  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
+  failDelete = true;
+  await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
+  await expect(page.locator('.task-notes-panel [role=alert]')).toHaveText('Could not delete the note.');
+  await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
+  await expect(deletingCard).toBeVisible();
+  failDelete = false; holdDelete = true;
+  await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
+  await expect.poll(() => Boolean(releaseDelete)).toBe(true);
+  await expect(deletingCard.getByRole('button', { name: 'Delete note 1', exact: true })).toBeDisabled();
+  await expect(send()).toBeDisabled();
+  releaseDelete();
+  await expect(deletingCard).toHaveCount(0);
+  await expect(page.locator('.pdf-container [data-note="n1"]')).toHaveCount(0);
+  await page.locator('.task-note-deleted').getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(deletingCard).toBeVisible();
+  await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
+  await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
+  await expect(deletingCard).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.note-tag[data-note="n2"]')).toHaveCount(1);
+  await expect(page.locator('.pdf-container [data-note="n1"]')).toHaveCount(0);
+  assert.ok(!notes.some(note => note.id === 'n1'));
+  notes = structuredClone(original);
+  await page.reload();
+
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Note 1: Revise n1.', exact: true }).click();
   const personalCard = page.getByRole('dialog', { name: 'PDF note 1', exact: true });

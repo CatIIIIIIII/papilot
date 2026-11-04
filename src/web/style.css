@@ -1050,3 +1050,6 @@ body.resizing iframe{pointer-events:none}
 @media(max-width:520px){.review-copy-label{display:none}}
 
 .task-note-edit-control{margin-left:auto;flex-shrink:0}
+
+.task-note-deleted{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;color:var(--muted)}
+.task-note-delete-control{flex-shrink:0}

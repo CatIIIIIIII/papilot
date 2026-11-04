@@ -725,6 +725,8 @@ function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const [saving, setSaving] = useState(false), [error, setError] = useState('');
   const pending = useRef(false);
+  const [deleted, setDeleted] = useState<Annotation | null>(null);
+  useEffect(() => { if (deleted && notes.some(note => note.id === deleted.id)) setDeleted(null); }, [notes, deleted]);
   const editing = draft !== null, locked = actions.sending || saving || editing;
   const onEditing = actions.onTaskEditing;
   useEffect(() => { onEditing(editing || saving); return () => onEditing(false); }, [editing, saving, onEditing]);
@@ -744,8 +746,22 @@ function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { pending.current = false; setSaving(false); }
   }
+  async function deleteNote(note: Annotation) {
+    if (locked || pending.current) return;
+    pending.current = true; setSaving(true); setError('');
+    try { await actions.remove(note); setDeleted(note); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { pending.current = false; setSaving(false); }
+  }
+  async function undoDelete() {
+    if (!deleted || locked || pending.current) return;
+    pending.current = true; setSaving(true); setError('');
+    try { await actions.restore(deleted); actions.selection.set([deleted.id], true); setDeleted(null); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { pending.current = false; setSaving(false); }
+  }
   const chosen = notes.filter(note => actions.selection.has(note.id));
-  if (!chosen.length) return null;
+  if (!chosen.length && !deleted && !error) return null;
   // Notes listed in My notes fly back there; placed AI suggestions stay on the page.
   const putBack = (list: Annotation[]) => {
     returnNotes(list.filter(note => !note.aiReview || note.key !== currentKey).flatMap(note => panel.current?.querySelector<HTMLElement>(`[data-note="${CSS.escape(note.id)}"]`) || []));
@@ -753,13 +769,12 @@ function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]
   };
   const remove = (note: Annotation, index: number) => {
     const label = note.aiReview ? t('Remove suggestion {n} from task', { n: index + 1 }) : t('Remove note {n} from task', { n: index + 1 });
-    return <button type="button" className="note-send included" aria-label={label} title={label} disabled={locked} onClick={() => putBack([note])}>{t('Included')}<Icon name="close" size={12}/></button>;
+    return <button type="button" className="note-send included" aria-label={label} title={label} disabled={locked} onClick={() => putBack([note])}>{t('Remove from task')}<Icon name="close" size={12}/></button>;
   };
   const reference = (note: Annotation, index: number) => <li key={note.id} data-note={note.id} className="task-note-reference">
-    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey || locked} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span>{!note.aiReview && <button type="button" className="icon-button task-note-edit-control" aria-label={t('Edit note {n}', { n: index + 1 })} title={t('Edit note')} disabled={locked} onClick={() => { setError(''); setDraft({ id: note.id, text: note.comment }); }}><Icon name="compose" size={14}/></button>}</div>
+    <div className="note-head"><button type="button" className="note-number" aria-label={note.aiReview ? t('Show suggestion {n} on the page', { n: index + 1 }) : t('Show note {n} on the page', { n: index + 1 })} disabled={note.key !== currentKey || locked} onClick={() => onShow(note)}>{index + 1}</button><span className="note-where">{noteWhere(note)}</span>{!note.aiReview && <button type="button" className="icon-button task-note-edit-control" aria-label={t('Edit note {n}', { n: index + 1 })} title={t('Edit note')} disabled={locked} onClick={() => { setError(''); setDraft({ id: note.id, text: note.comment }); }}><Icon name="compose" size={14}/></button>}{!note.aiReview && <button type="button" className="icon-button task-note-delete-control" aria-label={t('Delete note {n}', { n: index + 1 })} title={t('Delete note')} disabled={locked} onClick={() => void deleteNote(note)}><Icon name="trash" size={14}/></button>}</div>
     <NoteQuote text={note.quote}/>
-    {/* Same control and place as the PDF popover: bottom right, "Included ×". It
-        floats at the end of the comment, so only the last line makes room. */}
+    {/* Removing from the task keeps the annotation; the trash button deletes it. */}
     {draft?.id === note.id ? <div className="task-note-editor">
       <textarea autoFocus className="pdf-note-input" aria-label={t('Edit note {n}', { n: index + 1 })} value={draft.text} rows={3} maxLength={4000} readOnly={saving || actions.sending}
         onChange={event => setDraft({ id: note.id, text: event.target.value })} onKeyDown={event => {
@@ -780,6 +795,8 @@ function TaskNotes({ notes, currentKey, actions, onShow }: { notes: Annotation[]
     {note.key !== currentKey && <NotePlacementWarning/>}
   </li>;
   return <section ref={panel} className="task-notes-panel" aria-label={t('Notes in this task')}>
+    {deleted && <div className="task-note-deleted" role="status">{t('Note deleted.')}<button type="button" className="button ghost compact" disabled={locked} onClick={() => void undoDelete()}>{t('Undo')}</button></div>}
+    {!draft && error && <p className="inline-error" role="alert">{error}</p>}
     <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={locked} onClick={() => putBack(chosen)}>{t('Remove all from task')}</button></div>
     {noteGroups(notes).map(({ group, entries }) => {
       const selected = entries.filter(({ note }) => actions.selection.has(note.id));
@@ -1433,6 +1450,7 @@ function App() {
       await api(`/projects/${note.projectId}/annotations/${note.id}/delete`, {});
       noteSelection.set([note.id], false);
       withNotes(list => list.filter(item => item.id !== note.id));
+      setActiveNote(id => id === note.id ? '' : id);
       annotationUndo.current.push({ kind: 'remove', note });
     },
     async restore(note) {
