@@ -140,7 +140,7 @@ export async function doctor(args) {
       check('agent.codex', ready, 'warn', `Codex ${version} (${file}): ${ready ? 'signed in' : login.reason || 'login could not be confirmed'}.`, 'Run papilot codex login, then rerun doctor.');
       return ready;
     }
-    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : found ? `No installed Codex meets version ${minimum}.` : 'Codex is not installed.', configured ? 'Correct PAPILOT_CODEX_BIN or unset it to use automatic installation.' : 'Run papilot codex login; it installs the supported Codex when needed.');
+    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : found ? `No installed Codex meets version ${minimum}.` : 'Codex is not installed.', process.env.PAPILOT_INSTALL_METHOD === 'nix' ? 'Install a supported Codex separately with Nix or set PAPILOT_CODEX_BIN to an existing installation.' : configured ? 'Correct PAPILOT_CODEX_BIN or unset it to use automatic installation.' : 'Run papilot codex login; it installs the supported Codex when needed.');
     return false;
   }
   async function claudeCheck() {

@@ -121,7 +121,7 @@ else {
       next.child.once('exit', () => { if (!quitting && !switching && backend === next) fatal('The local server stopped unexpectedly. Reopen Papilot to continue.'); });
       // The backend asks for the switch once its update is ready and idle.
       next.child.on('message', message => {
-        if (backend !== next || switching || quitting || (message as { type?: unknown } | null)?.type !== 'papilot:activate') return;
+        if (nix || backend !== next || switching || quitting || (message as { type?: unknown } | null)?.type !== 'papilot:activate') return;
         switching = true;
         void switchServer(data, bundle, message, server, () => next.stop(), launch).then(running => { server = running; })
           .catch(error => fatal(`Papilot could not restart after the update: ${error instanceof Error ? error.message : error}`))
