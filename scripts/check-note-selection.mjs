@@ -28,6 +28,8 @@ let fail = false, hold = false, release, failEdit = false;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
   if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname.endsWith('/question-sessions')) return json({ sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] });
+  if (url.pathname.endsWith('/questions')) return json({ questions: [] });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
@@ -278,7 +280,7 @@ try {
   await setSelection(check('n2'), true); await setSelection(check('n4'), true);
   await expect(instruction('Yellow')).toHaveValue('Explain the reasoning step by step.');
   await expect(instruction('Purple')).toHaveValue('Shorten this wording.');
-  await page.getByRole('button', { name: 'Agent settings', exact: true }).click();
+  await page.locator('.new-task-panel').getByRole('button', { name: 'Agent settings', exact: true }).click();
   await page.getByRole('option', { name: / · Claude$/ }).first().click();
   await page.keyboard.press('Escape');
   await expect(prompt()).toHaveValue('');

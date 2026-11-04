@@ -24,6 +24,8 @@ const git = { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], he
 const files = new Map(), items = new Map(), creates = [], messages = [];
 let failUpload = false, failCreate = false, failMessage = false;
 await page.route('**/api/**', async route => {
+  if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+  if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const request = route.request(), url = new URL(request.url()), json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });

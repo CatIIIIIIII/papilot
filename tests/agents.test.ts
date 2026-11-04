@@ -521,3 +521,81 @@ test('read-only Claude CLI reviews disable tool access and project settings', as
     agent.close();
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+
+test('read-only Q&A SDK threads permit only web tools while other helpers stay tool-free', async () => {
+  const fake = fakeClaude(async function* (options) {
+    assert.deepEqual(options.tools, ['WebSearch', 'WebFetch']);
+    assert.deepEqual(options.allowedTools, ['WebSearch', 'WebFetch']);
+    assert.deepEqual(options.settingSources, []);
+    const context = { signal: new AbortController().signal };
+    for (const name of ['WebSearch', 'WebFetch']) assert.equal((await options.canUseTool(name, { query: 'paper' }, context)).behavior, 'allow');
+    for (const name of ['Bash', 'Write', 'Edit', 'Read', 'mcp__custom']) assert.equal((await options.canUseTool(name, {}, context)).behavior, 'deny');
+    yield { type: 'result', subtype: 'success', result: 'Source: https://example.com/paper', session_id: options.sessionId };
+  });
+  const agent = new ClaudeAgent(fake.load, () => null);
+  try {
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/tmp', sandbox: 'read-only', config: { web_search: 'live' } });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find related papers.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+  } finally { agent.close(); }
+});
+
+test('read-only Q&A CLI threads allow web search and fetching without file or shell tools', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-web-cli-'));
+  let agent: ClaudeAgent | undefined;
+  try {
+    const fake = fakeClaudeCli(dir, { loggedIn: true, authMethod: 'claude.ai' }, [[{ type: 'result', subtype: 'success', is_error: false, result: 'Source: https://example.com/paper' }]]);
+    agent = new ClaudeAgent(async () => { throw Error('No SDK needed'); }, () => fake.bin, fake.launch as any);
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: dir, sandbox: 'read-only', config: { web_search: 'live' } });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find related papers.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args;
+    assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch');
+    assert.equal(args[args.indexOf('--allowedTools') + 1], 'WebSearch,WebFetch');
+    assert.equal(args[args.indexOf('--setting-sources') + 1], '');
+  } finally { agent?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('full-access question SDK turns enable tools, settings and command/file permissions', async () => {
+  const fake = fakeClaude(async function* (options) {
+    assert.equal(options.permissionMode, 'bypassPermissions');
+    assert.equal(options.allowDangerouslySkipPermissions, true);
+    assert.equal(options.sandbox.enabled, false);
+    assert.equal(options.tools, undefined);
+    assert.deepEqual(options.settingSources, ['user', 'project', 'local']);
+    for (const name of ['Bash', 'Read', 'Write', 'Edit', 'WebSearch', 'WebFetch', 'mcp__custom']) {
+      assert.equal((await options.canUseTool(name, { path: '/paper/main.tex' }, { signal: new AbortController().signal })).behavior, 'allow');
+    }
+    yield { type: 'result', subtype: 'success', result: 'Done.', session_id: options.sessionId };
+  });
+  const agent = new ClaudeAgent(fake.load, () => null);
+  try {
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/paper', sandbox: 'danger-full-access' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Update this paper.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+  } finally { agent.close(); }
+});
+
+test('full-access question CLI turns bypass permissions and disable the command sandbox', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-full-cli-'));
+  let agent: ClaudeAgent | undefined;
+  try {
+    const fake = fakeClaudeCli(dir, { loggedIn: true, authMethod: 'claude.ai' }, [[{ type: 'result', subtype: 'success', is_error: false, result: 'Done.' }]]);
+    agent = new ClaudeAgent(async () => { throw Error('No SDK needed'); }, () => fake.bin, fake.launch as any);
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: dir, sandbox: 'danger-full-access' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Update this paper.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args;
+    assert.equal(args[args.indexOf('--permission-mode') + 1], 'bypassPermissions');
+    assert.equal(args.includes('--tools'), false);
+    assert.equal(args.includes('--setting-sources'), false);
+    assert.equal(JSON.parse(args[args.indexOf('--settings') + 1]).sandbox.enabled, false);
+    assert.equal(fake.launches[0].cwd, dir);
+  } finally { agent?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

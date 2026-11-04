@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Annotation, Project, Task, Run, TimelineItem } from '../shared.ts';
+import { DEFAULT_QUESTION_SESSION, type Annotation, type Project, type Task, type Run, type TimelineItem, type PaperQuestion, type PaperQuestionSession } from '../shared.ts';
 
 export class Store extends EventEmitter {
   db: DatabaseSync;
@@ -19,6 +19,8 @@ export class Store extends EventEmitter {
       CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, task_id TEXT NOT NULL, created INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS deleted_tasks(id TEXT PRIMARY KEY, deleted INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS ai_review_inputs(task_id TEXT PRIMARY KEY, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS paper_questions(project_id TEXT NOT NULL, owner_id TEXT NOT NULL, id TEXT NOT NULL, created INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY(project_id,owner_id,id));
+      CREATE TABLE IF NOT EXISTS paper_question_sessions(project_id TEXT NOT NULL, owner_id TEXT NOT NULL, id TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY(project_id,owner_id,id));
       CREATE TABLE IF NOT EXISTS annotations(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -29,6 +31,16 @@ export class Store extends EventEmitter {
       CREATE TABLE IF NOT EXISTS migrations(key TEXT PRIMARY KEY, done INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS task_items ON items(task_id,created);
       CREATE INDEX IF NOT EXISTS task_runs ON runs(task_id,status);`);
+    this.transaction(() => {
+      const columns = this.db.prepare('PRAGMA table_info(paper_questions)').all() as { name: string }[];
+      if (!columns.some(column => column.name === 'session_id')) this.db.exec("ALTER TABLE paper_questions ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'");
+      this.db.exec('CREATE INDEX IF NOT EXISTS question_session_items ON paper_questions(project_id,owner_id,session_id,created)');
+      if (!this.db.prepare('SELECT 1 FROM migrations WHERE key=?').get('paper-question-sessions')) {
+        // Old conversations become a selectable session without dropping messages.
+        for (const question of this.rows<PaperQuestion>('paper_questions')) this.saveQuestion(question);
+        this.db.prepare('INSERT INTO migrations VALUES(?,?)').run('paper-question-sessions', Date.now());
+      }
+    });
   }
   private rows<T>(table: string): T[] { return (this.db.prepare(`SELECT data FROM ${table} ORDER BY rowid`).all() as { data: string }[]).map(r => JSON.parse(r.data)); }
   projects() { return this.rows<Project>('projects'); }
@@ -46,6 +58,8 @@ export class Store extends EventEmitter {
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
       for (const table of ['items', 'runs', 'ai_review_inputs']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
       for (const table of ['tasks', 'annotations', 'members']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
+      this.db.prepare('DELETE FROM paper_questions WHERE project_id=?').run(id);
+      this.db.prepare('DELETE FROM paper_question_sessions WHERE project_id=?').run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
     for (const task of tasks) this.itemRevisions.delete(task);
@@ -111,6 +125,7 @@ export class Store extends EventEmitter {
   transaction<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const result = fn(); this.db.exec('COMMIT'); return result; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
   recover() {
     this.transaction(() => {
+      for (const question of this.rows<PaperQuestion>('paper_questions').filter(item => item.status === 'running')) this.saveQuestion({ ...question, status: 'failed', error: 'The server restarted before the answer finished. Retry the question.' });
       for (const t of this.tasks().filter(t => t.titleGeneration === 'pending')) this.updateTask(t.id, { titleGeneration: 'failed' });
       for (const t of this.tasks().filter(t => t.status === 'deleting')) this.updateTask(t.id, { error: 'The server restarted during deletion. Retry deletion to confirm cleanup.' });
       for (const t of this.tasks().filter(t => t.pendingReview)) this.updateTask(t.id, { status: 'uncertain', error: 'The server restarted before a review action was confirmed. Select Check status before continuing.' });
@@ -119,4 +134,33 @@ export class Store extends EventEmitter {
     });
   }
   close() { this.db.close(); }
+  questions(projectId: string, ownerId: string, sessionId = DEFAULT_QUESTION_SESSION) {
+    return (this.db.prepare('SELECT data FROM paper_questions WHERE project_id=? AND owner_id=? AND session_id=? ORDER BY created DESC,rowid DESC LIMIT 100').all(projectId, ownerId, sessionId) as { data: string }[]).reverse().map(row => JSON.parse(row.data) as PaperQuestion);
+  }
+  question(projectId: string, ownerId: string, id: string) {
+    const row = this.db.prepare('SELECT data FROM paper_questions WHERE project_id=? AND owner_id=? AND id=?').get(projectId, ownerId, id) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) as PaperQuestion : undefined;
+  }
+  saveQuestion(question: PaperQuestion) {
+    question = { ...question, sessionId: question.sessionId || DEFAULT_QUESTION_SESSION };
+    const session = this.ensureQuestionSession(question.projectId, question.ownerId, question.sessionId!, question.createdAt);
+    this.db.prepare('INSERT INTO paper_questions(project_id,owner_id,id,created,data,session_id) VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,owner_id,id) DO UPDATE SET data=excluded.data,session_id=excluded.session_id').run(question.projectId, question.ownerId, question.id, question.createdAt, JSON.stringify(question), question.sessionId!);
+    this.saveQuestionSession({ ...session, title: session.title || question.question.trim().split('\n')[0].slice(0, 80), updatedAt: Date.now() });
+    this.emit('change');
+    return question;
+  }
+  questionSessions(projectId: string, ownerId: string) {
+    return (this.db.prepare(`SELECT s.data, EXISTS(SELECT 1 FROM paper_questions q WHERE q.project_id=s.project_id AND q.owner_id=s.owner_id AND q.session_id=s.id AND json_extract(q.data,'$.status')='running') AS running FROM paper_question_sessions s WHERE s.project_id=? AND s.owner_id=? ORDER BY s.updated DESC,s.rowid DESC`).all(projectId, ownerId) as { data: string; running: number }[]).map(row => ({ ...JSON.parse(row.data), running: Boolean(row.running) }) as PaperQuestionSession);
+  }
+  questionSession(projectId: string, ownerId: string, id: string) {
+    const row = this.db.prepare('SELECT data FROM paper_question_sessions WHERE project_id=? AND owner_id=? AND id=?').get(projectId, ownerId, id) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) as PaperQuestionSession : undefined;
+  }
+  ensureQuestionSession(projectId: string, ownerId: string, id: string, createdAt = Date.now()) {
+    return this.questionSession(projectId, ownerId, id) || this.saveQuestionSession({ id, projectId, ownerId, title: '', createdAt, updatedAt: createdAt });
+  }
+  private saveQuestionSession(session: PaperQuestionSession) {
+    this.db.prepare('INSERT INTO paper_question_sessions VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,owner_id,id) DO UPDATE SET updated=excluded.updated,data=excluded.data').run(session.projectId, session.ownerId, session.id, session.createdAt, session.updatedAt, JSON.stringify(session));
+    return session;
+  }
 }

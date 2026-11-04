@@ -31,6 +31,8 @@ const decisions = { 1: { c1: 'pending', c2: 'rejected' }, 2: { c1: 'pending' } }
 const client = { get: async route => route.includes('/rounds/') ? rounds[Number(route.split('/').at(-1))] : { decisions: decisions[Number(new URL(route, origin).searchParams.get('round'))] } };
 let failResults = true;
 await page.route('**/api/**', async route => {
+  if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+  if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const url = new URL(route.request().url());
   if (url.pathname.startsWith('/review/')) return route.fallback();
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });

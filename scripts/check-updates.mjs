@@ -19,6 +19,8 @@ fs.mkdirSync('test-results', { recursive: true });
 try {
   const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } });
   await context.route('**/api/**', route => {
+    if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+    if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/state') return route.fulfill({ json: state });
     if (pathname === '/api/updates') return offline ? route.abort() : route.fulfill({ json: update });

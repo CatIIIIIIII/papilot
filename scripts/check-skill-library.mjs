@@ -29,6 +29,8 @@ const errors = []; page.on('pageerror', error => errors.push(error.message));
 const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [], requests: [], runtime: { connected: true, authenticated: true, account: null, error: null, models: [] } };
 const git = { branch: 'main', upstream: null, ahead: 0, behind: 0, head: null, files: [] };
 await page.route('**/api/**', async route => {
+  if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+  if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   if (url.pathname.startsWith('/api/skills')) return route.continue();
   if (url.pathname === '/api/state') return json(snapshot);

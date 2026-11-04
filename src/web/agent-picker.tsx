@@ -50,10 +50,10 @@ function agentState(runtime?: RuntimeStatus) {
 // selected model's reasoning effort and fast mode sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description }: {
+export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, allowFast = true }: {
   agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
-  onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string;
+  onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string; allowFast?: boolean;
 }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(''), [recent, setRecent] = useState(readRecent);
@@ -63,7 +63,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   const agentName = current?.label || agent;
   const modelName = selected?.name || model || agentName;
   const currentEffort = effort || selected?.defaultEffort;
-  const fastMode = agent === 'codex' ? selected?.fastMode : undefined;
+  const fastMode = allowFast && agent === 'codex' ? selected?.fastMode : undefined;
   const disconnected = runtime && (!runtime.connected || !runtime.authenticated);
   const summary = [agentName, modelName, currentEffort ? effortName(currentEffort) : '', fastMode && fast ? t('Fast') : ''].filter((part, index, all) => part && all.indexOf(part) === index).join(' · ');
   // Every model of every agent; an agent without a model list offers its default.

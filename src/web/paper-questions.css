@@ -1,0 +1,40 @@
+.question-split{display:grid;flex:1;min-height:0;min-width:0;overflow:hidden}
+.question-top{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
+.question-top>.new-task-panel,.question-top>.git-panel,.question-top>.contents-panel{flex:1;min-height:0}
+.question-resizer{cursor:row-resize;touch-action:none;position:relative;background:var(--bg);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.question-resizer:after{content:"";position:absolute;left:calc(50% - 16px);top:2px;width:32px;height:2px;border-radius:2px;background:var(--line)}
+.question-resizer:hover,.question-resizer:focus-visible{background:var(--accent-soft);outline:1px solid var(--accent)}
+.paper-questions{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--bg);overflow:hidden}
+.paper-questions-heading{display:flex;gap:6px;align-items:center;padding:9px 12px;flex:none;font-size:13px}
+.paper-questions-heading>strong{flex:none;white-space:nowrap}
+.paper-questions-heading>svg{flex:none}
+.question-session-error{margin:0 12px 6px;font-size:12px;max-height:50px;overflow:auto}
+.paper-question-conversation{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden}
+.paper-questions-heading>span{margin-left:auto;color:var(--muted);font-size:11px}
+.paper-question-history{overflow:auto;flex:1;min-height:0;padding:0 12px;overscroll-behavior:contain;font-size:13px;overflow-wrap:anywhere}
+.question-empty{color:var(--muted);line-height:1.6;margin:4px 0 12px}
+.paper-question-turn{margin-bottom:14px}
+.paper-question-prompt{white-space:pre-wrap;padding:8px 10px;border-radius:8px;background:var(--accent-soft);margin:4px 0 8px}
+.paper-question-answer>small{display:block;color:var(--muted);font-size:11px;margin:4px 0}
+.paper-question-answer .markdown{font-size:13px;line-height:1.6}
+.paper-question-answer .markdown pre{max-width:100%;overflow:auto}
+.paper-question-answer .markdown p{margin:6px 0}
+.paper-question-compose-wrap{flex:none;padding:8px 14px 14px;min-width:0}
+.paper-question-form.composer{width:100%;margin:0}
+.paper-question-form.composer textarea{min-height:80px;max-height:160px;font-size:14px}
+.paper-question-form .composer-footer{align-items:flex-end;padding-left:10px}
+.paper-question-conversation.is-empty{overflow:auto;justify-content:center}
+.paper-question-conversation.is-empty>.paper-question-history{display:none}
+.paper-question-conversation.is-empty .paper-question-compose-wrap{padding-top:20px;padding-bottom:32px}
+.paper-question-conversation.is-empty .composer textarea{min-height:128px}
+.question-welcome{margin-bottom:18px}
+.question-connection{font-size:12px;color:var(--muted);margin:6px 0 0}
+.paper-question-compose-wrap>.inline-error{font-size:12px;margin:6px 0 0;max-height:50px;overflow:auto}
+@media(max-width:680px){.paper-question-form.composer textarea{font-size:16px;min-height:60px;max-height:100px}.paper-questions-heading{padding:6px 12px}.paper-question-compose-wrap{padding-bottom:8px}.paper-question-conversation.is-empty .composer textarea{min-height:80px}.question-welcome{gap:8px;margin-bottom:10px}.question-welcome img{width:32px;height:32px}.question-welcome h2{font-size:20px}.question-split .new-task-panel .composer textarea{min-height:60px;max-height:100px}.activity-panel .question-top>.panel-heading{display:none}}
+.question-session-tools{display:flex;align-items:center;gap:2px;margin-left:auto}
+.question-session-tools .icon-button{width:28px;height:28px}
+.question-session-menu{width:300px;max-height:min(360px,60dvh);overflow-y:auto}
+.question-session-menu .menu-label{display:flex;flex-direction:column;min-width:0;overflow:hidden;white-space:normal;overflow-wrap:anywhere}
+.question-session-menu .menu-detail{display:block;font-family:var(--sans);white-space:normal}
+
+.question-access{color:var(--muted);font-size:11px;white-space:nowrap}

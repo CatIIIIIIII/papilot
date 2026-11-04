@@ -26,6 +26,8 @@ await context.addInitScript(() => {
   localStorage.setItem('papilot:recent-models', JSON.stringify([{ agent: 'claude', model: 'opus' }]));
 });
 await page.route('**/api/**', async route => {
+  if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+  if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
@@ -48,7 +50,7 @@ await page.route('**/api/**', async route => {
 try {
   await page.goto(origin);
   await page.getByRole('textbox', { name: 'Instructions for Codex' }).fill('Continue with these settings.');
-  const taskSettings = page.locator('.activity-panel').getByRole('button', { name: 'Agent settings', exact: true });
+  const taskSettings = page.locator('.activity-panel .question-top').getByRole('button', { name: 'Agent settings', exact: true });
   const taskModelMenu = page.getByRole('dialog', { name: 'Agent settings', exact: true });
   const taskEffort = taskModelMenu.getByRole('slider', { name: 'Reasoning effort', exact: true });
   await expect(taskSettings).toContainText('Fast model');

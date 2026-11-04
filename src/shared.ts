@@ -2,6 +2,18 @@ import type { GroupInstructions, NoteGroup } from './note-groups.ts';
 import type { SkillIcon } from './skill-icons.ts';
 export type TaskStatus = 'idle' | 'queued' | 'running' | 'waiting_input' | 'building' | 'reviewing' | 'interrupted' | 'failed' | 'uncertain' | 'deleting';
 export interface Project { id: string; name: string; path: string; createdAt: number }
+export interface PaperQuestion {
+  id: string; projectId: string; ownerId: string; question: string; answer: string;
+  sessionId?: string; effort?: string;
+  agent: AgentId; model: string; status: 'running' | 'completed' | 'failed';
+  createdAt: number; error: string | null; contextTruncated?: boolean;
+}
+export interface PaperQuestionSession {
+  id: string; projectId: string; ownerId: string; title: string;
+  createdAt: number; updatedAt: number; running?: boolean;
+}
+export const DEFAULT_QUESTION_SESSION = 'default';
+export const QUESTION_AGENTS: readonly AgentId[] = ['codex', 'claude', 'glm'];
 export const MAX_ATTACHMENTS = 10;
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;

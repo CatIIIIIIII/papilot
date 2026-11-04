@@ -29,6 +29,8 @@ async function open(options, { desktop = false } = {}) {
   if (desktop) await page.addInitScript(() => { window.papilotDesktop = { platform: 'darwin', minimize() {}, maximize() {}, close() {} }; });
   const errors = []; page.on('pageerror', failure => errors.push(failure.message));
   await page.route('**/api/**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+    if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
     const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
     if (url.pathname === '/api/state') return json(snapshot);
     if (url.pathname === '/api/updates') return json({ phase: 'idle', currentVersion: 'test', latestVersion: 'test', canUpdate: false });

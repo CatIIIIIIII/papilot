@@ -29,6 +29,8 @@ try {
   const page = await context.newPage();
   page.on('pageerror', error => failures.push(error.message));
   await page.route('**/api/**', route => {
+    if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+    if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/state') return route.fulfill({ json: snapshot });
     if (pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });

@@ -1,1 +1,23 @@
-{}
+{
+  "Paper Q&A": "论文问答",
+  "Discuss your paper": "讨论论文",
+  "Resize question panel": "调整问答区域高度",
+  "Question history": "问答记录",
+  "Ask about ideas, equations, or wording. Answers use the current manuscript and recent conversation.": "可以询问思路、公式或措辞。回答会参考当前论文和近期对话。",
+  "Thinking…": "思考中…",
+  "Could not answer the question.": "暂时无法回答这个问题。",
+  "Retry question": "重试问题",
+  "A portion of the manuscript was used because the paper is large.": "论文较长，本次回答只使用了部分内容。",
+  "Q&A agent": "问答 agent",
+  "Q&A model": "问答模型",
+  "Default model": "默认模型",
+  "Connect an agent to ask questions.": "连接 agent 后即可提问。",
+  "Ask a question": "提问",
+  "Ask a question about this paper…": "针对这篇论文提问…",
+  "Send question": "发送问题",
+  "Q&A sessions": "历史会话",
+  "New conversation": "新对话",
+  "What would you like to discuss?": "想讨论论文的什么内容？",
+  "Full access": "完全访问",
+  "Can run commands and modify files": "可运行命令和修改文件"
+}

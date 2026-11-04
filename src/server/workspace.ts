@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Store } from './store.ts';
+import { PaperQuestions, questionInstructions } from './paper-questions.ts';
 import { Attachments } from './attachments.ts';
 import { Codex, RpcResponseError } from './codex.ts';
 import { AGENT_NAMES, AntigravityAgent, ClaudeAgent, GlmAgent, type AgentRuntime } from './agents.ts';
@@ -126,13 +127,22 @@ export class Workspace extends EventEmitter {
   private projectRequests = new Map<string, number>();
   importsBusy = () => false;
   get busyForUpdate() {
-    return Boolean(this.importsBusy() || this.projectChanges.size || this.active.size || this.preparing.size || this.publishing.size || this.reviewWrites.size || this.commentWrites.size || this.committing.size || this.deletions.size || this.helperStops.size || this.titles.size
+    return Boolean(this.importsBusy() || this.questions.busy || this.projectChanges.size || this.active.size || this.preparing.size || this.publishing.size || this.reviewWrites.size || this.commentWrites.size || this.committing.size || this.deletions.size || this.helperStops.size || this.titles.size
       || this.store.tasks().some(task => ['queued', 'running', 'waiting_input', 'building', 'uncertain', 'deleting'].includes(task.status) || task.pendingReview));
   }
   readonly attachments: Attachments;
+  readonly questions: PaperQuestions;
   constructor(public store: Store, public codex: AgentRuntime = new Codex(), private connectReview = reviewClient, others: Partial<Record<AgentId, AgentRuntime>> = {}) {
     super();
     this.attachments = new Attachments(store);
+    this.questions = new PaperQuestions(store, async ({ agent, model, effort, prompt, cwd }) => {
+      if (this.closing) throw new Error('The server is shutting down.');
+      if (!this.agents[agent].ready || !this.runtimes[agent].authenticated) throw new Error(`Sign in to ${AGENT_NAMES[agent]} to answer questions.`);
+      if (model && this.runtimes[agent].models.length && !this.runtimes[agent].models.some(item => item.id === model)) throw new Error('Choose an available model for the Q&A agent.');
+      const choice = this.helper({ agent, model }, 'answer the question');
+      if (effort && !choice.model?.efforts.includes(effort)) throw new Error('Choose a reasoning effort supported by this model.');
+      return this.oneOff(agent, { cwd, sandbox: 'danger-full-access', webSearch: true, model: choice.model, effort: effort || undefined, instructions: questionInstructions, prompt, timeout: 600000, what: 'answer the question' });
+    }, id => this.enterProjectRequest(id));
     this.agents = { codex, claude: others.claude || new ClaudeAgent(), cursor: others.cursor || new CursorAgent(), copilot: others.copilot || new AcpAgent(ACP_PROFILES.copilot), grok: others.grok || new AcpAgent(ACP_PROFILES.grok), antigravity: others.antigravity || new AntigravityAgent(),
       kimi: others.kimi || new AcpAgent(ACP_PROFILES.kimi), glm: others.glm || new GlmAgent(), deepseek: others.deepseek || new AcpAgent(ACP_PROFILES.deepseek),
       qwen: others.qwen || new AcpAgent(ACP_PROFILES.qwen), opencode: others.opencode || new AcpAgent(ACP_PROFILES.opencode) };
@@ -945,7 +955,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
   }
   // One turn on a thread the agent does not keep, outside any task: its
   // reply is returned and no chat shows it.
-  private async oneOff(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
+  private async oneOff(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write' | 'danger-full-access'; webSearch?: boolean; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
     if (this.closing) throw new Error('The server is shutting down.');
     // A read-only helper (a title, a commit message) has everything in its
     // prompt. It runs in an empty folder, so an agent that does not enforce a
@@ -954,9 +964,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     try { return await this.helperTurn(id, { ...options, cwd: scratch || options.cwd }); }
     finally { if (scratch) fs.rmSync(scratch, { recursive: true, force: true }); }
   }
-  private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
+  private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write' | 'danger-full-access'; webSearch?: boolean; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
     const agent = this.agents[id], name = AGENT_NAMES[id];
-    const thread = await agent.request('thread/start', { cwd: options.cwd, approvalPolicy: 'never', sandbox: options.sandbox, ephemeral: true, developerInstructions: options.instructions, ...(options.model ? { model: options.model.id } : {}) }, options.timeout);
+    const thread = await agent.request('thread/start', { cwd: options.cwd, approvalPolicy: 'never', sandbox: options.sandbox, ephemeral: true, ...(options.webSearch ? { config: { web_search: 'live' } } : {}), developerInstructions: options.instructions, ...(options.model ? { model: options.model.id } : {}) }, options.timeout);
     if (this.closing) throw new Error('The server is shutting down.');
     const threadId = thread.thread.id;
     return new Promise<string>((resolve, reject) => {
@@ -1238,7 +1248,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
       throw error;
     } finally { this.deletions.delete(taskId); this.schedule(); }
   }
-  close() { this.closing = true; for (const stop of this.helperStops) stop(); for (const timer of this.usageTimers.values()) clearTimeout(timer); this.flush(); for (const id of AGENTS) this.agents[id].close(); this.attachments.close(); }
+  close() { this.closing = true; this.questions.close(); for (const stop of this.helperStops) stop(); for (const timer of this.usageTimers.values()) clearTimeout(timer); this.flush(); for (const id of AGENTS) this.agents[id].close(); this.attachments.close(); }
 }
 
 // The review engine records each task's accepted text as a commit beside the

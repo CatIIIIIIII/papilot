@@ -1,0 +1,53 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { Store } from '../src/server/store.ts';
+import type { AgentRuntime } from '../src/server/agents.ts';
+import type { Accounts } from '../src/server/accounts.ts';
+import type { Manuscripts } from '../src/server/manuscript.ts';
+
+test('question routes require project access and CSRF and only return the current viewer history', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-question-routes-'));
+  process.env.PAPILOT_DATA = path.join(root, 'data');
+  const { Workspace } = await import('../src/server/workspace.ts');
+  const { buildApp, gitQueue } = await import('../src/server/app.ts');
+  class Agent extends EventEmitter { ready = false; async request() { return {}; } respond() {} reject() {} close() {} }
+  const store = new Store(':memory:'), workspace = new Workspace(store, new Agent() as unknown as AgentRuntime);
+  fs.writeFileSync(path.join(root, 'main.tex'), 'Paper text.');
+  store.saveProject({ id: 'paper', name: 'Paper', path: root, createdAt: 1 });
+  store.saveQuestion({ id: 'private', projectId: 'paper', ownerId: 'guest', question: 'Guest question', answer: 'Guest answer', agent: 'codex', model: '', status: 'completed', createdAt: 1, error: null });
+  const app = await buildApp({ listener: { kind: 'local', port: 7274, publicOrigin: '', owner: '' }, store, workspace, accounts: {} as Accounts, manuscripts: {} as Manuscripts, csrf: 'fixture', serialGit: gitQueue(), dist: null, version: 'test' });
+  const headers = { host: '127.0.0.1:7274', 'x-papilot-token': 'fixture' };
+  try {
+    const listed = await app.inject({ url: '/api/projects/paper/questions', headers });
+    assert.equal(listed.statusCode, 200); assert.deepEqual(listed.json(), { questions: [] });
+    const request = { method: 'POST' as const, url: '/api/projects/paper/questions', headers, payload: { id: 'q1', question: 'Explain this paper.', agent: 'codex' } };
+    assert.equal((await app.inject({ ...request, headers: { host: headers.host } })).statusCode, 403);
+    assert.equal((await app.inject({ ...request, url: '/api/projects/missing/questions' })).statusCode, 400);
+    assert.equal((await app.inject({ ...request, payload: { ...request.payload, agent: 'antigravity' } })).statusCode, 400);
+    assert.equal((await app.inject(request)).statusCode, 200);
+    await workspace.questions.settled();
+    const questions = (await app.inject({ url: request.url, headers })).json().questions;
+    assert.equal(questions.length, 1); assert.equal(questions[0].question, request.payload.question);
+    assert.equal(questions[0].status, 'failed'); assert.match(questions[0].error, /Sign in/);
+    const sessionsUrl = '/api/projects/paper/question-sessions';
+    const create = { method: 'POST' as const, url: sessionsUrl, headers, payload: { id: 'new-session' } };
+    assert.equal((await app.inject({ ...create, headers: { host: headers.host } })).statusCode, 403);
+    assert.equal((await app.inject({ ...create, payload: {} })).statusCode, 400);
+    assert.equal((await app.inject(create)).statusCode, 200);
+    assert.equal((await app.inject(create)).statusCode, 200);
+    const sessions = (await app.inject({ url: sessionsUrl, headers })).json().sessions;
+    assert.equal(sessions.length, 2);
+    assert.equal(sessions.some((s: any) => s.title === 'Guest question'), false);
+    assert.deepEqual((await app.inject({ url: request.url + '?sessionId=new-session', headers })).json().questions, []);
+    assert.equal((await app.inject({ ...request, payload: { ...request.payload, id: 'q2', sessionId: 'new-session' } })).statusCode, 200);
+    await workspace.questions.settled();
+    assert.equal((await app.inject({ url: request.url + '?sessionId=new-session', headers })).json().questions[0].id, 'q2');
+    assert.equal((await app.inject({ url: request.url, headers })).json().questions.length, 1);
+    assert.equal((await app.inject({ url: request.url + '?sessionId=missing', headers })).statusCode, 400);
+    assert.deepEqual(store.tasks(), []);
+  } finally { await app.close(); workspace.close(); store.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});

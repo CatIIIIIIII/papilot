@@ -14,6 +14,8 @@ fs.mkdirSync('test-results', { recursive: true });
 try {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 850 } });
   await context.route('**/api/**', route => {
+    if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+    if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
     const url = new URL(route.request().url()), method = route.request().method();
     if (url.pathname.startsWith('/api/imports')) {
       const body = method === 'POST' ? route.request().postDataJSON() : null; requests.push({ route: url.pathname, body });
