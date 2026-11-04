@@ -4,9 +4,20 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-11-04
+
+Papilot 0.8.8 keeps conversations responsive, brings consistent choice lists and comment cards to the workspace, starts AI reviews without waiting for the manuscript preview, and introduces a redesigned website with interactive demos.
+
 ### Changed
 
 - **Choices open Papilot's own list.** Theme, accent, language, notifications, update channel, PDF appearance and zoom, the default model, and the LaTeX engine, main file and skill location fields no longer open the system's picker. The list matches Papilot's menus in light and dark mode, marks the current choice, shows theme and accent colours beside their names, groups models by agent, and becomes a sheet on a phone. Arrow keys, Home, End, typed letters, Enter and Escape work as in a system list.
+- **Conversations do less work while you type and wait.** Typing no longer renders the conversation again, unchanged replies keep their rendered Markdown, and a running task fetches only new or changed timeline items. Polls that find no changes leave the workspace alone, and the manuscript reuses its Git status while its files and Git state stay unchanged.
+- **Review comments match the chat composer.** The comment card has a compact heading, a close button, a field that grows with its text and a round send button. It follows the workspace's light and dark themes and keeps touch-sized controls on a phone.
+- **Try the review workflow on the website.** The redesigned landing page opens with an interactive review and shows three animated feature windows, with dark mode and eleven languages. Demo annotations stay aligned while you scroll or resize, and note cards and translated content fit inside the paper view on desktop and mobile.
+
+### Fixed
+
+- **Start an AI review while the preview is compiling.** AI review compiles and reads its own copy of the manuscript, so a stale, running or failed preview no longer prevents it from starting. If that copy cannot compile or be read, it is discarded so retrying after a fix uses the corrected manuscript. The request also allows time for a full compilation.
 
 ## [0.8.7] - 2026-11-03
 
@@ -290,7 +301,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.7...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.8...HEAD
+[0.8.8]: https://github.com/PapilotAI/papilot/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/PapilotAI/papilot/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/PapilotAI/papilot/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/PapilotAI/papilot/compare/v0.8.4...v0.8.5
