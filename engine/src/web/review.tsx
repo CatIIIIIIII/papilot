@@ -101,6 +101,12 @@ function store(key: string, value: unknown) {
     /* Storage is optional. */
   }
 }
+// The comment box grows with its text up to the height its style allows.
+function fitComposer(element: HTMLTextAreaElement | null) {
+  if (!element) return;
+  element.style.height = "0";
+  element.style.height = `${element.scrollHeight}px`;
+}
 function jobText(job: PageState["job"]) {
   return job?.status === "queued"
     ? job.ahead
@@ -1671,33 +1677,49 @@ export function ReviewApp({
             void submitComposer();
           }}
         >
-          <label htmlFor="composer-text">
-            {t("Comment on change {n}", { n: composer.stop + 1 })}
-          </label>
+          <div className="composer-head">
+            <label htmlFor="composer-text">
+              {t("Comment on change {n}", { n: composer.stop + 1 })}
+            </label>
+            <button
+              type="button"
+              className="composer-close"
+              aria-label={t("Cancel")}
+              title={t("Cancel")}
+              onClick={() => closeComposer()}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <textarea
             id="composer-text"
+            ref={fitComposer}
             autoFocus
-            rows={4}
+            rows={3}
             maxLength={20000}
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
               store(composer.key, e.target.value);
+              fitComposer(e.target);
             }}
             placeholder={t("What should the agent change here?")}
           />
           <div className="composer-row">
             <span className="muted">{t("⌘↵ send · Esc cancel")}</span>
-            <button type="button" onClick={() => closeComposer()}>
-              {t("Cancel")}
-            </button>
             <button
               type="submit"
-              title={state?.commentLock ? t(state.commentLock) : undefined}
+              className="composer-send"
+              aria-label={t("Send")}
+              title={state?.commentLock ? t(state.commentLock) : t("Send")}
               aria-describedby={state?.commentLock ? "review-lock" : undefined}
               disabled={busy || !draft.trim() || Boolean(state?.commentLock)}
             >
-              {t("Send")}
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 19V5m-7 7 7-7 7 7" />
+              </svg>
             </button>
           </div>
         </form>

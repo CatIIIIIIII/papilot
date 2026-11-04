@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AgentId, PaperImport, Project } from '../shared.ts';
 import { Icon } from './icons.tsx';
+import { ChipSelect } from './chip-select.tsx';
 import { keepDialogFocus } from './focus.ts';
 import { t } from './i18n.ts';
 import { browserStorage } from './storage.ts';
@@ -135,7 +136,7 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
         <form onSubmit={event => { event.preventDefault(); void build(); }}>
           <label>{t('Paper name')}<input required maxLength={120} value={form.name} disabled={locked} onChange={event => setForm({ ...form, name: event.target.value })}/></label>
           <div className="import-settings"><label>{t('Main TeX file')}<input aria-label={t('Main TeX file')} list="import-main-files" value={form.main} disabled={locked} onChange={event => setForm({ ...form, main: event.target.value })} placeholder="main.tex" spellCheck={false}/><datalist id="import-main-files">{draft.candidates.map(file => <option key={file} value={file}/>)}</datalist></label>
-          <label>{t('LaTeX engine')}<select aria-label={t('LaTeX engine')} value={form.engine} disabled={locked} onChange={event => setForm({ ...form, engine: event.target.value })}><option value="pdflatex">pdfLaTeX</option><option value="xelatex">XeLaTeX</option><option value="lualatex">LuaLaTeX</option></select></label></div>
+          <label>{t('LaTeX engine')}<ChipSelect className="field-select" label={t('LaTeX engine')} value={form.engine} disabled={locked} onChange={engine => setForm({ ...form, engine })} options={[{ value: 'pdflatex', label: 'pdfLaTeX' }, { value: 'xelatex', label: 'XeLaTeX' }, { value: 'lualatex', label: 'LuaLaTeX' }]}/></label></div>
           {!draft.candidates.length && <p role="alert">{t('Could not detect a main file. Enter its path relative to the paper folder.')}</p>}
           {draft.candidates.length > 1 && draft.phase === 'choose' && <p>{t('Several TeX files were found. Check the selected main document before continuing.')}</p>}
           {working && <BuildStatus draft={draft}/>}

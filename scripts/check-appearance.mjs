@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
+import { selectOption } from './select.mjs';
+import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();
@@ -39,7 +41,7 @@ const open = async () => {
 };
 const variable = (target, name) => target.locator('html').evaluate((el, name) => getComputedStyle(el).getPropertyValue(name).trim(), name);
 const rootHas = async (name, value) => page.waitForFunction(([name, value]) => document.documentElement.style.getPropertyValue(name) === value, [name, value]);
-const choose = async (name, value) => dialog.getByRole('combobox', { name, exact: true }).selectOption(value);
+const choose = async (name, value) => selectOption(dialog.getByRole('combobox', { name, exact: true }), value);
 try {
   await page.goto(origin);
   await page.getByRole('button', { name: /^Refine the introduction/ }).click();
@@ -116,6 +118,24 @@ try {
   await rootHas('--bg', '#ffffff');
   await rootHas('--primary', '#2563eb');
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#ffffff');
+  // The theme select follows the select-only combobox pattern: Escape cancels
+  // without closing Settings, Tab accepts, and a space typed into a search
+  // stays part of it instead of closing the list.
+  await page.setViewportSize({ width: 1100, height: 844 });
+  // A resize closes an open list, so let the resize land before opening one.
+  await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const theme = dialog.getByRole('combobox', { name: 'Theme', exact: true });
+  await theme.focus();
+  await page.keyboard.press('Enter'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Escape');
+  await expect(theme).toHaveAttribute('aria-expanded', 'false');
+  await expect(theme).toHaveAttribute('data-value', 'papilot');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Enter'); await page.keyboard.press('s'); await page.keyboard.press('Tab');
+  await expect(theme).toHaveAttribute('data-value', 'slate');
+  await theme.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('p'); await page.keyboard.press(' ');
+  await expect(theme).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Enter');
+  await expect(theme).toHaveAttribute('data-value', 'papilot');
   await other.evaluate(() => localStorage.setItem('papilot:appearance', '{broken'));
   await rootHas('--bg', '#ffffff');
   await other.close();

@@ -134,6 +134,7 @@
   "That page is not part of the manuscript.": "Den sidan ingår inte i manuskriptet.",
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": "AI-granskningen returnerade inte giltiga anteckningar. Be den försöka igen med det begärda JSON-formatet.",
   "The AI review response is incomplete or too long. Ask the reviewer to retry.": "Svaret från AI-granskningen är ofullständigt eller för långt. Be granskaren att försöka igen.",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "Det gick inte att ansluta till tjänsten för PDF-jämförelse. Dina ändringar är sparade. Välj ”Kontrollera status” för att återställa den befintliga kompileringen.",
   "The PDF copy for this review is unavailable. Start a new AI review.": "PDF-kopian för den här granskningen är inte tillgänglig. Starta en ny AI-granskning.",
   "The PDF is building. Wait for this build to finish.": "PDF-filen byggs. Vänta tills bygget är klart.",
   "The PDF snapshot for this review is unavailable. Start a new AI review.": "PDF-ögonblicksbilden för den här granskningen är inte tillgänglig. Starta en ny AI-granskning.",
@@ -144,6 +145,7 @@
   "The downloaded package does not match the requested release.": "Det nedladdade paketet matchar inte den begärda utgåvan.",
   "The downloaded release is incomplete.": "Den nedladdade utgåvan är ofullständig.",
   "The manuscript changed while copying this suggestion. Try again.": "Manuskriptet ändrades medan förslaget kopierades. Försök igen.",
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": "Manuskriptet kunde inte kompileras för AI-granskning. Åtgärda felen som visas i förhandsgranskningen av manuskriptet och försök sedan igen.",
   "The new version could not be installed. Check the connection and available disk space, then retry.": "Den nya versionen kunde inte installeras. Kontrollera anslutningen och ledigt diskutrymme och försök sedan igen.",
   "The new version did not pass its startup check. Your current version is still running.": "Den nya versionen klarade inte startkontrollen. Din nuvarande version körs fortfarande.",
   "The new version did not restart successfully.": "Den nya versionen kunde inte startas om.",
@@ -226,7 +228,6 @@
   "Wait for repository preparation to finish.": "Vänta tills förberedelsen av arkivet är klar.",
   "Wait for task creation to finish before deleting it.": "Vänta tills uppgiften har skapats innan du tar bort den.",
   "Wait for the current Git operation before sending more instructions.": "Vänta på den pågående Git-åtgärden innan du skickar fler instruktioner.",
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": "Vänta tills den aktuella PDF-filen har kompilerats klart och kör sedan färdigheten för AI-granskning.",
   "Wait for the current delivery before sending more instructions.": "Vänta på den pågående leveransen innan du skickar fler instruktioner.",
   "Wait for the current manuscript PDF to finish compiling, then copy the suggestion again.": "Vänta tills den aktuella PDF-filen för manuskriptet har kompilerats klart och kopiera sedan förslaget igen.",
   "Wait for the current review action before building a review.": "Vänta på den pågående granskningsåtgärden innan du bygger en granskning.",
@@ -236,6 +237,5 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Vänta tills uppgiften och granskningsåtgärderna är klara innan du väljer ett mål.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Vänta tills PDF-bygget för den här artikeln är klart innan du ändrar dess sökväg eller tar bort den.",
   "ZIP links and special files are not supported.": "Länkar och specialfiler i ZIP-arkiv stöds inte.",
-  "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot.",
-  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "Det gick inte att ansluta till tjänsten för PDF-jämförelse. Dina ändringar är sparade. Välj ”Kontrollera status” för att återställa den befintliga kompileringen."
+  "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot."
 }
