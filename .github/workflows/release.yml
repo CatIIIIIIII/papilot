@@ -15,17 +15,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # CI's checks on both supported Node versions; a tag pushed without a pull
+  # request gets them here.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   desktop:
-    # The reusable workflow's dev publishing job (skipped for tags) declares
-    # contents: write; its build jobs keep read-only tokens.
-    permissions:
-      contents: write
     uses: ./.github/workflows/desktop.yml
     secrets: inherit
 
   release:
-    # Publish only after every native installer has built and passed its smoke test.
-    needs: desktop
+    # Publish only after CI and every native installer have passed.
+    needs: [ci, desktop]
     runs-on: ubuntu-latest
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
@@ -59,10 +60,6 @@ jobs:
           printf '```sh\nnpm install -g papilot@latest\n```\n' >> "$RUNNER_TEMP/notes.md"
       - run: npm ci
       - run: npm run setup:review
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run i18n -- check
-      - run: npm run i18n:check-app
       - name: Download tested desktop installers
         uses: actions/download-artifact@v4
         with:
