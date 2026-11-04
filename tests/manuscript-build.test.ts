@@ -156,3 +156,17 @@ test('AI review freezes the task copy and repositions only a surviving passage w
     assert.deepEqual(fs.readFileSync(preserved), originalPdf, 'a restarted server retains the original task PDF');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('AI review reports a task copy that does not compile and keeps no PDF for it', { skip: !latexmk && 'needs latexmk and pdflatex', timeout: 60000 }, async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-review-broken-')), root = path.join(base, 'paper'), worktree = path.join(base, 'task');
+  fs.mkdirSync(root);
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  try {
+    fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\n\\begin{document}\n\\undefinedcommand\n\\end{document}\n');
+    git('init', '-q'); git('add', '.'); git('-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', 'Initial');
+    git('worktree', 'add', '--detach', worktree, 'HEAD');
+    const manuscript = new Manuscripts();
+    await assert.rejects(manuscript.captureReview(root, worktree, 'broken-copy'), /could not be compiled for AI review/);
+    assert.equal(await manuscript.savedReviewPdf(root, 'broken-copy'), null);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});

@@ -1953,7 +1953,7 @@ test('creating an AI review skill task persists its snapshot and queues review-o
   const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/isolated-review', deferred: true } : {});
   try {
     const reviewInput = { key: 'pdf-at-start', lines: [{ id: 'p1-l1', page: 0, text: 'Read this claim.', rect: [0.1, 0.2, 0.8, 0.3] as [number, number, number, number] }] };
-    const input = { id: 'ai-review-task-0001', projectId: f.task.projectId, title: 'AI review', instructions: '', skill: 'ai-review', reviewInput };
+    const input = { id: 'ai-review-task-0001', projectId: f.task.projectId, title: 'AI review', instructions: '', skill: 'ai-review', prepareReview: async () => reviewInput };
     const created = await f.workspace.createTask(input);
     assert.equal(created.mode, 'review');
     assert.equal(created.worktree, '/isolated-review');
@@ -1965,18 +1965,34 @@ test('creating an AI review skill task persists its snapshot and queues review-o
     assert.equal(f.store.items(created.id)[0].text, '');
     assert.equal((await f.workspace.createTask(input)).id, created.id);
     assert.equal(f.calls.filter(call => call.route === '/api/tasks').length, 1);
-    await assert.rejects(f.workspace.createTask({ ...input, reviewInput: undefined, instructions: 'Edit it.' }), /Invalid task ID/);
+    await assert.rejects(f.workspace.createTask({ ...input, prepareReview: undefined, instructions: 'Edit it.' }), /Invalid task ID/);
     await assert.rejects(f.workspace.createTask({ ...input, id: 'ai-review-task-0002', agent: 'cursor' }), /Choose Codex, Claude or GLM/);
+  } finally { f.close(); }
+});
+
+test('an AI review whose manuscript copy cannot be read discards the copy, so a retry copies it again', async () => {
+  const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/task-copy', deferred: true } : route.endsWith('/finish') ? { task: 'p-ai-review-retry-task', finished: true } : {});
+  try {
+    const captured = { key: 'task-pdf', pdf: '/saved-review.pdf', lines: [{ id: 'p1-l1', page: 0, text: 'The fixed copy.', rect: [0.1, 0.2, 0.8, 0.3] as [number, number, number, number] }] };
+    let fail = true;
+    const input = { id: 'ai-review-retry-task', projectId: f.task.projectId, title: 'AI review', instructions: '', skill: 'ai-review', prepareReview: async () => { if (fail) throw new Error('The manuscript could not be compiled for AI review.'); return captured; } };
+    await assert.rejects(f.workspace.createTask(input), /could not be compiled/);
+    assert.equal(f.store.tasks().some(task => task.id === input.id), false);
+    assert.deepEqual(f.calls.map(call => call.route), ['/api/tasks', '/api/tasks/p-ai-review-retry-task/finish']);
+    assert.deepEqual(f.calls[1].body, { force: true });
+    fail = false;
+    const created = await f.workspace.createTask(input);
+    assert.equal(created.aiReview?.key, 'task-pdf');
+    assert.equal(f.calls.filter(call => call.route === '/api/tasks').length, 2);
   } finally { f.close(); }
 });
 
 test('AI review captures the task worktree before enqueueing and retries keep that snapshot', async () => {
   const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/task-copy', deferred: true } : {});
   try {
-    const requested = { key: 'main-pdf', lines: [] };
     const captured = { key: 'task-pdf', pdf: '/saved-review.pdf', lines: [{ id: 'p1-l1', page: 0, text: 'The task copy.', rect: [0.1, 0.2, 0.8, 0.3] as [number, number, number, number] }] };
     let calls = 0;
-    const input = { id: 'ai-review-copy-task', projectId: f.task.projectId, title: 'AI review', instructions: '', skill: 'ai-review', reviewInput: requested, prepareReview: async (worktree: string) => { calls++; assert.equal(worktree, '/task-copy'); return captured; } };
+    const input = { id: 'ai-review-copy-task', projectId: f.task.projectId, title: 'AI review', instructions: '', skill: 'ai-review', prepareReview: async (worktree: string) => { calls++; assert.equal(worktree, '/task-copy'); return captured; } };
     const created = await f.workspace.createTask(input);
     assert.equal(created.aiReview?.key, 'task-pdf');
     assert.deepEqual(f.store.reviewInput(created.id), captured);

@@ -134,6 +134,7 @@
   "That page is not part of the manuscript.": "該頁面不屬於論文原稿的一部分。",
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": "AI 審閱未回傳有效的註解。請要求它以所需的 JSON 格式重試。",
   "The AI review response is incomplete or too long. Ask the reviewer to retry.": "AI 審閱回應不完整或過長。請要求審閱者重試。",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "暫時無法連線至 PDF 比較服務。修改已儲存，請選擇「檢查狀態」恢復原來的建置。",
   "The PDF copy for this review is unavailable. Start a new AI review.": "無法取得此審閱的 PDF 副本。請開始新的 AI 審閱。",
   "The PDF is building. Wait for this build to finish.": "正在建置 PDF，請等待此次建置完成。",
   "The PDF snapshot for this review is unavailable. Start a new AI review.": "無法取得此審閱的 PDF 快照。請開始新的 AI 審閱。",
@@ -144,6 +145,7 @@
   "The downloaded package does not match the requested release.": "下載的套件與要求的發行版本不符。",
   "The downloaded release is incomplete.": "下載的發行版本不完整。",
   "The manuscript changed while copying this suggestion. Try again.": "複製此建議時論文原稿已發生變更。請再試一次。",
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": "無法編譯論文原稿以進行 AI 審閱。請修正論文原稿預覽中顯示的錯誤，然後再試一次。",
   "The new version could not be installed. Check the connection and available disk space, then retry.": "無法安裝新版本。請檢查連線與可用磁碟空間，然後再試一次。",
   "The new version did not pass its startup check. Your current version is still running.": "新版本未通過啟動檢查。目前版本仍在執行中。",
   "The new version did not restart successfully.": "新版本未能成功重新啟動。",
@@ -226,7 +228,6 @@
   "Wait for repository preparation to finish.": "請等待儲存庫準備完成。",
   "Wait for task creation to finish before deleting it.": "刪除任務前，請先等待任務建立完成。",
   "Wait for the current Git operation before sending more instructions.": "傳送更多指示前，請先等待目前的 Git 作業完成。",
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": "請等待目前的 PDF 編譯完成後，再執行 AI 審閱技能。",
   "Wait for the current delivery before sending more instructions.": "傳送更多指示前，請先等待目前的傳送作業完成。",
   "Wait for the current manuscript PDF to finish compiling, then copy the suggestion again.": "請等待目前的論文原稿 PDF 編譯完成，然後再重新複製建議。",
   "Wait for the current review action before building a review.": "建置審閱前請先等待目前的審閱動作完成。",
@@ -236,6 +237,5 @@
   "Wait for the task and review actions to finish before choosing a destination.": "選擇目標位置前，請先等待任務與審閱動作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "請等待此論文的 PDF 建置完成後，再變更其路徑或將其移除。",
   "ZIP links and special files are not supported.": "不支援 ZIP 連結與特殊檔案。",
-  "npm is unavailable to Papilot.": "Papilot 無法使用 npm。",
-  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "暫時無法連線至 PDF 比較服務。修改已儲存，請選擇「檢查狀態」恢復原來的建置。"
+  "npm is unavailable to Papilot.": "Papilot 無法使用 npm。"
 }

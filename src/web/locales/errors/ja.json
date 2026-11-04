@@ -134,6 +134,7 @@
   "That page is not part of the manuscript.": "そのページは原稿に含まれていません。",
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": "AI レビューから有効な注釈が返されませんでした。必要な JSON 形式で再試行するよう指示してください。",
   "The AI review response is incomplete or too long. Ask the reviewer to retry.": "AI レビューの応答が不完全か長すぎます。レビュアーに再試行するよう指示してください。",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "PDF 比較サービスに接続できませんでした。変更は保存されています。「状態を確認」を選択して、元のビルドを復旧してください。",
   "The PDF copy for this review is unavailable. Start a new AI review.": "このレビューの PDF コピーを利用できません。新しい AI レビューを開始してください。",
   "The PDF is building. Wait for this build to finish.": "PDF をビルド中です。このビルドが完了するまでお待ちください。",
   "The PDF snapshot for this review is unavailable. Start a new AI review.": "このレビューの PDF スナップショットは利用できません。新しい AI レビューを開始してください。",
@@ -144,6 +145,7 @@
   "The downloaded package does not match the requested release.": "ダウンロードされたパッケージが要求されたリリースと一致しません。",
   "The downloaded release is incomplete.": "ダウンロードされたリリースが不完全です。",
   "The manuscript changed while copying this suggestion. Try again.": "この提案のコピー中に原稿が変更されました。もう一度お試しください。",
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": "AIレビュー用の原稿をコンパイルできませんでした。原稿プレビューに表示されているエラーを修正してから、もう一度お試しください。",
   "The new version could not be installed. Check the connection and available disk space, then retry.": "新しいバージョンをインストールできませんでした。接続と空きディスク容量を確認してから、再試行してください。",
   "The new version did not pass its startup check. Your current version is still running.": "新しいバージョンが起動チェックを通過しませんでした。現在のバージョンが引き続き実行されています。",
   "The new version did not restart successfully.": "新しいバージョンが正常に再起動しませんでした。",
@@ -226,7 +228,6 @@
   "Wait for repository preparation to finish.": "リポジトリの準備が完了するまでお待ちください。",
   "Wait for task creation to finish before deleting it.": "削除する前に、タスクの作成が完了するまでお待ちください。",
   "Wait for the current Git operation before sending more instructions.": "追加の指示を送信する前に、現在の Git 操作が完了するまでお待ちください。",
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": "現在の PDF のコンパイルが完了するのを待ってから、AI レビュースキルを実行してください。",
   "Wait for the current delivery before sending more instructions.": "追加の指示を送信する前に、現在の送信が完了するまでお待ちください。",
   "Wait for the current manuscript PDF to finish compiling, then copy the suggestion again.": "現在の原稿 PDF のコンパイルが完了するのを待ってから、もう一度提案をコピーしてください。",
   "Wait for the current review action before building a review.": "レビューをビルドする前に、現在のレビュー操作が完了するまでお待ちください。",
@@ -236,6 +237,5 @@
   "Wait for the task and review actions to finish before choosing a destination.": "反映先を選択する前に、タスクとレビュー操作が完了するまでお待ちください。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "パスの変更や削除を行う前に、この論文の PDF ビルドが完了するまでお待ちください。",
   "ZIP links and special files are not supported.": "ZIP 内のリンクおよび特殊ファイルはサポートされていません。",
-  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。",
-  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "PDF 比較サービスに接続できませんでした。変更は保存されています。「状態を確認」を選択して、元のビルドを復旧してください。"
+  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。"
 }
