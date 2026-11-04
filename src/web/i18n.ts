@@ -45,7 +45,8 @@ export const language = () => state.language;
 // Dates and numbers follow the interface language.
 export const locale = () => state.language;
 export function useLanguage() {
-  return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => state);
+  // The same snapshot on the server lets components that subscribe render in tests.
+  return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => state, () => state);
 }
 
 // t('Delete {name}?', { name }) fills {placeholders} after translating.

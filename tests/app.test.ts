@@ -714,15 +714,18 @@ test('attachment uploads and downloads follow paper membership and keep unsent f
   } finally { await f.close(); }
 });
 
-test('the AI review skill uses normal task submission with paper access, CSRF and a current PDF', async () => {
+test('the AI review skill uses normal task submission with paper access and CSRF, without waiting for the preview', async () => {
   const f = await fixture();
   try {
     const inputs: Parameters<Workspace['createTask']>[0][] = [];
-    f.manuscripts.state = async () => ({ git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null }, build: { key: 'pdf', status: 'ready', current: true } });
-    f.manuscripts.reviewSnapshot = async () => ({ key: 'pdf', lines: [{ id: 'p1-l1', page: 0, text: 'Claim', rect: [0, 0, 1, 1] }] });
+    // The review compiles its own copy, so the preview may be compiling or broken.
+    f.manuscripts.state = async () => { throw new Error('The AI review must not read the preview build.'); };
+    f.manuscripts.captureReview = async (_root, worktree) => ({ key: 'task-pdf', lines: [{ id: 'p1-l1', page: 0, text: worktree, rect: [0, 0, 1, 1] }] });
     f.workspace.createTask = async input => {
       inputs.push(input);
-      return f.store.saveTask({ ...task(input.id, input.projectId), mode: 'review', aiReview: { key: input.reviewInput!.key } });
+      if (!input.prepareReview) return f.store.saveTask(task(input.id, input.projectId));
+      const snapshot = await input.prepareReview('/task-copy');
+      return f.store.saveTask({ ...task(input.id, input.projectId), mode: 'review', aiReview: { key: snapshot.key } });
     };
     const payload = { id: 'ai-review-request-1', projectId: 'thesis', skill: 'ai-review', title: 'AI review', instructions: '', agent: 'codex' };
     const send = (body = payload, headers = f.as) => f.remote.inject({ method: 'POST', url: '/api/tasks', headers, payload: body });
@@ -730,18 +733,17 @@ test('the AI review skill uses normal task submission with paper access, CSRF an
     const denied = await send({ ...payload, projectId: 'grant' }), missing = await send({ ...payload, projectId: 'missing' });
     assert.equal(denied.statusCode, 400);
     assert.equal(denied.body, missing.body);
-    const ready = f.manuscripts.state;
-    f.manuscripts.state = async () => ({ ...(await ready('thesis', '/unused')), build: { status: 'building', current: false } });
-    assert.equal((await send()).statusCode, 400);
-    f.manuscripts.state = ready;
     assert.equal(inputs.length, 0);
-    assert.equal((await send()).statusCode, 200);
+    const sent = await send();
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.equal(sent.json().aiReview.key, 'task-pdf');
     assert.equal(inputs[0].author?.name, 'Ada');
-    assert.equal(inputs[0].reviewInput?.lines[0].text, 'Claim');
     assert.equal(inputs[0].skill, 'ai-review');
-    f.manuscripts.state = async () => { throw new Error('The PDF has changed since submission.'); };
-    assert.equal((await send()).statusCode, 200, 'A retry uses the existing review even after rebuilding');
+    assert.equal((await send()).statusCode, 200, 'A retry returns the existing review');
     assert.equal(inputs.length, 1);
+    const editing = await send({ ...payload, id: 'edit-request-1', skill: undefined as any, instructions: 'Edit it.' });
+    assert.equal(editing.statusCode, 200, editing.body);
+    assert.equal(inputs[1].prepareReview, undefined);
   } finally { await f.close(); }
 });
 

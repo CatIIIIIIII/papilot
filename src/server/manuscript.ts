@@ -79,6 +79,19 @@ function gitDir(root: string) {
     return fs.statSync(dot).isFile() ? path.resolve(root, readText(dot).replace(/^gitdir:\s*/, '').trim()) : dot;
   } catch { return null; }
 }
+// Cheap evidence that Git's own state moved: the index, HEAD, the current
+// branch, a fetch or a merge. Each changes when a commit, stage, checkout,
+// fetch or merge happens, from Papilot or from a terminal.
+export function gitStamp(root: string) {
+  const dir = gitDir(root);
+  if (!dir) return '';
+  const common = path.resolve(dir, readText(path.join(dir, 'commondir')).trim() || '.');
+  const branch = readText(path.join(dir, 'HEAD')).match(/^ref: (refs\/\S+)/)?.[1];
+  // FETCH_HEAD belongs to the worktree that fetched, so a linked worktree checks
+  // its own and the main one's.
+  return [path.join(dir, 'index'), path.join(dir, 'HEAD'), path.join(dir, 'MERGE_HEAD'), path.join(dir, 'FETCH_HEAD'), common !== dir && path.join(common, 'FETCH_HEAD'), path.join(common, 'packed-refs'), branch && path.join(common, branch)]
+    .map(file => { try { const stat = file && fs.statSync(file); return stat ? `${stat.mtimeMs}:${stat.size}` : '-'; } catch { return '-'; } }).join('|');
+}
 export function mergeInProgress(root: string) {
   const dir = gitDir(root);
   return Boolean(dir && fs.existsSync(path.join(dir, 'MERGE_HEAD')));
@@ -298,13 +311,13 @@ async function pageSizes(mupdf: any, pdf: string) {
 }
 
 async function engine() {
-  const [{ Builder }, { Repo, gitBinary }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
+  const [{ Builder, BuildError }, { Repo, gitBinary }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
     import(pathToFileURL(path.join(ENGINE, 'src/core/build.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/core/git.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href),
     import(pathToFileURL(path.join(ENGINE, 'src/render/pdf.ts')).href),
   ]);
-  return { Builder, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
+  return { Builder, BuildError, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
 }
 
 // `synctex edit` maps a PDF position (big points from the top-left corner) to
@@ -483,12 +496,16 @@ export class Manuscripts extends EventEmitter {
   // The view polls every second and a half while a build runs; Git's status
   // costs a walk of the working tree, which competes with TeX, so it is
   // read again at most every few seconds then, and after Papilot's own writes.
-  private statuses = new Map<string, { at: number; value: Promise<GitStatus> }>();
-  private gitStatus(root: string, building: boolean) {
-    const cached = this.statuses.get(root);
-    if (building && cached && Date.now() - cached.at < 5000) return cached.value;
+  // Between builds the view polls every five seconds to notice other editors:
+  // the status is read again when the working tree or Git's own state moved,
+  // and at least every half minute for what neither shows, such as a push
+  // from a terminal changing how far the branch is ahead.
+  private statuses = new Map<string, { at: number; value: Promise<GitStatus>; tree?: string; stamp?: string }>();
+  private gitStatus(root: string, building: boolean, tree?: string) {
+    const cached = this.statuses.get(root), age = cached ? Date.now() - cached.at : Infinity, stamp = building ? undefined : gitStamp(root);
+    if (cached && (building ? age < 5000 : tree !== undefined && cached.tree === tree && cached.stamp === stamp && age < 30000)) return cached.value;
     const value = gitStatus(root);
-    this.statuses.set(root, { at: Date.now(), value });
+    this.statuses.set(root, { at: Date.now(), value, tree, stamp });
     value.catch(() => { if (this.statuses.get(root)?.value === value) this.statuses.delete(root); });
     return value;
   }
@@ -497,7 +514,8 @@ export class Manuscripts extends EventEmitter {
     const current = this.builds.get(projectId), building = current?.status === 'building';
     // Polling an in-flight build needs its status, not another source snapshot.
     // Once it finishes, the next read checks for edits made during compilation.
-    const [status, tree] = await Promise.all([this.gitStatus(root, building), building ? current.tree : this.snapshot(root)]);
+    // The snapshot comes first so an unchanged tree can reuse the last status.
+    const tree = building ? current.tree : await this.snapshot(root), status = await this.gitStatus(root, building, building ? undefined : tree);
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
     const { status: state, key, pages, builtAt, error } = build;
@@ -701,13 +719,17 @@ export class Manuscripts extends EventEmitter {
   }
 
   // Compile the task's frozen source tree, then retain its PDF outside the build cache.
+  // A preview build of the same tree is shared, not repeated.
   async captureReview(root: string, worktree: string, taskId: string): Promise<ReviewSnapshot> {
-    const { Builder, Repo, loadProject } = await engine();
+    const { Builder, BuildError, Repo, loadProject } = await engine();
     const tree = await workingTree(worktree);
-    const result = await new Builder(loadProject(root), new Repo(root)).build(tree, ['full']);
-    const pdf = await this.preserveReviewPdf(root, taskId, result.pdf);
-    const key = createHash('sha256').update(fs.readFileSync(pdf)).digest('hex').slice(0, 16);
-    return { ...await this.snapshotPdf(pdf, key), pdf };
+    let result;
+    try { result = await new Builder(loadProject(root), new Repo(root)).build(tree, ['full']); }
+    catch (error) { throw error instanceof BuildError ? new Error('The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.') : error; }
+    const key = createHash('sha256').update(fs.readFileSync(result.pdf)).digest('hex').slice(0, 16);
+    const snapshot = await this.snapshotPdf(result.pdf, key);
+    // The task does not exist yet, so a PDF kept by an earlier failed attempt is replaced.
+    return { ...snapshot, pdf: await this.preserveReviewPdf(root, taskId, result.pdf, true) };
   }
 
   private async reviewPdfPath(root: string, taskId: string) {
@@ -720,11 +742,11 @@ export class Manuscripts extends EventEmitter {
     return fs.existsSync(pdf) ? pdf : null;
   }
 
-  async preserveReviewPdf(root: string, taskId: string, source: string) {
+  async preserveReviewPdf(root: string, taskId: string, source: string, replace = false) {
     const pdf = await this.reviewPdfPath(root, taskId), folder = path.dirname(pdf);
     fs.mkdirSync(folder, { recursive: true });
     // A retry always uses the original task copy, even after its build cache is pruned.
-    if (!fs.existsSync(pdf)) { const temporary = path.join(folder, 'review.tmp'); fs.copyFileSync(source, temporary); fs.renameSync(temporary, pdf); }
+    if (replace || !fs.existsSync(pdf)) { const temporary = path.join(folder, 'review.tmp'); fs.copyFileSync(source, temporary); fs.renameSync(temporary, pdf); }
     return pdf;
   }
 
@@ -762,11 +784,7 @@ export class Manuscripts extends EventEmitter {
     } finally { original.close(); current.close(); }
   }
 
-  async reviewSnapshot(projectId: string, key: string): Promise<ReviewSnapshot> {
-    return this.snapshotPdf(this.pdf(projectId, key), key);
-  }
-
-  private async snapshotPdf(pdf: string, key: string): Promise<ReviewSnapshot> {
+  async snapshotPdf(pdf: string, key: string): Promise<ReviewSnapshot> {
     const { PdfDocument } = await engine();
     const document = new PdfDocument(pdf), lines: ReviewSnapshot['lines'] = [];
     let length = 0;

@@ -1,6 +1,7 @@
 import type { ReviewSnapshot } from './ai-review.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Annotation, Project, Task, Run, TimelineItem } from '../shared.ts';
@@ -39,6 +40,7 @@ export class Store extends EventEmitter {
   saveProject(p: Project) { this.db.prepare('INSERT INTO projects VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET path=excluded.path,data=excluded.data').run(p.id, p.path, JSON.stringify(p)); this.emit('change'); }
   removeProject(id: string) {
     this.project(id);
+    const tasks = (this.db.prepare('SELECT id FROM tasks WHERE project_id=?').all(id) as { id: string }[]).map(row => row.id);
     this.transaction(() => {
       // Only Papilot records are removed. Never finish review tasks or touch their files.
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
@@ -46,6 +48,7 @@ export class Store extends EventEmitter {
       for (const table of ['tasks', 'annotations', 'members']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
+    for (const task of tasks) this.itemRevisions.delete(task);
     this.emit('change');
   }
   saveTask(t: Task) { t.updatedAt = Date.now(); this.db.prepare('INSERT INTO tasks VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(t.id, t.projectId, JSON.stringify(t)); this.emit('change'); return t; }
@@ -53,7 +56,28 @@ export class Store extends EventEmitter {
   saveRun(r: Run) { this.db.prepare('INSERT INTO runs VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,data=excluded.data').run(r.id, r.taskId, r.requestKey, r.status, JSON.stringify(r)); this.emit('change'); }
   runByKey(key: string) { const row = this.db.prepare('SELECT data FROM runs WHERE request_key=?').get(key) as { data: string } | undefined; return row ? JSON.parse(row.data) as Run : undefined; }
   items(taskId: string) { return (this.db.prepare('SELECT data FROM items WHERE task_id=? ORDER BY created,rowid').all(taskId) as { data: string }[]).map(r => JSON.parse(r.data) as TimelineItem); }
-  saveItem(item: TimelineItem) { this.db.prepare('INSERT INTO items VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(item.id, item.taskId, item.createdAt, JSON.stringify(item)); this.emit('change'); }
+  // A running task's view reads its timeline every second, and a command's
+  // output alone can be 40 KB, so a view that has the timeline asks only for
+  // the items written since its revision. Revisions start over with the
+  // process; one from an earlier run gets the whole timeline.
+  private readonly boot = randomUUID().slice(0, 8);
+  private revision = 0;
+  private itemRevisions = new Map<string, Map<string, number>>();
+  itemsSince(taskId: string, since?: string): { items: TimelineItem[]; revision: string; partial?: true } {
+    const revision = `${this.boot}:${this.revision}`, match = /^([0-9a-f]{8}):(\d{1,15})$/.exec(since || ''), after = match ? Number(match[2]) : NaN;
+    if (!match || match[1] !== this.boot || after > this.revision) return { items: this.items(taskId), revision };
+    const changed = [...this.itemRevisions.get(taskId) || []].filter(([, at]) => at > after).map(([id]) => id);
+    if (changed.length > 500) return { items: this.items(taskId), revision };
+    const items = changed.length ? (this.db.prepare(`SELECT data FROM items WHERE task_id=? AND id IN (${changed.map(() => '?').join()}) ORDER BY created,rowid`).all(taskId, ...changed) as { data: string }[]).map(r => JSON.parse(r.data) as TimelineItem) : [];
+    return { items, revision, partial: true };
+  }
+  saveItem(item: TimelineItem) {
+    this.db.prepare('INSERT INTO items VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(item.id, item.taskId, item.createdAt, JSON.stringify(item));
+    let revisions = this.itemRevisions.get(item.taskId);
+    if (!revisions) this.itemRevisions.set(item.taskId, revisions = new Map());
+    revisions.set(item.id, ++this.revision);
+    this.emit('change');
+  }
   saveReviewInput(taskId: string, snapshot: ReviewSnapshot) { this.db.prepare('INSERT INTO ai_review_inputs VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET data=excluded.data').run(taskId, JSON.stringify(snapshot)); }
   reviewInput(taskId: string): ReviewSnapshot {
     const row = this.db.prepare('SELECT data FROM ai_review_inputs WHERE task_id=?').get(taskId) as { data: string } | undefined;
@@ -81,6 +105,7 @@ export class Store extends EventEmitter {
       this.db.prepare('DELETE FROM ai_review_inputs WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
     });
+    this.itemRevisions.delete(id);
     this.emit('change');
   }
   transaction<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const result = fn(); this.db.exec('COMMIT'); return result; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }

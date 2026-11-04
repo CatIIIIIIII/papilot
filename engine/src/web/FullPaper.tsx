@@ -14,12 +14,21 @@ import worker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { ChangeBlock, Strip } from "../types.ts";
 import { t } from "./i18n.ts";
 import type { PlacedChange } from "./paper.ts";
+import { cMapData } from "./pdf-cmaps.ts";
 
 // Built assets share one folder, and a host such as Papilot serves the viewer
-// under its own prefix: find the worker next to this chunk, not at /assets.
-pdfjs.GlobalWorkerOptions.workerSrc = import.meta.env.DEV
-  ? worker
-  : new URL(worker.split("/").pop()!, import.meta.url).href;
+// under its own prefix: find the worker and CMaps next to this chunk, not at /assets.
+const besideChunk = (url: string) =>
+  import.meta.env.DEV ? url : new URL(url.split("/").pop()!, import.meta.url).href;
+pdfjs.GlobalWorkerOptions.workerSrc = besideChunk(worker);
+const CMapData = cMapData(
+  import.meta.glob<string>("../../node_modules/pdfjs-dist/cmaps/*.bcmap", {
+    eager: true,
+    import: "default",
+    query: "?url&no-inline",
+  }),
+  besideChunk,
+);
 
 // The whole paper with its changes in place: the new PDF's pages, opened up
 // where a change's new lines are, and that change shown there as in the
@@ -134,7 +143,7 @@ export function FullPaper({
     setStarted(Date.now());
     announced.current = false;
     const open = async (source: string, partial: boolean) => {
-      const task = pdfjs.getDocument({ url: source, enableXfa: false });
+      const task = pdfjs.getDocument({ url: source, enableXfa: false, BinaryDataFactory: CMapData });
       tasks.push(task);
       const pdf = await task.promise,
         first = (await pdf.getPage(1)).getViewport({ scale: 1 }),

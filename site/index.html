@@ -3,17 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Papilot · A Cursor-like workspace for your papers</title>
+<title>Papilot · A Modern Agentic LaTeX Editor</title>
 <!-- language-preference -->
-<meta name="description" content="Annotate and review PDFs directly without ever touching LaTeX. An AI agent edits the LaTeX, and every change comes back as a typeset before-and-after that you accept or reject." data-zh-content="直接在 PDF 上批注和审阅，完全不用碰 LaTeX。AI 智能体去改 LaTeX，每处改动都以排版后的修改前后对比回到你面前，由你接受或拒绝。">
+<script>try { const theme = localStorage.getItem('papilot-theme'); if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme; } catch {}</script>
+<meta name="description" content="Mark up the compiled PDF and the coding agent you choose edits the LaTeX source. Each change comes back as a typeset before-and-after for you to accept or reject." data-zh-content="在编译好的 PDF 上批注，你选的编程智能体去改 LaTeX 源码。每处改动都排成修改前后的版面对比，由你接受或拒绝。">
 <meta name="theme-color" content="#ffffff">
 <link rel="canonical" href="https://papilot.ai/">
 <link rel="alternate" hreflang="en" href="https://papilot.ai/?lang=en">
 <link rel="alternate" hreflang="zh-CN" href="https://papilot.ai/?lang=zh-CN">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Papilot">
-<meta property="og:title" content="Papilot · A Cursor-like workspace for your papers">
-<meta property="og:description" content="Annotate and review PDFs directly without ever touching LaTeX." data-zh-content="">
+<meta property="og:title" content="Papilot · A Modern Agentic LaTeX Editor">
+<meta property="og:description" content="Mark up the compiled PDF, and review every LaTeX change as a typeset before-and-after." data-zh-content="在编译好的 PDF 上批注，每处 LaTeX 改动都以排好版的修改前后给你审阅。">
 <meta property="og:url" content="https://papilot.ai/">
 <meta property="og:image" content="https://papilot.ai/assets/social-preview.png">
 <meta property="og:image:width" content="2560">
@@ -23,8 +24,6 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/TeXGyrePagellaX-Regular.otf" as="font" type="font/otf" crossorigin>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="demos.css">
-<script src="demos.js" defer></script>
 </head>
 <body>
 
@@ -32,12 +31,16 @@
   <div class="wrap topbar-inner">
     <a class="brand" href="./"><img class="brand-mark" src="assets/logo.svg" alt="" width="26" height="26">Papilot</a>
     <nav class="nav" aria-label="Sections" data-zh-aria-label="页面导航">
-      <a href="#features"><span lang="en">Features</span><span lang="zh-CN">功能</span></a>
       <a href="#agents"><span lang="en">Agents</span><span lang="zh-CN">智能体</span></a>
-      <a href="#start"><span lang="en">Quick start</span><span lang="zh-CN">快速开始</span></a>
-      <a href="https://github.com/cu1ch3n/papilot/blob/main/docs/guide.md"><span lang="en">Guide</span><span lang="zh-CN">指南</span></a>
+      <a href="#why"><span lang="en">Approach</span><span lang="zh-CN">理念</span></a>
+      <a href="#features"><span lang="en">Features</span><span lang="zh-CN">功能</span></a>
+      <a href="#download"><span lang="en">Download</span><span lang="zh-CN">下载</span></a>
     </nav>
     <div class="topbar-actions">
+      <button class="icon-button theme-button" type="button" id="theme-button" aria-pressed="false" aria-label="Dark mode" data-zh-aria-label="深色模式" title="Dark mode" data-zh-title="深色模式" hidden>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
       <div class="lang-menu" hidden>
         <button class="icon-button" type="button" id="lang-button" aria-haspopup="menu" aria-expanded="false" aria-controls="lang-list" aria-label="Language" data-zh-aria-label="语言" title="Language" data-zh-title="语言">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
@@ -55,10 +58,71 @@
 <main>
 
 <section class="hero">
-  <div class="wrap hero-copy">
-    <h1><span lang="en">A Cursor-like workspace<br> for your papers</span><span lang="zh-CN">像 Cursor 一样<br>改论文</span></h1>
-    <p class="lede"><span lang="en">Annotate and review PDFs directly, without ever touching LaTeX.</span><span lang="zh-CN">直接在 PDF 上批注和审阅，完全不用碰 LaTeX。</span></p>
-    <div class="hero-actions">
+  <!-- The first screen fills the window: the headline, whose "Agentic" is
+       marked as an addition, Papilot's window and the downloads. The window
+       keeps only what the point needs: one change on a page whose other text,
+       equations and figures are abstract, drawn from the viewer
+       (engine/src/web/review.tsx and style.css), and a chat whose agent
+       keeps changing. Accept and Reject
+       leave the side that stays as plain text, and clicking it reopens the
+       change; LaTeX shows the source and Comment opens the discussions. Until
+       someone touches the window, a pointer plays the whole round as the app
+       does it: it draws a box round the sentence, writes a note, sends the
+       note to the agent from the chat, the agent works, the diff appears and
+       the pointer accepts it. Without script or motion the window shows the
+       sent note and the diff. A quiet arrow says the page goes on. -->
+  <div class="wrap hero-copy hero-screen">
+    <h1><span lang="en">A Modern <ins>Agentic</ins> <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> Editor</span><span lang="zh-CN">一个现代的 <ins>Agentic</ins> <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> 编辑器</span></h1>
+    <figure class="app-window">
+      <div class="app-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="app-body">
+        <div class="app-pdf">
+          <div class="review-page">
+            <span class="sheet-eq" aria-hidden="true"><i style="width:26px"></i>=<span class="frac"><i style="width:64px"></i><b></b><i style="width:40px"></i></span>+<i style="width:34px"></i><em>(1)</em></span>
+            <article class="review-change current" data-state="pending">
+              <div class="review-head">
+                <span class="review-number"><span lang="en">Change 1</span><span lang="zh-CN">修改 1</span></span>
+                <button class="review-accept" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span lang="en">Accept</span><span lang="zh-CN">接受</span></button>
+                <button class="review-reject" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span lang="en">Reject</span><span lang="zh-CN">拒绝</span></button>
+                <a class="review-comment" href="https://github.com/PapilotAI/papilot/discussions" title="Discuss Papilot on GitHub" data-zh-title="在 GitHub 上讨论 Papilot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg><span lang="en">Comment</span><span lang="zh-CN">评论</span></a>
+                <button class="review-latex" type="button" aria-expanded="false" aria-controls="review-source-1" title="Show LaTeX source" data-zh-title="显示 LaTeX 源码">LaTeX</button>
+              </div>
+              <div class="review-side before" aria-hidden="true">
+                <span class="review-label"><span lang="en">Before</span><span lang="zh-CN">修改前</span></span>
+                <p class="review-body"><span lang="en">Writing <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del></span><span lang="zh-CN">用 <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> 写文档，<del>得看</del> <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> 源码<del>，去</del> PDF <del>里找对应 😭</del></span></p>
+              </div>
+              <div class="review-side after">
+                <span class="review-label" aria-hidden="true"><span lang="en">After</span><span lang="zh-CN">修改后</span></span>
+                <p class="review-body"><span lang="en">Writing <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins></span><span lang="zh-CN">用 <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> 写文档，<ins>与</ins> <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> 源码<ins>何干？我只看</ins> PDF<ins>！😎</ins></span></p>
+              </div>
+              <div class="review-source" id="review-source-1" hidden>
+                <p class="review-source-title">main.tex · <span lang="en">line 6</span><span lang="zh-CN">第 6 行</span></p>
+<pre><span lang="en">Writing \LaTeX{}, <del>I</del><ins>why</ins> read \LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins></span><span lang="zh-CN">用 \LaTeX{} 写文档，<del>得看</del><ins>与</ins> \LaTeX{} 源码<del>，去</del><ins>何干？我只看</ins> PDF<del> 里找对应 😭</del><ins>！😎</ins></span></pre>
+              </div>
+            </article>
+            <span class="sheet-lines fill" aria-hidden="true"><i style="width:100%"></i><i style="width:72%"></i><span class="sheet-fig"><span class="fig-flow"><span class="fig-panel fig-source"><svg class="fig-file" viewBox="0 0 64 78"><path d="M4 2h40l18 18v54a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" fill="#f6f7f9" stroke="#c9ced6" stroke-width="1.3"/><path d="M44 2v16a2 2 0 0 0 2 2h16" fill="none" stroke="#c9ced6" stroke-width="1.3"/><text x="9" y="34">\sum_{n</text><text x="9" y="46">\frac{1}</text><text x="9" y="58">= \frac{</text></svg><b>main.tex</b></span><span class="fig-step"><span class="latex">L<sup>a</sup>T<sub>e</sub>X</span><svg class="fig-arrow" viewBox="0 0 34 12"><path d="M1 6h30m-6-5 6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="fig-panel"><span class="fig-page"><span class="fig-op"><small>∞</small><span>∑</span><small><var>n</var>=1</small></span><span class="fig-frac"><span>1</span><span><var>n</var><sup>2</sup></span></span><span>=</span><span class="fig-frac"><span><var>π</var><sup>2</sup></span><span>6</span></span></span><b>main.pdf</b></span></span><i></i></span><i style="width:100%"></i><i style="width:100%"></i><i style="width:86%"></i></span>
+          </div>
+        </div>
+        <div class="app-chat" aria-hidden="true">
+          <div class="chat-thread">
+            <div class="chat-bubble">
+              <span class="chat-note-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span lang="en">Note on the PDF</span><span lang="zh-CN">PDF 上的批注</span></span>
+              <span class="chat-quote"><b>1</b><em><span lang="en">Marked region</span><span lang="zh-CN">标记的区域</span></em></span>
+              <p class="chat-comment"><span lang="en">Make it more modern</span><span lang="zh-CN">改得现代一点</span></p>
+            </div>
+            <div class="chat-reply"><span class="chat-dots"><i></i><i></i><i></i></span><span class="chat-lines"><i style="width:100%"></i><i style="width:94%"></i><i style="width:46%"></i></span></div>
+          </div>
+          <div class="chat-composer">
+            <span class="chat-input"><span class="chat-attached"><b>1</b><span></span></span><i></i></span>
+            <span class="chat-foot"><span class="chat-agent agent codex"><i></i><b>Codex</b></span><span class="chat-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></span></span>
+          </div>
+        </div>
+      </div>
+      <span class="demo-box" aria-hidden="true"></span>
+      <span class="demo-note" aria-hidden="true"><span class="demo-note-input"><span class="demo-note-typed"></span><span class="demo-note-hint"><span lang="en">What should change here?</span><span lang="zh-CN">这里应该怎么改？</span></span></span><span class="demo-note-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></span>
+      <span class="app-cursor" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5.5 2.5v17.2l4.3-4.1 2.9 6.6 3.1-1.3-2.9-6.5h6z"/></svg></span>
+    </figure>
+    <div class="actions">
       <div class="download">
         <button class="button primary download-button" type="button" id="download-button" aria-haspopup="menu" aria-expanded="false" aria-controls="download-list">
           <svg class="os-mac" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.33 1.9-3.45 1.99-3.5-1.08-1.59-2.77-1.8-3.37-1.83-1.43-.15-2.8.84-3.53.84-.73 0-1.85-.82-3.04-.8-1.56.02-3 .91-3.81 2.31-1.62 2.82-.42 6.99 1.17 9.27.77 1.12 1.7 2.38 2.91 2.33 1.17-.05 1.61-.75 3.02-.75 1.41 0 1.81.75 3.04.73 1.26-.02 2.05-1.14 2.82-2.26.89-1.3 1.25-2.55 1.27-2.62-.03-.01-2.44-.94-2.47-3.72ZM14.05 5.75c.64-.78 1.08-1.86.96-2.94-.93.04-2.05.62-2.71 1.4-.6.69-1.12 1.79-.98 2.85 1.03.08 2.09-.53 2.73-1.31Z"/></svg>
@@ -78,6 +142,9 @@
             <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
             <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
           </div>
+          <div class="download-group" role="none">
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/latest"><strong><span lang="en">All downloads</span><span lang="zh-CN">所有下载</span></strong><span class="download-meta">GitHub</span></a>
+          </div>
         </div>
       </div>
       <div class="install">
@@ -88,17 +155,20 @@
         </button>
       </div>
     </div>
-  </div>
-  <p class="wrap hero-note"><span lang="en">Version {{version}} · Free and open source ·</span><span lang="zh-CN">版本 {{version}} · 免费开源 ·</span> <a href="https://github.com/PapilotAI/papilot/releases/latest"><span lang="en">All downloads</span><span lang="zh-CN">全部下载</span></a></p>
-  <div class="wrap">
-    <!-- demo:hero -->
+    <p class="hero-note"><span lang="en">Version {{version}} · Free and open source · <a href="https://github.com/PapilotAI/papilot/blob/main/LICENSE">MIT License</a></span><span lang="zh-CN">版本 {{version}} · 免费开源 · <a href="https://github.com/PapilotAI/papilot/blob/main/LICENSE">MIT 许可证</a></span></p>
+    <a class="scroll-cue" href="#agents" aria-label="Scroll down" data-zh-aria-label="向下滚动"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
   </div>
 </section>
 
-<section class="logos" aria-labelledby="logos-title">
+<!-- Every agent at once, in colour. The first time they come on screen
+     they arrive one after another; without script or motion they simply
+     stand there. -->
+<section class="logos" id="agents" aria-labelledby="logos-title">
   <div class="wrap">
-    <h2 id="logos-title"><span lang="en">Works with the coding agents you already use</span><span lang="zh-CN">支持你已经在用的编程智能体</span></h2>
-    <ul>
+    <h2 id="logos-title"><span lang="en">Supported Coding Agents</span><span lang="zh-CN">支持的编程智能体</span></h2>
+  </div>
+  <div class="wrap">
+    <ul class="agent-grid">
       <li class="agent codex"><i aria-hidden="true"></i>Codex</li>
       <li class="agent claude"><i aria-hidden="true"></i>Claude</li>
       <li class="agent cursor"><i aria-hidden="true"></i>Cursor</li>
@@ -114,193 +184,266 @@
   </div>
 </section>
 
-<section class="statement">
+<!-- Three ways to work on a LaTeX paper, each drawn as a small window: the
+     two older ways side by side, Papilot's on a wide row of its own below,
+     drawn as a change with a comment on it. Scrolling on, the older two lose
+     their colour gradually as they pass the top of the window, and Papilot's
+     comes in on the same scroll.
+     The drawings are decoration: the cards' text carries the comparison. -->
+<section class="section" id="why">
   <div class="wrap">
-    <p><span lang="en">Nothing touches your paper until you accept it.</span><span lang="zh-CN">你点头之前，论文一个字都不会变。</span></p>
+    <header class="section-head">
+      <h2><span lang="en">What Matters in a Paper Is the Idea and the Story</span><span lang="zh-CN">写文档，重要的是想法和故事</span></h2>
+      <p><span lang="en">Rewording and layout shouldn't take attention away from them.</span><span lang="zh-CN">字句怎么改、版面怎么排，不该分走注意力。</span></p>
+    </header>
+    <div class="eras">
+      <article class="era old">
+        <div class="era-art" aria-hidden="true">
+          <div class="mini">
+            <div class="mini-bar"><i></i><i></i><i></i></div>
+            <div class="mini-body split">
+              <div class="mini-source"><span class="mini-tab">main.tex</span><pre><b>\subsection</b>{Typing}
+A lambda <em>$\lambda x.\,e$</em> has a
+function type when its
+body does:
+<b>\begin</b>{mathpar}
+  <b>\inferrule</b>
+    {\Gamma, x{:}\tau_1 <b>\vdash</b> e : \tau_2}
+    {\Gamma <b>\vdash</b> \lambda x.\, e
+       : \tau_1 \to \tau_2}
+<b>\end</b>{mathpar}
+Application is typed
+in the same way.</pre></div>
+              <div class="mini-pdf"><div class="mini-page"><strong>3.2 Typing</strong><span class="bar"></span><span class="bar"></span><span class="bar short"></span><span class="mini-eq"><span class="rule"><span class="rule-premises"><span>Γ, <i>x</i> : <i>τ</i>₁ ⊢ <i>e</i> : <i>τ</i>₂</span></span><span class="rule-name">T-Abs</span><span class="rule-conclusion">Γ ⊢ λ<i>x</i>. <i>e</i> : <i>τ</i>₁ → <i>τ</i>₂</span></span></span><span class="bar"></span><span class="bar"></span><span class="bar short"></span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="era-text">
+          <p class="era-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span lang="en">Before AI</span><span lang="zh-CN">AI 之前</span></p>
+          <h3><span lang="en">Writing <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> by Hand</span><span lang="zh-CN">手写 <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span></span></h3>
+          <p><span lang="en">Source on the left, preview on the right, every line typed by hand.</span><span lang="zh-CN">源码在左、预览在右，每一行都得亲手敲。</span></p>
+        </div>
+      </article>
+      <article class="era old">
+        <div class="era-art" aria-hidden="true">
+          <div class="mini">
+            <div class="mini-bar"><i></i><i></i><i></i></div>
+            <div class="mini-body diff">
+              <div class="mini-source"><span class="mini-tab">main.tex</span><span class="mini-tab mini-ai"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.5 4.6 2.9 7 7.5 7.5-4.6.5-7 2.9-7.5 7.5-.5-4.6-2.9-7-7.5-7.5 4.6-.5 7-2.9 7.5-7.5Z"/></svg>+5 −2</span><pre>The rule for application
+<del>is the obvious one:</del><del>$e_1\,e_2 : \tau_2$.</del><ins><b>\begin</b>{mathpar}</ins><ins>  <b>\inferrule</b>{\Gamma <b>\vdash</b> e_1 : \tau_1 \to \tau_2</ins><ins>    <b>\\</b> \Gamma <b>\vdash</b> e_2 : \tau_1}</ins><ins>   {\Gamma <b>\vdash</b> e_1\, e_2 : \tau_2}</ins><ins><b>\end</b>{mathpar}</ins>Soundness follows from
+progress and preservation.</pre></div>
+              <div class="mini-pdf"><div class="mini-page"><span class="bar"></span><span class="bar short"></span><span class="bar"></span><span class="bar"></span><span class="bar short"></span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="era-text">
+          <p class="era-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span lang="en">AI added to the editor</span><span lang="zh-CN">AI 加进编辑器</span></p>
+          <h3><span lang="en">Checking <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> Diffs</span><span lang="zh-CN">核对 <span class="latex">L<sup>a</sup>T<sub>e</sub>X</span> 差异</span></h3>
+          <p><span lang="en">The AI edits the source. Once the diffs pile up, they go unread and the AI decides.</span><span lang="zh-CN">AI 改了源码，差异一多就看不过来，最后只能由它说了算。</span></p>
+        </div>
+      </article>
+      <article class="era ours">
+        <div class="era-art" aria-hidden="true">
+          <div class="mini">
+            <div class="mini-bar"><i></i><i></i><i></i></div>
+            <div class="mini-body only">
+              <div class="mini-pdf"><div class="mini-page"><span class="mini-heading"><b>3.2</b><span class="bar"></span></span><span class="bar"></span><span class="bar short"></span><span class="mini-review"><span class="mini-head"><span class="bar"></span><span class="mini-acts"><i class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i><i class="no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 6 12 12M18 6 6 18"/></svg></i><i class="talk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg></i></span></span><span class="mini-side before"><span class="bar"></span><span class="bar mid"></span></span><span class="mini-side after"><span class="bar"></span><span class="bar short"></span></span></span><span class="mini-comment"><span><span class="bar"></span><span class="bar short"></span></span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></i></span><span class="bar"></span><span class="bar"></span><span class="bar short"></span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="era-text">
+          <p class="era-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Papilot</p>
+          <h3><span lang="en">Reviewing the PDF</span><span lang="zh-CN">审阅 PDF</span></h3>
+          <p><span lang="en">The AI edits the source, and each change is reviewed on the typeset page.</span><span lang="zh-CN">AI 改源码，改动排好版后在页面上逐条审阅。</span></p>
+        </div>
+      </article>
+    </div>
   </div>
 </section>
 
-<section class="section" id="features">
+<section class="section features" id="features">
   <div class="wrap">
-    <header class="section-head">
-      <p class="eyebrow"><span lang="en">Features</span><span lang="zh-CN">功能</span></p>
-      <h2><span lang="en">The PDF is the whole interface</span><span lang="zh-CN">PDF 就是全部界面</span></h2>
-      <p><span lang="en">Everything you would do on paper, plus the parts paper can't do: an agent that writes the LaTeX, and Git underneath.</span><span lang="zh-CN">纸上能做的，这里都能做；纸上做不到的也有：替你写 LaTeX 的智能体，和底层的 Git。</span></p>
-    </header>
-
+    <!-- Each feature is drawn like the opening window, with the rest of the
+         app as bars, and plays what the opening round leaves out: two notes
+         sent together, a comment that sends a change back for another round,
+         and the accepted change committed and pushed. Each round plays while
+         its window is on screen and not under the mouse. Without script or
+         motion a window shows where its round ends. -->
     <article class="feature">
       <div class="feature-text">
         <p class="step"><span class="num">01</span><span lang="en">Annotate</span><span lang="zh-CN">批注</span></p>
-        <h3><span lang="en">Mark up the PDF</span><span lang="zh-CN">在 PDF 上批注</span></h3>
-        <p><span lang="en">Select a sentence or circle an equation and say what should change. SyncTeX hands the agent the exact LaTeX lines.</span><span lang="zh-CN">选中一句话或框出一个公式，写下要怎么改。SyncTeX 会把对应的 LaTeX 行准确交给智能体。</span></p>
-        <ul class="checks">
-          <li><span lang="en">Notes on selected text, or on a marked region for figures and equations</span><span lang="zh-CN">批注选中的文字；图和公式可以框选区域来批注</span></li>
-          <li><span lang="en">All your notes go to the agent as one task</span><span lang="zh-CN">所有批注作为一个任务交给智能体</span></li>
-          <li><span lang="en">Pick the agent, its model and how hard it thinks</span><span lang="zh-CN">自选智能体、模型和推理强度</span></li>
-        </ul>
+        <h3><span lang="en">Point at What Should Change</span><span lang="zh-CN">在页面上指出要改什么</span></h3>
+        <p><span lang="en">Select a sentence, or box an equation or a figure, and write what should change. The agent gets the exact source lines, with no need to know which file they are in.</span><span lang="zh-CN">选中一句话，或框出一个公式、一张图，写下修改意见。智能体拿到的是对应的源码位置，不需要知道它在哪个文件里。</span></p>
       </div>
-      <!-- demo:annotate -->
+      <figure class="app-window scene" data-scene="notes" role="img" aria-label="A sentence and a figure boxed on the PDF, each with a note, sent to the agent together" data-zh-aria-label="在 PDF 上框出一句话和一张图，各写一条批注，一起发给智能体">
+        <div class="scene-art" aria-hidden="true" inert>
+          <div class="app-bar"><span class="lights"><i></i><i></i><i></i></span></div>
+          <div class="app-body">
+            <div class="app-pdf">
+              <div class="review-page">
+                <span class="sheet-lines"><i style="width:100%"></i><i style="width:62%"></i></span>
+                <p class="scene-text"><span lang="en">The type system markedly increases the expressiveness of the language while keeping type checking decidable.</span><span lang="zh-CN">该类型系统在保持类型检查可判定的同时，显著提升了语言的表达能力。</span></p>
+                <span class="scene-figure"><span class="figure-plot"><span class="figure-legend"><i></i><i></i></span><b style="height:30%"></b><b style="height:44%"></b><b style="height:40%"></b><b style="height:62%"></b><b style="height:86%"></b></span><i class="figure-caption"></i></span>
+                <span class="sheet-lines fill"><i style="width:100%"></i><i style="width:74%"></i><span class="sheet-eq"><i style="width:30px"></i>=<span class="frac"><i style="width:56px"></i><b></b><i style="width:44px"></i></span>+<i style="width:28px"></i><em>(4)</em></span><i style="width:100%"></i><i style="width:100%"></i></span>
+              </div>
+            </div>
+            <div class="app-chat">
+              <div class="chat-thread">
+                <div class="chat-bubble">
+                  <span class="chat-note-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span lang="en">2 notes on the PDF</span><span lang="zh-CN">PDF 上的 2 条批注</span></span>
+                  <span class="chat-quote"><b>1</b><em><span lang="en">Page 2 · main.tex:24</span><span lang="zh-CN">第 2 页 · main.tex:24</span></em></span>
+                  <p class="chat-comment"><span lang="en">Say it more plainly</span><span lang="zh-CN">说得直白一点</span></p>
+                  <span class="chat-quote"><b>2</b><em><span lang="en">Page 2 · main.tex:31</span><span lang="zh-CN">第 2 页 · main.tex:31</span></em></span>
+                  <p class="chat-comment"><span lang="en">Move the legend to the top right</span><span lang="zh-CN">图例挪到右上角</span></p>
+                </div>
+                <div class="chat-reply"><span class="chat-dots"><i></i><i></i><i></i></span><span class="chat-lines"><i style="width:100%"></i><i style="width:70%"></i></span></div>
+              </div>
+              <div class="chat-composer">
+                <span class="chat-input"><span class="chat-attached"><b>1</b><span></span></span><span class="chat-attached"><b>2</b><span></span></span><i></i></span>
+                <span class="chat-foot"><span class="chat-agent agent claude"><i></i><b>Claude</b></span><span class="chat-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></span></span>
+              </div>
+            </div>
+          </div>
+          <span class="demo-box" data-n="1"></span><span class="demo-box" data-n="2"></span>
+          <span class="demo-note"><span class="demo-note-input"><span class="demo-note-typed"></span><span class="demo-note-hint"><span lang="en">What should change here?</span><span lang="zh-CN">这里应该怎么改？</span></span></span><span class="demo-note-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></span>
+          <span class="app-cursor"><svg viewBox="0 0 24 24"><path d="M5.5 2.5v17.2l4.3-4.1 2.9 6.6 3.1-1.3-2.9-6.5h6z"/></svg></span>
+        </div>
+      </figure>
     </article>
 
     <article class="feature flip">
       <div class="feature-text">
         <p class="step"><span class="num">02</span><span lang="en">Review</span><span lang="zh-CN">审阅</span></p>
-        <h3><span lang="en">Approve change by change</span><span lang="zh-CN">逐条点头</span></h3>
-        <p><span lang="en">Each edit comes back as a typeset diff. Accept, reject or comment on it, and undo any decision.</span><span lang="zh-CN">每处改动都以排版后的差异呈现。接受、拒绝或评论，任何决定都能撤销。</span></p>
-        <ul class="checks">
-          <li><span lang="en">Before and after on the printed page, not in LaTeX source</span><span lang="zh-CN">在排版后的页面上看修改前后，不用读 LaTeX 源码</span></li>
-          <li><span lang="en">Send your comments back for another round</span><span lang="zh-CN">把评论发回去，再改一轮</span></li>
-          <li><span lang="en">Accept all and Reject all touch only the changes you haven't decided</span><span lang="zh-CN">全部接受、全部拒绝只作用于还没决定的改动</span></li>
-        </ul>
+        <h3><span lang="en">Every Change, Decided One by One</span><span lang="zh-CN">每一处改动，逐条拍板</span></h3>
+        <p><span lang="en">A paper is written to be read, so every change has to be right. However many there are, each one is shown typeset, and nothing that hasn't been accepted reaches the paper. If one isn't right yet, comment on it and the agent revises it.</span><span lang="zh-CN">文档是写给人读的，每一处都得准确。改动再多，也一条条排好版过目，没接受的不会进入文档。还不满意的，写条评论让它再改一轮。</span></p>
       </div>
-      <!-- demo:review -->
+      <figure class="app-window scene" data-scene="revise" role="img" aria-label="A comment on a change goes back to the agent, which rewrites it as the T-Abs typing rule before it is accepted" data-zh-aria-label="对一处改动写下评论发回给智能体，它改写成推导规则后再接受">
+        <div class="scene-art" aria-hidden="true" inert>
+          <div class="app-bar"><span class="lights"><i></i><i></i><i></i></span></div>
+          <div class="app-body">
+            <div class="app-pdf">
+              <div class="review-page">
+                <span class="sheet-head"><b>3.2</b><i style="width:34%"></i></span>
+                <span class="sheet-lines"><i style="width:100%"></i><i style="width:56%"></i></span>
+                <article class="review-change current" data-state="pending">
+                  <div class="review-head">
+                    <span class="review-number"><span lang="en">Change 1</span><span lang="zh-CN">修改 1</span></span>
+                    <button class="review-accept" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span lang="en">Accept</span><span lang="zh-CN">接受</span></button>
+                    <button class="review-reject" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span lang="en">Reject</span><span lang="zh-CN">拒绝</span></button>
+                    <button class="review-comment" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg><span lang="en">Comment</span><span lang="zh-CN">评论</span></button>
+                  </div>
+                  <div class="review-side before">
+                    <span class="review-label"><span lang="en">Before</span><span lang="zh-CN">修改前</span></span>
+                    <p class="review-body"><span lang="en"><del>The type of <span class="math">λ<i>x</i>. <i>e</i></span> is determined by the types of <i>x</i> and its body <i>e</i>.</del></span><span lang="zh-CN"><del>函数 <span class="math">λ<i>x</i>. <i>e</i></span> 的类型由参数 <i>x</i> 和函数体 <i>e</i> 的类型决定。</del></span></p>
+                  </div>
+                  <div class="review-side after" data-version="2">
+                    <span class="review-label"><span lang="en">After</span><span lang="zh-CN">修改后</span></span>
+                    <p class="review-body"><span class="first"><span lang="en"><ins>If <i>e</i> has type <i>τ</i>₂ in the context Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, then <span class="math">λ<i>x</i>. <i>e</i></span> has type <span class="math"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins></span><span lang="zh-CN"><ins>若在上下文 Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁ 中 <i>e</i> 的类型为 <i>τ</i>₂，则 <span class="math">λ<i>x</i>. <i>e</i></span> 的类型为 <span class="math"><i>τ</i>₁ → <i>τ</i>₂</span>。</ins></span></span><span class="second"><ins><span class="rule"><span class="rule-premises"><span>Γ, <i>x</i> : <i>τ</i>₁ ⊢ <i>e</i> : <i>τ</i>₂</span></span><span class="rule-name">T-Abs</span><span class="rule-conclusion">Γ ⊢ λ<i>x</i>. <i>e</i> : <i>τ</i>₁ → <i>τ</i>₂</span></span></ins></span></p>
+                  </div>
+                </article>
+                <span class="sheet-lines fill"><i style="width:100%"></i><i style="width:68%"></i><span class="sheet-eq"><i style="width:22px"></i>=<span class="frac"><i style="width:48px"></i><b></b><i style="width:30px"></i></span>+<i style="width:40px"></i><em>(7)</em></span><i style="width:100%"></i></span>
+              </div>
+            </div>
+            <div class="app-chat">
+              <div class="chat-thread">
+                <span class="chat-bubble chat-old"><i style="width:100%"></i><i style="width:64%"></i></span>
+                <div class="chat-reply chat-old"><span class="chat-lines"><i style="width:100%"></i><i style="width:82%"></i></span></div>
+                <div class="chat-bubble">
+                  <span class="chat-note-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg><span lang="en">Review feedback · 1 comment</span><span lang="zh-CN">审阅反馈 · 1 条评论</span></span>
+                  <p class="chat-comment"><span lang="en">Write this as an inference rule</span><span lang="zh-CN">这里写成推导规则</span></p>
+                </div>
+                <div class="chat-reply"><span class="chat-dots"><i></i><i></i><i></i></span><span class="chat-lines"><i style="width:100%"></i><i style="width:58%"></i></span></div>
+              </div>
+              <div class="chat-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg><span><span lang="en">1 review update not sent yet</span><span lang="zh-CN">1 项审阅更新尚未发送</span></span><b><span lang="en">Send feedback</span><span lang="zh-CN">发送反馈</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></b></div>
+              <div class="chat-composer">
+                <span class="chat-input"><i></i></span>
+                <span class="chat-foot"><span class="chat-agent agent codex"><i></i><b>Codex</b></span><span class="chat-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></span></span>
+              </div>
+            </div>
+          </div>
+          <span class="demo-note"><span class="demo-note-input"><span class="demo-note-typed"></span><span class="demo-note-hint"><span lang="en">What should the agent change here?</span><span lang="zh-CN">希望智能体在这里做什么修改？</span></span></span><span class="demo-note-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></span>
+          <span class="app-cursor"><svg viewBox="0 0 24 24"><path d="M5.5 2.5v17.2l4.3-4.1 2.9 6.6 3.1-1.3-2.9-6.5h6z"/></svg></span>
+        </div>
+      </figure>
     </article>
 
     <article class="feature">
       <div class="feature-text">
-        <p class="step"><span class="num">03</span><span lang="en">Read</span><span lang="zh-CN">阅读</span></p>
-        <h3><span lang="en">Read it like a real PDF</span><span lang="zh-CN">像本地 PDF 一样阅读</span></h3>
-        <p><span lang="en">Jump around with the contents panel, search every page and zoom in sharply. Selecting text picks exactly the printed words.</span><span lang="zh-CN">用目录随意跳转，全文搜索，缩放清晰。选中的文字与印出的词完全对齐。</span></p>
-        <ul class="checks">
-          <li><span lang="en">Contents from the PDF's own bookmarks, following the section you're in</span><span lang="zh-CN">目录来自 PDF 自带的书签，并跟随你正在读的章节</span></li>
-          <li><span lang="en">Crisp text at any zoom, with working links and cross-references</span><span lang="zh-CN">任意缩放都清晰，链接和交叉引用都能点</span></li>
-          <li><span lang="en">Shows the paper as it is on disk, accepted changes included</span><span lang="zh-CN">显示磁盘上论文的当前状态，包括已接受的改动</span></li>
-        </ul>
+        <p class="step"><span class="num">03</span><span lang="en">Commit</span><span lang="zh-CN">提交</span></p>
+        <h3><span lang="en">Every Change on the Record</span><span lang="zh-CN">每一处改动都有记录</span></h3>
+        <p><span lang="en">Each task runs in its own Git worktree, and committing and pushing accepted changes is a separate step. Every change to the paper stays in its Git history.</span><span lang="zh-CN">每个任务都在独立的 Git 工作树里进行，接受之后，提交和推送是单独的一步。文档的每一次变化都留在 Git 历史里。</span></p>
       </div>
-      <!-- demo:read -->
+      <figure class="app-window scene" data-scene="record" data-step="pushed" role="img" aria-label="The accepted rule, with a commit message written by the agent, committed and pushed" data-zh-aria-label="接受的规则由智能体写好提交信息，提交并推送">
+        <div class="scene-art" aria-hidden="true" inert>
+          <div class="app-bar"><span class="lights"><i></i><i></i><i></i></span></div>
+          <div class="app-body">
+            <div class="app-pdf">
+              <div class="review-page">
+                <span class="sheet-head"><b>3.2</b><i style="width:34%"></i></span>
+                <span class="sheet-lines"><i style="width:100%"></i><i style="width:48%"></i></span>
+                <p class="scene-text scene-edited scene-rule"><span class="rule"><span class="rule-premises"><span>Γ, <i>x</i> : <i>τ</i>₁ ⊢ <i>e</i> : <i>τ</i>₂</span></span><span class="rule-name">T-Abs</span><span class="rule-conclusion">Γ ⊢ λ<i>x</i>. <i>e</i> : <i>τ</i>₁ → <i>τ</i>₂</span></span></p>
+                <span class="sheet-lines fill"><i style="width:100%"></i><i style="width:80%"></i><span class="sheet-fig"><svg class="fig-auto" viewBox="0 0 300 88"><defs><marker id="fig-arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 7 4 1 7" fill="none" stroke="#59606c" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></marker></defs><path d="M22 38H52" fill="none" stroke="#59606c" stroke-width="1.1" marker-end="url(#fig-arrowhead)"/><circle cx="66" cy="38" r="13" fill="#fff" stroke="#59606c" stroke-width="1.1"/><text x="66" y="42" class="q">q<tspan dy="2.5" font-size="8">0</tspan></text><circle cx="150" cy="38" r="13" fill="#fff" stroke="#59606c" stroke-width="1.1"/><text x="150" y="42" class="q">q<tspan dy="2.5" font-size="8">1</tspan></text><circle cx="234" cy="38" r="13" fill="#fff" stroke="#59606c" stroke-width="1.1"/><circle cx="234" cy="38" r="10" fill="none" stroke="#59606c" stroke-width="1"/><text x="234" y="42" class="q">q<tspan dy="2.5" font-size="8">2</tspan></text><path d="M80 38H134" fill="none" stroke="#59606c" stroke-width="1.1" marker-end="url(#fig-arrowhead)"/><text x="107" y="32" class="e">a</text><path d="M164 38H218" fill="none" stroke="#59606c" stroke-width="1.1" marker-end="url(#fig-arrowhead)"/><text x="191" y="32" class="e">a</text><path d="M144 26C134 2 166 2 156 26" fill="none" stroke="#59606c" stroke-width="1.1" marker-end="url(#fig-arrowhead)"/><text x="150" y="1" class="e">b</text><path d="M226 49C200 84 100 84 74 50" fill="none" stroke="#59606c" stroke-width="1.1" marker-end="url(#fig-arrowhead)"/><text x="150" y="82" class="e">b</text></svg><i></i></span><i style="width:100%"></i><i style="width:60%"></i></span>
+              </div>
+            </div>
+            <div class="app-git">
+              <p class="git-branch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><code>main</code></p>
+              <div class="git-staged">
+                <p class="git-title"><span lang="en">1 file staged</span><span lang="zh-CN">已暂存 1 个文件</span></p>
+                <p class="git-file"><code>main.tex</code><b>+3 <s>−1</s></b></p>
+                <p class="git-message"><span class="git-typed"></span><span class="git-hint"><span lang="en">Commit message</span><span lang="zh-CN">提交信息</span></span><span class="git-spark"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.5 4.6 2.9 7 7.5 7.5-4.6.5-7 2.9-7.5 7.5-.5-4.6-2.9-7-7.5-7.5 4.6-.5 7-2.9 7.5-7.5Z"/></svg></span></p>
+                <p class="git-commit"><span lang="en">Commit 1 file</span><span lang="zh-CN">提交 1 个文件</span></p>
+              </div>
+              <div class="git-log">
+                <p class="git-row git-new"><i></i><span class="git-msg"><span lang="en">Write T-Abs as a rule</span><span lang="zh-CN">T-Abs 写成推导规则</span></span><code>3f9c2a1</code></p>
+                <p class="git-row"><i></i><b style="width:64%"></b><code>ecce73e</code></p>
+                <p class="git-row"><i></i><b style="width:48%"></b><code>91b07d4</code></p>
+                <p class="git-row"><i></i><b style="width:56%"></b><code>5a2e8c0</code></p>
+              </div>
+              <p class="git-push"><span class="git-push-button"><span lang="en">Push</span><span lang="zh-CN">推送</span></span><span class="git-pushed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span lang="en">Pushed to the remote.</span><span lang="zh-CN">已推送到远程。</span></span></p>
+            </div>
+          </div>
+          <span class="app-cursor"><svg viewBox="0 0 24 24"><path d="M5.5 2.5v17.2l4.3-4.1 2.9 6.6 3.1-1.3-2.9-6.5h6z"/></svg></span>
+        </div>
+      </figure>
     </article>
-
-    <article class="feature flip">
-      <div class="feature-text">
-        <p class="step"><span class="num">04</span><span lang="en">Commit</span><span lang="zh-CN">提交</span></p>
-        <h3><span lang="en">Commit when you're happy</span><span lang="zh-CN">满意了再提交</span></h3>
-        <p><span lang="en">Diff files, commit the ones you choose, then pull and push without leaving the page.</span><span lang="zh-CN">查看差异，只提交你勾选的文件，pull 和 push 都不用离开页面。</span></p>
-        <ul class="checks">
-          <li><span lang="en">Tick exactly the files to commit; LaTeX build output starts unticked</span><span lang="zh-CN">精确勾选要提交的文件；LaTeX 编译产物默认不勾选</span></li>
-          <li><span lang="en">Anything you staged elsewhere stays staged</span><span lang="zh-CN">你在别处暂存的内容保持原样</span></li>
-          <li><span lang="en">Pull only fast-forwards, so nothing is merged behind your back</span><span lang="zh-CN">pull 只做快进，不会背着你合并</span></li>
-        </ul>
-      </div>
-      <!-- demo:commit -->
-    </article>
   </div>
 </section>
 
-<section class="section">
-  <div class="wrap">
-    <header class="section-head">
-      <p class="eyebrow"><span lang="en">Safe by design</span><span lang="zh-CN">安全设计</span></p>
-      <h2><span lang="en">Your paper stays yours</span><span lang="zh-CN">论文始终由你做主</span></h2>
-    </header>
-    <div class="cards">
-      <div class="card">
-        <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
-        <h3><span lang="en">A worktree for every task</span><span lang="zh-CN">每个任务一个工作树</span></h3>
-        <p><span lang="en">Each task edits its own Git worktree, so your manuscript changes only when you accept an edit. Two tasks run at once; the rest wait in a queue.</span><span lang="zh-CN">每个任务都在自己的 Git 工作树里修改，只有你接受改动时，论文才会变。两个任务同时运行，其余排队等候。</span></p>
+<section class="get" id="download">
+  <div class="wrap get-inner">
+    <div class="get-text">
+      <h2><span lang="en">Get Papilot</span><span lang="zh-CN">下载 Papilot</span></h2>
+      <p><span lang="en">The desktop app runs on macOS and Linux, and the command-line version installs from npm (Node.js 22.22+). Both use Git and your own TeX distribution (<a href="https://www.tug.org/mactex/">MacTeX</a> or <a href="https://www.tug.org/texlive/">TeX Live</a>). Papilot is free and open source under the <a href="https://github.com/PapilotAI/papilot/blob/main/LICENSE">MIT License</a>.</span><span lang="zh-CN">桌面版支持 macOS 和 Linux，命令行版用 npm 安装（需要 Node.js 22.22+）。两者都使用本机已安装的 Git 和 TeX 发行版（<a href="https://www.tug.org/mactex/">MacTeX</a> 或 <a href="https://www.tug.org/texlive/">TeX Live</a>）。Papilot 免费开源，采用 <a href="https://github.com/PapilotAI/papilot/blob/main/LICENSE">MIT 许可证</a>。</span></p>
+      <div class="actions">
+        <div class="download">
+          <button class="button primary download-button" type="button" id="get-button" aria-haspopup="menu" aria-expanded="false" aria-controls="get-list">
+            <svg class="os-mac" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.33 1.9-3.45 1.99-3.5-1.08-1.59-2.77-1.8-3.37-1.83-1.43-.15-2.8.84-3.53.84-.73 0-1.85-.82-3.04-.8-1.56.02-3 .91-3.81 2.31-1.62 2.82-.42 6.99 1.17 9.27.77 1.12 1.7 2.38 2.91 2.33 1.17-.05 1.61-.75 3.02-.75 1.41 0 1.81.75 3.04.73 1.26-.02 2.05-1.14 2.82-2.26.89-1.3 1.25-2.55 1.27-2.62-.03-.01-2.44-.94-2.47-3.72ZM14.05 5.75c.64-.78 1.08-1.86.96-2.94-.93.04-2.05.62-2.71 1.4-.6.69-1.12 1.79-.98 2.85 1.03.08 2.09-.53 2.73-1.31Z"/></svg>
+            <svg class="os-linux" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>
+            <span class="for-mac"><span lang="en">Download for Mac</span><span lang="zh-CN">下载 Mac 版</span></span>
+            <span class="for-linux"><span lang="en">Download for Linux</span><span lang="zh-CN">下载 Linux 版</span></span>
+            <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="download-list" id="get-list" role="menu" aria-labelledby="get-button" hidden>
+            <div class="download-group" data-os="mac" role="group" aria-labelledby="get-mac">
+              <p class="download-label" id="get-mac">macOS</p>
+              <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
+              <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
+            </div>
+            <div class="download-group" data-os="linux" role="group" aria-labelledby="get-linux">
+              <p class="download-label" id="get-linux">Linux</p>
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
+            </div>
+            <div class="download-group" role="none">
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/latest"><strong><span lang="en">All downloads</span><span lang="zh-CN">所有下载</span></strong><span class="download-meta">GitHub</span></a>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
-        <h3><span lang="en">Accept first, commit later</span><span lang="zh-CN">先接受，再提交</span></h3>
-        <p><span lang="en">Accepting a change updates your working tree without committing, and any decision can be undone. You decide what goes into each commit.</span><span lang="zh-CN">接受改动只更新工作区，不会自动提交，任何决定都能撤销。每次提交包含什么，由你决定。</span></p>
-      </div>
-      <div class="card">
-        <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 18h.01"/></svg></span>
-        <h3><span lang="en">On your computer, and your phone</span><span lang="zh-CN">在电脑上运行，用手机也能看</span></h3>
-        <p><span lang="en">Papilot listens only on 127.0.0.1. Publish it on your tailnet with Tailscale Serve to review from a phone or tablet.</span><span lang="zh-CN">Papilot 只监听 127.0.0.1。用 Tailscale Serve 把它发布到你的 tailnet，就能在手机或平板上审阅。</span></p>
-      </div>
-      <div class="card">
-        <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5M16 13H8M16 17H8M10 9H8"/></svg></span>
-        <h3><span lang="en">Your own TeX</span><span lang="zh-CN">用你自己的 TeX</span></h3>
-        <p><span lang="en">It builds with latexmk and the TeX distribution you already have, so your packages, BibTeX and TikZ figures work as they do today.</span><span lang="zh-CN">用 latexmk 和你已经装好的 TeX 发行版编译，宏包、BibTeX 和 TikZ 图都照常工作。</span></p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="agents">
-  <div class="wrap">
-    <header class="section-head">
-      <p class="eyebrow"><span lang="en">Agents</span><span lang="zh-CN">智能体</span></p>
-      <h2><span lang="en">Bring the agent you already use</span><span lang="zh-CN">用你已经在用的智能体</span></h2>
-      <p><span lang="en">Choose one per task. Papilot finds the agents on your computer and offers only those. It never stores your credentials, and a key you set for an SDK agent goes only to that service.</span><span lang="zh-CN">每个任务选一个。Papilot 会自动找出电脑上已有的智能体，只列出这些。它从不保存你的凭据；为 SDK 类智能体设置的密钥只会交给对应的服务。</span></p>
-    </header>
-    <div class="agents">
-      <div class="agent-card">
-        <h3 class="agent codex"><i aria-hidden="true"></i>Codex</h3>
-        <p><span lang="en">Runs through the Codex app server, in its workspace sandbox. Papilot uses your <code>codex</code> if you have one, or installs it on first start.</span><span lang="zh-CN">通过 Codex app server 在其工作区沙箱中运行。已装有 <code>codex</code> 就直接用，没有则在首次启动时自动安装。</span></p>
-        <p class="sign-in"><span lang="en">Sign in once with <code>papilot codex login</code></span><span lang="zh-CN">用 <code>papilot codex login</code> 登录一次</span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent claude"><i aria-hidden="true"></i>Claude</h3>
-        <p><span lang="en">With Claude Code installed, runs <code>claude -p</code> on your own login, your Claude plan or a key, in Claude Code's sandbox. Without it, Papilot uses the Claude Agent SDK with an API key.</span><span lang="zh-CN">装了 Claude Code 时，用你自己的登录（Claude 订阅或密钥）运行 <code>claude -p</code>，在 Claude Code 的沙箱中工作；没装时通过 Claude Agent SDK 运行，需要 API 密钥。</span></p>
-        <p class="sign-in"><span lang="en">Install Claude Code and run <code>claude auth login</code>, or start <code>papilot</code> with <code>ANTHROPIC_API_KEY</code> set</span><span lang="zh-CN">安装 Claude Code 并运行 <code>claude auth login</code>，或设置好 <code>ANTHROPIC_API_KEY</code> 再启动 <code>papilot</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent cursor"><i aria-hidden="true"></i>Cursor</h3>
-        <p><span lang="en">Runs a local agent through the Cursor SDK, downloaded the first time, in Cursor's sandbox. The SDK does not use the Cursor app or CLI login.</span><span lang="zh-CN">通过 Cursor SDK 在本机运行，首次使用时下载，并在 Cursor 的沙箱中工作。该 SDK 不使用 Cursor 应用或 CLI 的登录。</span></p>
-        <p class="sign-in"><span lang="en">Start <code>papilot</code> with <code>CURSOR_API_KEY</code> set</span><span lang="zh-CN">设置好 <code>CURSOR_API_KEY</code> 再启动 <code>papilot</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent copilot"><i aria-hidden="true"></i>GitHub Copilot</h3>
-        <p><span lang="en">Runs <code>copilot --acp --stdio</code> in Agent mode with allow-all turned off, so tools come to you for approval. Sessions resume after reconnecting.</span><span lang="zh-CN">以 Agent 模式运行 <code>copilot --acp --stdio</code>，并关闭 allow-all，工具操作都交给你审批；重新连接后可继续会话。</span></p>
-        <p class="sign-in"><span lang="en">Install the CLI with <code>npm install -g @github/copilot</code> and run <code>copilot login</code></span><span lang="zh-CN">用 <code>npm install -g @github/copilot</code> 安装 CLI，再运行 <code>copilot login</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent grok"><i aria-hidden="true"></i>Grok</h3>
-        <p><span lang="en">Runs Grok Build through its official ACP interface with automatic approvals turned off. Replies and tool activity stream into the task.</span><span lang="zh-CN">通过 Grok Build 官方的 ACP 接口运行，并关闭自动审批；回复和工具操作实时显示在任务中。</span></p>
-        <p class="sign-in"><span lang="en">Install the <a href="https://x.ai/cli">Grok CLI</a> and run <code>grok login</code>, or set <code>XAI_API_KEY</code></span><span lang="zh-CN">安装 <a href="https://x.ai/cli">Grok CLI</a> 并运行 <code>grok login</code>，或设置 <code>XAI_API_KEY</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent antigravity"><i aria-hidden="true"></i>Antigravity</h3>
-        <p><span lang="en">Runs <code>agy -p</code>, one process per turn, editing files only. If your region needs it, set <code>PAPILOT_AGY_PROXY</code>.</span><span lang="zh-CN">运行 <code>agy -p</code>，每轮一个进程，只编辑文件。所在地区需要代理时，设置 <code>PAPILOT_AGY_PROXY</code>。</span></p>
-        <p class="sign-in"><span lang="en">Install Antigravity and sign in to <code>agy</code></span><span lang="zh-CN">安装 Antigravity 并登录 <code>agy</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent kimi"><i aria-hidden="true"></i>Kimi Code</h3>
-        <p><span lang="en">Choose Kimi in Papilot to select a model, stream replies, attach images and approve tools. Conversations resume after a restart. Set <code>PAPILOT_KIMI_BIN</code> if the CLI is not on your server's PATH.</span><span lang="zh-CN">在 Papilot 中选择 Kimi，即可选择模型、接收流式回复、附带图片和审批工具操作。重启后可继续会话；服务找不到 CLI 时，设置 <code>PAPILOT_KIMI_BIN</code>。</span></p>
-        <p class="sign-in"><span lang="en">Install <a href="https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started">Kimi Code CLI</a> and run <code>kimi login</code></span><span lang="zh-CN">安装 <a href="https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started">Kimi Code CLI</a>，运行 <code>kimi login</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent glm"><i aria-hidden="true"></i>GLM</h3>
-        <p><span lang="en">Runs Claude Code on Zhipu's Anthropic-compatible endpoint, as Zhipu documents for GLM Coding Plan, with the GLM models in the menu.</span><span lang="zh-CN">按智谱为 GLM Coding Plan 给出的方式，让 Claude Code 连接智谱的 Anthropic 兼容接口，菜单中列出 GLM 模型。</span></p>
-        <p class="sign-in"><span lang="en">Start <code>papilot</code> with <code>ZHIPU_API_KEY</code> (or <code>ZAI_API_KEY</code>) set</span><span lang="zh-CN">设置好 <code>ZHIPU_API_KEY</code>（或 <code>ZAI_API_KEY</code>）再启动 <code>papilot</code></span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent deepseek"><i aria-hidden="true"></i>DeepSeek</h3>
-        <p><span lang="en">Runs <code>dsh acp</code> in its workspace sandbox. Anything outside the paper's worktree comes to you for approval.</span><span lang="zh-CN">通过 <code>dsh acp</code> 在其工作区沙箱中运行；论文工作树以外的操作会交给你审批。</span></p>
-        <p class="sign-in"><span lang="en">Install <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> and set up a model in <code>dsh</code></span><span lang="zh-CN">安装 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>，并在 <code>dsh</code> 中配置好模型</span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent qwen"><i aria-hidden="true"></i>Qwen Code</h3>
-        <p><span lang="en">Runs <code>qwen --acp</code> in Auto Edit mode: edits go ahead, and commands come to you for approval.</span><span lang="zh-CN">以自动编辑模式运行 <code>qwen --acp</code>：改文件直接进行，运行命令需要你审批。</span></p>
-        <p class="sign-in"><span lang="en">Install <a href="https://github.com/QwenLM/qwen-code">Qwen Code</a> and sign in by running <code>qwen</code></span><span lang="zh-CN">安装 <a href="https://github.com/QwenLM/qwen-code">Qwen Code</a>，运行 <code>qwen</code> 登录</span></p>
-      </div>
-      <div class="agent-card">
-        <h3 class="agent opencode"><i aria-hidden="true"></i>OpenCode</h3>
-        <p><span lang="en">Runs <code>opencode acp</code> with your providers and models. Commands and anything outside the worktree come to you for approval.</span><span lang="zh-CN">用你配置的服务商和模型运行 <code>opencode acp</code>；运行命令和工作树以外的操作需要你审批。</span></p>
-        <p class="sign-in"><span lang="en">Install <a href="https://opencode.ai">OpenCode</a> and connect a provider with <code>opencode auth login</code></span><span lang="zh-CN">安装 <a href="https://opencode.ai">OpenCode</a>，用 <code>opencode auth login</code> 连接模型服务商</span></p>
-      </div>
-      <a class="agent-card agent-guide" href="https://github.com/PapilotAI/papilot/blob/main/docs/guide.md#agents">
-        <h3><span lang="en">Setting up an agent</span><span lang="zh-CN">配置智能体</span></h3>
-        <p><span lang="en">Requirements, models, permissions and environment variables for every agent are in the guide.</span><span lang="zh-CN">每个智能体的安装要求、模型、权限和环境变量，都写在指南里。</span></p>
-        <p class="sign-in"><span lang="en">Read the agent guide</span><span lang="zh-CN">阅读智能体指南（英文）</span> →</p>
-      </a>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="start">
-  <div class="wrap start">
-    <div class="start-text">
-      <header class="section-head">
-        <p class="eyebrow"><span lang="en">Quick start</span><span lang="zh-CN">快速开始</span></p>
-        <h2><span lang="en">Up and running in a minute</span><span lang="zh-CN">一分钟就能上手</span></h2>
-      </header>
-      <ol class="steps">
-        <li><span class="num">01</span><div><span lang="en"><strong>Install</strong> the desktop app for macOS or Linux, or the CLI with npm (Node.js 22.22+). Either way you need Git and a full TeX distribution (<a href="https://www.tug.org/mactex/">MacTeX</a> or <a href="https://www.tug.org/texlive/">TeX Live</a>).</span><span lang="zh-CN"><strong>安装。</strong>下载 macOS 或 Linux 桌面版，或用 npm 安装命令行版（需要 Node.js 22.22+）。两种方式都需要 Git 和完整的 TeX 发行版（<a href="https://www.tug.org/mactex/">MacTeX</a> 或 <a href="https://www.tug.org/texlive/">TeX Live</a>）。</span></div></li>
-        <li><span class="num">02</span><div><span lang="en"><strong>Open the example paper.</strong> The desktop app shows a 26-page LaTeX paper about Papilot itself on first launch. With the CLI, run the demo and open <code>127.0.0.1:7274</code>.</span><span lang="zh-CN"><strong>打开示例论文。</strong>桌面版首次启动就会打开一篇讲 Papilot 本身的 26 页 LaTeX 论文；命令行版运行 demo，再打开 <code>127.0.0.1:7274</code>。</span></div></li>
-        <li><span class="num">03</span><div><span lang="en"><strong>Add your paper.</strong> Choose <b>Add paper</b>, then pick or drag in a LaTeX folder, or import a ZIP from Overleaf.</span><span lang="zh-CN"><strong>添加你的论文。</strong>选择<b>添加论文</b>，选择或拖入 LaTeX 文件夹，也可以导入 Overleaf 的 ZIP。</span></div></li>
-      </ol>
+      <p class="get-links">
+        <a href="https://github.com/PapilotAI/papilot/blob/main/docs/guide.md#agents"><span lang="en">Setting up an agent</span><span lang="zh-CN">配置智能体（英文）</span></a>
+        <a href="https://github.com/PapilotAI/papilot/blob/main/CHANGELOG.md"><span lang="en">Changelog</span><span lang="zh-CN">更新日志</span></a>
+      </p>
     </div>
     <div class="terminal">
       <div class="terminal-bar">
@@ -319,17 +462,6 @@
   </div>
 </section>
 
-<section class="cta">
-  <div class="wrap">
-    <h2><span lang="en">Revise your next paper on the PDF</span><span lang="zh-CN">下一篇论文，直接在 PDF 上改</span></h2>
-    <p><span lang="en">Free and open source under the MIT license.</span><span lang="zh-CN">基于 MIT 许可证免费开源。</span></p>
-    <div class="cta-actions">
-      <a class="button primary" href="https://github.com/cu1ch3n/papilot"><span lang="en">Star on GitHub</span><span lang="zh-CN">在 GitHub 上 Star</span></a>
-      <a class="button secondary" href="https://github.com/cu1ch3n/papilot/blob/main/docs/guide.md"><span lang="en">Read the guide</span><span lang="zh-CN">阅读指南（英文）</span></a>
-    </div>
-  </div>
-</section>
-
 </main>
 
 <footer class="footer">
@@ -340,7 +472,8 @@
       <a href="https://github.com/PapilotAI/papilot/releases/latest"><span lang="en">Downloads</span><span lang="zh-CN">下载</span></a>
       <a href="https://www.npmjs.com/package/papilot">npm</a>
       <a href="https://github.com/cu1ch3n/papilot#readme" data-zh-href="https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.zh-CN.md">README</a>
-      <a href="https://github.com/cu1ch3n/papilot/blob/main/docs/guide.md"><span lang="en">Guide</span><span lang="zh-CN">指南</span></a>
+      <a href="https://github.com/PapilotAI/papilot/blob/main/docs/guide.md"><span lang="en">Guide</span><span lang="zh-CN">指南</span></a>
+      <a href="https://github.com/PapilotAI/papilot/blob/main/CHANGELOG.md"><span lang="en">Changelog</span><span lang="zh-CN">更新日志</span></a>
     </nav>
     <p>MIT © 2026 PapilotAI</p>
   </div>
@@ -379,39 +512,535 @@ list.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => { if (!menu.contains(event.target)) closeMenu(); });
 menu.hidden = false;
 
-// The download menu leads with this computer's system, and on a Mac whose
-// browser reports an Intel processor, with the Intel build.
-const download = document.querySelector('.download'), downloadButton = document.getElementById('download-button'), downloads = document.getElementById('download-list');
+// Each download menu (the hero's and the closing section's) leads with this
+// computer's system, and on a Mac whose browser reports an Intel processor,
+// with the Intel build.
 const linux = /Linux|X11/.test(navigator.userAgent) && !/Android|CrOS/.test(navigator.userAgent);
-download.classList.add(linux ? 'linux' : 'mac');
-if (linux) downloads.prepend(downloads.querySelector('[data-os=linux]'));
-navigator.userAgentData?.getHighEntropyValues?.(['architecture']).then(({ architecture }) => {
-  const mac = downloads.querySelector('[data-os=mac]');
-  if (architecture === 'x86' && /Mac/.test(navigator.platform)) mac.insertBefore(mac.querySelector('[data-arch=x86]'), mac.querySelector('[data-arch=arm]'));
-}).catch(() => {});
-const downloadItems = () => [...downloads.querySelectorAll('[role=menuitem]')];
-function openDownloads() {
-  downloads.hidden = false; downloadButton.setAttribute('aria-expanded', 'true');
-  downloadItems()[0].focus();
+const intelMac = navigator.userAgentData?.getHighEntropyValues?.(['architecture'])
+  .then(({ architecture }) => architecture === 'x86' && /Mac/.test(navigator.platform)).catch(() => false);
+for (const download of document.querySelectorAll('.download')) {
+  const button = download.querySelector('.download-button'), downloads = download.querySelector('.download-list');
+  download.classList.add(linux ? 'linux' : 'mac');
+  if (linux) downloads.prepend(downloads.querySelector('[data-os=linux]'));
+  intelMac?.then(intel => {
+    const mac = downloads.querySelector('[data-os=mac]');
+    if (intel) mac.insertBefore(mac.querySelector('[data-arch=x86]'), mac.querySelector('[data-arch=arm]'));
+  });
+  const items = () => [...downloads.querySelectorAll('[role=menuitem]')];
+  const open = () => {
+    downloads.hidden = false; button.setAttribute('aria-expanded', 'true');
+    const box = button.getBoundingClientRect(), need = downloads.offsetHeight + 16;
+    download.classList.toggle('up', innerHeight - box.bottom < need && box.top > need);
+    items()[0].focus();
+  };
+  const close = focus => {
+    if (downloads.hidden) return;
+    downloads.hidden = true; button.setAttribute('aria-expanded', 'false');
+    if (focus) button.focus();
+  };
+  button.addEventListener('click', () => downloads.hidden ? open() : close());
+  button.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); open(); } });
+  downloads.addEventListener('keydown', event => {
+    const all = items(), at = all.indexOf(document.activeElement);
+    if (event.key === 'Escape') { event.preventDefault(); close(true); }
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); all[(at + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length].focus(); }
+    else if (event.key === 'Tab') close();
+  });
+  downloads.addEventListener('click', () => close());
+  document.addEventListener('pointerdown', event => { if (!download.contains(event.target)) close(); });
 }
-function closeDownloads(focus) {
-  if (downloads.hidden) return;
-  downloads.hidden = true; downloadButton.setAttribute('aria-expanded', 'false');
-  if (focus) downloadButton.focus();
-}
-downloadButton.addEventListener('click', () => downloads.hidden ? openDownloads() : closeDownloads());
-downloadButton.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); openDownloads(); } });
-downloads.addEventListener('keydown', event => {
-  const items = downloadItems(), at = items.indexOf(document.activeElement);
-  if (event.key === 'Escape') { event.preventDefault(); closeDownloads(true); }
-  else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(at + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
-  else if (event.key === 'Tab') closeDownloads();
+
+const still = matchMedia('(prefers-reduced-motion: reduce)');
+const ease = 'cubic-bezier(.45,.05,.2,1)';
+// Steps take effect at once, without transitions, inside this.
+const instantly = (elements, step) => {
+  for (const element of elements) element.classList.add('instant');
+  step();
+  for (const element of elements) { element.offsetHeight; element.classList.remove('instant'); }
+};
+// Whatever a step removes folds up and the rest rises into place; whatever
+// it adds unfolds.
+const shut = { height: '0px', minHeight: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 };
+const fold = (part, frames) => {
+  part.motion?.cancel();
+  part.classList.add('folding');
+  const motion = part.motion = part.animate(frames, { duration: 480, easing: 'cubic-bezier(.25,.8,.25,1)' });
+  const done = () => { if (part.motion === motion) part.classList.remove('folding'); };
+  motion.finished.then(done, done);
+};
+const closing = part => { const height = part.offsetHeight; return () => fold(part, [{ height: `${height}px`, opacity: 1 }, shut]); };
+const opening = part => {
+  const { minHeight, paddingTop, paddingBottom } = getComputedStyle(part);
+  fold(part, [shut, { height: `${part.offsetHeight}px`, minHeight, paddingTop, paddingBottom, opacity: 1 }]);
+};
+// A change behaves as in the review: Accept and Reject leave the side that
+// stays as plain text, and clicking it then reopens the change. "idle" is the
+// sentence before anyone asked for a change.
+const shows = { idle: ['before'], pending: ['head', 'before', 'after'], accepted: ['after'], rejected: ['before'] };
+const review = change => {
+  const parts = { head: change.querySelector('.review-head'), before: change.querySelector('.before'), after: change.querySelector('.after') };
+  const source = change.querySelector('.review-source'), latex = change.querySelector('.review-latex');
+  return state => {
+    for (const part of Object.values(parts)) part.motion?.cancel();
+    const from = shows[change.dataset.state], to = shows[state];
+    const leaving = from.filter(name => !to.includes(name)).map(name => closing(parts[name]));
+    change.dataset.state = state;
+    if (source && state !== 'pending') { source.hidden = true; latex.setAttribute('aria-expanded', 'false'); }
+    if (still.matches) return;
+    for (const close of leaving) close();
+    for (const name of to.filter(name => !from.includes(name))) opening(parts[name]);
+  };
+};
+// Plays a window's rounds while it is on screen: a pointer, and pauses that
+// wait while the window is hidden or a mouse is over it. A round ends early
+// when the window stops playing.
+const player = app => {
+  const cursor = app.querySelector('.app-cursor'), waiting = [];
+  let shown = false, hovered = false;
+  const self = { cursor, playing: !still.matches };
+  const wake = () => {
+    if (shown && !document.hidden) {
+      waiting.splice(0).forEach(go => go());
+      if (anchors.size && frame === undefined) frame = requestAnimationFrame(track);
+    }
+  };
+  new IntersectionObserver(([entry]) => { shown = entry.isIntersecting; wake(); }, { threshold: .4 }).observe(app);
+  document.addEventListener('visibilitychange', wake);
+  app.addEventListener('pointerenter', event => { hovered = event.pointerType === 'mouse'; });
+  app.addEventListener('pointerleave', () => { hovered = false; wake(); });
+  self.sleep = async (ms, demo = true) => {
+    await new Promise(go => setTimeout(go, ms));
+    while (!shown || document.hidden || (demo && hovered)) await new Promise(go => waiting.push(go));
+    if (demo && !self.playing) throw new Error('stopped');
+  };
+  // Positions are relative to the window; the pointer's tip is 5px in, 2px down.
+  const at = (x, y) => { const outer = app.getBoundingClientRect(); return [x - outer.left - app.clientLeft, y - outer.top - app.clientTop]; };
+  self.tip = (x, y) => { const [left, top] = at(x, y); return `translate(${left - 5}px,${top - 2}px)`; };
+  self.point = (el, x = .5, y = .55) => { const box = el.getBoundingClientRect(); return self.tip(box.left + box.width * x, box.top + box.height * y); };
+  self.place = (el, x, y) => { const [left, top] = at(x, y); el.style.left = `${left}px`; el.style.top = `${top}px`; };
+  // Keep targets live through scrolling, font loading and responsive reflow.
+  // Viewport rectangles must never survive an await and then be converted
+  // against a different window position.
+  const anchors = new Map();
+  let frame;
+  const track = () => {
+    frame = undefined;
+    for (const [el, paint] of anchors) {
+      if (!el.classList.contains('open')) anchors.delete(el);
+      else if (shown && !document.hidden) paint();
+    }
+    if (anchors.size && shown && !document.hidden) frame = requestAnimationFrame(track);
+  };
+  self.anchor = (el, paint) => {
+    anchors.set(el, paint); paint();
+    if (frame === undefined) frame = requestAnimationFrame(track);
+  };
+  self.glide = async (target, duration) => {
+    const from = cursor.style.transform;
+    let to = target();
+    const motion = cursor.animate([{ transform: from }, { transform: to }], { duration, easing: ease });
+    let next;
+    const follow = () => {
+      const current = target();
+      if (current !== to) {
+        to = current;
+        motion.effect.setKeyframes([{ transform: from }, { transform: to }]);
+      }
+      next = requestAnimationFrame(follow);
+    };
+    follow();
+    try { await motion.finished; cursor.style.transform = target(); }
+    finally { cancelAnimationFrame(next); }
+  };
+  self.press = async el => {
+    cursor.classList.add('down'); el.classList.add('pressed');
+    await self.sleep(110);
+    cursor.classList.remove('down'); el.classList.remove('pressed');
+  };
+  self.show = el => { cursor.style.transform = self.point(el, .7, .85); cursor.classList.add('shown'); };
+  self.type = async (el, text, total = 900) => {
+    for (const letter of text) { el.textContent += letter; await self.sleep(Math.max(40, Math.min(120, total / text.length))); }
+  };
+  // Draws a dashed box round a rectangle, as dragging on the page does.
+  self.box = async (box, measure) => {
+    await self.glide(() => { const rect = measure(); return self.tip(rect.left, rect.top); }, 650);
+    box.classList.add('open', 'draft');
+    self.anchor(box, () => {
+      const rect = measure();
+      self.place(box, rect.left, rect.top);
+      Object.assign(box.style, { width: `${rect.width}px`, height: `${rect.height}px` });
+    });
+    cursor.classList.add('down');
+    await Promise.all([
+      self.glide(() => { const rect = measure(); return self.tip(rect.right, rect.bottom); }, 750),
+      box.animate([{ transform: 'scale(0)' }, { transform: 'scale(1)' }], { duration: 750, easing: ease }).finished,
+    ]);
+    cursor.classList.remove('down');
+  };
+  // Opens a note card below a rectangle, writes in it and presses its arrow.
+  self.note = async (note, measure, text) => {
+    note.classList.add('open');
+    self.anchor(note, () => {
+      const rect = measure(), page = app.querySelector('.review-page').getBoundingClientRect();
+      const pdf = app.querySelector('.app-pdf').getBoundingClientRect();
+      const left = Math.max(page.left + 6, Math.min(rect.left, page.right - 126));
+      note.style.width = `${Math.min(320, page.right - left - 6)}px`;
+      const bottom = Math.min(page.bottom, pdf.bottom) - 6;
+      const below = rect.bottom + 8;
+      const top = below + note.offsetHeight <= bottom ? below : rect.top - note.offsetHeight - 8;
+      self.place(note, left, Math.max(pdf.top + 6, Math.min(top, bottom - note.offsetHeight)));
+    });
+    await self.sleep(250);
+    note.classList.add('filled');
+    await self.type(note.querySelector('.demo-note-typed'), text);
+    await self.sleep(450);
+    await self.glide(() => self.point(note.querySelector('.demo-note-send')), 350);
+    await self.press(note.querySelector('.demo-note-send'));
+  };
+  // The note card flies into the composer.
+  self.fly = async (note, target) => {
+    const from = note.getBoundingClientRect(), to = target.getBoundingClientRect();
+    await note.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${to.left - from.left}px,${to.top - from.top}px) scale(.35)`, opacity: 0 }], { duration: 500, easing: 'cubic-bezier(.4,0,.2,1)' }).finished;
+    self.closeNote(note);
+  };
+  self.closeNote = note => { note.classList.remove('open', 'filled'); note.querySelector('.demo-note-typed').textContent = ''; };
+  // A round fades out and starts again from its first step.
+  self.restart = async (elements, begin) => {
+    const out = elements.map(el => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: 'forwards' }));
+    await Promise.all(out.map(motion => motion.finished));
+    begin();
+    for (const motion of out) motion.cancel();
+    for (const el of elements) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 360 });
+  };
+  self.loop = async (begin, round) => {
+    if (!self.playing) return;
+    app.classList.add('playing');
+    begin();
+    try { for (;;) await round(); } catch {}
+  };
+  return self;
+};
+// The rectangle a box is drawn round: an element's text, a little larger,
+// or a whole element such as a figure.
+const around = (el, page, text = true) => {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const box = text ? range.getBoundingClientRect() : el.getBoundingClientRect(), pad = text ? 10 : 0;
+  const left = box.left - pad, top = box.top - (text ? 6 : 0), right = Math.min(box.right + pad, page.right - 6), bottom = box.bottom + (text ? 6 : 0);
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+};
+const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach((chip, i) => {
+  chip.lastElementChild.textContent = texts[i] || '';
+  chip.classList.toggle('on', Boolean(texts[i]));
+  input.classList.toggle('filled', texts.some(Boolean));
 });
-downloads.addEventListener('click', () => closeDownloads());
-document.addEventListener('pointerdown', event => { if (!download.contains(event.target)) closeDownloads(); });
+
+// The opening window. Its change behaves as in the review, LaTeX shows the
+// source, and the PDF keeps the height of the undecided change, so a round
+// moves only the page inside the window and never the first screen.
+{
+  const app = document.querySelector('.hero .app-window'), pdf = app.querySelector('.app-pdf');
+  const change = app.querySelector('.review-change'), accept = change.querySelector('.review-accept');
+  const source = change.querySelector('.review-source'), latex = change.querySelector('.review-latex');
+  const decide = review(change);
+  const settle = state => {
+    decide(state);
+    if (state === 'accepted' || state === 'rejected') change.tabIndex = 0; else change.removeAttribute('tabindex');
+  };
+  for (const [name, state] of [['accept', 'accepted'], ['reject', 'rejected']]) {
+    change.querySelector(`.review-${name}`).addEventListener('click', () => { settle(state); change.focus(); });
+  }
+  const reopen = () => { settle('pending'); accept.focus(); };
+  change.addEventListener('click', event => { if (change.tabIndex === 0 && !event.target.closest('a, button')) reopen(); });
+  change.addEventListener('keydown', event => {
+    if (event.target === change && change.tabIndex === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reopen(); }
+  });
+  latex.addEventListener('click', () => {
+    source.hidden = !source.hidden;
+    latex.setAttribute('aria-expanded', String(!source.hidden));
+  });
+  const hold = () => instantly([change], () => {
+    const state = change.dataset.state, open = !source.hidden;
+    change.dataset.state = 'pending'; source.hidden = true;
+    pdf.style.minHeight = '';
+    pdf.style.minHeight = `${pdf.offsetHeight}px`;
+    change.dataset.state = state; source.hidden = !open;
+  });
+  hold(); document.fonts.ready.then(hold); addEventListener('resize', hold);
+
+  // Until someone touches the window, a pointer plays the round as the app
+  // does it: it draws a box round the sentence, writes a note, sends the
+  // note to the agent from the chat, the agent works, the diff unfolds and
+  // the pointer accepts it; then everything starts over. While nobody is
+  // asking, the composer cycles through the agents.
+  const play = player(app), { cursor } = play;
+  const chat = app.querySelector('.app-chat'), thread = chat.querySelector('.chat-thread');
+  const input = chat.querySelector('.chat-input'), send = chat.querySelector('.chat-send');
+  const chip = chat.querySelector('.chat-agent'), label = chip.querySelector('b');
+  const box = app.querySelector('.demo-box'), note = app.querySelector('.demo-note');
+  const comment = chat.querySelector('.chat-comment').textContent, quote = change.querySelector('.before .review-body');
+  let locked = false;
+  const clear = () => {
+    chips(input, []); play.closeNote(note);
+    for (const el of [box, note]) { el.classList.remove('open', 'draft', 'gone'); for (const motion of el.getAnimations()) motion.cancel(); }
+  };
+  // The start of a round: the sentence as written and an empty chat.
+  const begin = () => instantly([change, chat], () => { clear(); change.dataset.state = 'idle'; chat.dataset.step = 'empty'; });
+  // Someone took over: the round jumps to the sent note and the diff, ready to decide.
+  const stop = () => {
+    if (!play.playing) return;
+    play.playing = false; locked = false;
+    app.classList.remove('playing');
+    for (const el of app.querySelectorAll('.pressed')) el.classList.remove('pressed');
+    chip.classList.remove('busy'); clear();
+    for (const el of [change, thread]) for (const motion of el.getAnimations()) motion.cancel();
+    chat.dataset.step = 'done';
+    settle(change.dataset.state === 'idle' ? 'pending' : change.dataset.state);
+  };
+  for (const type of ['pointerdown', 'keydown', 'focusin']) app.addEventListener(type, stop);
+  play.loop(begin, async () => {
+    await play.sleep(1000);
+    play.show(pdf);
+    const measure = () => around(quote, quote.closest('.review-page').getBoundingClientRect());
+    await play.box(box, measure);
+    await play.note(note, measure, comment);
+    locked = true;
+    await play.fly(note, input);
+    chips(input, [comment]); box.classList.remove('draft');
+    await play.sleep(450);
+    await play.glide(() => play.point(send), 550);
+    await play.press(send);
+    chips(input, []);
+    chat.dataset.step = 'sent'; chip.classList.add('busy');
+    await play.sleep(1300);
+    chat.dataset.step = 'done'; chip.classList.remove('busy');
+    box.classList.add('gone');
+    decide('pending');
+    await play.sleep(2200);
+    await play.glide(() => play.point(accept, .4, .6), 750);
+    await play.press(accept);
+    decide('accepted');
+    await play.sleep(600);
+    cursor.classList.remove('shown');
+    await play.sleep(2600);
+    await play.restart([change, thread], () => { begin(); locked = false; });
+  });
+  if (!still.matches) {
+    const agents = [...document.querySelectorAll('.agent-grid li')].map(item => [item.classList[1], item.textContent]);
+    (async () => {
+      for (let i = 1; ; ) {
+        await play.sleep(1200, false);
+        if (locked) continue;
+        await chip.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-6px)' }], { duration: 140, easing: 'ease-in' }).finished;
+        if (locked) { chip.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120 }); continue; }
+        chip.className = `chat-agent agent ${agents[i][0]}${chip.classList.contains('busy') ? ' busy' : ''}`;
+        label.textContent = agents[i][1];
+        chip.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: 'ease-out' });
+        i = (i + 1) % agents.length;
+      }
+    })();
+  }
+}
+
+// Feature 1: a sentence and a figure boxed, each with a note, and both
+// notes sent to the agent in one message. Without motion the boxes stay.
+{
+  const app = document.querySelector('[data-scene=notes]'), play = player(app);
+  const page = app.querySelector('.review-page'), boxes = [...app.querySelectorAll('.demo-box')];
+  const note = app.querySelector('.demo-note'), chat = app.querySelector('.app-chat');
+  const input = chat.querySelector('.chat-input'), send = chat.querySelector('.chat-send');
+  const texts = [...chat.querySelectorAll('.chat-comment')].map(p => p.textContent);
+  const rects = () => [around(app.querySelector('.scene-text'), page.getBoundingClientRect()), around(app.querySelector('.scene-figure'), page.getBoundingClientRect(), false)];
+  const mark = () => rects().forEach((rect, i) => {
+    play.place(boxes[i], rect.left, rect.top);
+    Object.assign(boxes[i].style, { width: `${rect.width}px`, height: `${rect.height}px` });
+    boxes[i].classList.add('open');
+  });
+  if (!play.playing) { document.fonts.ready.then(mark); addEventListener('resize', mark); }
+  const begin = () => instantly([chat], () => {
+    for (const box of boxes) box.classList.remove('open', 'draft');
+    chips(input, []); play.closeNote(note); chat.dataset.step = 'empty';
+  });
+  play.loop(begin, async () => {
+    await play.sleep(900);
+    play.show(page);
+    const sent = [];
+    // Both the box and its note stay attached to the live target.
+    for (const i of boxes.keys()) {
+      await play.box(boxes[i], () => rects()[i]);
+      await play.note(note, () => rects()[i], texts[i]);
+      await play.fly(note, input);
+      boxes[i].classList.remove('draft');
+      sent.push(texts[i]); chips(input, sent);
+      await play.sleep(400);
+    }
+    await play.glide(() => play.point(send), 550);
+    await play.press(send);
+    chips(input, []);
+    chat.dataset.step = 'sent';
+    await play.sleep(1300);
+    chat.dataset.step = 'done';
+    await play.sleep(500);
+    play.cursor.classList.remove('shown');
+    await play.sleep(2600);
+    await play.restart([page, chat.querySelector('.chat-thread')], begin);
+  });
+}
+
+// Feature 2: a comment on a change goes back to the agent with Send
+// feedback; the agent's second attempt replaces the first, and is accepted.
+{
+  const app = document.querySelector('[data-scene=revise]'), play = player(app);
+  const change = app.querySelector('.review-change'), decide = review(change);
+  const after = change.querySelector('.after'), accept = change.querySelector('.review-accept');
+  const comment = change.querySelector('.review-comment'), note = app.querySelector('.demo-note');
+  const chat = app.querySelector('.app-chat'), pending = chat.querySelector('.chat-pending'), feedback = pending.querySelector('b');
+  const text = chat.querySelector('.chat-comment').textContent;
+  const begin = () => instantly([change, chat], () => {
+    change.dataset.state = 'pending'; after.dataset.version = '1';
+    chat.dataset.step = 'empty'; pending.classList.remove('on'); play.closeNote(note);
+  });
+  const revise = () => {
+    const from = after.offsetHeight;
+    after.dataset.version = '2';
+    fold(after, [{ height: `${from}px` }, { height: `${after.offsetHeight}px` }]);
+    after.querySelector('.review-body').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 480 });
+  };
+  play.loop(begin, async () => {
+    await play.sleep(1200);
+    play.show(app.querySelector('.app-pdf'));
+    await play.glide(() => play.point(comment), 650);
+    await play.press(comment);
+    await play.note(note, () => {
+      const box = change.getBoundingClientRect();
+      return { left: box.left + 16, top: box.top, bottom: box.bottom - 2 };
+    }, text);
+    pending.classList.add('on');
+    await play.fly(note, pending);
+    await play.sleep(500);
+    await play.glide(() => play.point(feedback), 550);
+    await play.press(feedback);
+    pending.classList.remove('on');
+    chat.dataset.step = 'sent';
+    await play.sleep(1300);
+    chat.dataset.step = 'done';
+    revise();
+    await play.sleep(2000);
+    await play.glide(() => play.point(accept, .4, .6), 700);
+    await play.press(accept);
+    decide('accepted');
+    await play.sleep(600);
+    play.cursor.classList.remove('shown');
+    await play.sleep(2400);
+    await play.restart([change, chat.querySelector('.chat-thread')], begin);
+  });
+}
+
+// Feature 3: the agent writes the commit message, Commit takes what is
+// staged into the history, and Push sends it to the remote.
+{
+  const app = document.querySelector('[data-scene=record]'), play = player(app);
+  const staged = app.querySelector('.git-staged'), fresh = app.querySelector('.git-new');
+  const message = app.querySelector('.git-message'), typed = message.querySelector('.git-typed');
+  const spark = message.querySelector('.git-spark'), commit = app.querySelector('.git-commit'), push = app.querySelector('.git-push-button');
+  const text = fresh.querySelector('.git-msg').textContent;
+  const begin = () => instantly([app], () => { app.dataset.step = 'staged'; typed.textContent = ''; message.classList.remove('filled', 'busy'); });
+  play.loop(begin, async () => {
+    await play.sleep(1200);
+    play.show(app.querySelector('.app-pdf'));
+    await play.glide(() => play.point(spark), 700);
+    await play.press(spark);
+    message.classList.add('busy');
+    await play.sleep(900);
+    message.classList.remove('busy'); message.classList.add('filled');
+    await play.type(typed, text, 700);
+    await play.sleep(600);
+    await play.glide(() => play.point(commit), 450);
+    await play.press(commit);
+    const close = closing(staged);
+    app.dataset.step = 'committed';
+    close(); opening(fresh);
+    await play.sleep(1400);
+    await play.glide(() => play.point(push), 500);
+    await play.press(push);
+    await play.sleep(300);
+    app.dataset.step = 'pushed';
+    await play.sleep(600);
+    play.cursor.classList.remove('shown');
+    await play.sleep(2600);
+    await play.restart([app.querySelector('.app-body')], begin);
+  });
+}
+
+// The agents arrive one after another the first time they come on screen.
+{
+  const grid = document.querySelector('.agent-grid');
+  [...grid.children].forEach((agent, i) => agent.style.setProperty('--i', i));
+  if (!still.matches) {
+    grid.classList.add('waiting');
+    const seen = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { grid.classList.add('arrived'); seen.disconnect(); }
+    }, { threshold: .4 });
+    seen.observe(grid);
+  }
+}
+
+// The older ways lose their colour gradually as they scroll up past the top
+// of the window, and Papilot's comes in on the same scroll, so the reader
+// sets the pace. Under reduced motion they are simply grey.
+{
+  const eras = document.querySelector('.eras'), old = [...eras.querySelectorAll('.era.old')];
+  const ours = eras.querySelector('.era.ours');
+  const clamp = value => Math.min(1, Math.max(0, value));
+  if (still.matches) for (const card of old) card.style.setProperty('--old', 1);
+  else {
+    eras.classList.add('staged');
+    let queued = false;
+    const paint = () => {
+      queued = false;
+      let last = 0;
+      for (const card of old) {
+        const box = card.getBoundingClientRect(), start = innerHeight * .22, end = -box.height * .45;
+        last = clamp((start - box.top) / (start - end));
+        card.style.setProperty('--old', last.toFixed(3));
+      }
+      ours.style.setProperty('--new', clamp((last - .25) / .5).toFixed(3));
+    };
+    addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(paint); } }, { passive: true });
+    addEventListener('resize', paint);
+    paint();
+  }
+}
+
+// Dark mode follows the system until the toggle chooses, and the choice is kept.
+{
+  const button = document.getElementById('theme-button'), system = matchMedia('(prefers-color-scheme: dark)'), root = document.documentElement;
+  const dark = () => root.dataset.theme ? root.dataset.theme === 'dark' : system.matches;
+  const sync = () => button.setAttribute('aria-pressed', String(dark()));
+  button.addEventListener('click', () => {
+    root.dataset.theme = dark() ? 'light' : 'dark';
+    try { localStorage.setItem('papilot-theme', root.dataset.theme); } catch {}
+    sync();
+  });
+  system.addEventListener('change', sync);
+  sync(); button.hidden = false;
+}
+
+// The navbar marks the section in the middle of the window.
+const links = new Map([...document.querySelectorAll('.nav a[href^="#"]')].map(link => [link.hash.slice(1), link]));
+new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting) for (const [id, link] of links) link.toggleAttribute('aria-current', id === entry.target.id);
+}, { rootMargin: '-45% 0px -54% 0px' }).observe(document.querySelector('.hero'));
+for (const id of links.keys()) document.getElementById(id) && new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting) for (const [other, link] of links) link.toggleAttribute('aria-current', other === id);
+}, { rootMargin: '-45% 0px -54% 0px' }).observe(document.getElementById(id));
 
 const topbar = document.querySelector('.topbar');
-const edge = () => topbar.classList.toggle('scrolled', scrollY > 8);
+const cue = document.querySelector('.scroll-cue');
+const edge = () => {
+  topbar.classList.toggle('scrolled', scrollY > 8);
+  cue.classList.toggle('gone', scrollY > 40);
+};
 addEventListener('scroll', edge, { passive: true }); edge();
 </script>
 </body>

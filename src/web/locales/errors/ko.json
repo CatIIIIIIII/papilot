@@ -134,6 +134,7 @@
   "That page is not part of the manuscript.": "해당 페이지는 원고의 일부가 아닙니다.",
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": "AI 검토에서 유효한 주석을 반환하지 않았습니다. 필수 JSON 형식으로 다시 시도하도록 요청하세요.",
   "The AI review response is incomplete or too long. Ask the reviewer to retry.": "AI 검토 응답이 불완전하거나 너무 깁니다. 검토자에게 다시 시도하도록 요청하세요.",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "PDF 비교 서비스에 연결할 수 없습니다. 수정 사항은 저장되어 있습니다. 기존 빌드를 복구하려면 상태 확인을 선택하세요.",
   "The PDF copy for this review is unavailable. Start a new AI review.": "이 검토의 PDF 사본을 사용할 수 없습니다. 새 AI 검토를 시작하세요.",
   "The PDF is building. Wait for this build to finish.": "PDF를 빌드하는 중입니다. 빌드가 완료될 때까지 기다려 주세요.",
   "The PDF snapshot for this review is unavailable. Start a new AI review.": "이 검토의 PDF 스냅샷을 사용할 수 없습니다. 새 AI 검토를 시작하세요.",
@@ -144,6 +145,7 @@
   "The downloaded package does not match the requested release.": "다운로드한 패키지가 요청한 릴리스와 일치하지 않습니다.",
   "The downloaded release is incomplete.": "다운로드한 릴리스가 불완전합니다.",
   "The manuscript changed while copying this suggestion. Try again.": "이 제안을 복사하는 동안 원고가 변경되었습니다. 다시 시도하세요.",
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": "AI 검토를 위해 원고를 컴파일할 수 없습니다. 원고 미리보기에 표시된 오류를 수정한 후 다시 시도하세요.",
   "The new version could not be installed. Check the connection and available disk space, then retry.": "새 버전을 설치할 수 없습니다. 연결 상태와 사용 가능한 디스크 공간을 확인한 후 다시 시도하세요.",
   "The new version did not pass its startup check. Your current version is still running.": "새 버전이 시작 확인을 통과하지 못했습니다. 현재 버전이 계속 실행 중입니다.",
   "The new version did not restart successfully.": "새 버전이 정상적으로 재시작되지 않았습니다.",
@@ -226,7 +228,6 @@
   "Wait for repository preparation to finish.": "저장소 준비가 완료될 때까지 기다려 주세요.",
   "Wait for task creation to finish before deleting it.": "작업을 삭제하기 전에 작업 생성이 완료될 때까지 기다려 주세요.",
   "Wait for the current Git operation before sending more instructions.": "추가 지침을 보내기 전에 현재 Git 작업이 완료될 때까지 기다려 주세요.",
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": "현재 PDF 컴파일이 완료될 때까지 기다린 후 AI 검토 스킬을 실행하세요.",
   "Wait for the current delivery before sending more instructions.": "추가 지침을 보내기 전에 현재 전송이 완료될 때까지 기다려 주세요.",
   "Wait for the current manuscript PDF to finish compiling, then copy the suggestion again.": "현재 원고 PDF 컴파일이 완료될 때까지 기다린 후 제안을 다시 복사하세요.",
   "Wait for the current review action before building a review.": "검토를 빌드하기 전에 현재 검토 동작이 완료될 때까지 기다려 주세요.",
@@ -236,6 +237,5 @@
   "Wait for the task and review actions to finish before choosing a destination.": "대상 위치를 선택하기 전에 작업 및 검토 동작이 완료될 때까지 기다려 주세요.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "경로를 변경하거나 제거하기 전에 이 논문의 PDF 빌드가 완료될 때까지 기다리세요.",
   "ZIP links and special files are not supported.": "ZIP 링크 및 특수 파일은 지원되지 않습니다.",
-  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다.",
-  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "PDF 비교 서비스에 연결할 수 없습니다. 수정 사항은 저장되어 있습니다. 기존 빌드를 복구하려면 상태 확인을 선택하세요."
+  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다."
 }

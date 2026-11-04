@@ -4,6 +4,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { selectOption } from './select.mjs';
 
 // Skills in the composers, review feedback and skills in the chat, and the
 // feedback bar after a review, against simulated workspace data.
@@ -171,7 +172,7 @@ try {
   await draft.fill('/pol'); await draft.press('Enter');
   await draft.fill('Keep all technical terms.');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Settings' }).getByRole('combobox', { name: 'Language' }).selectOption('zh-Hans');
+  await selectOption(page.getByRole('dialog', { name: 'Settings' }).getByRole('combobox', { name: 'Language' }), 'zh-Hans');
   await page.keyboard.press('Escape');
   await expect(page.getByText('已加入任务：2 条', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/merged-task-notes.png' });
@@ -182,7 +183,7 @@ try {
   await page.screenshot({ path: 'test-results/merged-task-notes-mobile.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('dialog', { name: '设置' }).getByRole('combobox', { name: '语言' }).selectOption('en');
+  await selectOption(page.getByRole('dialog', { name: '设置' }).getByRole('combobox', { name: '语言' }), 'en');
   await page.keyboard.press('Escape');
   failCreate = true;
   await page.getByRole('button', { name: 'Start task', exact: true }).click();

@@ -134,6 +134,7 @@
   "That page is not part of the manuscript.": "Diese Seite ist nicht Teil des Manuskripts.",
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": "Die KI-Überprüfung hat keine gültigen Anmerkungen zurückgegeben. Bitten Sie um einen erneuten Versuch im erforderlichen JSON-Format.",
   "The AI review response is incomplete or too long. Ask the reviewer to retry.": "Die Antwort der KI-Überprüfung ist unvollständig oder zu lang. Bitten Sie den Prüfer um einen erneuten Versuch.",
+  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "Der Dienst für den PDF-Vergleich ist nicht erreichbar. Ihre Änderungen sind gespeichert. Wählen Sie „Status prüfen“, um den bestehenden Build wiederherzustellen.",
   "The PDF copy for this review is unavailable. Start a new AI review.": "Die PDF-Kopie für diese Überprüfung ist nicht verfügbar. Starten Sie eine neue KI-Überprüfung.",
   "The PDF is building. Wait for this build to finish.": "Das PDF wird gerade erstellt. Warten Sie, bis die Erstellung abgeschlossen ist.",
   "The PDF snapshot for this review is unavailable. Start a new AI review.": "Der PDF-Schnappschuss für diese Überprüfung ist nicht verfügbar. Starten Sie eine neue KI-Überprüfung.",
@@ -144,6 +145,7 @@
   "The downloaded package does not match the requested release.": "Das heruntergeladene Paket stimmt nicht mit dem angeforderten Release überein.",
   "The downloaded release is incomplete.": "Das heruntergeladene Release ist unvollständig.",
   "The manuscript changed while copying this suggestion. Try again.": "Das Manuskript wurde während des Kopierens dieses Vorschlags geändert. Versuchen Sie es erneut.",
+  "The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.": "Das Manuskript konnte für die KI-Überprüfung nicht kompiliert werden. Beheben Sie die in der Manuskriptvorschau angezeigten Fehler und versuchen Sie es erneut.",
   "The new version could not be installed. Check the connection and available disk space, then retry.": "Die neue Version konnte nicht installiert werden. Prüfen Sie die Verbindung und den verfügbaren Speicherplatz und versuchen Sie es dann erneut.",
   "The new version did not pass its startup check. Your current version is still running.": "Die neue Version hat die Startprüfung nicht bestanden. Ihre aktuelle Version wird weiterhin ausgeführt.",
   "The new version did not restart successfully.": "Die neue Version konnte nicht erfolgreich neu gestartet werden.",
@@ -226,7 +228,6 @@
   "Wait for repository preparation to finish.": "Warten Sie, bis die Vorbereitung des Repositorys abgeschlossen ist.",
   "Wait for task creation to finish before deleting it.": "Warten Sie, bis die Erstellung der Aufgabe abgeschlossen ist, bevor Sie sie löschen.",
   "Wait for the current Git operation before sending more instructions.": "Warten Sie den aktuellen Git-Vorgang ab, bevor Sie weitere Anweisungen senden.",
-  "Wait for the current PDF to finish compiling, then run the AI review skill.": "Warten Sie, bis die aktuelle PDF-Datei fertig kompiliert ist, und führen Sie dann den Skill zur KI-Überprüfung aus.",
   "Wait for the current delivery before sending more instructions.": "Warten Sie die aktuelle Zustellung ab, bevor Sie weitere Anweisungen senden.",
   "Wait for the current manuscript PDF to finish compiling, then copy the suggestion again.": "Warten Sie, bis die aktuelle Manuskript-PDF fertig kompiliert ist, und kopieren Sie den Vorschlag dann erneut.",
   "Wait for the current review action before building a review.": "Warten Sie die aktuelle Überprüfungsaktion ab, bevor Sie eine Überprüfung erstellen.",
@@ -236,6 +237,5 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Warten Sie, bis die Aufgaben- und Überprüfungsaktionen abgeschlossen sind, bevor Sie ein Ziel auswählen.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Warten Sie, bis die PDF-Erstellung für diesen Artikel abgeschlossen ist, bevor Sie den Pfad ändern oder ihn entfernen.",
   "ZIP links and special files are not supported.": "Links und Spezialdateien in ZIP-Archiven werden nicht unterstützt.",
-  "npm is unavailable to Papilot.": "npm ist für Papilot nicht verfügbar.",
-  "The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.": "Der Dienst für den PDF-Vergleich ist nicht erreichbar. Ihre Änderungen sind gespeichert. Wählen Sie „Status prüfen“, um den bestehenden Build wiederherzustellen."
+  "npm is unavailable to Papilot.": "npm ist für Papilot nicht verfügbar."
 }
