@@ -4,12 +4,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { translatedSite } from './site-i18n.mjs';
+import { siteAnalytics } from './site-analytics.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 // The build empties this folder first, so it takes no folder argument that
 // could name the source or the repository by mistake.
 const out = path.join(root, '_site');
 const site = 'https://papilot.ai/';
+const analytics = siteAnalytics();
 const copy = (from, names, to = '') => {
   fs.mkdirSync(path.join(out, to), { recursive: true });
   for (const name of names) fs.copyFileSync(path.join(root, from, name), path.join(out, to, name));
@@ -17,6 +19,7 @@ const copy = (from, names, to = '') => {
 
 fs.rmSync(out, { recursive: true, force: true });
 copy('site', ['style.css']);
+if (analytics) copy('site', ['analytics.js']);
 const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // GitHub Pages lets browsers keep every file for ten minutes, so a fresh page
 // could meet a stylesheet or script cached from the previous release. Their
@@ -36,6 +39,7 @@ for (const locale of locales) {
   const translated = translatedSite(source, translations, locale);
   const title = translated.match(/<title>([^<]*)<\/title>/)[1];
   let html = translated
+    .replace('<!-- analytics -->', analytics)
     .replaceAll('{{version}}', release)
     .replace(/<link rel="alternate"[^>]*>/g, '')
     .replace(/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${urlFor(locale)}">\n${alternates}`)
@@ -43,7 +47,7 @@ for (const locale of locales) {
     .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${title.replaceAll('"', '&quot;')}">`)
     .replace(/(<div class="lang-list"[^>]*>)(<\/div>)/, `$1${menu}$2`)
     .replace('<body>', `<body><noscript><nav class="no-js-languages">${locales.map(code => `<a lang="${code}" href="${code === 'en' ? '/' : `/${code}/`}">${names[code]}</a>`).join('')}</nav></noscript>`)
-    .replace(/(\s(?:href|src)=")(style\.css)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
+    .replace(/(\s(?:href|src)=")(style\.css|analytics\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
     .replace(/(\s(?:href|src)=")((?:assets|fonts)\/[^" ]+|favicon.png|apple-touch-icon.png)"/g, '$1/$2"');
   if (locale !== 'en') html = html.replace('https://github.com/cu1ch3n/papilot#readme', `https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.${locale}.md`);
   // Explicit URLs always win. Only the root restores a saved choice; browser
@@ -56,7 +60,12 @@ for (const locale of locales) {
     if (choice === 'zh-Hans') choice = 'zh-CN';
     if (languages.includes(choice)) {
       const target = choice === 'en' ? '/' : '/' + choice + '/';
-      if (location.pathname !== target) location.replace(target + location.hash);
+      if (location.pathname !== target) {
+        document.documentElement.dataset.languageRedirect = 'true';
+        const query = new URLSearchParams(location.search);
+        query.delete('lang');
+        location.replace(target + (query.size ? '?' + query : '') + location.hash);
+      }
     }
   })();
   </script>`);

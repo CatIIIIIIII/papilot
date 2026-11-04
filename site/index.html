@@ -24,6 +24,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/TeXGyrePagellaX-Regular.otf" as="font" type="font/otf" crossorigin>
 <link rel="stylesheet" href="style.css">
+<!-- analytics -->
 </head>
 <body>
 
@@ -54,6 +55,20 @@
     </div>
   </div>
 </header>
+
+<section class="statistics-notice" id="statistics-notice" aria-labelledby="statistics-title" tabindex="-1" hidden>
+  <div class="wrap">
+    <h2 id="statistics-title"><span lang="en">Website statistics</span><span lang="zh-CN">网站统计</span></h2>
+    <p><span lang="en">With your permission, Umami measures visits and download clicks, processing your IP address and device information. No analytics loads until you allow it.</span><span lang="zh-CN">经你允许后，Umami 会统计访问和下载点击，并处理你的 IP 地址及设备信息。允许之前不会加载统计服务。</span></p>
+    <p><span lang="en">Your choice is saved for 180 days. Change it anytime in Statistics preferences.</span><span lang="zh-CN">你的选择会保存 180 天，可随时在「统计偏好」中更改。</span> <a id="statistics-privacy" rel="noreferrer"><span lang="en">Privacy notice</span><span lang="zh-CN">隐私声明</span></a></p>
+    <div class="statistics-actions">
+      <button class="button secondary" id="statistics-decline" type="button"><span lang="en">Decline</span><span lang="zh-CN">拒绝</span></button>
+      <button class="button secondary" id="statistics-allow" type="button"><span lang="en">Allow</span><span lang="zh-CN">允许</span></button>
+      <button class="button secondary" id="statistics-withdraw" type="button" hidden><span lang="en">Turn off statistics</span><span lang="zh-CN">关闭统计</span></button>
+      <button class="button secondary" id="statistics-close" type="button" hidden><span lang="en">Close</span><span lang="zh-CN">关闭</span></button>
+    </div>
+  </div>
+</section>
 
 <main>
 
@@ -134,13 +149,13 @@
         <div class="download-list" id="download-list" role="menu" aria-labelledby="download-button" hidden>
           <div class="download-group" data-os="mac" role="group" aria-labelledby="download-mac">
             <p class="download-label" id="download-mac">macOS</p>
-            <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
-            <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
+            <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg" data-download-platform="mac" data-download-arch="arm64" data-download-format="dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
+            <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg" data-download-platform="mac" data-download-arch="x64" data-download-format="dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
           </div>
           <div class="download-group" data-os="linux" role="group" aria-labelledby="download-linux">
             <p class="download-label" id="download-linux">Linux</p>
-            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
-            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage" data-download-platform="linux" data-download-arch="x64" data-download-format="AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb" data-download-platform="linux" data-download-arch="x64" data-download-format="deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
           </div>
           <div class="download-group" role="none">
             <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/latest"><strong><span lang="en">All downloads</span><span lang="zh-CN">所有下载</span></strong><span class="download-meta">GitHub</span></a>
@@ -426,13 +441,13 @@ progress and preservation.</pre></div>
           <div class="download-list" id="get-list" role="menu" aria-labelledby="get-button" hidden>
             <div class="download-group" data-os="mac" role="group" aria-labelledby="get-mac">
               <p class="download-label" id="get-mac">macOS</p>
-              <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
-              <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
+              <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg" data-download-platform="mac" data-download-arch="arm64" data-download-format="dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
+              <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg" data-download-platform="mac" data-download-arch="x64" data-download-format="dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
             </div>
             <div class="download-group" data-os="linux" role="group" aria-labelledby="get-linux">
               <p class="download-label" id="get-linux">Linux</p>
-              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
-              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage" data-download-platform="linux" data-download-arch="x64" data-download-format="AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb" data-download-platform="linux" data-download-arch="x64" data-download-format="deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
             </div>
             <div class="download-group" role="none">
               <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/latest"><strong><span lang="en">All downloads</span><span lang="zh-CN">所有下载</span></strong><span class="download-meta">GitHub</span></a>
@@ -474,6 +489,7 @@ progress and preservation.</pre></div>
       <a href="https://github.com/cu1ch3n/papilot#readme" data-zh-href="https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.zh-CN.md">README</a>
       <a href="https://github.com/PapilotAI/papilot/blob/main/docs/guide.md"><span lang="en">Guide</span><span lang="zh-CN">指南</span></a>
       <a href="https://github.com/PapilotAI/papilot/blob/main/CHANGELOG.md"><span lang="en">Changelog</span><span lang="zh-CN">更新日志</span></a>
+      <button type="button" id="statistics-preferences" hidden><span lang="en">Statistics preferences</span><span lang="zh-CN">统计偏好</span></button>
     </nav>
     <p>MIT © 2026 PapilotAI</p>
   </div>
@@ -484,6 +500,7 @@ for (const button of document.querySelectorAll('[data-copy]')) {
   button.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(button.dataset.copy); } catch { return; }
     button.classList.add('copied');
+    button.dispatchEvent(new Event('papilot:install-copied', { bubbles: true }));
     setTimeout(() => button.classList.remove('copied'), 1600);
   });
 }

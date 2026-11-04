@@ -648,6 +648,15 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .footer .brand-mark{width:22px;height:22px}
 .footer nav{display:flex;flex-wrap:wrap;gap:4px 22px;flex:1}
 .footer nav a{color:var(--text-2)}
+.footer nav button{color:var(--text-2)}
+.footer nav button:hover{text-decoration:underline;text-underline-offset:3px}
+/* Optional statistics choices stay in page flow and never cover the site. */
+.statistics-notice{padding:20px 0;border-bottom:1px solid var(--line);background:var(--bg-subtle);font-size:14px;color:var(--text-2)}
+.statistics-notice h2{font:600 16px/1.5 var(--sans);color:var(--text);margin-bottom:6px}
+.statistics-notice p{max-width:850px;margin-top:4px}
+.statistics-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.statistics-actions .button{min-width:110px;max-width:100%;height:auto;min-height:44px;padding:9px 20px;white-space:normal;text-align:center}
+.statistics-notice[hidden],.statistics-actions [hidden],#statistics-preferences[hidden]{display:none}
 
 @media(max-width:960px){
   .eras{grid-template-columns:minmax(0,1fr);max-width:560px;margin-inline:auto}
