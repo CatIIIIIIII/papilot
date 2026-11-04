@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { collectCatalog, collectErrorCatalog, readLegacyChinese, type Message } from './catalog.ts';
 // @ts-expect-error The static site's build helpers are plain JavaScript.
-import { renderDemo } from '../../site/demo-templates.mjs';
-// @ts-expect-error The static site's build helpers are plain JavaScript.
 import { siteMessages, htmlStructure } from '../site-i18n.mjs';
 
 export type Scope = 'workspace' | 'review' | 'site' | 'readme' | 'errors';
@@ -16,7 +14,7 @@ export function scopeCatalog(root: string, scope: Scope) {
     return { messages: Object.keys(readLegacyChinese(root, file)).map(source => ({ source, occurrences: [{ file, line: 1, context: 'PDF change-review interface; English message key from the maintained review catalog.' }] })), dynamic: [] };
   }
   if (scope === 'site') {
-    const html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8').replace(/<!-- demo:(\w+) -->/g, (_, kind) => renderDemo(kind));
+    const html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
     return { messages: siteMessages(html) as Message[], dynamic: [] };
   }
   const source = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
