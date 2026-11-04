@@ -154,6 +154,19 @@ test('task model settings persist, validate capabilities and clear incompatible 
   } finally { f.close(); }
 });
 
+test('a task cannot reset to an unknown default and silently keep its previous model', () => {
+  const f = fixture();
+  try {
+    f.workspace.runtime.models = taskModels.map(model => ({ ...model, isDefault: false }));
+    f.store.updateTask(f.task.id, { model: 'small' });
+    assert.throws(() => f.workspace.updateTaskModel(f.task.id, { model: '' }), /Choose an available model/);
+    assert.equal(f.store.task(f.task.id).model, 'small');
+    assert.equal(f.workspace.updateTaskModel(f.task.id, { effort: '' }).model, 'small', 'other settings remain editable');
+    f.workspace.runtime.models = taskModels;
+    assert.equal(f.workspace.updateTaskModel(f.task.id, { model: '' }).model, 'deep');
+  } finally { f.close(); }
+});
+
 test('a loaded task uses its changed model and the selected model default effort', async () => {
   const f = fixture();
   try {

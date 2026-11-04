@@ -1195,6 +1195,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     const models = this.runtimes[agent].models;
     const id = (change.model ?? task.model) || models.find(model => model.isDefault)?.id;
     const model = id ? models.find(model => model.id === id) : models.find(model => model.isDefault);
+    // Omitting a model on a resumed thread preserves its previous selection.
+    // An existing choice can only reset when we know which model to send.
+    if (change.model === '' && task.model && !model) throw new Error('Choose an available model for this agent.');
     if (change.model && change.model !== task.model && !model) throw new Error('Choose an available model for this agent.');
     const effort = change.effort ?? (change.model !== undefined && model && !model.efforts.includes(task.effort || '') ? '' : task.effort);
     if (change.effort && model && !model.efforts.includes(change.effort)) throw new Error('This model does not support that reasoning effort.');

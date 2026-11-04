@@ -232,7 +232,7 @@ export class ClaudeAgent extends Adapter {
     const child = this.launch(cli, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none', '--setting-sources', ''], { cwd: os.homedir(), env: this.environment() || process.env });
     let pending: { id: string; resolve: (value: any) => void; reject: (error: Error) => void } | undefined;
     const request = (id: string, body: object, timeout: number): Promise<any> => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending = undefined; reject(new Error('Claude Code did not report its model settings.')); }, timeout);
+      const timer = setTimeout(() => { pending = undefined; reject(new Error('Claude Code did not list its models.')); }, timeout);
       pending = { id, resolve: value => { clearTimeout(timer); pending = undefined; resolve(value); }, reject: error => { clearTimeout(timer); pending = undefined; reject(error); } };
       child.stdin!.write(JSON.stringify({ type: 'control_request', request_id: id, request: body }) + '\n');
     });
@@ -246,7 +246,7 @@ export class ClaudeAgent extends Adapter {
       }
     });
     child.once('error', error => pending?.reject(error));
-    child.once('close', () => pending?.reject(new Error('Claude Code exited before reporting its model settings.')));
+    child.once('close', () => pending?.reject(new Error('Claude Code exited before listing its models.')));
     child.stdin!.on('error', error => pending?.reject(error));
     try {
       const initialized = await request('papilot-models', { subtype: 'initialize' }, 20000);

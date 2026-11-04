@@ -82,6 +82,14 @@ try {
   await expect(taskSettings).toContainText('Fast model');
   await taskSettings.click();
   await expect(taskEffort).toHaveAttribute('aria-valuetext', 'Medium');
+  runtime.models[0].isDefault = false;
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(taskModelMenu.locator('.model-option-tag').filter({ hasText: 'Default' })).toHaveCount(0);
+  await expect(taskModelMenu.getByRole('option', { name: 'Default model · Codex', exact: true })).toHaveCount(0);
+  await expect(taskSettings, 'an existing task keeps its explicit selection when the host default is unknown').toContainText('Fast model');
+  runtime.models[0].isDefault = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(taskModelMenu.locator('.model-option-tag').filter({ hasText: 'Default' })).toHaveCount(1);
   // Rapid changes are saved in order; instructions wait for their settings.
   holdModel = new Promise(resolve => { releaseModel = resolve; });
   await taskEffort.press('End');
