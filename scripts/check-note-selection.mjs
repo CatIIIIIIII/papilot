@@ -31,7 +31,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
-  if (url.pathname.endsWith('/skills')) return json({ skills: [] });
+  if (url.pathname.endsWith('/skills')) return json({ skills: [{ id: 'review', name: 'Review', description: 'Review the paper', hint: '', source: 'builtin', output: 'annotations' }] });
   if (url.pathname.endsWith('/git')) return json({ branch: 'main', files: [] });
   if (url.pathname.endsWith('/git/overview')) return json({ worktrees: [], commits: [], truncated: false });
   if (url.pathname.endsWith('/manuscript')) return json({ git: { branch: 'main', files: [] }, build: { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]] }, annotations: url.pathname.includes('/other/') ? [otherNote] : notes });
@@ -355,6 +355,85 @@ try {
     await page.getByRole('tab', { name: 'New task', exact: true }).click();
     await expect(taskText()).toHaveText(`Keep this draft when opening ${tab}.`);
   }
+  // The library's deselection button must also save the task's draft before
+  // removing the card, including when activated without a pointer event.
+  await editTaskNote().click();
+  await taskEditor.fill('Keep this draft when deselecting elsewhere.');
+  failEdit = true;
+  await taskEditor.press('Enter');
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+  await check('n1').focus(); await page.keyboard.press('Enter');
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+  await expect(check('n1')).toHaveAttribute('aria-pressed', 'true');
+  await expect(taskEditor).toHaveValue('Keep this draft when deselecting elsewhere.');
+  failEdit = false;
+  await check('n1').click();
+  await expect(taskCard).toHaveCount(0);
+  assert.equal(notes[0].comment, 'Keep this draft when deselecting elsewhere.');
+  await setSelection(check('n1'), true);
+
+  // Phone navigation unmounts the card. Failed drafts and pending writes still
+  // belong to the task, so returning must recover the editor and submission lock.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const views = page.getByRole('group', { name: 'Manuscript view' });
+  await views.getByRole('button', { name: 'New task', exact: true }).click();
+  for (const tab of ['Contents', 'Git']) {
+    await editTaskNote().click();
+    await taskEditor.fill(`Keep the mobile draft across ${tab}.`);
+    failEdit = true;
+    await views.getByRole('button', { name: tab, exact: true }).click();
+    await views.getByRole('button', { name: 'New task', exact: true }).click();
+    await expect(taskEditor).toHaveValue(`Keep the mobile draft across ${tab}.`);
+    await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+    await expect(send()).toBeDisabled();
+    failEdit = false;
+    await taskEditor.press('ControlOrMeta+Enter');
+    await expect(taskEditor).toHaveCount(0);
+
+    await editTaskNote().click();
+    await taskEditor.fill(`Wait for the mobile save across ${tab}.`);
+    releaseEdit = undefined; holdEdit = true;
+    await views.getByRole('button', { name: tab, exact: true }).click();
+    await expect.poll(() => Boolean(releaseEdit)).toBe(true);
+    await views.getByRole('button', { name: 'New task', exact: true }).click();
+    await expect(taskEditor).toHaveValue(`Wait for the mobile save across ${tab}.`);
+    await expect(taskEditor).toHaveAttribute('readonly', '');
+    await expect(send()).toBeDisabled();
+    assert.equal(notes[0].comment, `Keep the mobile draft across ${tab}.`);
+    releaseEdit();
+    await expect(taskText()).toHaveText(`Wait for the mobile save across ${tab}.`);
+    await expect(send()).toBeEnabled();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Review skills hide attachments; returning to the ordinary task recovers
+  // failed drafts. The hidden editor must not silently unlock submission.
+  await editTaskNote().click();
+  await taskEditor.fill('Keep this draft across the review skill.');
+  failEdit = true;
+  await page.locator('.new-task-panel').getByRole('button', { name: 'Add files or skills', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Review', exact: true }).click();
+  await expect(taskCard).toHaveCount(0);
+  await expect(send()).toBeDisabled();
+  await page.locator('.new-task-panel').getByRole('button', { name: 'Add skill', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Review', exact: true }).click();
+  await expect(taskEditor).toHaveValue('Keep this draft across the review skill.');
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+
+  // A different paper has its own editing state, while this paper's failed
+  // draft remains available when its annotations finish loading again.
+  await switchPaper('Other paper'); await notesReady();
+  await setSelection(check('other-note'), true);
+  await expect(send()).toBeEnabled();
+  await setSelection(check('other-note'), false);
+  await switchPaper('Paper'); await notesReady();
+  await expect(taskEditor).toHaveValue('Keep this draft across the review skill.');
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+  await expect(send()).toBeDisabled();
+  failEdit = false;
+  await taskEditor.press('Enter');
+  await expect(taskText()).toHaveText('Keep this draft across the review skill.');
+
   // Saving and taking a note out of the task in one click, as in My notes.
   await editTaskNote().click();
   await taskEditor.fill('Revise n1.');
