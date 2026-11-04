@@ -147,3 +147,8 @@ test('a caption timeout is recoverable and an offline helper never prevents task
     assert.notEqual(created.titleGeneration, 'pending');
   } finally { f.close(); }
 });
+
+test('caption parsing handles long interior padding without repeated suffix scans', { timeout: 3000 }, () => {
+  assert.equal(taskCaptionFrom('prefix' + ' '.repeat(100000) + 'suffix'), 'prefix suffix');
+  assert.equal(taskCaptionFrom('```text\n' + ' '.repeat(100000) + 'A title\n```'), 'A title');
+});

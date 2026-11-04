@@ -120,5 +120,9 @@
     "parse5": "^8.0.1",
     "@babel/parser": "^8.0.10",
     "@babel/types": "^8.0.10"
+  },
+  "overrides": {
+    "katex": "$katex",
+    "minimatch@>=7 <11.0.1": "^11.0.4"
   }
 }
