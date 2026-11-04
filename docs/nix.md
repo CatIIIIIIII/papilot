@@ -1,8 +1,8 @@
 # Nix
 
-The flake packages Papilot's CLI and browser interface, including the review engine. It provides Node.js 24, Git, `which` and full TeX Live. The first build or development shell may download several gigabytes of dependencies. Agent CLIs and their sign-ins are configured separately, as described in the [agent guide](guide.md#agents).
+The flake packages Papilot's CLI, browser interface and Linux Electron desktop, including the review engine. It provides Node.js 24, Git, `which` and full TeX Live. The first build or development shell may download several gigabytes of dependencies. Agent CLIs and their sign-ins are configured separately, as described in the [agent guide](guide.md#agents).
 
-The flake exposes packages for `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. The package has been built and smoke-tested on `x86_64-linux`; the ARM outputs have been evaluated but still need native build and runtime validation. The pinned Nixpkgs no longer supports Intel macOS. Electron installers are built separately; see [Papilot Desktop](../desktop/README.md).
+The flake exposes packages for `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. The original CLI package was smoke-tested on `x86_64-linux`; the extended desktop package requires the VM integration check before release. ARM Linux has evaluation coverage only. The pinned Nixpkgs no longer supports Intel macOS. Electron installers are built separately; see [Papilot Desktop](../desktop/README.md).
 
 ## Run or install
 
@@ -45,7 +45,7 @@ The shell supplies the runtime libraries used by Vite's native npm dependencies 
 
 `flake.lock` pins Nixpkgs. Both npm dependency trees use the versions and integrity hashes in their existing `package-lock.json` files through [`importNpmLock`](https://nixos.org/manual/nixpkgs/unstable/#javascript-buildNpmPackage-importNpmLock); there are no separate npm hashes to update in the Nix expression.
 
-Keep the source and all three lockfiles unchanged to reproduce the build inputs for a given system. Different architectures produce different outputs. To check whether rebuilding the package produces identical output, first build it normally, then rebuild offline against the dependencies already in the Nix store:
+Keep the source and all four lockfiles unchanged to reproduce the build inputs for a given system. Different architectures produce different outputs. To check whether rebuilding the package produces identical output, first build it normally, then rebuild offline against the dependencies already in the Nix store:
 
 ```sh
 nix build --no-update-lock-file

@@ -1,5 +1,4 @@
-import { agentPath, findExecutable } from '../../bin/agent-paths.mjs';
-process.env.PATH = agentPath();
+import { findExecutable } from '../../bin/agent-paths.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';

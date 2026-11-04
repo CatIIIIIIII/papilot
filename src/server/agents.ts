@@ -35,7 +35,7 @@ export interface AgentRuntime extends EventEmitter {
 
 export { AGENT_NAMES };
 
-import { agentDirs, findExecutable } from '../../bin/agent-paths.mjs';
+import { agentDirs, findExecutable, agentPath } from '../../bin/agent-paths.mjs';
 export { agentDirs, findExecutable };
 
 export interface Thread { readOnly?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
@@ -185,7 +185,7 @@ export class ClaudeAgent extends Adapter {
   detect() { return Boolean(this.findCli()) || claudeConfigured(); }
   async preload() { if (packageFile('@anthropic-ai/claude-agent-sdk')) await this.load(); }
   // The environment Claude Code runs with; undefined keeps Papilot's own.
-  protected environment(): Record<string, string> | undefined { return undefined; }
+  protected environment(): Record<string, string> | undefined { return Object.fromEntries(Object.entries({ ...process.env, PATH: agentPath() }).filter((entry): entry is [string, string] => entry[1] !== undefined)); }
   async start() {
     if (this.ready) return;
     this.cli = this.findCli();
