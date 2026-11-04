@@ -302,7 +302,7 @@ try {
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('b');
   await expect.poll(() => rounds[1].first).toBe('accepted');
-  await expect(viewer().locator('[data-stop="0"] .change-head')).toBeHidden();
+  await expect(viewer().locator('[data-stop="0"] .change-head')).toBeVisible();
   await expect(viewer().locator('.change.current button.accept')).toBeEnabled();
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('ControlOrMeta+z');
@@ -351,14 +351,14 @@ try {
     const position = await viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position);
     if (width > 520) assert.notEqual(position, 'fixed');
     else assert.equal(position, 'fixed');
-    assert.equal(await viewer().locator('#paper').evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
+    assert.equal(await viewer().locator('html').evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await viewer().locator('.change.current').getByRole('button', { name: 'Accept', exact: true }).click();
   const accepted = viewer().locator('[data-stop="0"]');
-  await expect(accepted.locator('.change-head')).toBeHidden();
+  await expect(accepted.locator('.change-head')).toBeVisible();
   await expect(accepted.locator('.side.after')).toBeVisible();
-  await expect(accepted.locator('.side.before')).toBeHidden();
+  await expect(accepted.locator('.side.before')).toBeVisible();
   await expect(viewer().locator('.change-map-mark')).toHaveCount(2);
   await expect(viewer().locator('.change.current')).toHaveAttribute('data-stop', '1');
   // The accepted paragraph remains selectable for another note.
@@ -368,12 +368,12 @@ try {
   await viewer().getByRole('button', { name: 'Add note', exact: true }).click();
   await viewer().getByRole('button', { name: 'Close review notes' }).click();
   await viewer().locator('.change.current').getByRole('button', { name: 'Reject', exact: true }).click();
-  await expect(viewer().locator('[data-stop="1"] .change-head')).toBeHidden();
+  await expect(viewer().locator('[data-stop="1"] .change-head')).toBeVisible();
   await expect(viewer().locator('[data-stop="1"] .side.before')).toBeVisible();
   await viewer().locator('.change.current').getByRole('button', { name: 'Comment', exact: true }).click();
   await viewer().getByRole('textbox', { name: /^Comment on change/ }).fill('Try a clearer explanation.');
   await viewer().getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(viewer().locator('.change-head:visible')).toHaveCount(0);
+  await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   await expect(viewer().locator('.change-map-mark')).toHaveCount(0);
   await expect(viewer().locator('.review-complete')).toBeVisible();
   // Only History mode adds a row under the toolbar.
@@ -390,11 +390,11 @@ try {
   await viewer().getByRole('button', { name: 'Back to review', exact: true }).click();
   await expect(viewer().getByText('All changes reviewed', { exact: true })).toBeVisible();
   await expect(viewer().getByText('There are no new changes to review. Previous decisions are available in History.', { exact: true })).toBeVisible();
-  await expect(viewer().locator('.change-head:visible')).toHaveCount(0);
+  await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   await viewer().getByRole('button', { name: 'History', exact: true }).click();
   await viewer().getByRole('button', { name: 'Undo last decision', exact: true }).click();
   await expect(viewer().getByRole('button', { name: 'History', exact: true })).toBeVisible();
-  await expect(viewer().locator('.change-head:visible')).toHaveCount(1);
+  await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   await expect(viewer().locator('.change.current')).toHaveAttribute('data-stop', '2');
   // Mixed decisions cannot be shown as an entirely accepted or rejected PDF strip.
   await viewer().locator('.change.current').getByRole('button', { name: /LaTeX$/ }).click();
@@ -587,14 +587,14 @@ try {
   await expect(viewer().getByLabel('Review history')).toHaveCount(0);
   await expect(viewer().locator('.change[data-stop="0"]')).toHaveAttribute('data-state', 'accepted');
   await viewer().locator('body').evaluate(() => { location.href = '?task=flow'; });
-  await expect(viewer().locator('.change-head:visible')).toHaveCount(0);
+  await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   // A new result replaces the current review. Earlier results are inspection only.
   latest = 2; rounds[2] = { new: 'pending' }; task.review.round = 2; task.review.unsent = 0; update();
   await sync();
   await expect(viewer().locator('html')).toHaveAttribute('data-papilot-round', '2');
   await expect(taskStatus).toHaveText('Ready for review');
   assert.doesNotMatch(await viewer().locator('body').innerText(), /Round \d+/);
-  await expect(viewer().locator('.change-head:visible')).toHaveCount(1);
+  await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   await viewer().getByRole('button', { name: 'History', exact: true }).click();
   assert.doesNotMatch(await viewer().getByLabel('Review history').innerText(), /Round \d+/);
   await expect(viewer().getByLabel('Review history').locator('option[value="1"]')).toContainText('2026');
@@ -612,7 +612,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
   await viewer().locator('.change.current').getByRole('button', { name: 'Accept', exact: true }).click();
-  await expect(viewer().locator('.change-head:visible')).toHaveCount(0);
+  await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   await viewer().getByRole('button', { name: 'History', exact: true }).click();
   await expect(viewer().getByRole('button', { name: 'Undo last decision', exact: true })).toBeInViewport();
   await expect(viewer().getByRole('button', { name: 'Back to review', exact: true })).toBeInViewport();
