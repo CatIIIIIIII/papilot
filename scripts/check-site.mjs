@@ -5,6 +5,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, webkit } from '../engine/node_modules/playwright/index.mjs';
+import { checkAnnotations } from './site-annotation-checks.mjs';
 
 const languages = JSON.parse(fs.readFileSync('i18n/languages.json', 'utf8'));
 const route = locale => locale === 'en' ? '/' : `/${locale}/`;
@@ -26,8 +27,11 @@ const watch = page => {
 const hero = '.hero .app-window', change = `${hero} .review-change`;
 const stateOf = page => page.locator(change).getAttribute('data-state');
 try {
+  await checkAnnotations(browser, origin);
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
   const page = await context.newPage();
+  await page.bringToFront();
+  await page.mouse.move(0, 0);
   watch(page);
   await page.goto(`${origin}/?lang=en`);
   await page.evaluate(() => document.fonts.ready);
@@ -220,7 +224,7 @@ try {
 
   // Every language fits at every width: no sideways scroll, the first screen
   // still holds the hero, and buttons, menus, cards and windows fit.
-  for (const width of [1440, 768, 390, 320]) {
+  for (const width of [1440, 961, 768, 390, 320]) {
     await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
     for (const locale of Object.keys(languages)) {
       await page.goto(origin + route(locale));
@@ -235,6 +239,12 @@ try {
         }
       }
       await page.keyboard.press('Escape');
+      const panels = await page.locator('.scene').evaluateAll(apps => apps.map(app => {
+        const pdf = app.querySelector('.app-pdf').getBoundingClientRect();
+        const target = app.querySelector(app.dataset.scene === 'notes' ? '.scene-figure' : app.dataset.scene === 'revise' ? '.review-change' : '.scene-text').getBoundingClientRect();
+        return { scene: app.dataset.scene, bottom: target.bottom - pdf.top, height: pdf.height };
+      }));
+      for (const panel of panels) assert.ok(panel.bottom <= panel.height - 6, `${locale}/${width}: ${panel.scene} content stays inside its PDF pane`);
       if (width === 390 || width === 1440) {
         await page.screenshot({ path: `test-results/site/${locale}-${width}-hero.png` });
         await page.locator('#why').screenshot({ style: '.topbar{visibility:hidden!important}', path: `test-results/site/${locale}-${width}-why.png` });
@@ -243,7 +253,7 @@ try {
   }
   assert.deepEqual(errors, []);
   assert.equal(requests.some(url => /\.(mp4|gif|jpe?g)|feature-.*\.png/.test(url)), false);
-  console.log('Site checks passed: first screen, the hero round and takeover, feature windows, reduced motion, no-JS, all language URLs and SEO, saved language, both download menus, and layouts at 320/390/768/1440px.');
+  console.log('Site checks passed: annotations during scroll and resize, first screen, the hero round and takeover, feature windows, reduced motion, no-JS, all language URLs and SEO, saved language, both download menus, and layouts at 320/390/768/961/1440px.');
 } finally {
   await browser.close();
   await server.close();

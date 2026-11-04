@@ -60,7 +60,7 @@
     "model": "gemini-4-argon-high"
   },
   "Agents": {
-    "revision": "070522ca36031d7bf55d302fa745e4c64110277ecfd5f02912f2dbc061b4e869",
+    "revision": "8896e67f4c2276cbf844fafaedda32d43cf57f6e6460d99238f58515a94d99c2",
     "textHash": "08a28e4cc1aacda4c773d8bc7561efd13f1f2f68328a14cba1ba605e4f20af0c",
     "model": "gemini-4-argon-high"
   },

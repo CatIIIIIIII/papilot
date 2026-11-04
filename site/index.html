@@ -598,7 +598,12 @@ const player = app => {
   const cursor = app.querySelector('.app-cursor'), waiting = [];
   let shown = false, hovered = false;
   const self = { cursor, playing: !still.matches };
-  const wake = () => { if (shown && !document.hidden) waiting.splice(0).forEach(go => go()); };
+  const wake = () => {
+    if (shown && !document.hidden) {
+      waiting.splice(0).forEach(go => go());
+      if (anchors.size && frame === undefined) frame = requestAnimationFrame(track);
+    }
+  };
   new IntersectionObserver(([entry]) => { shown = entry.isIntersecting; wake(); }, { threshold: .4 }).observe(app);
   document.addEventListener('visibilitychange', wake);
   app.addEventListener('pointerenter', event => { hovered = event.pointerType === 'mouse'; });
@@ -609,13 +614,43 @@ const player = app => {
     if (demo && !self.playing) throw new Error('stopped');
   };
   // Positions are relative to the window; the pointer's tip is 5px in, 2px down.
-  const at = (x, y) => { const outer = app.getBoundingClientRect(); return [x - outer.left, y - outer.top]; };
+  const at = (x, y) => { const outer = app.getBoundingClientRect(); return [x - outer.left - app.clientLeft, y - outer.top - app.clientTop]; };
   self.tip = (x, y) => { const [left, top] = at(x, y); return `translate(${left - 5}px,${top - 2}px)`; };
   self.point = (el, x = .5, y = .55) => { const box = el.getBoundingClientRect(); return self.tip(box.left + box.width * x, box.top + box.height * y); };
   self.place = (el, x, y) => { const [left, top] = at(x, y); el.style.left = `${left}px`; el.style.top = `${top}px`; };
-  self.glide = async (to, duration) => {
-    await cursor.animate([{ transform: cursor.style.transform }, { transform: to }], { duration, easing: ease }).finished;
-    cursor.style.transform = to;
+  // Keep targets live through scrolling, font loading and responsive reflow.
+  // Viewport rectangles must never survive an await and then be converted
+  // against a different window position.
+  const anchors = new Map();
+  let frame;
+  const track = () => {
+    frame = undefined;
+    for (const [el, paint] of anchors) {
+      if (!el.classList.contains('open')) anchors.delete(el);
+      else if (shown && !document.hidden) paint();
+    }
+    if (anchors.size && shown && !document.hidden) frame = requestAnimationFrame(track);
+  };
+  self.anchor = (el, paint) => {
+    anchors.set(el, paint); paint();
+    if (frame === undefined) frame = requestAnimationFrame(track);
+  };
+  self.glide = async (target, duration) => {
+    const from = cursor.style.transform;
+    let to = target();
+    const motion = cursor.animate([{ transform: from }, { transform: to }], { duration, easing: ease });
+    let next;
+    const follow = () => {
+      const current = target();
+      if (current !== to) {
+        to = current;
+        motion.effect.setKeyframes([{ transform: from }, { transform: to }]);
+      }
+      next = requestAnimationFrame(follow);
+    };
+    follow();
+    try { await motion.finished; cursor.style.transform = target(); }
+    finally { cancelAnimationFrame(next); }
   };
   self.press = async el => {
     cursor.classList.add('down'); el.classList.add('pressed');
@@ -627,26 +662,39 @@ const player = app => {
     for (const letter of text) { el.textContent += letter; await self.sleep(Math.max(40, Math.min(120, total / text.length))); }
   };
   // Draws a dashed box round a rectangle, as dragging on the page does.
-  self.box = async (box, rect) => {
-    await self.glide(self.tip(rect.left, rect.top), 650);
-    self.place(box, rect.left, rect.top);
+  self.box = async (box, measure) => {
+    await self.glide(() => { const rect = measure(); return self.tip(rect.left, rect.top); }, 650);
     box.classList.add('open', 'draft');
+    self.anchor(box, () => {
+      const rect = measure();
+      self.place(box, rect.left, rect.top);
+      Object.assign(box.style, { width: `${rect.width}px`, height: `${rect.height}px` });
+    });
     cursor.classList.add('down');
-    const size = { width: `${rect.width}px`, height: `${rect.height}px` };
-    await Promise.all([self.glide(self.tip(rect.right, rect.bottom), 750), box.animate([{ width: '0px', height: '0px' }, size], { duration: 750, easing: ease }).finished]);
-    Object.assign(box.style, size);
+    await Promise.all([
+      self.glide(() => { const rect = measure(); return self.tip(rect.right, rect.bottom); }, 750),
+      box.animate([{ transform: 'scale(0)' }, { transform: 'scale(1)' }], { duration: 750, easing: ease }).finished,
+    ]);
     cursor.classList.remove('down');
   };
   // Opens a note card below a rectangle, writes in it and presses its arrow.
-  self.note = async (note, rect, page, text) => {
-    note.style.width = `${Math.min(320, page.right - rect.left - 14)}px`;
-    self.place(note, rect.left, rect.bottom + 8);
+  self.note = async (note, measure, text) => {
     note.classList.add('open');
+    self.anchor(note, () => {
+      const rect = measure(), page = app.querySelector('.review-page').getBoundingClientRect();
+      const pdf = app.querySelector('.app-pdf').getBoundingClientRect();
+      const left = Math.max(page.left + 6, Math.min(rect.left, page.right - 126));
+      note.style.width = `${Math.min(320, page.right - left - 6)}px`;
+      const bottom = Math.min(page.bottom, pdf.bottom) - 6;
+      const below = rect.bottom + 8;
+      const top = below + note.offsetHeight <= bottom ? below : rect.top - note.offsetHeight - 8;
+      self.place(note, left, Math.max(pdf.top + 6, Math.min(top, bottom - note.offsetHeight)));
+    });
     await self.sleep(250);
     note.classList.add('filled');
     await self.type(note.querySelector('.demo-note-typed'), text);
     await self.sleep(450);
-    await self.glide(self.point(note.querySelector('.demo-note-send')), 350);
+    await self.glide(() => self.point(note.querySelector('.demo-note-send')), 350);
     await self.press(note.querySelector('.demo-note-send'));
   };
   // The note card flies into the composer.
@@ -753,15 +801,14 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
   play.loop(begin, async () => {
     await play.sleep(1000);
     play.show(pdf);
-    // Measured again after the drag, as the page may have scrolled meanwhile.
-    const measure = () => { const page = quote.closest('.review-page').getBoundingClientRect(); return [around(quote, page), page]; };
-    await play.box(box, measure()[0]);
-    await play.note(note, ...measure(), comment);
+    const measure = () => around(quote, quote.closest('.review-page').getBoundingClientRect());
+    await play.box(box, measure);
+    await play.note(note, measure, comment);
     locked = true;
     await play.fly(note, input);
     chips(input, [comment]); box.classList.remove('draft');
     await play.sleep(450);
-    await play.glide(play.point(send), 550);
+    await play.glide(() => play.point(send), 550);
     await play.press(send);
     chips(input, []);
     chat.dataset.step = 'sent'; chip.classList.add('busy');
@@ -770,7 +817,7 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
     box.classList.add('gone');
     decide('pending');
     await play.sleep(2200);
-    await play.glide(play.point(accept, .4, .6), 750);
+    await play.glide(() => play.point(accept, .4, .6), 750);
     await play.press(accept);
     decide('accepted');
     await play.sleep(600);
@@ -818,17 +865,16 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
     await play.sleep(900);
     play.show(page);
     const sent = [];
-    // Each box is measured when it is drawn, and its note when it opens: the
-    // page may have scrolled since the round began.
+    // Both the box and its note stay attached to the live target.
     for (const i of boxes.keys()) {
-      await play.box(boxes[i], rects()[i]);
-      await play.note(note, rects()[i], page.getBoundingClientRect(), texts[i]);
+      await play.box(boxes[i], () => rects()[i]);
+      await play.note(note, () => rects()[i], texts[i]);
       await play.fly(note, input);
       boxes[i].classList.remove('draft');
       sent.push(texts[i]); chips(input, sent);
       await play.sleep(400);
     }
-    await play.glide(play.point(send), 550);
+    await play.glide(() => play.point(send), 550);
     await play.press(send);
     chips(input, []);
     chat.dataset.step = 'sent';
@@ -863,14 +909,16 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
   play.loop(begin, async () => {
     await play.sleep(1200);
     play.show(app.querySelector('.app-pdf'));
-    await play.glide(play.point(comment), 650);
+    await play.glide(() => play.point(comment), 650);
     await play.press(comment);
-    const page = change.closest('.review-page').getBoundingClientRect(), box = change.getBoundingClientRect();
-    await play.note(note, { left: box.left + 16, bottom: box.bottom - 2 }, page, text);
+    await play.note(note, () => {
+      const box = change.getBoundingClientRect();
+      return { left: box.left + 16, top: box.top, bottom: box.bottom - 2 };
+    }, text);
     pending.classList.add('on');
     await play.fly(note, pending);
     await play.sleep(500);
-    await play.glide(play.point(feedback), 550);
+    await play.glide(() => play.point(feedback), 550);
     await play.press(feedback);
     pending.classList.remove('on');
     chat.dataset.step = 'sent';
@@ -878,7 +926,7 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
     chat.dataset.step = 'done';
     revise();
     await play.sleep(2000);
-    await play.glide(play.point(accept, .4, .6), 700);
+    await play.glide(() => play.point(accept, .4, .6), 700);
     await play.press(accept);
     decide('accepted');
     await play.sleep(600);
@@ -900,20 +948,20 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
   play.loop(begin, async () => {
     await play.sleep(1200);
     play.show(app.querySelector('.app-pdf'));
-    await play.glide(play.point(spark), 700);
+    await play.glide(() => play.point(spark), 700);
     await play.press(spark);
     message.classList.add('busy');
     await play.sleep(900);
     message.classList.remove('busy'); message.classList.add('filled');
     await play.type(typed, text, 700);
     await play.sleep(600);
-    await play.glide(play.point(commit), 450);
+    await play.glide(() => play.point(commit), 450);
     await play.press(commit);
     const close = closing(staged);
     app.dataset.step = 'committed';
     close(); opening(fresh);
     await play.sleep(1400);
-    await play.glide(play.point(push), 500);
+    await play.glide(() => play.point(push), 500);
     await play.press(push);
     await play.sleep(300);
     app.dataset.step = 'pushed';

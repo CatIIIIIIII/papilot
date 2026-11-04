@@ -232,7 +232,7 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 /* A box drawn on the page opens a one-line note with its send button, as in
    the app's PDF view; the box is dashed until the note is sent, then carries
    the note's number. */
-.demo-box{position:absolute;z-index:3;display:none;border:1.5px solid var(--accent);border-radius:3px;background:rgb(37 99 235/.07);transition:opacity .2s}
+.demo-box{position:absolute;z-index:3;display:none;border:1.5px solid var(--accent);border-radius:3px;background:rgb(37 99 235/.07);transition:opacity .2s;transform-origin:0 0}
 .demo-box.open{display:block}
 .demo-box.draft{border-style:dashed}
 .demo-box.gone{opacity:0}
@@ -529,7 +529,7 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
    Their app bodies keep a fixed height so a round never moves the page. */
 .scene{width:100%;box-shadow:0 1px 2px rgb(15 23 42/.05),0 24px 48px -26px rgb(15 23 42/.3)}
 .scene-art{display:contents}
-.scene .app-body{grid-template-columns:minmax(0,1fr) 232px;height:394px}
+.scene .app-body{grid-template-columns:minmax(0,1fr) 232px;height:430px}
 .scene .app-pdf{padding:40px 20px 0;overflow:hidden}
 .scene .review-page{padding-top:22px;font-size:15px}
 .scene .sheet-lines,.scene .sheet-head{padding:0 26px}
@@ -702,7 +702,7 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
   .section-head{margin-bottom:40px}
   .features{padding-top:8px}
   .feature h3{font-size:28px}
-  .scene .app-body{grid-template-columns:minmax(0,1fr);grid-template-rows:278px 304px;height:auto}
+  .scene .app-body{grid-template-columns:minmax(0,1fr);grid-template-rows:394px 304px;height:auto}
   .scene .app-pdf{padding-top:32px}
   .scene :is(.app-chat,.app-git){min-height:0;overflow:hidden;border-left:0;border-top:1px solid #e4e4e4}
   .scene .review-side{padding:22px 18px 12px}
