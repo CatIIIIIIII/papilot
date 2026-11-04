@@ -33,6 +33,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/git')) return json({ branch: 'main', files: [] });
+  if (url.pathname.endsWith('/git/overview')) return json({ worktrees: [], commits: [], truncated: false });
   if (url.pathname.endsWith('/manuscript')) return json({ git: { branch: 'main', files: [] }, build: { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]] }, annotations: url.pathname.includes('/other/') ? [otherNote] : notes });
   if (url.pathname.endsWith('/manuscript.pdf')) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname.endsWith('/manuscript/words')) return json(words[Number(url.searchParams.get('page'))]);
@@ -336,6 +337,24 @@ try {
   await taskEditor.press('Escape');
   await expect(taskText()).toHaveText('This save fails.');
   assert.equal(notes[0].comment, 'This save fails.');
+  // Changing side tabs must await the save and preserve a failed draft. Use
+  // the keyboard as well: it does not trigger the card's pointerdown saver.
+  for (const tab of ['Contents', 'Git']) {
+    await editTaskNote().click();
+    await taskEditor.fill(`Keep this draft when opening ${tab}.`);
+    failEdit = true;
+    await page.getByRole('tab', { name: tab, exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(taskEditor).toHaveValue(`Keep this draft when opening ${tab}.`);
+    await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+    await expect(page.getByRole('tab', { name: 'New task', exact: true })).toHaveAttribute('aria-selected', 'true');
+    failEdit = false;
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
+    assert.equal(notes[0].comment, `Keep this draft when opening ${tab}.`);
+    await page.getByRole('tab', { name: 'New task', exact: true }).click();
+    await expect(taskText()).toHaveText(`Keep this draft when opening ${tab}.`);
+  }
   // Saving and taking a note out of the task in one click, as in My notes.
   await editTaskNote().click();
   await taskEditor.fill('Revise n1.');
@@ -525,10 +544,18 @@ try {
   await setSelection(check('n5'), true);
   await page.locator('.task-notes-panel [data-note="n5"]').getByRole('button', { name: /^Delete note/ }).click();
   await expect(page.locator('.task-notes-panel .note-dismissed')).toContainText('Note deleted.');
-  await prompt().fill('A question after deleting a note.'); await send().click();
+  await prompt().fill('A question after deleting a note.');
+  fail = true; await send().click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Try again.' })).toBeVisible();
+  await expect(page.locator('.task-notes-panel .note-dismissed')).toContainText('Note deleted.');
+  await send().click();
   await expect.poll(() => sent.length).toBe(5);
   await expect(page.locator('.task-notes-panel .note-dismissed')).toHaveCount(0);
   assert.equal(sent[4].annotations, undefined);
+  await page.locator('.side-tabs [role="tab"]').first().focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(check('n5')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.task-notes-panel [data-note="n5"]')).toHaveCount(0);
   assert.deepEqual(errors, []);
   console.log('PASS: notes default to saved only, explicit selection, direct note sends, inline color-group instructions, persistence, failure/retry, partial sends to different agents, retained group drafts, grouped history, plain questions, and mobile controls.');
 } finally { release?.(); releaseEdit?.(); releaseDelete?.(); await browser.close(); await server.close(); }
