@@ -3,6 +3,7 @@
   "1 review update not sent yet": "尚有 1 項審閱更新未傳送",
   "2 notes on the PDF": "PDF 上有 2 則註解",
   "<del>The type of <span class=\"math\">λ<i>x</i>. <i>e</i></span> is determined by the types of <i>x</i> and its body <i>e</i>.</del>": "<del>函數 <span class=\"math\">λ<i>x</i>. <i>e</i></span> 的型別由參數 <i>x</i> 和函數體 <i>e</i> 的型別決定。</del>",
+  "<ins>If <i>e</i> has type <i>τ</i>₂ in the context Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, then <span class=\"math\">λ<i>x</i>. <i>e</i></span> has type <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins>": "<ins>若在上下文 Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁ 中 <i>e</i> 的型別為 <i>τ</i>₂，則 <span class=\"math\">λ<i>x</i>. <i>e</i></span> 的型別為 <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>。</ins>",
   "A Modern <ins>Agentic</ins> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> Editor": "現代化的<ins>智慧代理</ins> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 編輯器",
   "A comment on a change goes back to the agent, which rewrites it as the T-Abs typing rule before it is accepted": "對變更的評論會傳回給智慧代理，智慧代理會在變更獲接受前將其改寫為 T-Abs 型別規則",
   "A paper is written to be read, so every change has to be right. However many there are, each one is shown typeset, and nothing that hasn't been accepted reaches the paper. If one isn't right yet, comment on it and the agent revises it.": "文件是寫給人閱讀的，因此每項變更都必須準確無誤。無論變更再多，每一處都會以排版後的樣貌呈現；未經接受的內容絕不會寫入文件。如果某處還不夠理想，只需加上評論，智慧代理就會據此修正。",
@@ -51,6 +52,7 @@
   "Page 2 · main.tex:31": "第 2 頁 · main.tex:31",
   "Papilot · A Modern Agentic LaTeX Editor": "Papilot · 現代化的智慧代理 LaTeX 編輯器",
   "Point at What Should Change": "直接指出需要修改的地方",
+  "Privacy notice": "隱私權聲明",
   "Push": "推送",
   "Pushed to the remote.": "已推送至遠端。",
   "Reject": "拒絕",
@@ -83,6 +85,5 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "寫 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>，<del>得</del>看 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 原始碼<del>，再去翻</del> PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "寫 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>，<ins>何必</ins>看 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 原始碼<ins>？我只看</ins> PDF<ins>！ 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "寫 \\LaTeX{}，<del>得</del><ins>何必</ins>看 \\LaTeX{} 原始碼<del>，再去翻</del><ins>？我只看</ins> PDF<del> 😭</del><ins>！ 😎</ins>",
-  "line 6": "第 6 行",
-  "<ins>If <i>e</i> has type <i>τ</i>₂ in the context Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁, then <span class=\"math\">λ<i>x</i>. <i>e</i></span> has type <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>.</ins>": "<ins>若在上下文 Γ,&nbsp;<i>x</i>&nbsp;:&nbsp;<i>τ</i>₁ 中 <i>e</i> 的型別為 <i>τ</i>₂，則 <span class=\"math\">λ<i>x</i>. <i>e</i></span> 的型別為 <span class=\"math\"><i>τ</i>₁ → <i>τ</i>₂</span>。</ins>"
+  "line 6": "第 6 行"
 }

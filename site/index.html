@@ -24,6 +24,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/TeXGyrePagellaX-Regular.otf" as="font" type="font/otf" crossorigin>
 <link rel="stylesheet" href="style.css">
+<!-- analytics -->
 </head>
 <body>
 
@@ -134,13 +135,13 @@
         <div class="download-list" id="download-list" role="menu" aria-labelledby="download-button" hidden>
           <div class="download-group" data-os="mac" role="group" aria-labelledby="download-mac">
             <p class="download-label" id="download-mac">macOS</p>
-            <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
-            <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
+            <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg" data-download-platform="mac" data-download-arch="arm64" data-download-format="dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
+            <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg" data-download-platform="mac" data-download-arch="x64" data-download-format="dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
           </div>
           <div class="download-group" data-os="linux" role="group" aria-labelledby="download-linux">
             <p class="download-label" id="download-linux">Linux</p>
-            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
-            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage" data-download-platform="linux" data-download-arch="x64" data-download-format="AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
+            <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb" data-download-platform="linux" data-download-arch="x64" data-download-format="deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
           </div>
           <div class="download-group" role="none">
             <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/latest"><strong><span lang="en">All downloads</span><span lang="zh-CN">所有下载</span></strong><span class="download-meta">GitHub</span></a>
@@ -426,13 +427,13 @@ progress and preservation.</pre></div>
           <div class="download-list" id="get-list" role="menu" aria-labelledby="get-button" hidden>
             <div class="download-group" data-os="mac" role="group" aria-labelledby="get-mac">
               <p class="download-label" id="get-mac">macOS</p>
-              <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
-              <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
+              <a role="menuitem" tabindex="-1" data-arch="arm" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-arm64.dmg" data-download-platform="mac" data-download-arch="arm64" data-download-format="dmg"><strong><span lang="en">Apple Silicon</span><span lang="zh-CN">Apple 芯片</span></strong><span class="download-meta">.dmg</span></a>
+              <a role="menuitem" tabindex="-1" data-arch="x86" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-mac-x64.dmg" data-download-platform="mac" data-download-arch="x64" data-download-format="dmg"><strong><span lang="en">Intel</span><span lang="zh-CN">Intel 芯片</span></strong><span class="download-meta">.dmg</span></a>
             </div>
             <div class="download-group" data-os="linux" role="group" aria-labelledby="get-linux">
               <p class="download-label" id="get-linux">Linux</p>
-              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
-              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-x86_64.AppImage" data-download-platform="linux" data-download-arch="x64" data-download-format="AppImage"><strong>AppImage</strong><span class="download-meta">x64</span></a>
+              <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/download/v{{version}}/Papilot-{{version}}-linux-amd64.deb" data-download-platform="linux" data-download-arch="x64" data-download-format="deb"><strong>Debian / Ubuntu</strong><span class="download-meta">x64 · .deb</span></a>
             </div>
             <div class="download-group" role="none">
               <a role="menuitem" tabindex="-1" href="https://github.com/PapilotAI/papilot/releases/latest"><strong><span lang="en">All downloads</span><span lang="zh-CN">所有下载</span></strong><span class="download-meta">GitHub</span></a>
@@ -474,35 +475,46 @@ progress and preservation.</pre></div>
       <a href="https://github.com/cu1ch3n/papilot#readme" data-zh-href="https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.zh-CN.md">README</a>
       <a href="https://github.com/PapilotAI/papilot/blob/main/docs/guide.md"><span lang="en">Guide</span><span lang="zh-CN">指南</span></a>
       <a href="https://github.com/PapilotAI/papilot/blob/main/CHANGELOG.md"><span lang="en">Changelog</span><span lang="zh-CN">更新日志</span></a>
+      <a href="/privacy/"><span lang="en">Privacy notice</span><span lang="zh-CN">隐私声明</span></a>
     </nav>
     <p>MIT © 2026 PapilotAI</p>
   </div>
+
 </footer>
 
 <script>
+// Only real input handlers emit these fixed actions; demo animations do not.
+function siteAction(event, name, data = {}) {
+  if (event.isTrusted) document.dispatchEvent(new CustomEvent('papilot:site-action', { detail: { name, data, at: event.timeStamp } }));
+}
 for (const button of document.querySelectorAll('[data-copy]')) {
-  button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(button.dataset.copy); } catch { return; }
+  button.addEventListener('click', async event => {
+    const placement = button.closest('.hero') ? 'hero' : 'download';
+    try { await navigator.clipboard.writeText(button.dataset.copy); }
+    catch { siteAction(event, 'copy_install_failed', { placement }); return; }
     button.classList.add('copied');
+    siteAction(event, 'copy_install', { placement });
     setTimeout(() => button.classList.remove('copied'), 1600);
   });
 }
 
 // The build emits real links; JavaScript only adds menu interaction and persistence.
 const menu = document.querySelector('.lang-menu'), menuButton = document.getElementById('lang-button'), list = document.getElementById('lang-list');
-for (const item of list.children) item.addEventListener('click', () => {
+for (const item of list.children) item.addEventListener('click', event => {
   try { localStorage.setItem('papilot-lang', item.lang); } catch {}
+  if (item.lang !== document.documentElement.lang) siteAction(event, 'language_change', { language: item.lang });
 });
-function openMenu() {
+function openMenu(event) {
   list.hidden = false; menuButton.setAttribute('aria-expanded', 'true');
   (list.querySelector('[aria-checked=true]') || list.firstElementChild).focus();
+  siteAction(event, 'menu_open', { menu: 'language', placement: 'header' });
 }
 function closeMenu(focus) {
   if (list.hidden) return;
   list.hidden = true; menuButton.setAttribute('aria-expanded', 'false');
   if (focus) menuButton.focus();
 }
-menuButton.addEventListener('click', () => list.hidden ? openMenu() : closeMenu());
+menuButton.addEventListener('click', event => list.hidden ? openMenu(event) : closeMenu());
 list.addEventListener('keydown', event => {
   const items = [...list.children], at = items.indexOf(document.activeElement);
   if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); }
@@ -527,19 +539,20 @@ for (const download of document.querySelectorAll('.download')) {
     if (intel) mac.insertBefore(mac.querySelector('[data-arch=x86]'), mac.querySelector('[data-arch=arm]'));
   });
   const items = () => [...downloads.querySelectorAll('[role=menuitem]')];
-  const open = () => {
+  const open = event => {
     downloads.hidden = false; button.setAttribute('aria-expanded', 'true');
     const box = button.getBoundingClientRect(), need = downloads.offsetHeight + 16;
     download.classList.toggle('up', innerHeight - box.bottom < need && box.top > need);
     items()[0].focus();
+    siteAction(event, 'menu_open', { menu: 'download', placement: download.closest('.hero') ? 'hero' : 'download' });
   };
   const close = focus => {
     if (downloads.hidden) return;
     downloads.hidden = true; button.setAttribute('aria-expanded', 'false');
     if (focus) button.focus();
   };
-  button.addEventListener('click', () => downloads.hidden ? open() : close());
-  button.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); open(); } });
+  button.addEventListener('click', event => downloads.hidden ? open(event) : close());
+  button.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); if (downloads.hidden) open(event); } });
   downloads.addEventListener('keydown', event => {
     const all = items(), at = all.indexOf(document.activeElement);
     if (event.key === 'Escape') { event.preventDefault(); close(true); }
@@ -748,16 +761,17 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
     if (state === 'accepted' || state === 'rejected') change.tabIndex = 0; else change.removeAttribute('tabindex');
   };
   for (const [name, state] of [['accept', 'accepted'], ['reject', 'rejected']]) {
-    change.querySelector(`.review-${name}`).addEventListener('click', () => { settle(state); change.focus(); });
+    change.querySelector(`.review-${name}`).addEventListener('click', event => { settle(state); change.focus(); siteAction(event, 'demo_interaction', { action: name }); });
   }
-  const reopen = () => { settle('pending'); accept.focus(); };
-  change.addEventListener('click', event => { if (change.tabIndex === 0 && !event.target.closest('a, button')) reopen(); });
+  const reopen = event => { settle('pending'); accept.focus(); siteAction(event, 'demo_interaction', { action: 'reopen' }); };
+  change.addEventListener('click', event => { if (change.tabIndex === 0 && !event.target.closest('a, button')) reopen(event); });
   change.addEventListener('keydown', event => {
-    if (event.target === change && change.tabIndex === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reopen(); }
+    if (event.target === change && change.tabIndex === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reopen(event); }
   });
-  latex.addEventListener('click', () => {
+  latex.addEventListener('click', event => {
     source.hidden = !source.hidden;
     latex.setAttribute('aria-expanded', String(!source.hidden));
+    siteAction(event, 'demo_interaction', { action: source.hidden ? 'source_close' : 'source_open' });
   });
   const hold = () => instantly([change], () => {
     const state = change.dataset.state, open = !source.hidden;
@@ -1017,10 +1031,11 @@ const chips = (input, texts) => input.querySelectorAll('.chat-attached').forEach
   const button = document.getElementById('theme-button'), system = matchMedia('(prefers-color-scheme: dark)'), root = document.documentElement;
   const dark = () => root.dataset.theme ? root.dataset.theme === 'dark' : system.matches;
   const sync = () => button.setAttribute('aria-pressed', String(dark()));
-  button.addEventListener('click', () => {
+  button.addEventListener('click', event => {
     root.dataset.theme = dark() ? 'light' : 'dark';
     try { localStorage.setItem('papilot-theme', root.dataset.theme); } catch {}
     sync();
+    siteAction(event, 'theme_change', { theme: root.dataset.theme });
   });
   system.addEventListener('change', sync);
   sync(); button.hidden = false;

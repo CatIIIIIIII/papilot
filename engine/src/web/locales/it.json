@@ -249,5 +249,5 @@
   "{sources} could not be reached.": "Impossibile raggiungere {sources}.",
   "{source} has this work with other details. Compare them below.": "{source} riporta questo lavoro con altri dettagli. Confrontali di seguito.",
   "{staged} of {total} staged": "{staged} di {total} preparate",
-  "⌘↵ send · Esc cancel": "⌘↵ invia · Esc annulla"
+  "↵ send · Esc cancel": "↵ invia · Esc annulla"
 }
