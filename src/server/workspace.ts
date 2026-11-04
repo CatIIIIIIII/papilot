@@ -189,10 +189,24 @@ export class Workspace extends EventEmitter {
       runtime.authenticated = Boolean(account.account) || account.requiresOpenaiAuth === false;
       runtime.account = account.account?.email || account.account?.type || (runtime.authenticated ? `Local ${name} configuration` : null);
       runtime.error = runtime.authenticated ? null : account.reason || `Sign in to ${name} on this host, then select Reconnect.`;
-      try {
-        const models = await agent.request('model/list', {}, 20000);
-        runtime.models = (models.data || []).map(agentModel);
-      } catch { /* Tasks can still use the account's configured default model. */ }
+      const [catalog, configuration] = await Promise.allSettled([
+        agent.request('model/list', {}, 20000),
+        id === 'codex' ? agent.request('config/read', { includeLayers: false }, 20000) : Promise.resolve(null),
+      ]);
+      runtime.models = catalog.status === 'fulfilled' ? (catalog.value.data || []).map(agentModel) : [];
+      if (id === 'codex') {
+        // model/list marks the catalog recommendation, not the host's configured
+        // model. Read through Codex so CODEX_HOME and configuration layers apply.
+        const config = configuration.status === 'fulfilled' ? configuration.value?.config : undefined;
+        const configured = config?.profiles?.[config.profile]?.model ?? config?.model;
+        const defaultId = typeof configured === 'string' && configured.trim() ? configured.trim()
+          : config ? runtime.models.find(model => model.isDefault)?.id : undefined;
+        runtime.models = runtime.models.map(model => ({ ...model, isDefault: model.id === defaultId }));
+        // Custom/hidden models may not be in the catalog. Do not invent capabilities.
+        if (defaultId && !runtime.models.some(model => model.id === defaultId)) {
+          runtime.models.push({ id: defaultId, name: defaultId, isDefault: true, efforts: [], defaultEffort: null });
+        }
+      }
       await this.readUsage(id);
     } catch (e) { runtime.error = errorText(e); runtime.connected = false; }
   }
@@ -290,6 +304,8 @@ export class Workspace extends EventEmitter {
     if (existing) { if (existing.projectId !== input.projectId || (existing.mode === 'review') !== Boolean(input.prepareReview)) throw new Error('Invalid task ID.'); return existing; }
     if (input.prepareReview && !REVIEW_AGENTS.includes(input.agent || 'codex')) throw new Error('Choose Codex, Claude or GLM for AI review.');
     if (input.prepareReview && (input.annotations?.length || input.attachments?.length)) throw new Error('AI review uses the manuscript PDF. Start a separate editing task to send notes or attachments.');
+    // Pin the model shown to the author, including for clients using the default.
+    input = { ...input, model: input.model || this.runtimes[input.agent || 'codex'].models.find(model => model.isDefault)?.id };
     if (input.serviceTier !== undefined) {
       if (input.agent && input.agent !== 'codex') throw new Error('Service tiers are only available for Codex.');
       const models = this.runtimes.codex.models;
@@ -1177,8 +1193,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     const task = this.store.task(taskId), agent = this.agentOf(task);
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     const models = this.runtimes[agent].models;
-    const id = change.model ?? task.model;
+    const id = (change.model ?? task.model) || models.find(model => model.isDefault)?.id;
     const model = id ? models.find(model => model.id === id) : models.find(model => model.isDefault);
+    // Omitting a model on a resumed thread preserves its previous selection.
+    // An existing choice can only reset when we know which model to send.
+    if (change.model === '' && task.model && !model) throw new Error('Choose an available model for this agent.');
     if (change.model && change.model !== task.model && !model) throw new Error('Choose an available model for this agent.');
     const effort = change.effort ?? (change.model !== undefined && model && !model.efforts.includes(task.effort || '') ? '' : task.effort);
     if (change.effort && model && !model.efforts.includes(change.effort)) throw new Error('This model does not support that reasoning effort.');

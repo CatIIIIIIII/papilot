@@ -1320,7 +1320,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Default": {
-    "revision": "4d3ddf2e13e142a7de69c912a75badc8aa2d2749786b37be08cabd468e329232",
+    "revision": "39809988b2b77f6e7400019bd6a6fccaa3c20702bff5ac8b6c18ecbc94c763a1",
     "textHash": "291b4fc834dc08c6476873f6c062a43e3abb8d36220207002baf0a65490a3762",
     "model": "gemini-4-argon-medium"
   },
@@ -2350,7 +2350,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Model default": {
-    "revision": "dd2c7e09d7a045cab73ea4e7cb482c1f642aaf22c50dee171cb82dfb9a23d378",
+    "revision": "da5c5555ce20d14eda8d04148fb30581ee84659fad43351364663e5f8b1e5f11",
     "textHash": "9517778ba4658aea3966125fdd0b69558c0b7271b7f35339ffaad7cc6ae953f8",
     "model": "gemini-4-argon-medium"
   },
