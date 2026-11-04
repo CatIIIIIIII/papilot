@@ -35,6 +35,7 @@ import {
   useReferenceChecks,
 } from "./references.tsx";
 import { bindingLabel, readShortcuts, resolveShortcuts, shortcutAction, SHORTCUT_EVENT, SHORTCUT_STORAGE } from "./shortcuts.ts";
+import { sendsMessage } from "./send-key.ts";
 import {
   STATE,
   buildStops,
@@ -655,15 +656,6 @@ export function ReviewApp({
         if (confirm) setConfirm(null);
         else if (help) setHelp(false);
         else if (composer) closeComposer();
-        return;
-      }
-      if (
-        composer &&
-        (event.metaKey || event.ctrlKey) &&
-        event.key === "Enter"
-      ) {
-        event.preventDefault();
-        void submitComposer();
         return;
       }
       if (typing || help || confirm || window.getSelection()?.toString()) return;
@@ -1700,6 +1692,12 @@ export function ReviewApp({
             rows={3}
             maxLength={20000}
             value={draft}
+            onKeyDown={(event) => {
+              if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) {
+                event.preventDefault();
+                void submitComposer();
+              }
+            }}
             onChange={(e) => {
               setDraft(e.target.value);
               store(composer.key, e.target.value);
@@ -1708,7 +1706,7 @@ export function ReviewApp({
             placeholder={t("What should the agent change here?")}
           />
           <div className="composer-row">
-            <span className="muted">{t("⌘↵ send · Esc cancel")}</span>
+            <span className="muted">{t("↵ send · Esc cancel")}</span>
             <button
               type="submit"
               className="composer-send"
