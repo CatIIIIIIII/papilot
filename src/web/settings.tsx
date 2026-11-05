@@ -13,6 +13,7 @@ import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
 import { AppearanceSettings, type AppearanceSettingsProps } from './appearance-settings.tsx';
 import { ShortcutSettings } from './shortcut-settings.tsx';
+import { QuickNoteSettings } from './quick-note-settings.tsx';
 import { AboutSettings, LicenseSettings } from './about-settings.tsx';
 import info from 'virtual:papilot-info';
 import { DiagnosticsSettings, type DiagnosticsSettingsProps } from './diagnostics-settings.tsx';
@@ -22,13 +23,13 @@ import { SkillLibraryPanel, type SkillLibraryControls, type SkillLibraryOptions 
 import { ModelDefaultSettings, type ModelDefaultSettingsProps } from './model-default-settings.tsx';
 import { PeopleSettings, type PeopleSettingsProps, type PeopleSettingsControls } from './people-settings.tsx';
 
-type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'latex' | 'skills' | 'people' | 'updates';
+type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'latex' | 'skills' | 'people' | 'updates';
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'latex-review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: 'general' | 'shortcuts' }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const peopleControls = useRef<PeopleSettingsControls>(null);
   const [peopleVisited, setPeopleVisited] = useState(false);
@@ -71,6 +72,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       { page: 'appearance', label: t('Appearance'), icon: 'sun', keywords: `${t('Light')} ${t('Dark')} ${t('System')} ${t('Theme')} ${t('Accent')} ${t('Background')} ${t('Foreground')}` },
       { page: 'notifications', label: t('Notifications'), icon: 'bell' },
       { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Expand indirect changes')}` },
+      { page: 'quickNotes', label: t('Quick notes'), icon: 'toolMagic', keywords: `${t('Magic pen')} ${t('Polish')} ${t('Shorten')} ${t('Runt')} ${t('Connect')} ${t('Verify')}` },
       { page: 'shortcuts', label: t('Keyboard shortcuts'), icon: 'keyboard' },
     ] },
     { label: t('Workspace'), entries: [
@@ -152,6 +154,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         </section>}
         {page === 'notifications' && <NotificationSettings/>}
         {page === 'shortcuts' && <ShortcutSettings/>}
+        {page === 'quickNotes' && <QuickNoteSettings/>}
         {page === 'about' && <AboutSettings onLicenses={() => goTo('licenses')}/>}
         {page === 'licenses' && <LicenseSettings/>}
         {page === 'agents' && diagnostics && <DiagnosticsSettings {...diagnostics}/>}

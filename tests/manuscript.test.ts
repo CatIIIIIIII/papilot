@@ -79,6 +79,30 @@ test('the chat reads PDF notes back from the message that carried them', () => {
   assert.equal(readNotesInstructions(annotationTask([note('x')]).instructions.replace('   Note: ', '   Comment: ')), null);
 });
 
+test('deletions, points and quick notes reach the agent as plain instructions and read back', () => {
+  const note = (comment: string, extra: Partial<Annotation> = {}): Annotation => ({ id: comment || 'x', projectId: 'p', key: 'k', page: 0, rect: [0.1, 0.1, 0.2, 0.2], comment, quote: 'a very simple idea', source: { file: 'main.tex', lines: [4, 4] }, createdAt: 1, ...extra });
+  const notes = [
+    note('', { kind: 'delete' }),
+    note('a plain idea', { kind: 'delete', group: 'red' }),
+    note('Break the line here.', { kind: 'point', quote: 'first part ‸ second part', stamp: 'Line break' }),
+    note('Say this more concisely.', { stamp: 'Tighten' }),
+  ];
+  const task = annotationTask(notes);
+  assert.match(task.instructions, /A note headed "Delete" or "Replace" asks you to remove exactly the marked text/);
+  assert.match(task.instructions, /1\. Page 1 · main\.tex line 4 · Delete\n   PDF text: "a very simple idea"\n   Note: Delete the marked text\./);
+  assert.match(task.instructions, /2\. Page 1 · main\.tex line 4 · Color group: Red · Replace\n   PDF text: "a very simple idea"\n   Note: Replace the marked text with: a plain idea/);
+  assert.match(task.instructions, /3\. Page 1 · main\.tex line 4 · Quick note: Line break\n   Marked point \(‸\) in this PDF line: "first part ‸ second part"\n   Note: Break the line here\./);
+  assert.deepEqual(readNotesInstructions(task.instructions), [
+    { kind: 'delete', where: 'Page 1 · main.tex line 4', quote: 'a very simple idea', comment: '' },
+    { group: 'red', kind: 'delete', where: 'Page 1 · main.tex line 4', quote: 'a very simple idea', comment: 'a plain idea' },
+    { kind: 'point', stamp: 'Line break', where: 'Page 1 · main.tex line 4', quote: 'first part ‸ second part', comment: 'Break the line here.' },
+    { stamp: 'Tighten', where: 'Page 1 · main.tex line 4', quote: 'a very simple idea', comment: 'Say this more concisely.' },
+  ]);
+  assert.equal(annotationTask([notes[0]]).title, 'Delete marked text');
+  assert.equal(annotationTask([notes[1]]).title, 'Replace marked text');
+  assert.doesNotMatch(annotationTask([note('Plain.')]).instructions, /headed "Delete"/, 'The explanation appears only with such marks');
+});
+
 test('source excerpts keep the marked lines and shorten long ranges', () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-excerpt-')), 'main.tex');
   try {

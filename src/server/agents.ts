@@ -35,26 +35,10 @@ export interface AgentRuntime extends EventEmitter {
 
 export { AGENT_NAMES };
 
-// Where agent CLIs install themselves. A background service's PATH often
-// lacks these folders, so a CLI not on PATH is looked for here too.
-export function agentDirs(env: NodeJS.ProcessEnv = process.env) {
-  const home = env.HOME || os.homedir();
-  return ['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)).concat('/opt/homebrew/bin', '/usr/local/bin');
-}
-// The executable a command name resolves to on PATH or in an agent folder (or the path itself), or null.
-export function findExecutable(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  const windows = process.platform === 'win32';
-  const extensions = windows ? ['', ...(env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')] : [''];
-  const usable = (file: string) => {
-    try { if (!fs.statSync(file).isFile()) return false; fs.accessSync(file, windows ? fs.constants.F_OK : fs.constants.X_OK); return true; } catch { return false; }
-  };
-  const candidates = command.includes('/') || (windows && command.includes('\\')) ? [path.resolve(command)]
-    : [...new Set([...(env.PATH || '').split(path.delimiter).filter(Boolean), ...agentDirs(env)])].map(dir => path.join(dir, command));
-  for (const candidate of candidates) for (const extension of extensions) if (usable(candidate + extension)) return candidate + extension;
-  return null;
-}
+import { agentDirs, findExecutable, agentPath } from '../../bin/agent-paths.mjs';
+export { agentDirs, findExecutable };
 
-export interface Thread { readOnly?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
+export interface Thread { readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
 export interface Item { id: string; type: string; [key: string]: unknown }
 
@@ -76,7 +60,7 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
       const model = params.model || known?.model || null;
-      this.threads.set(id, { readOnly: params.sandbox === 'read-only', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      this.threads.set(id, { readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
       return { thread: { id }, model };
     }
     if (method === 'turn/start') {
@@ -133,6 +117,10 @@ const PACKAGES = path.join(DATA, 'agents');
 export async function loadPackage(name: string, version: string, label: string, ready: () => void = () => {}): Promise<any> {
   try { return await import(name); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ERR_MODULE_NOT_FOUND') throw error; }
+  if (process.env.PAPILOT_INSTALL_METHOD === 'nix') {
+    const entry = createRequire(path.join(ROOT, 'nix-agent-runtime/package.json')).resolve(name);
+    return import(pathToFileURL(entry).href);
+  }
   const prefix = PACKAGES, resolve = () => createRequire(path.join(prefix, 'package.json')).resolve(name);
   let entry: string;
   try { entry = resolve(); } catch {
@@ -146,7 +134,7 @@ export async function loadPackage(name: string, version: string, label: string, 
 // The file a package loaded from: Papilot's own dependencies, or the copy
 // fetched on first use.
 export function packageFile(name: string) {
-  for (const from of [import.meta.url, path.join(PACKAGES, 'package.json')]) {
+  for (const from of [import.meta.url, ...(process.env.PAPILOT_INSTALL_METHOD === 'nix' ? [path.join(ROOT, 'nix-agent-runtime/package.json')] : [path.join(PACKAGES, 'package.json')])]) {
     try { return createRequire(from).resolve(name); } catch { /* Not installed there. */ }
   }
   return null;
@@ -197,7 +185,7 @@ export class ClaudeAgent extends Adapter {
   detect() { return Boolean(this.findCli()) || claudeConfigured(); }
   async preload() { if (packageFile('@anthropic-ai/claude-agent-sdk')) await this.load(); }
   // The environment Claude Code runs with; undefined keeps Papilot's own.
-  protected environment(): Record<string, string> | undefined { return undefined; }
+  protected environment(): Record<string, string> | undefined { return Object.fromEntries(Object.entries({ ...process.env, PATH: agentPath() }).filter((entry): entry is [string, string] => entry[1] !== undefined)); }
   async start() {
     if (this.ready) return;
     this.cli = this.findCli();
@@ -320,8 +308,9 @@ export class ClaudeAgent extends Adapter {
       }
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
         ...(thread.readOnly ? ['--tools', ''] : []),
+        ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : []),
         '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
-        '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true } }),
+        '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } }),
         // A question cannot be answered in -p; Claude asks in its reply instead.
         '--disallowedTools', 'AskUserQuestion', ...(thread.instructions ? ['--append-system-prompt', thread.instructions] : []),
         ...(thread.model ? ['--model', thread.model] : []), ...(effort ? ['--effort', effort] : []),
@@ -363,8 +352,13 @@ export class ClaudeAgent extends Adapter {
         ...(thread.started ? { resume: turn.threadId } : { sessionId: turn.threadId }),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: thread.instructions },
         settingSources: thread.readOnly ? [] : ['project'], permissionMode: 'acceptEdits', ...(thread.readOnly ? { tools: [] } : {}),
-        sandbox: { enabled: true, autoAllowBashIfSandboxed: true },
+        ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}),
+        sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) },
         canUseTool: (name, input, { signal, title, decisionReason }) => new Promise<PermissionResult>(resolve => {
+          if (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)) {
+            resolve({ behavior: 'allow', updatedInput: input });
+            return;
+          }
           const id = randomUUID(), question = name === 'AskUserQuestion' && Array.isArray(input.questions);
           const questions = question ? (input.questions as { question: string; header?: string; options?: { label: string; description?: string }[] }[]) : [];
           this.approvals.set(id, { resolve, input, kind: question ? 'question' : 'tool', questions: questions.map(q => q.question) });
@@ -454,7 +448,7 @@ export class GlmAgent extends ClaudeAgent {
     if (!endpoint) throw new Error(GLM_KEY);
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(this.env)) if (value !== undefined && !/^(ANTHROPIC_|CLAUDE_CODE_USE_|AWS_BEARER_TOKEN_BEDROCK$)/.test(key)) env[key] = value;
-    return { ...env, ANTHROPIC_BASE_URL: endpoint.url, ANTHROPIC_AUTH_TOKEN: endpoint.token,
+    return { ...env, PATH: agentPath(env), ANTHROPIC_BASE_URL: endpoint.url, ANTHROPIC_AUTH_TOKEN: endpoint.token,
       ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.3', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5.3', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.7',
       API_TIMEOUT_MS: '3000000', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
   }
@@ -486,7 +480,8 @@ export class AntigravityAgent extends Adapter {
   // Some regions need a proxy for Antigravity; PAPILOT_AGY_PROXY applies only to agy.
   private env() {
     const proxy = process.env.PAPILOT_AGY_PROXY;
-    return proxy ? { ...process.env, HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : process.env;
+    const env = { ...process.env, PATH: agentPath() };
+    return proxy ? { ...env, HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : env;
   }
   async start() {
     if (this.ready) return;
@@ -501,13 +496,27 @@ export class AntigravityAgent extends Adapter {
     return { data: this.catalog.map(model => ({ model: model.model, displayName: model.displayName, isDefault: model.isDefault, supportedReasoningEfforts: model.efforts.map(effort => ({ reasoningEffort: effort })), defaultReasoningEffort: model.defaultEffort })) };
   }
   protected run(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
-    // agy's CLI accepts text prompts; its file tools open the supplied images.
-    if (images.length) text += '\n\nOpen the attached images with your file/image tools: ' + images.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
+    // Attachments live outside the worktree. Grant read access to only the
+    // selected files for this invocation; adding their directory as a workspace
+    // would also expose other tasks' attachments and permit writes there.
+    let imageSettings: string[] = [];
+    try {
+      const files = images.map(file => {
+        const resolved = fs.realpathSync(file);
+        if (!fs.statSync(resolved).isFile() || /[()*\r\n]/.test(resolved)) throw new Error('Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.');
+        return resolved;
+      });
+      if (files.length) {
+        for (const [index, file] of files.entries()) text = text.replaceAll(images[index], file);
+        text += '\n\nOpen the attached images with your file/image tools: ' + files.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
+        imageSettings = ['--settings', JSON.stringify({ permissions: { allow: files.map(file => `read_file(${file})`) } })];
+      }
+    } catch (error) { this.finish(turn, 'failed', error instanceof Error ? error.message : String(error)); return; }
     const conversation = this.conversations[turn.threadId], entry = this.catalog.find(model => model.model === thread.model);
     const model = entry ? entry.ids[effort || entry.defaultEffort || ''] || Object.values(entry.ids)[0] : thread.model;
     // agy has no separate system prompt: the first turn carries Papilot's instructions.
     const prompt = conversation ? text : `${thread.instructions}\n\n---\n\n${text}`;
-    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
+    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
@@ -532,7 +541,7 @@ export class AntigravityAgent extends Adapter {
     child.on('close', () => {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: in Papilot it works without approval prompts, so it edits files in the task worktree but does not run commands.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
       if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });

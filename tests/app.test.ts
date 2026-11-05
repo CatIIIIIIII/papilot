@@ -709,6 +709,53 @@ test('color groups persist without per-location comments and take their meaning 
   } finally { await f.close(); }
 });
 
+test('deletions need no comment, quick notes keep their name, and a task of deletions alone is accepted', async () => {
+  const f = await fixture();
+  f.manuscripts.locate = async () => ({ quote: 'a very simple idea', source: { file: 'main.tex', lines: [4, 4], excerpt: undefined } });
+  try {
+    const post = (payload: object) => f.remote.inject({ method: 'POST', url: '/api/projects/thesis/annotations', headers: f.as, payload: { key: 'pdf', page: 0, rect: [0.1, 0.1, 0.4, 0.2], ...payload } });
+    const deletion = await post({ kind: 'delete' });
+    assert.equal(deletion.statusCode, 200, deletion.body);
+    assert.equal(deletion.json().kind, 'delete'); assert.equal(deletion.json().comment, '');
+    assert.equal((await post({ comment: '' })).statusCode, 400, 'An ordinary note still needs a comment');
+    assert.equal((await post({ kind: 'erase', comment: 'x' })).statusCode, 400);
+    const stamped = await post({ comment: 'Say this more concisely.', stamp: 'Tight·en\n' });
+    assert.equal(stamped.json().stamp, 'Tight en', 'A name cannot break the heading it is written into');
+    const replaced = await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${deletion.json().id}`, headers: f.as, payload: { comment: 'a plain idea' } });
+    assert.equal(replaced.json().comment, 'a plain idea');
+    const cleared = await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${deletion.json().id}`, headers: f.as, payload: { comment: '' } });
+    assert.equal(cleared.statusCode, 200, 'Clearing the replacement goes back to deleting');
+    const send = await f.remote.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { id: 'deletions-only-task-01', projectId: 'thesis', title: 'Delete marked text', instructions: '', annotations: [deletion.json().id] } });
+    assert.equal(send.statusCode, 200, send.body);
+    assert.match(f.store.runByKey('initial-deletions-only-task-01')!.prompt, /· Delete\n {3}PDF text: "a very simple idea"\n {3}Note: Delete the marked text\./);
+  } finally { await f.close(); }
+});
+
+test('each person keeps their own quick notes, presets by id and their own in full', async () => {
+  const f = await fixture();
+  try {
+    const owner = { ...LOCAL, origin: 'http://127.0.0.1:7274', 'x-papilot-token': 'local-csrf' };
+    const read = async (headers: Record<string, string>) => (await f.local.inject({ url: '/api/quick-notes', headers })).json().quickNotes;
+    assert.equal(await read(LOCAL), null, 'No list saved means the presets');
+    const mine = [{ id: 'verify' }, { id: 'polish', label: 'Smooth' }, { id: 'custom-define', label: ' Define  ·  term ', instruction: ' Define this term where it first appears. ', icon: 'book' }];
+    const saved = await f.local.inject({ method: 'POST', url: '/api/quick-notes', headers: owner, payload: { quickNotes: mine } });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.deepEqual(saved.json().quickNotes[2], { id: 'custom-define', label: 'Define term', instruction: 'Define this term where it first appears.', icon: 'book' });
+    assert.deepEqual(await read(LOCAL), saved.json().quickNotes);
+    // Another person has their own list, and theirs goes when they are removed.
+    assert.equal((await f.remote.inject({ url: '/api/quick-notes', headers: f.as })).json().quickNotes, null);
+    assert.equal((await f.remote.inject({ method: 'POST', url: '/api/quick-notes', headers: f.as, payload: { quickNotes: [{ id: 'runt' }] } })).statusCode, 200);
+    assert.deepEqual(await read(LOCAL), saved.json().quickNotes);
+    for (const quickNotes of [[], Array.from({ length: 9 }, (_, index) => ({ id: `n${index}`, label: 'N', instruction: 'Do it.' })), [{ id: 'custom-x', label: 'X' }], [{ id: 'runt' }, { id: 'runt' }], [{ id: 'Bad id' }], [{ id: 'runt', label: 'x'.repeat(41) }], [{ id: 'runt', icon: '<svg>' }], 'runt']) {
+      assert.equal((await f.local.inject({ method: 'POST', url: '/api/quick-notes', headers: owner, payload: { quickNotes } })).statusCode, 400, JSON.stringify(quickNotes));
+    }
+    assert.equal((await f.local.inject({ method: 'POST', url: '/api/quick-notes', headers: owner, payload: { quickNotes: null } })).json().quickNotes, null, 'Restoring the presets forgets the list');
+    assert.equal(await read(LOCAL), null);
+    f.accounts.remove(f.ada.id);
+    assert.equal(f.store.preference(f.ada.id, 'quick-notes'), undefined);
+  } finally { await f.close(); }
+});
+
 test('group-specific instructions are scoped to selected notes and preserved in the agent prompt and chat', async () => {
   const f = await fixture();
   try {

@@ -1,3 +1,4 @@
+import { agentPath } from '../../bin/agent-paths.mjs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
@@ -108,7 +109,8 @@ export class AcpAgent extends Adapter {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), `papilot-${this.profile.id}-`));
     try {
       // The probe folder is removed below, so the agent itself runs from the home folder.
-      const child = this.launch(findExecutable(this.binary) || this.binary, this.profile.args, { cwd: os.homedir(), env: this.profile.env?.() || process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+      const env = this.profile.env?.() || process.env;
+      const child = this.launch(findExecutable(this.binary) || this.binary, this.profile.args, { cwd: os.homedir(), env: { ...env, PATH: agentPath(env) }, stdio: ['pipe', 'pipe', 'pipe'] });
       this.child = child;
       const failed = (error: Error) => { if (this.child === child) this.disconnect(error); };
       createInterface({ input: child.stdout! }).on('line', line => {

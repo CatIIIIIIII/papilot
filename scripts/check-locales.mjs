@@ -61,7 +61,7 @@ try {
     await page.getByRole('button', { name: label(id, 'Settings'), exact: true }).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), id, 'preference survives reload');
     await page.locator('.home').getByRole('button', { name: label(id, 'Add paper'), exact: true }).click();
-    await page.getByText(label(id, 'Use a folder on this computer'), { exact: true }).click();
+    await page.getByText(label(id, 'Enter a folder path'), { exact: true }).click();
     await page.getByRole('textbox', { name: label(id, 'Folder path'), exact: true }).fill('/tmp/example');
     await page.getByRole('button', { name: label(id, 'Read folder'), exact: true }).click();
     const error = id === 'en' ? 'Paper name is too long.' : errorMessages[id]['Paper name is too long.'];

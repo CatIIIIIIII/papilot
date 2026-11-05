@@ -1,0 +1,101 @@
+/* The PDF's marking tools: the rail at its left edge (after an image
+   editor's), the magic pen's wheel, and the marks those tools leave. */
+:root{--delete:var(--red);--stamp:var(--purple)}
+
+.pdf-body{position:relative;flex:1;min-height:0;display:flex}
+.pdf-body>.pdf-scroll-host{flex:1;min-width:0}
+.pdf-rail{position:relative;z-index:20;display:flex;flex-direction:column;align-items:center;gap:2px;width:46px;flex:none;padding:8px 0;border-right:1px solid var(--line);background:var(--bg)}
+.rail-tool{position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;border-radius:9px;color:var(--text-2);transition:background .12s,color .12s}
+.rail-tool:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
+.rail-tool[aria-pressed=true]{background:var(--accent-soft);color:var(--accent)}
+.rail-tool:disabled{opacity:.4;cursor:default}
+.rail-tool:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rail-separator{flex:none;width:20px;height:1px;margin:5px 0;background:var(--line)}
+.rail-badge{position:absolute;right:-1px;bottom:-1px;min-width:10px;height:14px;padding:0 3px;border:2px solid var(--bg);border-radius:9px;background:var(--stamp);color:#fff;font:600 9.5px/14px var(--sans);text-align:center}
+/* A tool's name, key and use, beside the rail after a short hover. */
+.rail-tip{position:absolute;left:calc(100% + 12px);top:50%;transform:translateY(-50%);z-index:30;display:flex;flex-direction:column;gap:3px;width:max-content;max-width:236px;padding:8px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text-2);box-shadow:var(--float);font:12px/1.45 var(--sans);text-align:left;white-space:normal;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s,visibility .12s}
+.rail-tool:hover .rail-tip,.rail-tool:focus-visible .rail-tip{opacity:1;visibility:visible;transition-delay:.4s}
+.rail-tip-title{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text);font-weight:600;font-size:12.5px}
+.rail-tip kbd{min-width:18px;height:18px;padding:0 5px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;background:var(--bg-subtle);color:var(--text-2);font:500 11px/15px var(--sans);text-align:center}
+/* The note tool is its own color picker: the line under the pencil takes the
+   group's color, and a small corner mark says a second click opens colors. */
+.group-picker:has(>.rail-tool){display:flex}
+.rail-tool[data-group] .tool-note-line{fill:var(--note-color)}
+.rail-tool.has-menu::after{content:"";position:absolute;right:4px;bottom:4px;border-left:4px solid transparent;border-bottom:4px solid currentColor;border-radius:0 0 1px 0;opacity:.4}
+/* Narrow viewers have no rail and keep their marking tools in the toolbar. */
+.pdf-compact-tools{display:none;align-items:center;gap:2px}
+@container (max-width:560px){.pdf-rail{display:none}.pdf-compact-tools{display:inline-flex}}
+
+/* Tools that do not select text let clicks reach the page instead. */
+.tool-point .pdf-container .textLayer,.tool-hand .pdf-container .textLayer{pointer-events:none}
+.tool-hand .pdf-container{cursor:grab}
+.tool-hand .pdf-container.panning{cursor:grabbing}
+.tool-magic .pdf-container .page{cursor:crosshair}
+.tool-magic .pdf-container .textLayer span{cursor:text}
+.point-capture{position:absolute;inset:0;pointer-events:auto;cursor:crosshair}
+/* pdf.js draws a selection as an overlay under the text (.selection). With
+   the delete tool a selection is only a strike line through the text; with
+   the magic pen it takes the pen's color. */
+.tool-delete .pdf-container .canvasWrapper .selection{background:transparent}
+.tool-delete .pdf-container .textLayer ::selection{text-decoration:line-through;text-decoration-color:var(--delete);text-decoration-thickness:1.5px}
+.tool-magic .pdf-container .canvasWrapper .selection{background:color-mix(in srgb,var(--stamp) 24%,transparent)}
+
+/* A deletion is struck through; a quick note takes the magic pen's color and
+   names itself on its tag; a point is a caret at the place. */
+/* A deletion is only its strike line; when open, the line is heavier. */
+.note-mark[data-kind=delete]{mix-blend-mode:normal;background:linear-gradient(to bottom,transparent calc(54% - .75px),var(--delete) calc(54% - .75px),var(--delete) calc(54% + .75px),transparent calc(54% + .75px))}
+.note-mark[data-kind=delete].active{background:linear-gradient(to bottom,transparent calc(54% - 1.25px),var(--delete) calc(54% - 1.25px),var(--delete) calc(54% + 1.25px),transparent calc(54% + 1.25px))}
+.note-tag[data-kind=delete]{background:var(--delete);color:#fff}
+.note-mark[data-stamp]{background:color-mix(in srgb,var(--stamp) 15%,transparent)}
+.note-mark[data-stamp].active{background:color-mix(in srgb,var(--stamp) 28%,transparent)}
+.note-box[data-stamp]{border-color:var(--stamp);background:color-mix(in srgb,var(--stamp) 6%,transparent)}
+.note-tag[data-stamp]{display:inline-flex;align-items:center;gap:5px;background:var(--stamp);color:#fff}
+.note-tag-stamp{font-weight:500}
+.note-point{position:absolute;width:2px;height:18px;margin:-9px 0 0 -1px;border-radius:1px;background:var(--accent);pointer-events:none}
+.note-point::before{content:"";position:absolute;left:-4px;top:-7px;width:10px;height:10px;border-radius:50%;background:inherit;box-shadow:0 0 0 2px var(--pdf-page,#fff)}
+.note-point[data-stamp]{background:var(--stamp)}
+.note-point.active::before{box-shadow:0 0 0 2px var(--pdf-page,#fff),0 0 0 5px color-mix(in srgb,var(--accent) 30%,transparent)}
+.note-point.draft{opacity:.65}
+
+/* While a quick note is kept on the pen. */
+.stamp-lock{position:absolute;z-index:15;top:10px;left:12px;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 10px;border:1px solid color-mix(in srgb,var(--stamp) 30%,var(--line));border-radius:999px;background:var(--bg);color:var(--stamp);box-shadow:var(--float);font:500 12.5px/1 var(--sans);animation:menu-in .14s var(--ease)}
+.stamp-lock button{display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;color:var(--text-3)}
+.stamp-lock button:hover{background:var(--bg-hover);color:var(--text)}
+
+/* The magic pen's wheel: a frosted disc of rounded segments, each with its
+   icon. Segments fan in when it opens; the one under the pointer lifts
+   outward in the pen's color with a soft glow, and the middle names it. */
+.stamp-wheel-overlay{position:fixed;inset:0;z-index:1000;outline:none}
+.stamp-wheel{position:fixed;transform:translate(-50%,-50%);border-radius:50%;background:var(--bg);box-shadow:0 0 0 1px var(--line),var(--float);animation:stamp-wheel-in .16s var(--ease)}
+@keyframes stamp-wheel-in{from{opacity:0;transform:translate(-50%,-50%) scale(.94)}}
+.stamp-ring{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.stamp-segments{fill:var(--bg-muted);stroke:var(--bg-muted);stroke-linejoin:round}
+.stamp-segment-lit{--lit:color-mix(in srgb,var(--accent) 14%,var(--bg));fill:var(--lit);stroke:var(--lit);stroke-linejoin:round;transform:translate(var(--lift-x),var(--lift-y));animation:stamp-lift .14s var(--ease)}
+@keyframes stamp-lift{from{transform:translate(0,0)}}
+.stamp-slot{position:absolute;transform:translate(-50%,-50%);display:grid;place-items:center;width:40px;height:40px;padding:0;border-radius:50%;background:none;color:var(--text-2);transition:transform .14s var(--ease),color .1s}
+.stamp-slot[data-hover]{transform:translate(calc(-50% + var(--lift-x)),calc(-50% + var(--lift-y)));color:var(--accent)}
+.stamp-slot:focus-visible{outline:none}
+.stamp-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:78px;height:78px;border-radius:50%;color:var(--text-3);transition:color .1s,background .1s}
+.stamp-center:hover,.stamp-center:focus-visible{background:var(--bg-hover);color:var(--text);outline:none}
+.stamp-center-name{display:flex;flex-direction:column;align-items:center;gap:5px;max-width:70px;color:var(--text);font:600 13.5px/1.2 var(--sans);text-align:center;overflow-wrap:anywhere}
+.stamp-center-name kbd{min-width:18px;height:18px;padding:0 5px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;background:var(--bg-subtle);color:var(--text-2);font:500 11px/15px var(--sans);text-align:center}
+.stamp-caption{position:fixed;transform:translateX(-50%);width:max-content;max-width:280px;margin:0;padding:8px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);box-shadow:var(--float);color:var(--text-2);font:12px/1.45 var(--sans);text-align:center;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.stamp-wheel,.stamp-segment-lit{animation:none}.stamp-slot{transition:none}}
+
+/* A quick note's name and a deletion's wording, wherever notes are listed. */
+.pdf-note-stamp{display:inline-flex;align-items:center;gap:4px;margin:0 6px 2px 0;padding:0 7px 0 5px;border-radius:999px;background:color-mix(in srgb,var(--stamp) 12%,transparent);color:var(--stamp);font:600 11.5px/19px var(--sans);vertical-align:1px}
+.pdf-note-text[data-kind=delete]{color:var(--delete)}
+blockquote[data-kind=delete]{text-decoration:line-through;text-decoration-color:var(--delete)}
+
+/* The magic pen's menu on the rail, like the app's other menus. */
+.stamp-menu{position:fixed;inset:auto;margin:0;padding:5px;width:224px;max-width:calc(100vw - 16px);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg);color:var(--text);box-shadow:var(--float);font-size:13px}
+.stamp-menu:popover-open{display:flex;flex-direction:column;gap:1px;animation:menu-in .14s var(--ease)}
+.stamp-menu-label{padding:5px 9px 4px;color:var(--text-3);font-size:12px}
+.stamp-menu>button{display:flex;align-items:center;gap:10px;min-height:32px;padding:4px 8px;border-radius:var(--r);text-align:left;color:inherit}
+.stamp-menu>button>span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stamp-menu>button:hover,.stamp-menu>button:focus-visible{background:var(--bg-hover);outline:none}
+.stamp-menu>button[aria-checked=true]{background:var(--accent-soft);color:var(--accent)}
+.stamp-menu-icon{display:flex;color:var(--text-2)}
+.stamp-menu>button[aria-checked=true] .stamp-menu-icon{color:inherit}
+.stamp-menu kbd{min-width:18px;height:18px;padding:0 5px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;background:var(--bg-subtle);color:var(--text-2);font:500 11px/15px var(--sans);text-align:center}
+.stamp-menu hr{margin:4px 2px;border:0;border-top:1px solid var(--line)}

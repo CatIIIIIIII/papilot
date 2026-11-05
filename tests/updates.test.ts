@@ -343,7 +343,7 @@ test('installation is deduplicated, allows ongoing work, and restarts only after
     assert.equal(f.updates.snapshot().phase, 'waiting'); assert.equal(restarts, 0);
     const finish = f.updates.enter(); busy = false; await f.updates.activate();
     assert.equal(restarts, 0); finish(); finish();
-    await f.updates.activate(); assert.equal(restarts, 1); assert.equal(f.updates.restarting, true);
+    await tick(); assert.equal(restarts, 1); assert.equal(f.updates.restarting, true);
     await f.updates.activate(); assert.equal(restarts, 1);
   } finally { f.close(); }
 });

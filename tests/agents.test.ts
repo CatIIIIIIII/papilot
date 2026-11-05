@@ -91,6 +91,41 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('Antigravity grants only selected images read access for the current turn', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
+  const image = path.join(dir, 'attached.png'); fs.writeFileSync(image, 'image fixture');
+  const fake = fakeAgy([[JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })], [JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })]]);
+  const agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/work' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: `See ${image}` }, { type: 'localImage', path: image }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args, resolved = fs.realpathSync(image);
+    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]), { permissions: { allow: [`read_file(${resolved})`] } });
+    assert.ok(args[1].includes(resolved));
+    assert.ok(!args.includes('--add-dir') && !args.includes('--dangerously-skip-permissions'));
+    const next = events(agent);
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Continue without an image.' }] });
+    assert.equal((await completed(next)).status, 'completed');
+    assert.ok(!fake.launches[1].args.includes('--settings'), 'Image permission must not persist into later turns');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const name of ['wild*card.png', 'paren).png', 'missing.png', 'directory']) test(`Antigravity refuses unsafe image permission paths: ${name}`, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
+  const file = path.join(dir, name);
+  if (name === 'directory') fs.mkdirSync(file);
+  else if (name !== 'missing.png') fs.writeFileSync(file, 'fixture');
+  const fake = fakeAgy([]), agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const seen = events(agent), { thread } = await agent.request('thread/start', { cwd: '/work' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'localImage', path: file }] });
+    assert.equal((await completed(seen)).status, 'failed');
+    assert.equal(fake.launches.length, 0);
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 function fakeClaude(script: (options: any) => AsyncGenerator<any>, account: Record<string, string> = { email: 'me@example.com', apiKeySource: 'ANTHROPIC_API_KEY', apiProvider: 'firstParty' }, currentModel: string | null = 'claude-opus-5-5') {
   const calls: { prompt: unknown; options: any }[] = [];
   const query = ((input: { prompt: unknown; options: any }) => {
@@ -251,7 +286,8 @@ test('GLM runs Claude Code on Zhipu\'s endpoint with only the GLM key, and offer
     assert.equal(options.env.ANTHROPIC_AUTH_TOKEN, 'zhipu-key');
     assert.equal(options.env.ANTHROPIC_API_KEY, undefined, 'an Anthropic key never goes to Zhipu');
     assert.equal(options.env.CLAUDE_CODE_USE_BEDROCK, undefined);
-    assert.equal(options.env.PATH, '/usr/bin');
+    assert.ok(options.env.PATH.startsWith('/usr/bin' + path.delimiter));
+    assert.ok(options.env.PATH.split(path.delimiter).includes(path.join(os.homedir(), '.nix-profile/bin')));
   }
   assert.equal(fake.calls.at(-1)!.options.model, 'glm-5.3-flash');
 });
@@ -562,4 +598,48 @@ test('read-only Claude CLI reviews disable tool access and project settings', as
     assert.equal(args[args.indexOf('--setting-sources') + 1], '');
     agent.close();
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('editing network SDK permissions allow web tools while retaining sandbox and other approvals', async () => {
+  const fake = fakeClaude(async function* (options) {
+    assert.equal(options.tools, undefined, 'editing tools remain available');
+    assert.deepEqual(options.allowedTools, ['WebSearch', 'WebFetch']);
+    assert.equal(options.permissionMode, 'acceptEdits');
+    assert.equal(options.sandbox.enabled, true);
+    assert.deepEqual(options.sandbox.network.allowedDomains, ['*']);
+    const context = { signal: new AbortController().signal };
+    for (const name of ['WebSearch', 'WebFetch']) assert.equal((await options.canUseTool(name, { query: 'paper' }, context)).behavior, 'allow');
+    assert.equal((await options.canUseTool('Bash', { command: 'outside-sandbox-command' }, context)).behavior, 'deny');
+    yield { type: 'result', subtype: 'success', result: 'Done.', session_id: options.sessionId };
+  });
+  const agent = new ClaudeAgent(fake.load, () => null);
+  const requests: any[] = [];
+  agent.on('request', message => { requests.push(message); agent.respond(message.id, { decision: 'decline' }); });
+  try {
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/tmp', sandbox: 'workspace-write', config: { web_search: 'live' } });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find and update a reference.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    assert.equal(requests.length, 1, 'only the non-web action requires approval');
+  } finally { agent.close(); }
+});
+
+test('editing network CLI permissions allow web access without bypassing sandbox or disabling editing', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-edit-web-cli-'));
+  let agent: ClaudeAgent | undefined;
+  try {
+    const fake = fakeClaudeCli(dir, { loggedIn: true, authMethod: 'claude.ai' }, [[{ type: 'result', subtype: 'success', is_error: false, result: 'Done.' }]]);
+    agent = new ClaudeAgent(async () => { throw Error('No SDK needed'); }, () => fake.bin, fake.launch as any);
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/resume', { threadId: 'existing-task', cwd: dir, sandbox: 'workspace-write', config: { web_search: 'live' } });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find and update a reference.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args;
+    assert.equal(args.includes('--tools'), false);
+    assert.equal(args[args.indexOf('--allowedTools') + 1], 'WebSearch,WebFetch');
+    assert.equal(args[args.indexOf('--permission-mode') + 1], 'acceptEdits');
+    const sandbox = JSON.parse(args[args.indexOf('--settings') + 1]).sandbox;
+    assert.equal(sandbox.enabled, true);
+    assert.deepEqual(sandbox.network.allowedDomains, ['*']);
+  } finally { agent?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

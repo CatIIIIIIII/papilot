@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
   workflow_call:
+    outputs:
+      verified:
+        description: All requested desktop targets built and launched successfully
+        value: ${{ jobs.verified.outputs.result }}
     inputs:
       quick:
         description: Check only the unpacked app on Apple silicon and Linux
@@ -109,3 +113,17 @@ jobs:
           path: test-results/desktop*.png
           if-no-files-found: ignore
           retention-days: 7
+
+  verified:
+    if: always()
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.verify.outputs.result }}
+    steps:
+      - id: verify
+        env:
+          RESULT: ${{ needs.build.result }}
+        run: |
+          test "$RESULT" = success
+          echo result=success >> "$GITHUB_OUTPUT"
