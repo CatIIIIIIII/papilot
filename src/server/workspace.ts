@@ -146,6 +146,7 @@ export class Workspace extends EventEmitter {
   }
   private agentOf(task: Task): AgentId { return task.agent && AGENTS.includes(task.agent) ? task.agent : 'codex'; }
   private disconnected(id: AgentId, e: unknown) {
+    if (this.closing) return;
     this.connectionEpochs.set(id, (this.connectionEpochs.get(id) || 0) + 1);
     this.runtimes[id].connected = false; this.runtimes[id].error = errorText(e);
     for (const [key, request] of this.requests) if (request.agent === id) this.requests.delete(key);
@@ -544,6 +545,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     this.emit('change');
   }
   private async notification(message: any, agent: AgentId = 'codex') {
+    if (this.closing) return;
     const p = message.params || {}, method = message.method;
     if (method === 'account/rateLimits/updated') {
       clearTimeout(this.usageTimers.get(agent));
@@ -607,6 +609,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     }
   }
   private serverRequest(message: any, agent: AgentId = 'codex') {
+    if (this.closing) return;
     const task = this.store.tasks().find(t => t.threadId === message.params?.threadId), runtime = this.agents[agent];
     const allowed = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput', 'item/tool/call'];
     if (!task || this.agentOf(task) !== agent || !this.active.has(task.id) || !allowed.includes(message.method)) { runtime.reject(message.id, 'This request is not supported or its turn is no longer active.'); return; }

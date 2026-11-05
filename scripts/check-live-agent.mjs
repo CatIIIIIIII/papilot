@@ -12,6 +12,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), `papilot-live-${agent}-`));
 process.env.PAPILOT_DATA = path.join(root, 'data');
 const { Store } = await import('../src/server/store.ts');
 const { Workspace } = await import('../src/server/workspace.ts');
+const { findSkill } = await import('../src/server/skills.ts');
 const { Codex } = await import('../src/server/codex.ts');
 const { reviewClient } = await import('../src/server/review.ts');
 const paper = path.join(root, 'paper'); fs.mkdirSync(paper);
@@ -62,8 +63,10 @@ async function wait(id) {
 try {
   observe(); await connect();
   const models = workspace.runtimes[agent].models; evidence.models = models;
+  const selected = process.env.PAPILOT_LIVE_MODEL;
+  if (selected) assert.ok(models.some(model => model.id === selected), 'The requested live model is unavailable');
   const project = await workspace.addProject(paper, 'Subscription integration fixture');
-  const created = await workspace.createTask({ id: randomUUID(), projectId: project.id, agent, title: 'Live integration', instructions: 'Read main.tex. Change only "The original sentence." to "The revised sentence." Do not run git or network commands. Then reply briefly.' });
+  const created = await workspace.createTask({ id: randomUUID(), projectId: project.id, agent, ...(selected ? { model: selected } : {}), title: 'Live integration', instructions: 'Read main.tex. Change only "The original sentence." to "The revised sentence." Do not run git or network commands. Then reply briefly.' });
   let task = await wait(created.id);
   assert.match(fs.readFileSync(path.join(task.worktree, 'main.tex'), 'utf8'), /The revised sentence/);
   assert.ok(evidence.events['item/agentMessage/delta'] > 0, 'Real streaming reply was not observed');
@@ -81,6 +84,24 @@ try {
   task = await wait(task.id);
   assert.match(fs.readFileSync(path.join(task.worktree, 'main.tex'), 'utf8'), /The final sentence/);
   evidence.checks.push('continued-conversation', 'restart-resume', ...(other ? ['model-switch', 'effort'] : []));
+  if (process.env.PAPILOT_LIVE_EXTENDED === '1') {
+    const folder = path.join(paper, '.papilot/skills'); fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'vision-fixture.md'), '---\nname: Vision fixture\ndescription: Identify a supplied square\n---\nRead the attached image. Replace only the final sentence in main.tex with "The square is COLOR." using the actual color in lowercase. Do not change other files.');
+    const attachment = await workspace.attachments.upload(project.id, 'owner', 'square.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC', 'base64'));
+    await workspace.enqueue(task.id, 'Apply the selected skill to the attached image.', randomUUID(), false, { skill: findSkill(paper, 'vision-fixture'), attachments: [attachment.id] });
+    task = await wait(task.id);
+    assert.match(fs.readFileSync(path.join(task.worktree, 'main.tex'), 'utf8'), /The square is red/);
+    evidence.checks.push('image-attachment', 'paper-skill');
+    await workspace.enqueue(task.id, 'Do not edit files. Write a very long explanation of LaTeX line breaking, at least 3000 words.', randomUUID());
+    const until = Date.now() + 30000;
+    while (!store.task(task.id).turnId && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(store.task(task.id).turnId, 'No running turn to stop');
+    await workspace.interrupt(task.id);
+    const stoppedBy = Date.now() + 30000;
+    while (store.task(task.id).status === 'running' && Date.now() < stoppedBy) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(store.task(task.id).status, 'interrupted');
+    evidence.checks.push('stop-real-turn');
+  }
   evidence.passed = true;
 } catch (error) { evidence.passed = false; evidence.error = String(error); process.exitCode = 1; }
 finally {

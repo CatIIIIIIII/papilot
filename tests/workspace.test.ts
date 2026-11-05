@@ -74,6 +74,15 @@ const taskModels = [
   { id: 'small', name: 'Small', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'low' },
 ];
 
+test('late agent events after shutdown never touch the closed database', async () => {
+  const f = fixture();
+  uncertainRun(f);
+  f.close();
+  assert.doesNotThrow(() => f.codex.emit('disconnected', new Error('Process exited after shutdown')));
+  assert.doesNotThrow(() => f.codex.emit('request', { id: 'late', method: 'item/commandExecution/requestApproval', params: { threadId: 'thread' } }));
+  await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'late', status: 'interrupted' } } });
+});
+
 test('Codex defaults come from configuration, including profiles and models outside the catalog', async () => {
   const f = fixture();
   let config: any = { model: 'small' }, configFailure = false, catalogFailure = false;
