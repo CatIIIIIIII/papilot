@@ -175,10 +175,15 @@ try {
     await moved.waitForURL('http://127.0.0.1:*/');
     assert.notEqual(new URL(moved.url()).origin, origin, 'An occupied saved port falls back to a free port');
     if (process.platform === 'linux') {
-      const closed = application.waitForEvent('close');
-      await moved.getByRole('button', { name: /^(Close window|关闭窗口)$/ }).click();
-      await closed;
       const movedOrigin = new URL(moved.url()).origin;
+      const closed = application.waitForEvent('close');
+      // The close button can quit Electron before Playwright finishes its click.
+      // Accept only that expected teardown; still require the app close event
+      // and the backend shutdown check below.
+      await moved.getByRole('button', { name: /^(Close window|关闭窗口)$/ }).click().catch(error => {
+        if (!moved.isClosed() || !/Target page, context or browser has been closed/.test(String(error))) throw error;
+      });
+      await closed;
       await assert.rejects(fetch(`${movedOrigin}/api/health`, { signal: AbortSignal.timeout(5000) }), 'Closing the Linux window stops the backend');
     } else await application.close();
     application = null;
