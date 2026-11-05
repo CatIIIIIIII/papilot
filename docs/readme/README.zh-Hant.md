@@ -1,82 +1,76 @@
 <div align="center">
 
-<h1>
-  <img src="../assets/wordmark.svg#gh-light-mode-only" width="280" height="88" alt="Papilot">
-  <img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="280" height="88" alt="Papilot">
-</h1>
+<img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**新世代 AI LaTeX 編輯器**
 
-<p><b>使用 AI 修訂 LaTeX 論文，並在 PDF 上審閱變更。</b></p>
+# 不必讀寫 `.tex`<br>直接在 <img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF"> 上作業
 
-<p><a href="https://papilot.ai">網站</a> · <a href="../guide.md">說明文件</a></p>
+以 AI 進行負責任寫作與排版的**全新典範**。
 
-<p data-language-switcher><a href="../../README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-Hant.md">繁體中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.pt.md">Português</a> · <a href="README.it.md">Italiano</a> · <a href="README.sv.md">Svenska</a></p>
+**[下載 Papilot](https://github.com/PapilotAI/papilot/releases/latest)** 支援 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>與 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS)，<br>或執行 `npm install -g papilot`。
 
-[![CI](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2563eb)](../../LICENSE)
-
-<p><img src="../assets/demo.gif" alt="Papilot：在 PDF 上標記段落、交由智慧代理處理，並審閱排版後的變更" width="100%"></p>
+<a href="https://papilot.ai">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/hero-dark.png">
+  <source media="(max-width: 600px)" srcset="../assets/readme-showcase/hero-compact.png">
+  <img src="../assets/readme-showcase/hero.png" alt="Papilot 在 PDF 上以排版後的前後對照呈現 AI 編輯內容，並提供接受、拒絕與評論功能。" width="900">
+</picture>
+</a>
 
 </div>
 
-Papilot 是用於與 AI 智慧代理共同撰寫及修訂 LaTeX 論文的本機工作區。在 PDF 上標記段落與公式，讓智慧代理編輯獨立的原始碼副本，接著審閱排版後的變更並選擇要保留的修改。
+<a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
+
+## 📄 你在意的是 PDF<br>而非背後的 `.tex`
+
+論文、學位論文、書籍、投影片：讀者只會看到排版後的頁面。<br>
+**因此，頁面也該是你工作的地方。**
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/paradigm-dark.png">
+    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact.png">
+    <img src="../assets/readme-showcase/paradigm.png" alt="從手寫 LaTeX，到檢查 AI 產生的 LaTeX 差異，再到現在的 Papilot：直接審閱 PDF。" width="900">
+  </picture>
+</p>
+
+**不必再於腦中編譯差異。**<br>
+原始碼差異迫使你*想像* PDF 的樣貌。Papilot 則直接將排版後的結果*呈現*在你眼前。
+
+<a id="-point-at-the-page-and-say-what-you-want"></a>
+
+## 👉 指著頁面，說出你的需求
+
+標記句子、公式或圖表，並寫下註解。<br>
+**你的智慧代理會自動找到原始碼。你完全不必打開 `.tex` 檔案。**
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/notes-app-dark.png">
+    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact.png">
+    <img src="../assets/readme-showcase/notes-app.png" alt="Papilot 在 PDF 上將一個公式框起並標記一個句子，兩者皆附有註解，並已加入下一個任務。" width="900">
+  </picture>
+</p>
 
 <a id="features"></a>
 
-## 功能特色
+<a id="-your-files-stay-yours"></a>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<a href="../assets/readme-note.jpg"><img src="../assets/readme-note.jpg" alt="PDF 上依顏色分組的段落註解與框選的公式註解"></a>
-<h3>在 PDF 上加上註解</h3>
-選取句子或框選公式，並說明需要修改的內容。依顏色將相關註解分組，即可對多個段落同時下達同一條指令。
-</td>
-<td width="50%" valign="top">
-<a href="../assets/readme-review.jpg"><img src="../assets/readme-review.jpg" alt="頁面上的排版前後差異對比，附有接受、拒絕與評論按鈕"></a>
-<h3>審閱每一項變更</h3>
-對比修改前後的排版頁面，包含公式重新編號等其他位置的連帶變更。您可以接受、拒絕或評論每一處修改，並在審閱過程中隨時復原決定。
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<a href="../assets/readme-deliver.jpg"><img src="../assets/readme-deliver.jpg" alt="將已接受的修改套用至論文原稿"></a>
-<h3>選擇修改的套用位置</h3>
-每項新任務都會在獨立的論文副本上運作。審閱修改後，選擇 **提交至論文原稿** 將此任務儲存為目前分支上的一次提交，或選擇 **套用至工作區** 保留修改而不提交。若同一段落在這段期間也發生了變更，AI 會自動解決衝突，僅在目標內容不明確時向您詢問。儲存前可先審閱合併後的 PDF，準備就緒後即可從 Git 面板推送。
-</td>
-<td width="50%" valign="top">
-<a href="../assets/readme-git.jpg"><img src="../assets/readme-git.jpg" alt="顯示已暫存檔案、自動產生的提交訊息與提交圖表的 Git 面板"></a>
-<h3>搭配 Git 使用</h3>
-在工作區中暫存並提交檔案、拉取及推送變更。智慧代理可協助起草提交訊息並解決合併衝突；提交圖表則會顯示每項任務的工作樹。
-</td>
-</tr>
-</table>
+## 🔒 你的檔案完全屬於你
 
-- **[技能](../guide.md#skills)與[附件](../guide.md#task-attachments)：** 執行 `/` 技能以潤飾文句、校對或檢查數學公式，在「設定」中定義自訂技能，並將參考檔案或圖片附加至任務與訊息中。
-- **閱讀與工作區：** 透過 PDF 目錄與全文搜尋瀏覽論文原稿，支援淺色與深色主題，以及英文或中文介面。
+<img src="../assets/readme-icons/folder.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**儲存在本機的純文字檔案。** 每次變更都會記錄在你的 Git 歷史紀錄中。
 
-<a id="quick-start"></a>
+<img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**透過 Git 與共同作者同步。** 拉取、推送，並讓智慧代理解決衝突。
 
-## 快速開始
-
-如需 macOS 與 Linux 桌面版應用程式以及本機建置說明，請參閱 [Papilot Desktop](../../desktop/README.md)。桌面版 CI 會建置 Apple Silicon 與 Intel Mac 安裝程式，以及 Linux x64 AppImage 與 deb 套件。
-
-Papilot 需要 **Node.js 22.22+**、**Git**，以及包含 `latexmk` 與 `synctex` 的完整 **TeX** 發行版（[MacTeX](https://www.tug.org/mactex/) 或 [TeX Live](https://www.tug.org/texlive/)）。修訂論文還需要至少設定一個[智慧代理](#agents)。
-
-```sh
-npm install -g papilot
-papilot demo
-```
-
-開啟 [http://127.0.0.1:7274](http://127.0.0.1:7274) 並在側邊欄選取 **論文原稿**，即可瀏覽內建的範例論文。
-
-若要處理您自己的論文原稿，請執行 `papilot` 並選擇 **新增論文…** 以開啟本機 LaTeX 資料夾或 ZIP 壓縮檔。Papilot 會尋找主要的 `.tex` 檔案、在需要時準備 Git 歷史紀錄，並嘗試編譯。若主檔案不明確或建置失敗，匯入對話框會協助您選擇檔案或修正問題。
-
-可在 **設定 → 執行環境** 下的 **智慧代理** 或 **LaTeX** 中檢查您的環境設定。執行 `papilot doctor` 可進行環境檢查，或執行 `papilot doctor --repo /path/to/paper` 一併檢查論文原稿（[診斷說明](../guide.md#diagnostics)）。
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**免費且開源。** 採用 MIT 授權條款，支援 macOS 與 Linux。
 
 <a id="agents"></a>
 
-## 智慧代理
+<a id="-bring-the-ai-agent-you-already-use"></a>
+
+## 🤖 接入你慣用的 AI 智慧代理
 
 <!-- BEGIN AGENT ICONS -->
 <p align="center">
@@ -91,20 +85,36 @@ papilot demo
 </p>
 <!-- END AGENT ICONS -->
 
-您可以為每項任務選擇智慧代理與模型。根據整合方式的不同，Papilot 會使用智慧代理的本機 CLI 登入狀態或您提供的服務商 API 憑證來執行智慧代理，且不會儲存您的金鑰。
+<a id="quick-start"></a>
 
-開啟 **設定 → 執行環境 → 智慧代理** 以查看狀態、可用模型與設定說明（例如 `papilot codex login`）。若在 Papilot 執行期間安裝或登入智慧代理，請點擊 **重新連線**；若變更了環境變數，請重新啟動 `papilot`。各智慧代理的系統需求與功能請參閱[智慧代理指南](../guide.md#agents)。
+<a id="-get-started"></a>
+
+## 🚀 快速開始
+
+1. **安裝。** [下載應用程式](https://github.com/PapilotAI/papilot/releases/latest)（支援 macOS 或 Linux），或執行 `npm install -g papilot`（需 Node.js 22.22+）。你還需要安裝 Git 以及 TeX Live 或 MacTeX。
+2. **開啟專案。** 選擇包含 `.tex` 檔案的資料夾。Papilot 會自動建置 PDF。
+3. **選擇智慧代理。** 使用你現有的 CLI 登入憑證或 API 金鑰，接著就能在頁面上標記。
+
+想先試用範例嗎？請執行 `papilot demo`。詳細說明請參閱[使用指南](../guide.md#install-and-run)。
 
 <a id="documentation-and-community"></a>
 
-## 說明文件與社群
+<a id="-community"></a>
 
-- **說明文件：** 閱讀[使用者指南](../guide.md)，了解工作區工作流程、環境設定、[應用程式內更新](../guide.md#updates)、[透過 Tailscale 遠端存取](../guide.md#remote-access-with-tailscale)，以及[與協作者分享通行金鑰](../guide.md#collaborators)。
-- **設計與歷史紀錄：** 瀏覽 [`examples/papilot-paper`](../../examples/papilot-paper) 以查閱正式設計論文與證明，並查看[更新日誌](../../CHANGELOG.md)了解版本發行說明。
-- **社群與支援：** 在 [Discussions](https://github.com/PapilotAI/papilot/discussions) 中提問、在 [Issues](https://github.com/PapilotAI/papilot/issues) 中回報錯誤，或閱讀 [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) 了解如何參與貢獻。
+## 🤝 社群
+
+<img src="../assets/readme-icons/issue.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**發現錯誤或缺少某項功能？** 歡迎[建立 Issue](https://github.com/PapilotAI/papilot/issues/new/choose)，即使只是初步想法也沒問題。
+
+<img src="../assets/readme-icons/discussion.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**有任何問題或點子？** 歡迎[發起討論](https://github.com/PapilotAI/papilot/discussions)。
+
+<img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**成為貢獻者。** 非常歡迎提交 Pull Request，包含由 AI 智慧代理協助撰寫的程式碼。請從[貢獻指南](../../.github/CONTRIBUTING.md)開始。
 
 ---
 
-[MIT](../../LICENSE) © 2026 PapilotAI
+<div align="center">
 
-友情連結：[LINUX DO](https://linux.do/)。
+<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center"><sub><a href="../../LICENSE">MIT</a> © 2026 PapilotAI. 感謝 <a href="https://linux.do/">LINUX DO</a> 夥伴們的支持。</sub></p>

@@ -55,8 +55,23 @@ test('README regeneration writes translations under docs and leaves the root ent
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-readme-'));
   try {
     fs.copyFileSync(path.join(root, 'README.md'), path.join(directory, 'README.md'));
+    fs.cpSync(path.join(root, 'docs/assets/readme-showcase'), path.join(directory, 'docs/assets/readme-showcase'), { recursive: true });
     renderReadme(directory, JSON.parse(fs.readFileSync(path.join(root, 'i18n/readme/zh-CN.json'), 'utf8')), 'zh-CN');
     assert.deepEqual(fs.readdirSync(directory).sort(), ['README.md', 'docs']);
     assert.equal(fs.readFileSync(path.join(directory, 'docs/readme/README.zh-CN.md'), 'utf8'), fs.readFileSync(path.join(root, 'docs/readme/README.zh-CN.md'), 'utf8'));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+test('README translations use the translated copy of an image when one exists', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-readme-'));
+  try {
+    const source = '## Title\n\n<img src="docs/a.png" alt="A"> <img src="docs/b.png" alt="B"> <img src="https://example.com/c.png" alt="C">\n';
+    fs.writeFileSync(path.join(directory, 'README.md'), source);
+    fs.mkdirSync(path.join(directory, 'docs'));
+    fs.writeFileSync(path.join(directory, 'docs/a.ja.png'), '');
+    renderReadme(directory, { [source]: source.replace('Title', 'タイトル') }, 'ja');
+    const markdown = fs.readFileSync(path.join(directory, 'docs/readme/README.ja.md'), 'utf8');
+    assert.match(markdown, /src="\.\.\/a\.ja\.png"/);
+    assert.match(markdown, /src="\.\.\/b\.png"/);
+    assert.match(markdown, /src="https:\/\/example\.com\/c\.png"/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
