@@ -17,8 +17,8 @@ import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
 import { type Accounts, deviceLabel } from './accounts.ts';
-import { type Listener, Limiter, SESSION_COOKIE, author, clientAddress, cookie, equals, guard, viewerInfo, visibleSnapshot } from './access.ts';
-import { isTaskReviewNote, isAgentId, type AgentId, type NoteSummary } from '../shared.ts';
+import { type Listener, type Viewer, Limiter, SESSION_COOKIE, author, clientAddress, cookie, equals, guard, viewerInfo, visibleSnapshot } from './access.ts';
+import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote } from '../shared.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
 import { taskNoteResults } from './note-results.ts';
 import type { Updates } from './updates.ts';
@@ -43,6 +43,30 @@ export function gitQueue() {
     queue.set(projectId, run);
     return run.finally(() => { if (queue.get(projectId) === run) queue.delete(projectId); });
   };
+}
+
+// Quick notes as one person saved them: up to eight, each with a unique id.
+// A preset may keep only its id; one added in settings needs a name for the
+// wheel and an instruction for the agent.
+function readQuickNotes(value: unknown): QuickNote[] {
+  const invalid = () => new Error('Invalid quick notes.');
+  if (!Array.isArray(value) || !value.length || value.length > QUICK_NOTE_LIMIT) throw invalid();
+  const ids = new Set<string>();
+  return value.map(entry => {
+    const { id, label, instruction, icon } = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
+    if (typeof id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(id) || ids.has(id)) throw invalid();
+    ids.add(id);
+    const text = (field: unknown, max: number) => {
+      if (field === undefined) return undefined;
+      const clean = typeof field === 'string' ? field.trim() : '';
+      if (!clean || clean.length > max) throw invalid();
+      return clean;
+    };
+    const name = text(label, 40)?.replace(/[·\s]+/g, ' '), said = text(instruction, 1000);
+    if ((!name || !said) && !PRESET_QUICK_NOTES.includes(id)) throw invalid();
+    if (icon !== undefined && (typeof icon !== 'string' || !/^[a-zA-Z]{1,40}$/.test(icon))) throw invalid();
+    return { id, ...(name ? { label: name } : {}), ...(said ? { instruction: said } : {}), ...(icon ? { icon } : {}) };
+  });
 }
 
 export interface AppOptions {
@@ -181,6 +205,16 @@ export async function buildApp(options: AppOptions) {
   app.get('/api/state', any, request => {
     const viewer = request.viewer!;
     return { ...visibleSnapshot(workspace.snapshot(), viewer, accounts), csrf: csrfFor(viewer), viewer: viewerInfo(viewer, accounts) };
+  });
+  // Each person's quick notes for the magic pen, the same on every device they
+  // sign in from. None saved means the presets.
+  const person = (viewer: Viewer) => viewer.listener === 'local' ? accounts.owner().id : viewer.user.id;
+  app.get('/api/quick-notes', any, request => ({ quickNotes: store.preference<QuickNote[]>(person(request.viewer!), 'quick-notes') || null }));
+  app.post('/api/quick-notes', any, request => {
+    const value = (request.body as any)?.quickNotes;
+    const quickNotes = value === null ? undefined : readQuickNotes(value);
+    store.savePreference(person(request.viewer!), 'quick-notes', quickNotes);
+    return { quickNotes: quickNotes || null };
   });
   // Signed-in people get at most a few event streams each.
   const streams = new Map<string, number>();
@@ -398,11 +432,15 @@ export async function buildApp(options: AppOptions) {
     if (!isRect(b.rect)) throw new Error('Select text or mark a region on the page first.');
     const rects = Array.isArray(b.rects) ? b.rects.slice(0, 80).filter(isRect) : [];
     if (b.group !== undefined && !isNoteGroup(b.group)) throw new Error('Invalid annotation group.');
-    const comment = b.group ? optional(b.comment, 'Note', 4000) : string(b.comment, 'Note', 4000), key = string(b.key, 'Preview key', 64), page = Number(b.page);
+    if (b.kind !== undefined && !isMarkKind(b.kind)) throw new Error('Invalid kind of mark.');
+    // A quick note's name labels its mark; its comment is the instruction.
+    const stamp = b.stamp === undefined ? '' : string(b.stamp, 'Quick note name', 40).replace(/[·\n]/g, ' ').trim();
+    // A delete mark may name a replacement; with none, the text simply goes.
+    const comment = b.group || b.kind === 'delete' ? optional(b.comment, 'Note', 4000) : string(b.comment, 'Note', 4000), key = string(b.key, 'Preview key', 64), page = Number(b.page);
     const selected = typeof b.quote === 'string' ? b.quote.slice(0, 2000) : '';
     const { quote, source } = await manuscripts.locate(project.id, key, page, b.rect, rects, selected);
     const by = author(request.viewer);
-    return store.saveAnnotation({ id: randomUUID(), projectId: project.id, key, page, rect: b.rect, ...(b.group ? { group: b.group } : {}), ...(rects.length ? { rects } : {}), comment, quote, source, createdAt: Date.now(), ...(by ? { author: by } : {}) });
+    return store.saveAnnotation({ id: randomUUID(), projectId: project.id, key, page, rect: b.rect, ...(b.group ? { group: b.group } : {}), ...(b.kind ? { kind: b.kind } : {}), ...(stamp ? { stamp } : {}), ...(rects.length ? { rects } : {}), comment, quote, source, createdAt: Date.now(), ...(by ? { author: by } : {}) });
   });
   app.post<{ Params: { id: string; note: string } }>('/api/projects/:id/annotations/:note', project(), request => {
     const note = store.annotation(request.params.id, request.params.note);
@@ -410,7 +448,8 @@ export async function buildApp(options: AppOptions) {
     if (workspace.annotationSending(note.id)) throw new Error('This note is being sent. Wait for the task to finish creating.');
     if (note.taskId) throw new Error('This note has already been sent.');
     if (note.deletedAt !== undefined) throw new Error('This note has been deleted. Undo the deletion first.');
-    return store.saveAnnotation({ ...note, comment: string((request.body as any)?.comment, 'Note', 4000) });
+    const comment = (request.body as any)?.comment;
+    return store.saveAnnotation({ ...note, comment: note.kind === 'delete' ? optional(comment, 'Note', 4000) : string(comment, 'Note', 4000) });
   });
   app.post<{ Params: { id: string; note: string } }>('/api/projects/:id/annotations/:note/delete', project(), request => {
     const note = store.annotation(request.params.id, request.params.note);
@@ -458,7 +497,8 @@ export async function buildApp(options: AppOptions) {
   app.get<{ Params: { id: string }; Querystring: { key?: string } }>('/api/projects/:id/manuscript/annotated.pdf', project(), async (request, reply) => {
     const project = store.project(request.params.id), key = String(request.query.key || '');
     const notes = store.annotations(project.id).filter(note => !note.taskId && !isTaskReviewNote(note) && note.key === key)
-      .map(note => ({ page: note.page, rect: note.rect, rects: note.rects, comment: note.comment, group: note.group, review: Boolean(note.aiReview), author: note.author?.name }));
+      // A deletion's card, if any, gives its replacement.
+      .map(note => ({ page: note.page, rect: note.rect, rects: note.rects, comment: note.kind === 'delete' && note.comment.trim() ? `→ ${note.comment}` : note.comment, group: note.group, review: Boolean(note.aiReview), author: note.author?.name, ...(note.kind === 'delete' ? { strike: true } : {}) }));
     const pdf = await manuscripts.annotatedPdf(project.id, key, notes);
     return reply.type('application/pdf').header('Content-Disposition', `attachment; filename="${pdfName(project.name, '-annotated')}"`).header('Cache-Control', 'no-store').send(Buffer.from(pdf.buffer, pdf.byteOffset, pdf.byteLength));
   });
@@ -577,7 +617,7 @@ export async function buildApp(options: AppOptions) {
         if (!equals(String(request.headers['x-review-token'] || ''), client.token)) return reply.code(403).send({ error: 'This review page has expired. Refresh it and try again.' });
       }
       const reviewTask = request.method === 'POST' ? store.tasks().find(t => t.projectId === project.id && t.name === route.split('/')[3]) : undefined;
-      const writesFiles = route.endsWith('/undo') || (route.endsWith('/decide') && (request.body as any)?.action !== 'comment');
+      const writesFiles = route.endsWith('/source') || route.endsWith('/undo') || (route.endsWith('/decide') && (request.body as any)?.action !== 'comment');
       if (request.method === 'POST' && writesFiles) string((request.body as any)?.id, 'Review action ID', 80);
       const forward = async () => {
         const search = new URL(request.url, 'http://localhost').search;

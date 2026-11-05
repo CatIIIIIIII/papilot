@@ -22,6 +22,7 @@ export function writeJson(file, value) {
 // Updates live beside the database, never over a global installation or checkout.
 // All launch methods (CLI, npm start, launchd) enter through main.ts.
 export function activeInstallation(root, data) {
+  if (process.env.PAPILOT_INSTALL_METHOD === 'nix') return root;
   const active = readJson(path.join(data, 'updates/active.json'));
   const version = readJson(path.join(root, 'package.json'))?.version;
   if (!active || !releaseVersion(active.version)) return root;
@@ -39,6 +40,7 @@ export function activeInstallation(root, data) {
   return active.root;
 }
 export async function waitForActivation(data) {
+  if (process.env.PAPILOT_INSTALL_METHOD === 'nix') return;
   const file = path.join(data, 'updates/active.json');
   for (let attempt = 0; attempt < 200; attempt++) {
     const active = readJson(file);

@@ -35,24 +35,8 @@ export interface AgentRuntime extends EventEmitter {
 
 export { AGENT_NAMES };
 
-// Where agent CLIs install themselves. A background service's PATH often
-// lacks these folders, so a CLI not on PATH is looked for here too.
-export function agentDirs(env: NodeJS.ProcessEnv = process.env) {
-  const home = env.HOME || os.homedir();
-  return ['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)).concat('/opt/homebrew/bin', '/usr/local/bin');
-}
-// The executable a command name resolves to on PATH or in an agent folder (or the path itself), or null.
-export function findExecutable(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  const windows = process.platform === 'win32';
-  const extensions = windows ? ['', ...(env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')] : [''];
-  const usable = (file: string) => {
-    try { if (!fs.statSync(file).isFile()) return false; fs.accessSync(file, windows ? fs.constants.F_OK : fs.constants.X_OK); return true; } catch { return false; }
-  };
-  const candidates = command.includes('/') || (windows && command.includes('\\')) ? [path.resolve(command)]
-    : [...new Set([...(env.PATH || '').split(path.delimiter).filter(Boolean), ...agentDirs(env)])].map(dir => path.join(dir, command));
-  for (const candidate of candidates) for (const extension of extensions) if (usable(candidate + extension)) return candidate + extension;
-  return null;
-}
+import { agentDirs, findExecutable, agentPath } from '../../bin/agent-paths.mjs';
+export { agentDirs, findExecutable };
 
 export interface Thread { fullAccess?: boolean; readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
@@ -75,8 +59,9 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
     if (method === 'thread/start' || method === 'thread/resume') {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
-      this.threads.set(id, { fullAccess: params.sandbox === 'danger-full-access', readOnly: params.sandbox === 'read-only', webSearch: params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model: params.model || known?.model || null, started: method === 'thread/resume' || Boolean(known?.started) });
-      return { thread: { id }, model: params.model || null };
+      const model = params.model || known?.model || null;
+      this.threads.set(id, { fullAccess: params.sandbox === 'danger-full-access', readOnly: params.sandbox === 'read-only', webSearch: params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      return { thread: { id }, model };
     }
     if (method === 'turn/start') {
       const thread = this.threads.get(String(params.threadId));
@@ -132,6 +117,10 @@ const PACKAGES = path.join(DATA, 'agents');
 export async function loadPackage(name: string, version: string, label: string, ready: () => void = () => {}): Promise<any> {
   try { return await import(name); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ERR_MODULE_NOT_FOUND') throw error; }
+  if (process.env.PAPILOT_INSTALL_METHOD === 'nix') {
+    const entry = createRequire(path.join(ROOT, 'nix-agent-runtime/package.json')).resolve(name);
+    return import(pathToFileURL(entry).href);
+  }
   const prefix = PACKAGES, resolve = () => createRequire(path.join(prefix, 'package.json')).resolve(name);
   let entry: string;
   try { entry = resolve(); } catch {
@@ -145,7 +134,7 @@ export async function loadPackage(name: string, version: string, label: string, 
 // The file a package loaded from: Papilot's own dependencies, or the copy
 // fetched on first use.
 export function packageFile(name: string) {
-  for (const from of [import.meta.url, path.join(PACKAGES, 'package.json')]) {
+  for (const from of [import.meta.url, ...(process.env.PAPILOT_INSTALL_METHOD === 'nix' ? [path.join(ROOT, 'nix-agent-runtime/package.json')] : [path.join(PACKAGES, 'package.json')])]) {
     try { return createRequire(from).resolve(name); } catch { /* Not installed there. */ }
   }
   return null;
@@ -184,7 +173,7 @@ type Launch = (command: string, args: string[], options: { cwd: string; env: Nod
 
 export class ClaudeAgent extends Adapter {
   protected name = 'Claude';
-  protected info: { account: AccountInfo | null; models: ModelInfo[] } = { account: null, models: [] };
+  protected info: { account: AccountInfo | null; models: ModelInfo[]; model: string | null } = { account: null, models: [], model: null };
   private rateLimits = new Map<string, SDKRateLimitInfo>();
   private defaults = new Map<string, string>();
   private approvals = new Map<string, { resolve: (result: PermissionResult) => void; input: Record<string, unknown>; kind: 'tool' | 'question'; questions: string[] }>();
@@ -196,7 +185,7 @@ export class ClaudeAgent extends Adapter {
   detect() { return Boolean(this.findCli()) || claudeConfigured(); }
   async preload() { if (packageFile('@anthropic-ai/claude-agent-sdk')) await this.load(); }
   // The environment Claude Code runs with; undefined keeps Papilot's own.
-  protected environment(): Record<string, string> | undefined { return undefined; }
+  protected environment(): Record<string, string> | undefined { return Object.fromEntries(Object.entries({ ...process.env, PATH: agentPath() }).filter((entry): entry is [string, string] => entry[1] !== undefined)); }
   async start() {
     if (this.ready) return;
     this.cli = this.findCli();
@@ -205,7 +194,7 @@ export class ClaudeAgent extends Adapter {
       const status = await promisify(execFile)(this.cli, ['auth', 'status', '--json'], { timeout: 20000 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout || '{}' }));
       try { this.login = JSON.parse(status.stdout); } catch { this.login = null; }
       // Claude Code's own model list, with versions and efforts; the aliases stand in if it cannot be read.
-      this.info.models = this.login?.loggedIn ? await this.listModels(this.cli).catch(() => []) : [];
+      Object.assign(this.info, this.login?.loggedIn ? await this.listModels(this.cli).catch(() => ({ models: [], model: null })) : { models: [], model: null });
       this.ready = true;
       return;
     }
@@ -217,7 +206,8 @@ export class ClaudeAgent extends Adapter {
     const probe = query({ prompt: idle, options: { cwd: os.homedir(), settingSources: [], ...(env ? { env } : {}) } });
     try {
       const [account, models] = await Promise.all([probe.accountInfo(), probe.supportedModels()]);
-      this.info = { account, models };
+      const context = typeof probe.getContextUsage === 'function' ? await probe.getContextUsage({ detail: 'summary' }).catch(() => null) : null;
+      this.info = { account, models, model: context?.model || null };
       this.ready = true;
     } finally { finish(); probe.close(); }
   }
@@ -226,22 +216,32 @@ export class ClaudeAgent extends Adapter {
   // credentials: Anthropic does not accept a Claude subscription login through the SDK.
   // Claude Code answers an initialize request with its models before any
   // prompt is sent; reading them sends nothing to a model.
-  private async listModels(cli: string): Promise<ModelInfo[]> {
-    const child = this.launch(cli, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none'], { cwd: os.homedir(), env: this.environment() || process.env });
+  private async listModels(cli: string): Promise<{ models: ModelInfo[]; model: string | null }> {
+    const child = this.launch(cli, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--permission-prompts', 'none', '--setting-sources', ''], { cwd: os.homedir(), env: this.environment() || process.env });
+    let pending: { id: string; resolve: (value: any) => void; reject: (error: Error) => void } | undefined;
+    const request = (id: string, body: object, timeout: number): Promise<any> => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { pending = undefined; reject(new Error('Claude Code did not list its models.')); }, timeout);
+      pending = { id, resolve: value => { clearTimeout(timer); pending = undefined; resolve(value); }, reject: error => { clearTimeout(timer); pending = undefined; reject(error); } };
+      child.stdin!.write(JSON.stringify({ type: 'control_request', request_id: id, request: body }) + '\n');
+    });
+    createInterface({ input: child.stdout! }).on('line', line => {
+      let message: any;
+      try { message = JSON.parse(line); } catch { return; }
+      const response = message.type === 'control_response' ? message.response : null;
+      if (pending && response?.request_id === pending.id) {
+        if (response.subtype === 'error') pending.reject(new Error(response.error || 'Unsupported request.'));
+        else pending.resolve(response.response);
+      }
+    });
+    child.once('error', error => pending?.reject(error));
+    child.once('close', () => pending?.reject(new Error('Claude Code exited before listing its models.')));
+    child.stdin!.on('error', error => pending?.reject(error));
     try {
-      return await new Promise<ModelInfo[]>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Claude Code did not list its models.')), 20000);
-        createInterface({ input: child.stdout! }).on('line', line => {
-          let message: any;
-          try { message = JSON.parse(line); } catch { return; }
-          const response = message.type === 'control_response' ? message.response : null;
-          if (response?.request_id === 'papilot-models') { clearTimeout(timer); Array.isArray(response.response?.models) ? resolve(response.response.models) : reject(new Error(response.error || 'No models.')); }
-        });
-        child.once('error', error => { clearTimeout(timer); reject(error); });
-        child.once('close', () => { clearTimeout(timer); reject(new Error('Claude Code exited before listing its models.')); });
-        child.stdin!.on('error', () => {});
-        child.stdin!.write(JSON.stringify({ type: 'control_request', request_id: 'papilot-models', request: { subtype: 'initialize' } }) + '\n');
-      });
+      const initialized = await request('papilot-models', { subtype: 'initialize' }, 20000);
+      // Summary uses local estimates, without token-count API calls or generation.
+      // Older CLIs can list models without exposing their current selection.
+      const context = await request('papilot-model', { subtype: 'get_context_usage', detail: 'summary' }, 5000).catch(() => null);
+      return { models: Array.isArray(initialized?.models) ? initialized.models : [], model: typeof context?.model === 'string' ? context.model : null };
     } finally { child.kill(); }
   }
   protected account() {
@@ -257,11 +257,16 @@ export class ClaudeAgent extends Adapter {
     return { account: null, requiresOpenaiAuth: true, reason: CLAUDE_KEY };
   }
   protected models() {
-    if (this.cli && !this.info.models.length) return { data: CLAUDE_CLI_MODELS.map(model => ({ model: model.model, displayName: model.displayName, isDefault: false, supportedReasoningEfforts: model.efforts.map(effort => ({ reasoningEffort: effort })), defaultReasoningEffort: null })) };
-    const all = this.info.models, preferred = all.find(model => model.value === 'default');
-    const data = all.filter(model => model.value !== 'default').map(model => ({
+    const all: ModelInfo[] = this.cli && !this.info.models.length
+      ? CLAUDE_CLI_MODELS.map(model => ({ value: model.model, displayName: model.displayName, description: '', supportedEffortLevels: model.efforts as ModelInfo['supportedEffortLevels'] }))
+      : this.info.models.filter(model => model.value !== 'default');
+    // The list's "default" row is a recommendation. Only a reported current
+    // model can mark a default; don't assume Opus when a CLI omits that data.
+    const preferred = all.find(model => model.value === this.info.model || model.resolvedModel === this.info.model);
+    const models: ModelInfo[] = this.info.model && !preferred ? [...all, { value: this.info.model, displayName: this.info.model, description: '' }] : all;
+    const data = models.map(model => ({
       model: model.value, displayName: model.displayName,
-      isDefault: Boolean(preferred?.resolvedModel ? model.resolvedModel === preferred.resolvedModel : model.value === 'opus'),
+      isDefault: preferred ? model === preferred : model.value === this.info.model,
       supportedReasoningEfforts: (model.supportedEffortLevels || []).map(effort => ({ reasoningEffort: effort })),
       defaultReasoningEffort: this.defaults.get(model.value) || null,
     }));
@@ -446,7 +451,7 @@ export class GlmAgent extends ClaudeAgent {
     if (!endpoint) throw new Error(GLM_KEY);
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(this.env)) if (value !== undefined && !/^(ANTHROPIC_|CLAUDE_CODE_USE_|AWS_BEARER_TOKEN_BEDROCK$)/.test(key)) env[key] = value;
-    return { ...env, ANTHROPIC_BASE_URL: endpoint.url, ANTHROPIC_AUTH_TOKEN: endpoint.token,
+    return { ...env, PATH: agentPath(env), ANTHROPIC_BASE_URL: endpoint.url, ANTHROPIC_AUTH_TOKEN: endpoint.token,
       ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.3', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5.3', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.7',
       API_TIMEOUT_MS: '3000000', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
   }
@@ -478,7 +483,8 @@ export class AntigravityAgent extends Adapter {
   // Some regions need a proxy for Antigravity; PAPILOT_AGY_PROXY applies only to agy.
   private env() {
     const proxy = process.env.PAPILOT_AGY_PROXY;
-    return proxy ? { ...process.env, HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : process.env;
+    const env = { ...process.env, PATH: agentPath() };
+    return proxy ? { ...env, HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : env;
   }
   async start() {
     if (this.ready) return;
@@ -493,13 +499,27 @@ export class AntigravityAgent extends Adapter {
     return { data: this.catalog.map(model => ({ model: model.model, displayName: model.displayName, isDefault: model.isDefault, supportedReasoningEfforts: model.efforts.map(effort => ({ reasoningEffort: effort })), defaultReasoningEffort: model.defaultEffort })) };
   }
   protected run(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
-    // agy's CLI accepts text prompts; its file tools open the supplied images.
-    if (images.length) text += '\n\nOpen the attached images with your file/image tools: ' + images.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
+    // Attachments live outside the worktree. Grant read access to only the
+    // selected files for this invocation; adding their directory as a workspace
+    // would also expose other tasks' attachments and permit writes there.
+    let imageSettings: string[] = [];
+    try {
+      const files = images.map(file => {
+        const resolved = fs.realpathSync(file);
+        if (!fs.statSync(resolved).isFile() || /[()*\r\n]/.test(resolved)) throw new Error('Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.');
+        return resolved;
+      });
+      if (files.length) {
+        for (const [index, file] of files.entries()) text = text.replaceAll(images[index], file);
+        text += '\n\nOpen the attached images with your file/image tools: ' + files.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
+        imageSettings = ['--settings', JSON.stringify({ permissions: { allow: files.map(file => `read_file(${file})`) } })];
+      }
+    } catch (error) { this.finish(turn, 'failed', error instanceof Error ? error.message : String(error)); return; }
     const conversation = this.conversations[turn.threadId], entry = this.catalog.find(model => model.model === thread.model);
     const model = entry ? entry.ids[effort || entry.defaultEffort || ''] || Object.values(entry.ids)[0] : thread.model;
     // agy has no separate system prompt: the first turn carries Papilot's instructions.
     const prompt = conversation ? text : `${thread.instructions}\n\n---\n\n${text}`;
-    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
+    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
@@ -524,7 +544,7 @@ export class AntigravityAgent extends Adapter {
     child.on('close', () => {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: in Papilot it works without approval prompts, so it edits files in the task worktree but does not run commands.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
       if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });
@@ -546,7 +566,10 @@ export function groupModels(listing: string, preferred = '') {
     const base = variant && id.endsWith('-' + level) ? id.slice(0, -level!.length - 1) : id;
     const group = groups.get(base) || { model: base, displayName: variant && id !== base ? variant[1] : name, efforts: [], ids: {}, isDefault: false, defaultEffort: null };
     if (variant && id !== base) { group.efforts.push(level!); group.ids[level!] = id; } else group.ids[''] = id;
-    if (name === preferred) { group.isDefault = true; if (variant && id !== base) group.defaultEffort = level!; }
+    if (name === preferred || id === preferred || base === preferred) {
+      group.isDefault = true;
+      if (variant && id !== base && (name === preferred || id === preferred)) group.defaultEffort = level!;
+    }
     groups.set(base, group);
   }
   for (const group of groups.values()) {

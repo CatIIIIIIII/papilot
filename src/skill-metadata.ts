@@ -9,7 +9,7 @@ function parts(content: string) {
 export function skillMetadata(content: string): Record<string, string> {
   const { header } = parts(content), fields: Record<string, string> = {};
   for (const line of header?.[1].split(/\r?\n/) || []) {
-    const field = /^([A-Za-z-]+):\s*(.*)$/.exec(line);
+    const field = /^([A-Za-z-]+):(.*)$/.exec(line);
     if (field) {
       const value = field[2].trim();
       let decoded = value.replace(/^(['"])(.*)\1$/, '$2');

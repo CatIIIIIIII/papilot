@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agentPath, findExecutable } from './agent-paths.mjs';
 import { activeInstallation } from './installation.mjs';
 
 const usage = `Usage: papilot [doctor | demo | codex <args> | service install | service stop] [--port <number>] [--data <folder>]
@@ -81,6 +82,7 @@ async function main() {
   const emitWarning = process.emitWarning;
   process.emitWarning = (warning, ...rest) => String(warning).includes('SQLite') ? undefined : emitWarning.call(process, warning, ...rest);
   process.env.PAPILOT_DATA ||= path.join(os.homedir(), '.papilot');
+  process.env.PATH = agentPath();
   pkg = installedPackage();
 
   // Papilot drives Codex through its app server. A codex on PATH at least as new
@@ -91,10 +93,14 @@ async function main() {
     const tested = pkg.devDependencies['@openai/codex'];
     const version = file => (spawnSync(file, ['--version'], { encoding: 'utf8' }).stdout || '').match(/\d+\.\d+\.\d+/)?.[0] || '0.0.0';
     const recent = file => { const [a, b] = [parse(version(file)), parse(tested)]; return (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) >= 0; };
-    const onPath = (process.env.PATH || '').split(path.delimiter).map(dir => path.join(dir, 'codex')).find(file => existsSync(file));
+    const onPath = findExecutable('codex');
     if (onPath && recent(onPath)) return onPath;
     const prefix = path.join(process.env.PAPILOT_DATA, 'agents'), installed = path.join(prefix, 'node_modules/.bin/codex');
     if (existsSync(installed) && recent(installed)) return installed;
+    if (process.env.PAPILOT_INSTALL_METHOD === 'nix') {
+      console.warn('Install a supported Codex separately with Nix, or set PAPILOT_CODEX_BIN to an existing installation.');
+      return '';
+    }
     console.log(`Installing Codex ${tested} for Papilot (first run only)...`);
     const result = spawnSync('npm', ['install', '--prefix', prefix, `@openai/codex@${tested}`, '--no-audit', '--no-fund', '--loglevel=error'], { stdio: 'inherit' });
     if (result.status === 0 && existsSync(installed)) return installed;

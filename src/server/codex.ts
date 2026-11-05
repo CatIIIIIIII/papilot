@@ -1,3 +1,4 @@
+import { agentPath } from '../../bin/agent-paths.mjs';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
@@ -21,7 +22,7 @@ export class Codex extends EventEmitter {
   }
   private async launch() {
     this.stderr = '';
-    const child = spawn(this.binary, this.args, { cwd: ROOT, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(this.binary, this.args, { cwd: ROOT, env: { ...process.env, PATH: agentPath() }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     const lines = createInterface({ input: child.stdout });
     lines.on('line', line => { try { this.receive(JSON.parse(line)); } catch { /* non-protocol stdout is ignored */ } });

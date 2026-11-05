@@ -4,9 +4,15 @@ import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
 
 export function SkillIconPicker({ value, onChange, disabled }: { value: SkillIcon; onChange: (value: SkillIcon) => void; disabled: boolean }) {
+  return <IconPicker value={value} onChange={onChange} disabled={disabled} icons={SKILL_ICONS.map(icon => ({ id: icon.id, label: t(icon.label) }))} name={t('Skill icon')}/>;
+}
+
+// A grid of icons to choose from, opened from a large tile; skills and quick
+// notes each offer their own set.
+export function IconPicker<T extends string>({ value, onChange, disabled, icons, name }: { value: T; onChange: (value: T) => void; disabled: boolean; icons: readonly { id: T; label: string }[]; name: string }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const selected = SKILL_ICONS.find(icon => icon.id === value)!;
+  const selected = icons.find(icon => icon.id === value) || icons[0];
   function close(focus = false) { panel.current?.hidePopover(); if (focus) trigger.current?.focus(); }
   useEffect(() => { if (disabled) close(); }, [disabled]);
   useEffect(() => {
@@ -25,7 +31,7 @@ export function SkillIconPicker({ value, onChange, disabled }: { value: SkillIco
     element.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
   }
   return <>
-    <button ref={trigger} type="button" className="skill-icon-trigger" aria-label={t('Choose an icon')} title={`${t('Choose an icon')} · ${t(selected.label)}`} aria-haspopup="dialog" aria-expanded={open} popoverTarget={id} disabled={disabled} onClick={event => { event.preventDefault(); if (panel.current?.matches(':popover-open')) close(); else show(); }}>
+    <button ref={trigger} type="button" className="skill-icon-trigger" aria-label={t('Choose an icon')} title={`${t('Choose an icon')} · ${selected.label}`} aria-haspopup="dialog" aria-expanded={open} popoverTarget={id} disabled={disabled} onClick={event => { event.preventDefault(); if (panel.current?.matches(':popover-open')) close(); else show(); }}>
       <Icon name={value} size={25}/><span><Icon name="chevronDown" size={10}/></span>
     </button>
     <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Choose an icon')} className="skill-icon-popover" onToggle={event => setOpen((event.nativeEvent as ToggleEvent).newState === 'open')} onKeyDown={event => {
@@ -38,12 +44,12 @@ export function SkillIconPicker({ value, onChange, disabled }: { value: SkillIco
         const step = event.key === 'ArrowDown' ? 4 : event.key === 'ArrowUp' ? -4 : event.key === 'ArrowRight' ? 1 : -1;
         const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + step + items.length) % items.length;
         items[index]?.focus();
-        if (!disabled && SKILL_ICONS[index]) onChange(SKILL_ICONS[index].id);
+        if (!disabled && icons[index]) onChange(icons[index].id);
       }
     }}>
       <p>{t('Choose an icon')}</p>
-      <div className="skill-icon-grid" role="radiogroup" aria-label={t('Skill icon')}>
-        {SKILL_ICONS.map(icon => <button key={icon.id} type="button" role="radio" aria-label={t(icon.label)} title={t(icon.label)} aria-checked={icon.id === value} tabIndex={icon.id === value ? 0 : -1} disabled={disabled} onClick={() => { onChange(icon.id); close(true); }}><Icon name={icon.id} size={21}/></button>)}
+      <div className="skill-icon-grid" role="radiogroup" aria-label={name}>
+        {icons.map(icon => <button key={icon.id} type="button" role="radio" aria-label={icon.label} title={icon.label} aria-checked={icon.id === value} tabIndex={icon.id === value ? 0 : -1} disabled={disabled} onClick={() => { onChange(icon.id); close(true); }}><Icon name={icon.id} size={21}/></button>)}
       </div>
     </div>
   </>;

@@ -343,7 +343,7 @@ test('installation is deduplicated, allows ongoing work, and restarts only after
     assert.equal(f.updates.snapshot().phase, 'waiting'); assert.equal(restarts, 0);
     const finish = f.updates.enter(); busy = false; await f.updates.activate();
     assert.equal(restarts, 0); finish(); finish();
-    await f.updates.activate(); assert.equal(restarts, 1); assert.equal(f.updates.restarting, true);
+    await tick(); assert.equal(restarts, 1); assert.equal(f.updates.restarting, true);
     await f.updates.activate(); assert.equal(restarts, 1);
   } finally { f.close(); }
 });
@@ -437,9 +437,14 @@ for (const version of ['0.7.0', devVersion]) for (const broken of [false, true])
     fs.rmSync(data, { recursive: true, force: true });
   }
 });
-test('downloaded releases must pass a real isolated server startup before activation', async () => {
+test('downloaded releases tolerate a slow isolated startup before activation', async () => {
   const stage = temporary(), root = path.join(stage, 'candidate'), log = fs.openSync(path.join(stage, 'probe.log'), 'w');
-  try { fakeRelease(root, '0.7.0'); await probeInstallation(root, '0.7.0', stage, log); }
+  try {
+    fakeRelease(root, '0.7.0');
+    const main = path.join(root, 'src/server/main.ts');
+    fs.writeFileSync(main, 'await new Promise(resolve => setTimeout(resolve, 12000));\n' + fs.readFileSync(main, 'utf8'));
+    await probeInstallation(root, '0.7.0', stage, log);
+  }
   finally { fs.closeSync(log); fs.rmSync(stage, { recursive: true, force: true }); }
 });
 
