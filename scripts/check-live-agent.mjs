@@ -98,7 +98,7 @@ try {
   await workspace.enqueue(task.id, 'Read main.tex and change "The revised sentence." to "The final sentence." Do not change other files.', randomUUID());
   task = await wait(task.id);
   assert.match(fs.readFileSync(path.join(task.worktree, 'main.tex'), 'utf8'), /The final sentence/);
-  evidence.checks.push('continued-conversation', 'restart-resume', ...(other ? ['model-switch', 'effort'] : []));
+  evidence.checks.push('continued-conversation', 'restart-resume', ...(other ? ['model-switch', ...(other.efforts.length ? ['effort'] : [])] : []));
   if (process.env.PAPILOT_LIVE_EXTENDED === '1') {
     const folder = path.join(paper, '.papilot/skills'); fs.mkdirSync(folder, { recursive: true });
     fs.writeFileSync(path.join(folder, 'vision-fixture.md'), '---\nname: Vision fixture\ndescription: Identify a supplied square\n---\nRead the attached image. Replace only the final sentence in main.tex with "The square is COLOR." using the actual color in lowercase. Do not change other files.');

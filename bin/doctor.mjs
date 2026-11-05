@@ -125,7 +125,7 @@ export async function doctor(args) {
     const candidates = configured ? [configured] : ['codex', path.join(data, 'agents/node_modules/.bin/codex')];
     let found = false;
     for (const candidate of candidates) {
-      const file = executable(candidate);
+      const file = agentExecutable(candidate);
       if (!file) continue;
       found = true;
       const result = await command(file, ['--version']);

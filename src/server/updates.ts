@@ -112,7 +112,16 @@ export class Updates {
     return { currentVersion, latestVersion, phase, checkedAt, error, canUpdate, channel: this.channel, ...(this.downloadUrl ? { downloadUrl: this.downloadUrl } : {}) };
   }
   get restarting() { return this.snapshot().phase === 'restarting'; }
-  enter() { this.inFlight++; let released = false; return () => { if (!released) { released = true; this.inFlight--; } }; }
+  enter() {
+    this.inFlight++; let released = false;
+    return () => {
+      if (released) return;
+      released = true; this.inFlight--;
+      // Installation may finish while the request that started it is still
+      // open. Resume once that final operation releases its restart guard.
+      if (!this.inFlight && this.state.phase === 'waiting') void this.activate();
+    };
+  }
   start() {
     if (process.env.PAPILOT_INSTALL_METHOD === 'nix') return;
     if (this.state.phase !== 'failed') void this.check();

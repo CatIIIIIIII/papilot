@@ -127,6 +127,12 @@ buildNpmPackage {
   installCheckPhase = ''
     runHook preInstallCheck
     export PAPILOT_DATA="$TMPDIR/papilot-install-check"
+    export PAPILOT_PORT=1
+    # Exercise cold TeX binaries without doctor's short interactive timeout.
+    # On Darwin the first execution can involve slow signature verification.
+    ${tex}/bin/latexmk -v
+    ${tex}/bin/synctex --version
+    ${tex}/bin/pdflatex --version
     test "$("$out/bin/papilot" --version)" = "${(lib.importJSON ../package.json).version}"
     "$out/bin/papilot" doctor --json
     ${lib.optionalString stdenv.hostPlatform.isLinux ''
