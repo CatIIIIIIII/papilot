@@ -8,6 +8,7 @@ import { LANGUAGES, browserLanguage, setLanguage, t, useLanguage, type LanguageC
 import { NotificationSettings } from './notification-settings.tsx';
 import { browserStorage } from './storage.ts';
 import { saveExpandedEffects, useExpandedEffects } from './effect-preferences.ts';
+import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
 import { AppearanceSettings, type AppearanceSettingsProps } from './appearance-settings.tsx';
@@ -35,6 +36,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const skillControls = useRef<SkillLibraryControls>(null);
   const { choice } = useLanguage();
   const expandedEffects = useExpandedEffects(), reviewView = useDefaultReviewView();
+  const advancedGit = useAdvancedGit();
   const [page, setPage] = useState<SettingsPage>(initialPage);
   const [showCategories, setShowCategories] = useState(() => initialPage === 'general' && window.matchMedia('(max-width: 760px)').matches);
   const [query, setQuery] = useState('');
@@ -66,7 +68,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const close = () => { if (peopleControls.current?.isBusy()) return; if (page === 'skills') skillControls.current?.cancel(); else navigate(onClose); };
   const groups: { label: string; entries: SettingsEntry[] }[] = [
     { label: t('Personal'), entries: [
-      { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')}` },
+      { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')} ${t('Show advanced Git features')}` },
       { page: 'appearance', label: t('Appearance'), icon: 'sun', keywords: `${t('Light')} ${t('Dark')} ${t('System')} ${t('Theme')} ${t('Accent')} ${t('Background')} ${t('Foreground')}` },
       { page: 'notifications', label: t('Notifications'), icon: 'bell' },
       { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Expand indirect changes')}` },
@@ -121,6 +123,13 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
             <ChipSelect label={t('Language')} value={choice} onChange={value => setLanguage(value as LanguageChoice)} options={[{ value: 'system', label: t('Browser default ({language})', { language: browserName }) }, ...LANGUAGES.map(item => ({ value: item.id, label: item.name }))]}/>
           </div>
           <ModelDefaultSettings {...modelDefaults}/>
+          <div className="settings-row settings-toggle">
+            <div className="settings-text">
+              <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>
+              <p id="settings-advanced-git-detail">{t('Show the commit graph, worktrees, amend and separate remote actions in the Git panel. Off by default.')}</p>
+            </div>
+            <input id="settings-advanced-git" type="checkbox" role="switch" className="switch" aria-describedby="settings-advanced-git-detail" checked={advancedGit} onChange={event => saveAdvancedGit(event.target.checked)}/>
+          </div>
         </section>}
         {page === 'appearance' && <AppearanceSettings theme={theme} onTheme={onTheme} resolved={resolved} appearance={appearance} onAppearance={onAppearance}/>}
         {page === 'review' && <section className="settings-card">

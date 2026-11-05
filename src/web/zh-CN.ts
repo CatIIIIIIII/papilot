@@ -1,6 +1,20 @@
 // Simplified Chinese for the workspace, keyed by the English text (see i18n.ts).
 // Chinese text keeps a space around numbers and Latin words: "修改 2", "PDF 批注".
 export const zhCN: Record<string, string> = {
+  "Refresh version history": "刷新版本记录",
+  "Loading versions…": "正在读取版本…",
+  "Your commits will appear here.": "提交后，版本记录会显示在这里。",
+  "Restore this version": "恢复此版本",
+  "Older versions": "更早的版本",
+  "No file changes in this version.": "此版本没有文件改动。",
+  "Save current changes before restoring a version.": "请先保存当前修改，再恢复历史版本。",
+  "Check out a branch before restoring a version.": "请先切换到一个分支，再恢复版本。",
+  "Restore this version?": "恢复此版本？",
+  "The manuscript’s files will match this version. A new version records the restoration, so all previous versions remain available.": "论文文件将恢复为此版本的内容。这次恢复会生成一条新记录，之前的所有版本都会保留。",
+  "Go to changes": "前往改动",
+  "Restoring…": "正在恢复…",
+  "Version restored. Previous versions are kept in history.": "版本已恢复，之前的版本仍保留在记录中。",
+
   'AI is resolving conflicts…': 'AI 正在解决冲突…',
   'Open chat': '打开聊天',
   'AI needs your input': 'AI 需要你补充信息',
@@ -145,7 +159,7 @@ export const zhCN: Record<string, string> = {
   "Reading paper files…": "正在读取论文文件…",
   "Import progress": "导入进度",
   "Files received": "已接收文件",
-  "Version history": "版本历史",
+  "Version history": "版本记录",
   "PDF compilation": "编译 PDF",
   "Saved folder": "保存位置",
   "Main TeX file": "TeX 主文件",
@@ -207,7 +221,7 @@ export const zhCN: Record<string, string> = {
 
   // Requests
   'Request failed. Please try again.': '请求失败，请重试。',
-  'The connection is taking too long. Check your network and try again.': '连接时间过长。请检查网络后重试。',
+  'The request timed out. Please try again.': '请求超时，请重试。',
   'The request timed out and may still be processing. Check the task status before retrying.': '请求超时，可能仍在处理中。重试前请先检查任务状态。',
 
   // Task status
@@ -263,6 +277,11 @@ export const zhCN: Record<string, string> = {
   'Showing the latest {n} commits. Older history is not shown.': '显示最近 {n} 次提交，更早的历史未展示。',
   'detached': '游离', '{n} changed': '{n} 处改动', 'clean': '无改动',
   'Modified': '已修改', 'Added': '已添加', 'Deleted': '已删除', 'Renamed': '已重命名', 'Conflict': '冲突', 'Untracked': '未跟踪', 'Type changed': '类型已改变',
+  'Back to manuscript': '返回论文',
+  'Back to files': '返回文件列表',
+  'Before': '修改前',
+  'After': '修改后',
+  'Unchanged lines omitted': '未改动的行已省略',
   'No textual changes.': '没有文本改动。', 'The diff is too long to show in full.': '差异太长，无法完整显示。',
   'Git status': 'Git 状态', 'Reading Git status…': '正在读取 Git 状态…', 'Committed {hash}.': '已提交 {hash}。',
   '{n} new commit on {upstream}.': '{upstream} 上有 {n} 个新提交。', '{n} new commits on {upstream}.': '{upstream} 上有 {n} 个新提交。',
@@ -280,6 +299,17 @@ export const zhCN: Record<string, string> = {
   'This file is not tracked by Git, so it cannot be recovered.': '这个文件没有被 Git 跟踪，删除后无法恢复。', 'Unstaged changes are lost for good and untracked files are deleted. Staged changes stay.': '未暂存的改动会被永久丢弃，未跟踪的文件会被删除。已暂存的改动会保留。', 'Unstaged changes are lost for good. Staged changes stay.': '未暂存的改动会被永久丢弃。已暂存的改动会保留。',
   'Discarded changes in {n} file.': '已放弃 {n} 个文件中的改动。', 'Discarded changes in {n} files.': '已放弃 {n} 个文件中的改动。',
   'Commit and push': '提交并推送', 'Committing and pushing…': '正在提交并推送…',
+  'Show advanced Git features': '显示高级 Git 功能',
+  'Show the commit graph, worktrees, amend and separate remote actions in the Git panel. Off by default.': '在 Git 面板中显示提交关系图、工作树、追加提交，以及单独的远程操作。默认关闭。',
+  'Incoming: {status}': '远端待同步：{status}',
+  'Local: {status}': '本地：{status}',
+  'Sync': '同步', 'Synced': '已同步', 'Syncing…': '正在同步…', 'Commit and sync': '提交并同步', 'Commit (Amend)': '提交（追加到上次）',
+  '{added} lines added, {deleted} lines removed': '新增 {added} 行，删除 {deleted} 行',
+  'Sync committed changes with the remote. Uncommitted changes are kept.': '与远程同步已提交的改动，保留本地未提交的改动。',
+  'Synced with the remote. Uncommitted changes are kept.': '已与远程同步，本地未提交的改动已保留。',
+  'Committed {hash} and synced.': '已提交 {hash} 并同步。',
+  'This repository has no remote.': '此仓库尚未配置远程。',
+  'Check out a branch before syncing.': '请先切换到一个分支再同步。',
   'Merge': '合并', '{branch} and {upstream} have both changed. Merge brings in the remote commits.': '{branch} 和 {upstream} 都有新提交。合并会引入远端的提交。',
   'Merged {upstream}.': '已合并 {upstream}。', 'The merge stopped at conflicts.': '合并遇到了冲突。', 'Merge in progress': '合并进行中',
   'Merging: {n} file has conflicts': '合并中：{n} 个文件有冲突', 'Merging: {n} files have conflicts': '合并中：{n} 个文件有冲突', 'Merging: no conflicts left': '合并中：冲突已全部解决',
