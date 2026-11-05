@@ -1,5 +1,6 @@
 import type { ReviewSummary } from '../shared.ts';
 export { reviewInstructions } from '../conversation.ts';
+export { sendsMessage } from '../../engine/src/web/send-key.ts';
 
 type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 // Feedback sends the unsent review updates on their own; a skill runs with or without text.
@@ -81,13 +82,4 @@ export function taskTitle(text: string) {
   if (line.length <= 80) return line;
   const cut = line.slice(0, 80), space = cut.lastIndexOf(' ');
   return (space > 40 ? cut.slice(0, space) : cut).replace(/[\s,.;:]+$/, '') + '…';
-}
-
-type SendKey = { key: string; keyCode?: number; shiftKey: boolean; altKey: boolean; metaKey: boolean; ctrlKey: boolean; isComposing: boolean };
-// Enter sends from a hardware keyboard and Shift+Enter adds a line. Touch
-// keyboards have no Shift+Enter, so Enter adds a line there. Command/Ctrl+Enter
-// always sends. Safari reports the Enter that confirms IME input as keyCode 229.
-export function sendsMessage(event: SendKey, touch: boolean) {
-  if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return false;
-  return event.metaKey || event.ctrlKey || (!touch && !event.shiftKey && !event.altKey);
 }

@@ -73,6 +73,21 @@ test('comments the margin cannot hold are printed in full after the paper and li
   assert.ok(back.length > 0 && back.every(page => page === 3), 'the full text links back to the page');
 });
 
+test('a deletion is struck through in red, and a replacement is printed on its card', () => {
+  const struck = note(3, 'Three commitments', '', { strike: true });
+  const output = open(annotatePdf(mupdf, input, [struck, note(3, 'unreviewed text cannot leak into the paper.', '→ cannot reach the paper', { strike: true })]));
+  assert.match(text(output, 3), /→ cannot reach the paper/);
+  const original = open(input).loadPage(3), [, , w, h] = original.getBounds(), scale = 2;
+  const pixmap = output.loadPage(3).toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false);
+  const pixels = pixmap.getPixels(), stride = pixmap.getStride();
+  const [a, b, c, d] = struck.rects![0], y = Math.round((b + (d - b) * 0.54) * h * scale);
+  const red = Array.from({ length: 20 }, (_, step) => Math.round((a + (c - a) * (step + 0.5) / 20) * w * scale) * 3 + y * stride)
+    .filter(at => pixels[at] > 180 && pixels[at + 1] < 90 && pixels[at + 2] < 90);
+  assert.ok(red.length >= 10, 'the line runs across the struck words');
+  const above = Math.round((b + (d - b) * 0.15) * h * scale) * stride + Math.round((a + c) / 2 * w * scale) * 3;
+  assert.ok(!(pixels[above] > 180 && pixels[above + 1] < 90), 'the words themselves are not highlighted');
+});
+
 test('a PDF without notes is returned as it is', () => {
   assert.equal(annotatePdf(mupdf, input, []), input);
   assert.equal(annotatePdf(mupdf, input, [{ page: 999, rect: [0, 0, 1, 1], comment: 'gone' }]), input);

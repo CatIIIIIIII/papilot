@@ -1,0 +1,66 @@
+name: Desktop Dev
+
+# The desktop Dev channel: a nightly build of main (03:00 in UTC+8), or one
+# started with Run workflow on main. Once every installer has built and passed
+# its smoke test, the rolling desktop-dev prerelease that desktop apps on the
+# Dev channel check moves to this commit.
+on:
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-dev
+  cancel-in-progress: false
+
+jobs:
+  # A nightly run without new commits on main has nothing to publish.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Desktop Dev publishes main. Run the Desktop workflow to build another branch."
+            exit 1
+          fi
+          published=$(gh release download desktop-dev --repo "$GITHUB_REPOSITORY" --pattern desktop.json --output - 2>/dev/null | jq -r '.version // empty' || true)
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "${published##*-dev.}" = "$GITHUB_SHA" ]; then
+            echo "desktop-dev already has $published."
+            echo build=false >> "$GITHUB_OUTPUT"
+          else
+            echo build=true >> "$GITHUB_OUTPUT"
+          fi
+
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    uses: ./.github/workflows/desktop.yml
+    with:
+      dev: true
+    secrets: inherit
+
+  publish:
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download the tested installers and update layer
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Papilot-*
+          merge-multiple: true
+          path: release/desktop
+      - name: Publish the dev build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-desktop-dev.mjs release/desktop

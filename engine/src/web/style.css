@@ -549,6 +549,7 @@ kbd {
   color: #555;
   margin-bottom: 6px;
 }
+.source-location { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unit-actions {
   margin-left: auto;
   display: flex;
@@ -606,6 +607,40 @@ kbd {
   color: #2b2f33;
   max-height: 420px;
   overflow: auto;
+}
+.source-editor .source-title { flex-wrap: wrap; }
+.source-editor-actions { display: flex; flex: none; align-items: center; gap: 2px; margin-left: auto; }
+.source-editor .source-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; color: var(--muted); background: transparent; cursor: pointer; }
+.source-editor .source-icon:hover:not(:disabled) { background: var(--head); color: var(--ink); }
+.source-editor .source-save,.source-editor .source-save:hover:not(:disabled) { color: var(--accent); }
+.source-editor .source-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.source-icon[aria-busy="true"] svg { animation: source-spin 1s linear infinite; }
+@keyframes source-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .source-icon[aria-busy="true"] svg { animation: none; } }
+@media (pointer: coarse) { .source-editor .source-icon { width: 36px; height: 36px; } }
+.source-editor button:disabled { opacity: .5; cursor: default; }
+.source-editor-error { color: var(--reject); font-size: 13px; white-space: pre-wrap; }
+.latex-input { position: relative; padding: 0; overflow: hidden; }
+.latex-input:focus-within { border-color: var(--accent); }
+.latex-input textarea,.latex-highlight { box-sizing: border-box; width: 100%; margin: 0; padding: 10px 12px; border: 0; border-radius: 0; font: inherit; font-variant-ligatures: none; letter-spacing: normal; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; text-align: left; }
+.latex-input textarea { position: relative; display: block; resize: vertical; min-height: 41px; max-height: 418px; overflow: auto; color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--ink); background: transparent; outline: none; }
+.latex-input textarea::selection { background: rgb(70 130 230 / .25); color: transparent; }
+.latex-highlight { position: absolute; top: 0; left: 0; height: 100%; overflow: hidden; pointer-events: none; }
+.latex-highlight code { font: inherit; color: inherit; white-space: inherit; }
+.latex-command { color: #7042b2; }
+.latex-comment { color: #6b7480; }
+.latex-math { color: #126d65; }
+.latex-bracket { color: #a34920; }
+.latex-parameter { color: #a12a67; }
+:root[data-theme="dark"] .latex-command { color: #c7a7fa; }
+:root[data-theme="dark"] .latex-comment { color: #929ba8; }
+:root[data-theme="dark"] .latex-math { color: #7bd6c9; }
+:root[data-theme="dark"] .latex-bracket { color: #ecb384; }
+:root[data-theme="dark"] .latex-parameter { color: #eda5cb; }
+@media (forced-colors: active) {
+  .latex-highlight { visibility: hidden; }
+  .latex-input textarea { color: CanvasText; -webkit-text-fill-color: CanvasText; caret-color: CanvasText; }
+  .latex-input textarea::selection { color: HighlightText; background: Highlight; }
 }
 .source-code del {
   background: #fadfe1;

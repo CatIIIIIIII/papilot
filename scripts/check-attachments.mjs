@@ -69,6 +69,9 @@ try {
   await page.goto(origin);
   const input = page.getByRole('textbox', { name: 'Describe the revision', exact: true });
   await expect(input).toBeVisible();
+  // Exercise a fully initialized PDF viewer before switching papers and
+  // pasting in chat; a discarded viewer must not retain clipboard handlers.
+  await page.locator('.pdfViewer .textLayer').first().waitFor();
   await page.getByRole('button', { name: 'Add files or skills', exact: true }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('menuitem', { name: 'Add files…', exact: true }).click();

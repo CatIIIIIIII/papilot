@@ -12,3 +12,6 @@ test-results/
 .desktop/
 release/desktop/
 i18n/state/*.lock
+/result
+/result-*
+/.direnv/

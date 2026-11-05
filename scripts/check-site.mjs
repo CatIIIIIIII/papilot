@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, webkit } from '../engine/node_modules/playwright/index.mjs';
 import { checkAnnotations } from './site-annotation-checks.mjs';
+import { checkSiteTheme } from './site-theme-checks.mjs';
 
 const languages = JSON.parse(fs.readFileSync('i18n/languages.json', 'utf8'));
 const route = locale => locale === 'en' ? '/' : `/${locale}/`;
@@ -27,6 +28,7 @@ const watch = page => {
 const hero = '.hero .app-window', change = `${hero} .review-change`;
 const stateOf = page => page.locator(change).getAttribute('data-state');
 try {
+  await checkSiteTheme(browser, origin, watch);
   await checkAnnotations(browser, origin);
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
   const page = await context.newPage();
@@ -137,24 +139,6 @@ try {
   assert.equal(await calmPage.locator(`${change} .before`).isVisible(), false, 'decisions are immediate');
   await calm.close();
 
-  // Dark mode follows the system, the toggle switches and remembers, and the
-  // app windows stay light either way.
-  const night = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
-  const nightPage = await night.newPage();
-  watch(nightPage);
-  await nightPage.goto(origin + '/');
-  const surface = () => nightPage.evaluate(() => [getComputedStyle(document.body).backgroundColor, getComputedStyle(document.querySelector('.hero .review-page')).backgroundColor]);
-  assert.deepEqual(await surface(), ['rgb(17, 18, 20)', 'rgb(255, 255, 255)']);
-  assert.equal(await nightPage.locator('#theme-button').getAttribute('aria-pressed'), 'true');
-  await nightPage.locator('#theme-button').click();
-  assert.deepEqual(await surface(), ['rgb(255, 255, 255)', 'rgb(255, 255, 255)']);
-  await nightPage.reload();
-  assert.equal(await nightPage.locator('#theme-button').getAttribute('aria-pressed'), 'false', 'the choice is kept');
-  await nightPage.screenshot({ path: 'test-results/site/light-chosen.png' });
-  await nightPage.locator('#theme-button').click();
-  await nightPage.screenshot({ path: 'test-results/site/dark.png' });
-  await night.close();
-
   // Without JavaScript every window shows where its round ends.
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
   const staticPage = await noJs.newPage();
@@ -166,7 +150,8 @@ try {
   // Every URL is already localized without JavaScript, with reciprocal SEO links.
   const sitemap = fs.readFileSync('_site/sitemap.xml', 'utf8');
   assert.match(fs.readFileSync('_site/robots.txt', 'utf8'), /Sitemap: https:\/\/papilot.ai\/sitemap.xml/);
-  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length);
+  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length + 1);
+  assert.ok(sitemap.includes('<loc>https://papilot.ai/privacy/</loc>'));
   const staticContext = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   const staticVisitor = await staticContext.newPage();
   for (const [locale] of Object.entries(languages)) {

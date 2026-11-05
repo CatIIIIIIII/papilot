@@ -87,7 +87,7 @@ export class Accounts extends EventEmitter {
   remove(userId: string) {
     if (this.member(userId).role === 'owner') throw new AccountError('The owner cannot be removed.');
     this.store.transaction(() => {
-      for (const table of ['credentials', 'invites', 'sessions', 'members']) this.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(userId);
+      for (const table of ['credentials', 'invites', 'sessions', 'members', 'preferences']) this.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(userId);
       this.db.prepare('DELETE FROM users WHERE id=?').run(userId);
     });
     for (const [key, challenge] of this.challenges) if (challenge.userId === userId) this.challenges.delete(key);
