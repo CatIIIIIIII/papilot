@@ -204,7 +204,9 @@ try {
   await expect(tool('Redo')).toBeEnabled();
   await tool('Redo').click();
   await expect.poll(() => notes).toEqual([originalMark]);
+  await expect(tool('Undo')).toBeEnabled();
   await key('ControlOrMeta+z'); await expect.poll(() => notes.length).toBe(0);
+  await expect(tool('Redo')).toBeEnabled();
   await key('ControlOrMeta+Shift+z'); await expect.poll(() => notes).toEqual([originalMark]);
   await page.locator('.note-tag[data-kind="delete"]').click();
   const card = page.getByRole('dialog', { name: /^PDF note/ });
@@ -232,6 +234,8 @@ try {
   await expect.poll(() => notes[0].comment).toBe('');
   await tool('Redo').click();
   await expect.poll(() => notes[0].comment).toBe('plainer words');
+
+  await expect(tool('Undo')).toBeEnabled();
 
   // The magic pen opens its wheel where the drag ended; a number picks a slot.
   await key('q');

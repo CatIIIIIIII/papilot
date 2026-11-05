@@ -4,9 +4,45 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-05 — A desktop workspace for your papers
+
+Papilot 0.9.0 brings quicker PDF markup, review comments in the chat composer, a dedicated Version Management workspace, Nix packages and AI reviews with any connected, supported agent. For the full **0.8.0 → 0.9.0** overview, including the desktop apps, compilation improvements, PDF exports and language support delivered in the intervening releases, read the [0.9.0 release introduction](https://github.com/PapilotAI/papilot/blob/v0.9.0/docs/releases/0.9.0/release-notes.md). The entries below describe changes since 0.8.9.
+
+### Added
+
+- **Mark up the PDF with a full set of tools.** A collapsible rail puts text notes, region marks, sticky notes, deletion marks and a hand tool beside the paper. The **Magic pen** opens a wheel of reusable instructions: polish, shorten, fix a short last line, connect or verify. Choose one with a click or number key, or customize its name, instruction and icon in **Settings → Quick notes**. Undo and Redo cover creating, deleting and editing annotations, with familiar keyboard shortcuts. ([#53](https://github.com/PapilotAI/papilot/pull/53), [#60](https://github.com/PapilotAI/papilot/pull/60))
+- **Version Management has its own workspace.** Open it from the sidebar to stage files, inspect source diffs, commit, sync and browse version history. Restoring an earlier version creates a new commit and keeps the existing history. Long diffs scroll efficiently, incoming changes are visible, and advanced Git controls remain available in Settings. Returning to the manuscript restores your reading position. ([#51](https://github.com/PapilotAI/papilot/pull/51), [#64](https://github.com/PapilotAI/papilot/pull/64))
+- **Edit LaTeX directly while reviewing.** Open a change's **LaTeX** view and edit its proposed source in place, with syntax highlighting and a saved draft. **Save and update PDF** rebuilds the comparison for another review; the manuscript changes only when you apply or commit the task. ([#48](https://github.com/PapilotAI/papilot/pull/48))
+- **Native desktop notifications.** Opt in to task alerts, click one to open its task, and preview delivery with a test notification. macOS offers optional notification sounds; Linux follows the desktop environment's sound settings. ([#55](https://github.com/PapilotAI/papilot/pull/55))
+- **Install with Nix.** The flake packages the CLI, browser interface and review engine with Node, Git and TeX Live, plus the Electron desktop on Linux. Nix installations stay under package-manager control and discover separately installed agent CLIs. See the [Nix guide](https://github.com/PapilotAI/papilot/blob/main/docs/nix.md) for platforms and setup. ([#45](https://github.com/PapilotAI/papilot/pull/45))
+
+### Changed
+
+- **AI reviews can use any connected, supported agent, with full-length feedback.** Reviews use the agent's normal tools and approval flow. Papilot no longer rejects a paper above its former 180,000-character threshold or silently truncates instructions, skills, comments and findings to its old application limits. Long requests keep their retry IDs across reloads. PDF anchors are still validated, and manuscript changes still need your explicit approval. Provider context windows and service limits still apply. ([#65](https://github.com/PapilotAI/papilot/pull/65))
+- **Send review feedback from the chat composer.** Quote text from either the before or after PDF, or comment on a whole change, then send feedback together with instructions, attachments and skills. Drafts survive reloads and keep their original round and location; links take you back to the passage. Empty comments remain drafts without blocking a message or saving accepted changes. ([#46](https://github.com/PapilotAI/papilot/pull/46), [#61](https://github.com/PapilotAI/papilot/pull/61))
+- **Edit included notes without starting over.** Correct a note inside the New task panel, save or cancel the edit, or delete it from the task and PDF with Undo. Removing a note from the task still keeps its PDF annotation. Unsaved edits are preserved when switching views and must be resolved before sending the task. ([#36](https://github.com/PapilotAI/papilot/pull/36))
+- **Look up references during editing.** Codex editing tasks can use live web search and sandbox networking; Claude and GLM editing tasks can use WebSearch and WebFetch. Configured sandbox restrictions and other tool approvals still apply. ([#54](https://github.com/PapilotAI/papilot/pull/54))
+- **Indirect changes are optional work.** **Settings → Review preferences → Track indirect changes** is off by default. Ordinary comparisons skip the whole-document attribution and its extra compilations. Turn it on to see where an edit affects other passages; attribution may require up to 16 additional builds. ([#57](https://github.com/PapilotAI/papilot/pull/57))
+- **Choose from 48 searchable skill icons.** Search by English name, translated name or icon ID, and navigate the grid with the keyboard on desktop or mobile. ([#63](https://github.com/PapilotAI/papilot/pull/63))
+- **More room for the paper.** Contents moves into a compact PDF-toolbar menu, the redundant section title is removed, note buttons use a compact included-state control, and the sidebar's tools menu is named **Research Tools**. ([#44](https://github.com/PapilotAI/papilot/pull/44), [#56](https://github.com/PapilotAI/papilot/pull/56), [#59](https://github.com/PapilotAI/papilot/pull/59), [#62](https://github.com/PapilotAI/papilot/pull/62), [#64](https://github.com/PapilotAI/papilot/pull/64))
+
 ### Fixed
 
 - **Changes with dingbat symbols show in the review again.** When a page used a symbol from the ZapfDingbats font, such as the ✗ and ✓ of `pifont`'s `\ding{55}` and `\ding{51}`, the review showed a broken image for every part of the page with that symbol, often the "after" side of the change itself. The PDF renderer wrote those symbols' text as characters an SVG image may not contain, so the browser refused the whole image. Papilot now leaves that unused text out of the images, which also makes them about 8% smaller.
+- **Model selectors match the model a task runs.** Default choices follow the configured runtime, resumed ACP sessions retain their model, and an existing task cannot reset to an unknown default. ([#47](https://github.com/PapilotAI/papilot/pull/47))
+- **Antigravity can read selected image attachments.** Each invocation receives access to the chosen image files without granting access to their whole folder. ([#52](https://github.com/PapilotAI/papilot/pull/52))
+- **Updates and shutdown recover more reliably.** Prepared updates resume once requests finish, cold desktop update checks have time to initialize, and late agent events after workspace shutdown are ignored. Pasting attachments no longer conflicts with the PDF viewer's native editor. ([#45](https://github.com/PapilotAI/papilot/pull/45))
+- **Website demos follow dark mode consistently.** The homepage also has a bilingual privacy notice and a statistics opt-out. ([#39](https://github.com/PapilotAI/papilot/pull/39))
+
+### Security
+
+- Updated KaTeX, glob and related runtime dependencies, overrode affected minimatch versions, and replaced ambiguous whitespace parsing in task captions and skill metadata. ([#41](https://github.com/PapilotAI/papilot/pull/41), [#42](https://github.com/PapilotAI/papilot/pull/42), [#50](https://github.com/PapilotAI/papilot/pull/50))
+
+### Thanks
+
+- [@chengluyu](https://github.com/chengluyu) for the conversation rendering, incremental timeline polling and Git-status caching improvements ([#24](https://github.com/PapilotAI/papilot/pull/24), [#25](https://github.com/PapilotAI/papilot/pull/25), [#26](https://github.com/PapilotAI/papilot/pull/26), [#27](https://github.com/PapilotAI/papilot/pull/27), [#28](https://github.com/PapilotAI/papilot/pull/28)), and the consistent choice lists across the app ([#32](https://github.com/PapilotAI/papilot/pull/32)), introduced in 0.8.8 and carried forward into this release.
+- [@CatIIIIIIII](https://github.com/CatIIIIIIII) for editing and deleting included PDF notes ([#36](https://github.com/PapilotAI/papilot/pull/36)) and enabling online lookup in editing tasks ([#54](https://github.com/PapilotAI/papilot/pull/54)).
+- [@RIvance](https://github.com/RIvance) for contributing the Nix packaging that grew into the CLI and NixOS desktop support ([#45](https://github.com/PapilotAI/papilot/pull/45)).
 
 ## [0.8.9] - 2026-11-04
 
@@ -314,7 +350,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.8.9...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/PapilotAI/papilot/compare/v0.8.9...v0.9.0
 [0.8.9]: https://github.com/PapilotAI/papilot/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/PapilotAI/papilot/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/PapilotAI/papilot/compare/v0.8.6...v0.8.7

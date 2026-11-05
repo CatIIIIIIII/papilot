@@ -1,0 +1,17 @@
+{
+  "version": "0.9.0",
+  "commit": "98c331b3c28602e55521a3656ba087942a6fa93b",
+  "viewport": {
+    "width": 1440,
+    "height": 800
+  },
+  "scale": 2,
+  "source": "Real Papilot UI and a TeX-compiled disposable example; simulated account, task list, conversation and Git responses; no live agent inference.",
+  "captures": [
+    "review-feedback.png",
+    "inline-source.png",
+    "magic-pen.png",
+    "version-management.png",
+    "version-history.png"
+  ]
+}

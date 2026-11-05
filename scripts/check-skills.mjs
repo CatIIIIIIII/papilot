@@ -7,7 +7,7 @@ import { chromium, expect } from '../engine/node_modules/@playwright/test/index.
 import { selectOption } from './select.mjs';
 
 // Skills in the composers, review feedback and skills in the chat, and the
-// feedback bar after a review, against simulated workspace data.
+// feedback in the composer after a review, against simulated workspace data.
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
@@ -93,19 +93,22 @@ try {
   await expect(page.locator('.task-row.active .status')).toHaveText('Review complete');
   await expect(page.getByRole('button', { name: 'Send feedback', exact: true })).toHaveCount(0);
   await expect(page.locator('.review-feedback')).toHaveCount(0);
-  // Comments go back to the agent; in the chat-only view the bar ends the conversation.
+  // Comments go back to the agent through the composer, including in chat-only view.
   task.review = { ...task.review, unsent: 4, comments: 1 }; await sync();
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
-  await expect(page.locator('.thread .review-feedback.card:not(.commit-card)')).toContainText('4 review updates not sent yet');
+  await expect(page.locator('.composer .review-draft')).toContainText('4 review updates');
+  await expect(page.locator('.thread .commit-card')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Split', exact: true }).click();
+  await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
+  await expect.poll(() => messages.length).toBe(1);
+  assert.equal(messages[0].feedback, true);
+  task.review = { ...task.review, unsent: 0, comments: 0 }; await sync();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
   // The accepted change is in the manuscript; committing it is offered, not required.
   const commitCard = page.locator('.thread .commit-card');
   await expect(commitCard.getByRole('textbox', { name: 'Commit message', exact: true })).toHaveValue('Polish the introduction');
   await expect(commitCard.getByRole('button', { name: 'Commit', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Split', exact: true }).click();
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
-  await expect.poll(() => messages.length).toBe(1);
-  assert.equal(messages[0].feedback, true);
-  task.review = { ...task.review, unsent: 0, comments: 0 }; await sync();
 
   // "/" lists skills in the follow-up composer; the chosen one runs without text.
   const followUp = page.getByRole('textbox', { name: 'Instructions for Codex' });

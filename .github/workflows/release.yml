@@ -1,7 +1,8 @@
 name: Release
 
 # Pushing a version tag such as v0.4.0 publishes that version to npm and
-# creates its GitHub release from the CHANGELOG. npm trusts this workflow
+# creates its GitHub release from curated release notes when present, otherwise
+# from the CHANGELOG. npm trusts this workflow
 # (trusted publishing), so no token or one-time code is needed.
 on:
   push:
@@ -53,11 +54,21 @@ jobs:
           if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
             echo "::error::CHANGELOG.md has no [$version] section."; exit 1
           fi
+          release_notes="docs/releases/$version/release-notes.md"
+          if [ -f "$release_notes" ]; then
+            # The versioned introduction may cover an entire minor-release cycle.
+            # Omit the heading; the CHANGELOG supplies the release title below.
+            sed '1{/^# /d;}' "$release_notes" | sed '/./,$!d' > "$RUNNER_TEMP/notes.md"
+            if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+              echo "::error::$release_notes is empty."; exit 1
+            fi
+          else
+            printf '```sh\nnpm install -g papilot@latest\n```\n' >> "$RUNNER_TEMP/notes.md"
+          fi
           headline="$(awk -v heading="## [$version]" 'index($0, heading) == 1 { separator = " — "; offset = index($0, separator); if (offset) print substr($0, offset + length(separator)); exit }' CHANGELOG.md)"
           title="Papilot $version"
           if [ -n "$headline" ]; then title="$title — $headline"; fi
           printf '%s\n' "$title" > "$RUNNER_TEMP/title.txt"
-          printf '```sh\nnpm install -g papilot@latest\n```\n' >> "$RUNNER_TEMP/notes.md"
       - run: npm ci
       - run: npm run setup:review
       - name: Download tested desktop installers

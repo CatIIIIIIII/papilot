@@ -29,6 +29,7 @@ let fail = false, hold = false, release, failEdit = false, holdEdit = false, fai
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
+  if (url.pathname.endsWith('/git/history')) return json({ versions: [], next: null });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
@@ -419,26 +420,27 @@ try {
     await expect(taskText()).toHaveText(draft);
     assert.equal(notes[0].comment, draft);
   }
-  // Changing side tabs must await the save and preserve a failed draft. Use
+  // Opening Version Management must save and preserve a failed draft. Use
   // the keyboard as well: it does not trigger the card's pointerdown saver.
-  for (const tab of ['Git']) {
+  for (const tab of ['Version Management']) {
     await editTaskNote().click();
     await taskEditor.fill(`Keep this draft when opening ${tab}.`);
     failEdit = true;
-    await page.getByRole('tab', { name: tab, exact: true }).focus();
+    await page.locator('.git-link').focus();
     await page.keyboard.press('Enter');
     await expect(taskEditor).toHaveValue(`Keep this draft when opening ${tab}.`);
     await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
     await expect(page.getByRole('tab', { name: 'New task', exact: true })).toHaveAttribute('aria-selected', 'true');
     failEdit = false;
-    await page.getByRole('tab', { name: tab, exact: true }).click();
-    await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
+    await page.locator('.git-link').click();
+    await expect(page.getByRole('region', { name: 'Version Management', exact: true })).toBeVisible();
     assert.equal(notes[0].comment, `Keep this draft when opening ${tab}.`);
-    await page.getByRole('tab', { name: 'New task', exact: true }).click();
+    await page.locator('.manuscript-link').click();
     await expect(taskText()).toHaveText(`Keep this draft when opening ${tab}.`);
   }
   // The library's deselection button must also save the task's draft before
   // removing the card, including when activated without a pointer event.
+  await page.getByRole('button', { name: 'My notes', exact: true }).click();
   await editTaskNote().click();
   await taskEditor.fill('Keep this draft when deselecting elsewhere.');
   failEdit = true;
@@ -467,7 +469,7 @@ try {
       await expect(contentsMenu).toBeHidden();
     }
   }
-  for (const tab of ['PDF', 'Git']) {
+  for (const tab of ['PDF']) {
     await editTaskNote().click();
     await taskEditor.fill(`Keep the mobile draft across ${tab}.`);
     failEdit = true;
@@ -494,6 +496,26 @@ try {
     await expect(taskText()).toHaveText(`Wait for the mobile save across ${tab}.`);
     await expect(send()).toBeEnabled();
   }
+  const openVersionManagement = async () => {
+    await page.getByRole('button', { name: 'Show task list', exact: true }).click();
+    await page.locator('.git-link').click();
+  };
+  await editTaskNote().click();
+  await taskEditor.fill('Keep the mobile draft across Version Management.');
+  failEdit = true;
+  await openVersionManagement();
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+  await expect(page.getByRole('region', { name: 'Version Management', exact: true })).toHaveCount(0);
+  await expect(taskEditor).toHaveValue('Keep the mobile draft across Version Management.');
+  failEdit = false;
+  // The failed navigation leaves the sidebar open for a retry.
+  await page.locator('.git-link').click();
+  await expect(page.getByRole('region', { name: 'Version Management', exact: true })).toBeVisible();
+  assert.equal(notes[0].comment, 'Keep the mobile draft across Version Management.');
+  await page.getByRole('button', { name: 'Show task list', exact: true }).click();
+  await page.locator('.manuscript-link').click();
+  await views.getByRole('button', { name: 'New task', exact: true }).click();
+  await expect(taskText()).toHaveText('Keep the mobile draft across Version Management.');
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // Review skills hide attachments; returning to the ordinary task recovers

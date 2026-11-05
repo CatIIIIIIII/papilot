@@ -23,6 +23,7 @@ function holdNextBuild() { heldBuild = new Promise(resolve => { releaseBuild = r
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
   if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/updates') return json({ phase: 'idle', currentVersion: 'test', latestVersion: 'test', canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
@@ -87,7 +88,8 @@ try {
       const boxes = [...toolbar.querySelectorAll(':scope > button, :scope > .problems-anchor > button')].map(button => button.getBoundingClientRect());
       const modes = toolbar.querySelector('.pdf-modes').getBoundingClientRect();
       const nav = toolbar.querySelector('.sidebar-toggle')?.getBoundingClientRect();
-      const tools = boxes.filter(box => box.x >= modes.right);
+      const tools = [...toolbar.querySelectorAll(':scope > .compile-button, :scope > .problems-anchor > button, :scope > [data-notes-home="library"]')]
+        .map(button => button.getBoundingClientRect()).filter(box => box.width > 0);
       return { count: tools.length, gaps: tools.slice(1).map((box, index) => box.x - tools[index].right),
         tops: tools.map(box => box.y), navGap: nav && modes.x - nav.right,
         contained: boxes.every(box => box.x >= toolbar.getBoundingClientRect().x && box.right <= toolbar.getBoundingClientRect().right) };

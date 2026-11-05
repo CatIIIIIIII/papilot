@@ -26,6 +26,7 @@ let failUpload = false, failCreate = false, failMessage = false;
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url()), json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({});
   if (url.pathname.endsWith('/skills')) return json({ skills: [{ id: 'polish', name: 'Polish', source: 'builtin', description: 'Polish', hint: '' }] });
