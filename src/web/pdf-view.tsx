@@ -7,7 +7,10 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { EventBus, FindState, LinkTarget, PDFFindController, PDFLinkService, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import viewerStyles from 'pdfjs-dist/web/pdf_viewer.css?inline';
 import worker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { Annotation } from '../shared.ts';
+import type { Annotation, MarkKind } from '../shared.ts';
+import { loadStamps, slotKey, useStamps, type Stamp } from './stamps.ts';
+import { StampWheel } from './stamp-wheel.tsx';
+import { StampMenu } from './stamp-menu.tsx';
 import { ChipSelect } from './chip-select.tsx';
 import { Icon } from './icons.tsx';
 import { browserStorage } from './storage.ts';
@@ -32,11 +35,44 @@ export interface OutlineItem { title: string; level: number; dest: unknown; page
 export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note: Annotation) => void; showPlace: (page: number, rect: Rect) => void; focus: () => void; fitWidth: () => void }
 // A touch selection also has its ends: the edge of its first and last word, with that line's top and bottom.
 interface Selection { page: number; rects: Rect[]; quote: string; handles?: { from: [number, number, number]; to: [number, number, number] } }
+// What a tool marks: selected text, a region, or a point (a small box quoted
+// by the line at or beside it).
+interface Target { page: number; rect: Rect; rects: Rect[]; quote: string; point?: boolean }
+// The tool rail, after an image editor's: each tool stays chosen until another
+// is picked or Escape returns to Select.
+export type PdfTool = 'select' | 'note' | 'magic' | 'region' | 'point' | 'delete' | 'hand';
+const TOOL_KEYS: Record<string, PdfTool> = { v: 'select', t: 'note', q: 'magic', m: 'region', p: 'point', d: 'delete', h: 'hand' };
 
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 const percent = ([x0, y0, x1, y1]: Rect): React.CSSProperties => ({ left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
 const bounds = (rects: Rect[]): Rect => [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1])), Math.max(...rects.map(r => r[2])), Math.max(...rects.map(r => r[3]))];
+const center = (rect: Rect): React.CSSProperties => ({ left: `${(rect[0] + rect[2]) * 50}%`, top: `${(rect[1] + rect[3]) * 50}%` });
+const typing = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]'));
 const zooms = () => [{ value: 'page-width', label: t('Fit width') }, { value: 'page-fit', label: t('Fit page') }, ...[0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map(scale => ({ value: String(scale), label: `${scale * 100}%` }))];
+
+// A point is a small box where the author clicked. Its quote is the line of
+// text at or beside it, with ‸ where the point falls, so the agent can find it.
+function pointAt(pageDiv: HTMLElement, clientX: number, clientY: number): Target {
+  const frame = pageDiv.getBoundingClientRect();
+  const x = unit((clientX - frame.left) / frame.width), y = unit((clientY - frame.top) / frame.height);
+  const words = Array.from(pageDiv.querySelectorAll<HTMLElement>('.textLayer span')).filter(span => !span.firstElementChild && span.textContent?.trim()).map(span => {
+    const box = span.getBoundingClientRect();
+    return { text: span.textContent!.trim(), left: (box.left - frame.left) / frame.width, right: (box.right - frame.left) / frame.width, top: (box.top - frame.top) / frame.height, bottom: (box.bottom - frame.top) / frame.height };
+  }).filter(word => word.bottom > word.top);
+  // Prefer the line the point is on over a word straight above or below it.
+  let nearest: typeof words[number] | undefined, distance = Infinity;
+  for (const word of words) {
+    const dy = y < word.top ? word.top - y : y > word.bottom ? y - word.bottom : 0, dx = x < word.left ? word.left - x : x > word.right ? x - word.right : 0;
+    if (dy * 4 + dx < distance) { distance = dy * 4 + dx; nearest = word; }
+  }
+  let quote = '';
+  if (nearest && distance < 0.12) {
+    const middle = (nearest.top + nearest.bottom) / 2, height = nearest.bottom - nearest.top;
+    const line = words.filter(word => Math.abs((word.top + word.bottom) / 2 - middle) < height / 2).sort((a, b) => a.left - b.left);
+    quote = [...line.filter(word => (word.left + word.right) / 2 < x).map(word => word.text), '‸', ...line.filter(word => (word.left + word.right) / 2 >= x).map(word => word.text)].join(' ').slice(0, 600);
+  }
+  return { page: Number(pageDiv.dataset.pageNumber) - 1, rect: [Math.max(0, x - 0.006), Math.max(0, y - 0.004), Math.min(1, x + 0.006), Math.min(1, y + 0.004)], rects: [], quote, point: true };
+}
 
 // A note covers whole words: a drag that starts or ends inside a word takes
 // all of it, so the quote is readable and the highlight matches it. Only a
@@ -107,14 +143,16 @@ function textContent({ words }: Words, view: number[]) {
 }
 
 // Number tags sit in the page margin level with the first marked line, on the
-// side nearer the mark, so they never cover text; tags on one line step outwards.
-function tagSpots(firsts: Rect[]) {
-  const placed: { side: 'left' | 'right'; top: number }[] = [];
-  return firsts.map(rect => {
+// side nearer the mark, so they never cover text; tags on one line step
+// along by each one's width (a quick note's tag also carries its name).
+const tagWidth = (name?: string) => name ? 30 + [...name].reduce((width, letter) => width + (letter.charCodeAt(0) > 0x2e80 ? 12 : 7), 0) : 20;
+function tagSpots(tags: { rect: Rect; name?: string }[]) {
+  const placed: { side: 'left' | 'right'; top: number; width: number }[] = [];
+  return tags.map(({ rect, name }) => {
     const side: 'left' | 'right' = (rect[0] + rect[2]) / 2 > 0.5 ? 'right' : 'left', top = (rect[1] + rect[3]) / 2;
-    const slot = placed.filter(spot => spot.side === side && Math.abs(spot.top - top) < 0.015).length;
-    placed.push({ side, top });
-    return { [side]: 8 + slot * 24, top: `${top * 100}%` } as React.CSSProperties;
+    const offset = placed.filter(spot => spot.side === side && Math.abs(spot.top - top) < 0.015).reduce((sum, spot) => sum + spot.width + 4, 0);
+    placed.push({ side, top, width: tagWidth(name) });
+    return { [side]: 8 + offset, top: `${top * 100}%` } as React.CSSProperties;
   });
 }
 
@@ -146,7 +184,7 @@ export const PdfView = forwardRef<PdfHandle, {
   readOnly?: boolean;
   group?: NoteGroup | null; onGroupChange?: (group: NoteGroup | null) => void; markingDisabled?: boolean;
   url: string; words?: string; notes: { note: Annotation; number: number }[]; active: string; region: boolean; setRegion: (on: boolean) => void;
-  onCreate: (page: number, rect: Rect, rects: Rect[], quote: string, comment: string, group?: NoteGroup, options?: { reveal?: boolean; quote?: boolean }) => Promise<void>;
+  onCreate: (page: number, rect: Rect, rects: Rect[], quote: string, comment: string, group?: NoteGroup, options?: { reveal?: boolean; quote?: boolean; kind?: MarkKind; stamp?: string }) => Promise<void>;
   onSelect: (note: Annotation) => void; outline: OutlineItem[]; section: number;
   noteActions?: PdfNoteActions; onDeselect?: () => void;
   onOutline: (items: OutlineItem[]) => void; onSection: (index: number) => void;
@@ -156,7 +194,7 @@ export const PdfView = forwardRef<PdfHandle, {
   place?: string;
 }>(function PdfView(props, ref) {
   const latest = useRef(props); latest.current = props;
-  const container = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), findInput = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLDivElement>(null), container = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), findInput = useRef<HTMLInputElement>(null);
   const tools = useRef<{ bus: EventBus; links: PDFLinkService; find: PDFFindController; viewer: PDFViewer } | null>(null);
   const loaded = useRef<PDFDocumentProxy | null>(null), restore = useRef<{ scale: string; top: number; left: number } | null>(null);
   const layerMap = useRef(new Map<number, HTMLElement>());
@@ -168,7 +206,7 @@ export const PdfView = forwardRef<PdfHandle, {
   const [selection, setSelection] = useState<Selection | null>(null);
   // A place shown from elsewhere, such as a compilation problem, marked briefly.
   const [flash, setFlash] = useState<{ page: number; rect: Rect; id: number } | null>(null);
-  const [editing, setEditing] = useState<{ page: number; rect: Rect; rects: Rect[]; quote: string } | null>(null), editingRef = useRef(editing); editingRef.current = editing;
+  const [editing, setEditing] = useState<Target | null>(null), editingRef = useRef(editing); editingRef.current = editing;
   const picking = useRef<ReturnType<typeof touchSelection> | null>(null);
   const [draft, updateDraft] = useState<{ page: number; rect: Rect } | null>(null), draftRef = useRef(draft);
   const setDraft = (value: typeof draft) => { draftRef.current = value; updateDraft(value); };
@@ -178,6 +216,23 @@ export const PdfView = forwardRef<PdfHandle, {
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [newNoteDraft, setNewNoteDraft] = useState('');
   const [dismissedNote, setDismissedNote] = useState<Annotation | null>(null);
+  // The chosen tool; holding Space borrows the hand without changing it.
+  const [tool, setTool] = useState<PdfTool>(props.region ? 'region' : 'select'), [spaceHand, setSpaceHand] = useState(false);
+  const active: PdfTool = spaceHand ? 'hand' : tool, toolRef = useRef(active); toolRef.current = active;
+  const spaceRef = useRef({ held: false, used: false }); spaceRef.current.held = spaceHand;
+  // A number key keeps one quick note on the magic pen until 0 or Escape.
+  const [locked, setLocked] = useState<number | null>(null), lockedRef = useRef(locked); lockedRef.current = locked;
+  const [wheel, setWheel] = useState<{ x: number; y: number; target: Target } | null>(null);
+  const [markError, setMarkError] = useState(''), pressed = useRef({ card: false });
+  const stamps = useStamps(), markable = !props.readOnly;
+  // The magic pen fetches this person's quick notes the first time it is
+  // picked; a lock on a slot that no longer exists ends.
+  useEffect(() => { if (tool === 'magic') loadStamps(); }, [tool]);
+  useEffect(() => { if (locked !== null && !stamps[locked]) setLocked(null); }, [stamps, locked]);
+  // Color groups belong to the note and region tools, like a brush's color.
+  const groupFor = (tool: PdfTool) => tool === 'note' || tool === 'region' ? latest.current.group || null : null;
+  useEffect(() => { setTool(current => props.region ? 'region' : current === 'region' ? 'select' : current); }, [props.region]);
+  useEffect(() => { if (!markError) return; const timer = setTimeout(() => setMarkError(''), 6000); return () => clearTimeout(timer); }, [markError]);
   const suggestions = props.notes.filter(({ note }) => note.aiReview).sort((a, b) => a.note.page - b.note.page || a.note.rect[1] - b.note.rect[1] || a.note.rect[0] - b.note.rect[0]);
   const suggestionIndex = suggestions.findIndex(({ note }) => note.id === props.active);
   const activeSuggestion = suggestions[suggestionIndex];
@@ -391,16 +446,50 @@ export const PdfView = forwardRef<PdfHandle, {
     };
     const selectionChange = () => { clearTimeout(timer); timer = setTimeout(select, 120); };
     document.addEventListener('selectionchange', selectionChange);
-    const finishGroup = (event: PointerEvent) => {
-      if (!latest.current.group || latest.current.markingDisabled || editingRef.current || latest.current.region || event.pointerType === 'touch' || !box.contains(event.target as Node) || (event.target as Element).closest('button,input,select,.pdf-note-card')) return;
-      setTimeout(() => { if (disposed) return; const value = select(); if (value && latest.current.group) addToGroup(value); }, 0);
+    // The note, delete and magic tools act when a drag over text ends; a
+    // plain click on the page gives the magic pen a point instead. The click
+    // waits a moment, so a double click still selects a word.
+    // A click that closes an open card does only that. The card closes on
+    // the same press, so whether one was open is read before anything else.
+    let down: { x: number; y: number } | null = null, pointTimer: ReturnType<typeof setTimeout> | undefined;
+    const pressStart = (event: PointerEvent) => {
+      pressed.current.card = Boolean(latest.current.active || editingRef.current);
+      clearTimeout(pointTimer); down = event.button === 0 && box.contains(event.target as Node) ? { x: event.clientX, y: event.clientY } : null;
     };
-    document.addEventListener('pointerup', finishGroup);
+    const finishMark = (event: PointerEvent) => {
+      const tool = toolRef.current, start = down; down = null;
+      if ((tool !== 'note' && tool !== 'delete' && tool !== 'magic') || latest.current.readOnly || latest.current.markingDisabled || editingRef.current || event.pointerType === 'touch' || event.button !== 0
+        || !box.contains(event.target as Node) || (event.target as Element).closest('button,input,textarea,select,.pdf-note-card')) return;
+      const at = { x: event.clientX, y: event.clientY }, page = (event.target as Element).closest<HTMLElement>('.page');
+      const click = Boolean(start && !pressed.current.card && Math.hypot(at.x - start.x, at.y - start.y) < 5), onNote = Boolean(noteAt(event));
+      setTimeout(() => {
+        if (disposed) return;
+        const value = select();
+        if (value) { markRef.current({ page: value.page, rect: bounds(value.rects), rects: value.rects, quote: value.quote }, at); return; }
+        if (tool === 'magic' && page && click && !onNote) pointTimer = setTimeout(() => { if (!disposed && !editingRef.current) markRef.current(pointAt(page, at.x, at.y), at); }, 220);
+      }, 0);
+    };
+    window.addEventListener('pointerdown', pressStart, true);
+    document.addEventListener('pointerup', finishMark);
+    // The hand drags the pages, whichever tool is chosen while Space is held.
+    let pan: { id: number; x: number; y: number; left: number; top: number } | null = null;
+    const panStart = (event: PointerEvent) => {
+      if (toolRef.current !== 'hand' || event.button !== 0 || event.pointerType === 'touch' || (event.target as Element).closest('button,a,input,textarea,select,.pdf-note-card')) return;
+      event.preventDefault(); spaceRef.current.used = true;
+      pan = { id: event.pointerId, x: event.clientX, y: event.clientY, left: box.scrollLeft, top: box.scrollTop };
+      box.setPointerCapture(event.pointerId); box.classList.add('panning');
+    };
+    const panMove = (event: PointerEvent) => {
+      if (!pan || event.pointerId !== pan.id) return;
+      box.scrollLeft = pan.left - (event.clientX - pan.x); box.scrollTop = pan.top - (event.clientY - pan.y);
+    };
+    const panEnd = (event: PointerEvent) => { if (pan?.id === event.pointerId) { pan = null; box.classList.remove('panning'); } };
+    box.addEventListener('pointerdown', panStart); box.addEventListener('pointermove', panMove); box.addEventListener('pointerup', panEnd); box.addEventListener('pointercancel', panEnd);
     // Keep marks transparent to pointer events so dragging still selects the
     // underlying text. A click/tap on a mark selects its note after the native
     // selection gesture has finished; drags, scrolling and long presses do not.
     const noteAt = (event: MouseEvent) => {
-      if (latest.current.region || editingRef.current) return;
+      if (latest.current.region || editingRef.current || toolRef.current === 'point') return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('button,a,input,textarea,select,[contenteditable],.select-handle,.pdf-note-card')) return;
       const page = target?.closest<HTMLElement>('.page');
@@ -464,9 +553,10 @@ export const PdfView = forwardRef<PdfHandle, {
       onClear: () => setSelection(null),
     });
     return () => {
-      disposed = true; clearTimeout(timer); picking.current?.stop(); picking.current = null;
+      disposed = true; clearTimeout(timer); clearTimeout(pointTimer); picking.current?.stop(); picking.current = null;
       resize.disconnect(); cancelAnimationFrame(resizeFrame);
-      document.removeEventListener('selectionchange', selectionChange); document.removeEventListener('pointerup', finishGroup);
+      document.removeEventListener('selectionchange', selectionChange); document.removeEventListener('pointerup', finishMark); window.removeEventListener('pointerdown', pressStart, true);
+      box.removeEventListener('pointerdown', panStart); box.removeEventListener('pointermove', panMove); box.removeEventListener('pointerup', panEnd); box.removeEventListener('pointercancel', panEnd);
       box.removeEventListener('pointerdown', pressNote); box.removeEventListener('scroll', cancelPress);
       document.removeEventListener('pointermove', moveNote); document.removeEventListener('pointerup', releaseNote); document.removeEventListener('pointercancel', cancelPress);
       box.removeEventListener('wheel', wheel); box.removeEventListener('touchstart', touchStart); box.removeEventListener('touchmove', touchMove); box.removeEventListener('touchend', touchEnd);
@@ -521,15 +611,44 @@ export const PdfView = forwardRef<PdfHandle, {
       else if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); viewer.increaseScale(); }
       else if (mod && e.key === '-') { e.preventDefault(); viewer.decreaseScale(); }
       else if (mod && e.key === '0') { e.preventDefault(); viewer.currentScaleValue = 'page-width'; }
-      else if (e.key === 'Escape' && latest.current.region) latest.current.setRegion(false);
     };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
   }, []);
 
+  // Single keys pick tools while the PDF has focus (V T Q M P D H), number
+  // keys keep a quick note on the magic pen, Space borrows the hand (a tap
+  // still turns the page), and Escape steps back: unlock, then Select.
   useEffect(() => {
-    const finish = (event: KeyboardEvent) => { if (event.key === 'Escape' && latest.current.group) latest.current.onGroupChange?.(null); };
-    document.addEventListener('keydown', finish); return () => document.removeEventListener('keydown', finish);
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.metaKey || event.ctrlKey || event.altKey || latest.current.readOnly) return;
+      const focus = document.activeElement;
+      if (typing(event.target) || (focus && focus !== document.body && !root.current?.contains(focus)) || document.querySelector('dialog[open]')) return;
+      if (event.key === ' ') {
+        if (focus?.closest('button,a,[role="button"]') || toolRef.current === 'hand' && !spaceRef.current.held) return;
+        event.preventDefault();
+        if (!event.repeat && !spaceRef.current.held) { spaceRef.current.used = false; setSpaceHand(true); }
+        return;
+      }
+      if (event.key === 'Escape') {
+        if (lockedRef.current !== null) { event.preventDefault(); setLocked(null); }
+        else if (toolRef.current !== 'select' && !spaceRef.current.held) { event.preventDefault(); keys.current.pickTool('select'); }
+        return;
+      }
+      if (event.shiftKey) return;
+      const tool = TOOL_KEYS[event.key.toLowerCase()];
+      if (tool) { event.preventDefault(); keys.current.pickTool(tool); }
+      else if (/^[0-9]$/.test(event.key)) { event.preventDefault(); const slot = (Number(event.key) + 9) % 10; keys.current.lock(lockedRef.current === slot ? null : slot); }
+    };
+    const keyUp = (event: KeyboardEvent) => {
+      if (event.key !== ' ' || !spaceRef.current.held) return;
+      setSpaceHand(false);
+      const box = container.current;
+      if (!spaceRef.current.used && box) box.scrollBy({ top: (event.shiftKey ? -0.9 : 0.9) * box.clientHeight });
+    };
+    const blur = () => setSpaceHand(false);
+    document.addEventListener('keydown', keyDown); document.addEventListener('keyup', keyUp); window.addEventListener('blur', blur);
+    return () => { document.removeEventListener('keydown', keyDown); document.removeEventListener('keyup', keyUp); window.removeEventListener('blur', blur); };
   }, []);
 
   function search(again: boolean, previous = false, text = query) {
@@ -540,37 +659,101 @@ export const PdfView = forwardRef<PdfHandle, {
     const viewer = tools.current?.viewer, number = Number.parseInt(pageInput, 10);
     if (viewer && number >= 1 && number <= pages) viewer.currentPageNumber = number; else setPageInput(String(page));
   }
-  function addToGroup(value: Selection, rect = bounds(value.rects)) {
-    const group = latest.current.group;
-    if (!group || latest.current.markingDisabled) return;
-    const create = latest.current.onCreate;
-    document.getSelection()?.removeAllRanges(); picking.current?.reset(); setSelection(null);
-    void create(value.page, rect, value.rects, value.quote, '', group).catch(error => setError(error instanceof Error ? error.message : String(error)));
+  function clearSelection() { document.getSelection()?.removeAllRanges(); picking.current?.reset(); setSelection(null); }
+  const selected = (value: Selection): Target => ({ page: value.page, rect: bounds(value.rects), rects: value.rects, quote: value.quote });
+  // Saved at once, without a card: a color group's mark, a deletion, a quick note.
+  function createMark(target: Target, comment: string, options: { group?: NoteGroup; kind?: MarkKind; stamp?: string } = {}) {
+    if (latest.current.markingDisabled) return;
+    clearSelection();
+    const kind = options.kind || (target.point ? 'point' : undefined);
+    void latest.current.onCreate(target.page, target.rect, target.rects, target.quote, comment, options.group, { reveal: false, ...(kind ? { kind } : {}), ...(options.stamp ? { stamp: options.stamp } : {}) })
+      .catch(error => setMarkError(error instanceof Error ? error.message : String(error)));
+  }
+  function openCard(target: Target) {
+    clearSelection(); setNewNoteDraft(''); setNoteError(''); setEditing(target);
+  }
+  // Where on screen a target ends, for the wheel when a key, not the pointer, asked for it.
+  function screenPoint(target: Target) {
+    const div = tools.current?.viewer.getPageView(target.page)?.div, box = div?.getBoundingClientRect(), end = target.rects.at(-1) || target.rect;
+    return box ? { x: box.left + end[2] * box.width, y: box.top + end[3] * box.height } : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  }
+  // Each tool's response to what was marked with it.
+  function mark(target: Target, at?: { x: number; y: number }) {
+    const tool = toolRef.current;
+    if (tool === 'delete') { if (!target.point) createMark(target, '', { kind: 'delete' }); return; }
+    if (tool === 'magic') {
+      const slot = lockedRef.current, stamp = slot === null ? undefined : stamps[slot];
+      if (stamp) createMark(target, stamp.instruction, { stamp: stamp.label });
+      else { clearSelection(); setWheel({ ...(at || screenPoint(target)), target }); }
+      return;
+    }
+    const group = target.point ? null : groupFor(tool);
+    if (group) createMark(target, '', { group }); else openCard(target);
+  }
+  const markRef = useRef(mark); markRef.current = mark;
+  function choose(next: PdfTool) {
+    setTool(next); setWheel(null);
+    if (next !== 'magic') setLocked(null);
+    if ((next === 'region') !== latest.current.region) latest.current.setRegion(next === 'region');
+  }
+  // A selection made first is marked by the tool picked next.
+  function pickTool(next: PdfTool) {
+    const pending = selection && !selection.handles && !editing ? selection : null;
+    choose(next);
+    if (pending && (next === 'note' || next === 'delete' || next === 'magic')) { toolRef.current = next; mark(selected(pending)); }
+  }
+  function lock(slot: number | null) {
+    if (slot === null || !stamps[slot]) { setLocked(null); return; }
+    const pending = selection && !selection.handles && !editing ? selection : null;
+    choose('magic'); setLocked(slot);
+    if (pending) createMark(selected(pending), stamps[slot].instruction, { stamp: stamps[slot].label });
+  }
+  const keys = useRef({ pickTool, lock }); keys.current = { pickTool, lock };
+  function pickStamp(stamp: Stamp) {
+    const target = wheel?.target; setWheel(null); container.current?.focus({ preventScroll: true });
+    if (target) createMark(target, stamp.instruction, { stamp: stamp.label });
   }
   function startNote() {
     if (!selection) return;
-    if (props.group) { addToGroup(selection); return; }
-    setNewNoteDraft(''); setNoteError('');
-    setEditing({ page: selection.page, rect: bounds(selection.rects), rects: selection.rects, quote: selection.quote });
-    document.getSelection()?.removeAllRanges(); picking.current?.reset(); setSelection(null);
+    // The button beside a selection: on touch screens it also carries the note tool's color.
+    const group = groupFor(toolRef.current), target = selected(selection);
+    if (group) createMark(target, '', { group }); else openCard(target);
   }
   function closeNewNote(restoreFocus = true) {
-    setEditing(null); latest.current.setRegion(false);
+    setEditing(null);
     if (restoreFocus) container.current?.focus({ preventScroll: true });
   }
   async function saveNewNote(comment: string, action: 'keep' | 'close' | 'quote') {
     if (!editing) return false;
     setNoteBusy(true); setNoteError('');
     try {
-      await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action === 'keep', quote: action === 'quote' });
-      setEditing(null); latest.current.setRegion(false); return true;
+      await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action === 'keep', quote: action === 'quote', ...(editing.point ? { kind: 'point' as const } : {}) });
+      setEditing(null); return true;
     } catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); return false; }
     finally { setNoteBusy(false); }
   }
   const presets = zooms(), zoomLabel = presets.find(option => option.value === zoom.value) ? zoom.value : String(Math.round(zoom.scale * 100) / 100);
   const zoomOptions = presets.some(option => option.value === zoomLabel) ? presets : [...presets, { value: zoomLabel, label: `${Math.round(zoom.scale * 100)}%` }];
 
-  return <div className={'pdf-view' + (props.region ? ' marking' : '')} onKeyDown={event => {
+  const pillGroup = active === 'note' || active === 'region' ? props.group || null : null;
+  // On touch screens the button beside a selection does what the chosen tool does.
+  const pillTool = active === 'delete' || active === 'magic' ? active : null;
+  const railTools: { id: PdfTool; icon: string; label: string; key: string; hint: string }[] = [
+    { id: 'select', icon: 'toolSelect', label: t('Select'), key: 'V', hint: t('Select text to copy it or add a note from the button beside it.') },
+    { id: 'note', icon: 'toolNote', label: t('Note'), key: 'T', hint: t('Drag over text and write a note straight away. Click again to pick a color, and marks join that color group.') },
+    { id: 'magic', icon: 'toolMagic', label: t('Magic pen'), key: 'Q', hint: t('Drag over text or click a spot, then pick a quick note. Click again, or press a number key, to keep one on the pen.') },
+    { id: 'region', icon: 'toolRegion', label: t('Region'), key: 'M', hint: t('Draw a box around a figure, table or equation.') },
+    { id: 'point', icon: 'toolSticky', label: t('Sticky note'), key: 'P', hint: t('Click anywhere on the page to leave a note there.') },
+    { id: 'delete', icon: 'toolStrike', label: t('Delete'), key: 'D', hint: t('Strike out text to ask for it to be removed. Open the mark to give a replacement.') },
+    { id: 'hand', icon: 'toolHand', label: t('Hand'), key: 'H', hint: t('Drag to move around the page. Hold Space to use it with any tool.') },
+  ];
+  const lockedStamp = locked === null ? undefined : stamps[locked];
+  const tagLabel = (note: Annotation, label: number) => note.aiReview ? t('Suggestion {n}: {comment}', { n: label, comment: note.comment })
+    : note.stamp ? t('Quick note {n}: {name}', { n: label, name: note.stamp })
+    : note.kind === 'delete' ? note.comment ? t('Replacement {n}: {text}', { n: label, text: note.comment }) : t('Deletion {n}', { n: label })
+    : t('Note {n}: {comment}', { n: label, comment: note.group ? groupName(note.group) : note.comment });
+
+  return <div ref={root} className={'pdf-view' + (props.region ? ' marking' : '') + (markable ? ` tool-${active}` : '')} onKeyDown={event => {
     if (!activeSuggestion || noteLocked || editing || props.region || event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     const target = event.target instanceof Element ? event.target : null;
@@ -596,8 +779,11 @@ export const PdfView = forwardRef<PdfHandle, {
         <button type="button" className="icon-button" aria-label={t('Zoom in')} title={t('Zoom in (⌘+)')} onClick={() => tools.current?.viewer.increaseScale()}><Icon name="plus" size={16}/></button>
       </div>
       <button type="button" className={'icon-button' + (findOpen ? ' active' : '')} aria-label={t('Find in PDF')} aria-pressed={findOpen} title={t('Find (⌘F)')} onClick={() => { if (findOpen) closeFind(); else setFindOpen(true); }}><Icon name="search" size={16}/></button>
-      {!props.readOnly && <button type="button" className={'icon-button region-toggle' + (props.region ? ' active' : '')} aria-label={t('Mark region')} aria-pressed={props.region} title={t('Mark a figure or region')} onClick={() => props.setRegion(!props.region)}><Icon name="region" size={16}/></button>}
-      {props.onGroupChange && <GroupPicker value={props.group || null} onChange={props.onGroupChange} disabled={props.markingDisabled || Boolean(editing)}/>}
+      {/* Narrow viewers have no tool rail; their marking tools stay up here. */}
+      {markable && <span className="pdf-compact-tools">
+        <button type="button" className={'icon-button region-toggle' + (props.region ? ' active' : '')} aria-label={t('Mark region')} aria-pressed={props.region} title={t('Mark a figure or region')} onClick={() => pickTool(props.region ? 'select' : 'region')}><Icon name="region" size={16}/></button>
+        {props.onGroupChange && <GroupPicker value={props.group || null} onChange={group => { props.onGroupChange!(group); if (group && tool !== 'region') choose('note'); }} disabled={props.markingDisabled || Boolean(editing)}/>}
+      </span>}
       {suggestions.length > 0 && <button type="button" className="pdf-suggestion-trigger" aria-label={t('AI suggestions')} title={t('AI suggestions')} aria-pressed={Boolean(activeSuggestion)} disabled={noteLocked} onClick={() => activeSuggestion ? closeNote() : props.onSelect(suggestions.find(({ note }) => note.page >= page - 1)?.note || suggestions[0].note)}><Icon name="spark" size={15}/><span>{suggestions.length}</span></button>}
       {props.tools}
     </div>
@@ -609,22 +795,45 @@ export const PdfView = forwardRef<PdfHandle, {
       <button type="button" className="icon-button" aria-label={t('Next match')} disabled={!matches.total} onClick={() => search(true)}><Icon name="chevronDown" size={16}/></button>
       <button type="button" className="icon-button" aria-label={t('Close search')} onClick={closeFind}><Icon name="close" size={15}/></button>
     </div>}
+    <div className="pdf-body">
+    {markable && <div className="pdf-rail" role="toolbar" aria-orientation="vertical" aria-label={t('Marking tools')}>
+      {railTools.map(item => {
+        const content = <><Icon name={item.icon} size={18}/>
+          {item.id === 'magic' && locked !== null && <span className="rail-badge" aria-hidden="true">{slotKey(locked)}</span>}
+          <span className="rail-tip" aria-hidden="true"><span className="rail-tip-title">{item.label}<kbd>{item.key}</kbd></span><span>{item.hint}</span></span></>;
+        return <Fragment key={item.id}>
+          {(item.id === 'note' || item.id === 'hand') && <span className="rail-separator" aria-hidden="true"/>}
+          {/* The note tool doubles as its color picker: its underline shows the color. */}
+          {item.id === 'note' && props.onGroupChange ? <GroupPicker value={props.group || null} disabled={props.markingDisabled} onChange={group => props.onGroupChange!(group)}
+            tool={{ label: item.label, pressed: tool === 'note', keys: item.key, content, onPress: () => { if (tool !== 'note') { pickTool('note'); return false; } return !editing; } }}/>
+            : item.id === 'magic' ? <StampMenu label={item.label} keys={item.key} pressed={tool === 'magic'} disabled={props.markingDisabled} content={content} stamps={stamps} locked={locked}
+              onPress={() => { if (tool !== 'magic') { pickTool('magic'); return false; } loadStamps(); return !editing; }} onLock={slot => { if (slot === null) setLocked(null); else lock(slot); }}/>
+            : <button type="button" className="rail-tool" aria-label={item.label} aria-pressed={tool === item.id} aria-keyshortcuts={item.key} disabled={item.id !== 'select' && item.id !== 'hand' && props.markingDisabled} onClick={() => pickTool(item.id)}>{content}</button>}
+        </Fragment>;
+      })}
+    </div>}
     <div className="pdf-scroll-host">
       <div ref={container} className="pdf-container" tabIndex={0} aria-label={t('PDF pages')}>
         <div ref={inner} className="pdfViewer"/>
       </div>
+      {lockedStamp && <div className="stamp-lock" role="status"><Icon name="toolMagic" size={14}/><span>{t('Magic pen: {name}', { name: lockedStamp.label })}</span><button type="button" onClick={() => setLocked(null)} title={t('Unlock (Esc)')} aria-label={t('Unlock quick note')}><Icon name="close" size={12}/></button></div>}
+      {markError && <div className="pdf-suggestion-undo" role="alert">{markError}<button type="button" onClick={() => setMarkError('')}>{t('Close')}</button></div>}
       {(loading || error) && <div className="review-loading"><p role={error ? 'alert' : 'status'}>{error ? t('The PDF could not be opened: {error}', { error }) : t('Opening the PDF…')}</p></div>}
       {dismissedNote && <div className="pdf-suggestion-undo" role="status">{dismissedNote.aiReview ? t('Suggestion ignored.') : t('Note deleted.')}<button type="button" disabled={noteLocked} onClick={() => void restoreNote()}>{t('Undo')}</button>{noteError && <p role="alert">{noteError}</p>}</div>}
     </div>
+    </div>
+    {wheel && <StampWheel x={wheel.x} y={wheel.y} stamps={stamps} onPick={pickStamp} onClose={() => { setWheel(null); container.current?.focus({ preventScroll: true }); }}
+      onFree={() => { const target = wheel.target; setWheel(null); openCard(target); }}/>}
     {[...layers].map(([number, layer]) => createPortal(<Fragment>
       {(() => {
-        const notes = props.notes.filter(({ note }) => note.page === number - 1), spots = tagSpots(notes.map(({ note }) => (note.rects?.length ? note.rects : [note.rect])[0]));
+        const notes = props.notes.filter(({ note }) => note.page === number - 1), spots = tagSpots(notes.map(({ note }) => ({ rect: (note.rects?.length ? note.rects : [note.rect])[0], name: note.stamp })));
         return notes.map(({ note, number: label }, index) => <Fragment key={note.id}>
-          {(note.rects?.length ? note.rects : [note.rect]).map((rect, part) => <div key={part} className={(note.rects?.length ? 'note-mark' : 'note-box') + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-review={note.aiReview ? true : undefined} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
-          <button type="button" className={'note-tag' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-review={note.aiReview ? true : undefined} style={{ ...spots[index], ...groupStyle(note.group) }} aria-label={note.aiReview ? t('Suggestion {n}: {comment}', { n: label, comment: note.comment }) : t('Note {n}: {comment}', { n: label, comment: note.group ? groupName(note.group) : note.comment })} aria-expanded={props.noteActions ? props.active === note.id : undefined} title={note.group ? t('Annotation groups') : note.comment} onClick={() => props.onSelect(note)}>{label}</button>
+          {note.kind === 'point' ? <div className={'note-point' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-stamp={note.stamp ? true : undefined} style={{ ...center(note.rect), ...groupStyle(note.group) }}/>
+            : (note.rects?.length ? note.rects : [note.rect]).map((rect, part) => <div key={part} className={(note.rects?.length ? 'note-mark' : 'note-box') + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
+          <button type="button" className={'note-tag' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...spots[index], ...groupStyle(note.group) }} aria-label={tagLabel(note, label)} aria-expanded={props.noteActions ? props.active === note.id : undefined} title={note.group ? t('Annotation groups') : note.comment} onClick={() => props.onSelect(note)}>{label}{note.stamp && <span className="note-tag-stamp">{note.stamp}</span>}</button>
         </Fragment>);
       })()}
-      {activeNote?.note.page === number - 1 && props.noteActions && !editing && !props.region && <PdfNoteCard key={activeNote.note.id} note={activeNote.note} number={activeNote.number} index={noteIndex} total={peers.length} selected={props.noteActions.has(activeNote.note.id)} busy={noteLocked} error={noteError}
+      {activeNote?.note.page === number - 1 && props.noteActions && !editing && !wheel && !props.region && <PdfNoteCard key={activeNote.note.id} note={activeNote.note} number={activeNote.number} index={noteIndex} total={peers.length} selected={props.noteActions.has(activeNote.note.id)} busy={noteLocked} error={noteError}
         draft={noteDrafts[activeNote.note.id] ?? null} onDraftChange={draft => setNoteDrafts(current => {
           const next = { ...current };
           if (draft === null) delete next[activeNote.note.id]; else next[activeNote.note.id] = draft;
@@ -652,21 +861,24 @@ export const PdfView = forwardRef<PdfHandle, {
         onPointerMove={e => { const start = origin.current; if (!start) return; const x = unit((e.clientX - start.box.left) / start.box.width), y = unit((e.clientY - start.box.top) / start.box.height); setDraft({ page: start.page, rect: [Math.min(start.x, x), Math.min(start.y, y), Math.max(start.x, x), Math.max(start.y, y)] }); }}
         onPointerUp={() => {
           const current = draftRef.current; origin.current = null; setDraft(null);
-          if (current && (current.rect[2] - current.rect[0] > 0.015 || current.rect[3] - current.rect[1] > 0.01)) {
-            if (latest.current.group) addToGroup({ page: current.page, rects: [], quote: '' }, current.rect);
-            else { setNewNoteDraft(''); setNoteError(''); setEditing({ page: current.page, rect: current.rect, rects: [], quote: '' }); }
-          }
+          if (current && (current.rect[2] - current.rect[0] > 0.015 || current.rect[3] - current.rect[1] > 0.01)) mark({ page: current.page, rect: current.rect, rects: [], quote: '' });
         }}/>}
+      {active === 'point' && markable && !editing && <div className="point-capture" onClick={event => {
+        const page = event.currentTarget.closest<HTMLElement>('.page');
+        if (page && !props.markingDisabled && !pressed.current.card) mark(pointAt(page, event.clientX, event.clientY));
+      }}/>}
+      {wheel?.target.page === number - 1 && (wheel.target.point ? <div className="note-point draft" style={center(wheel.target.rect)}/>
+        : (wheel.target.rects.length ? wheel.target.rects : [wheel.target.rect]).map((rect, index) => <div key={index} className={(wheel.target.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>))}
       {draft?.page === number - 1 && <div className="note-box draft" style={percent(draft.rect)}/>}
       {flash?.page === number - 1 && <div key={flash.id} className="problem-flash" style={percent(flash.rect)}/>}
       {selection?.handles && selection.page === number - 1 && !editing && <>
         {selection.rects.map((rect, index) => <div key={index} className="note-mark draft" style={percent(rect)}/>)}
         {(['from', 'to'] as const).map(end => { const [x, top, bottom] = selection.handles![end]; return <span key={end} className="select-handle" data-end={end} style={{ left: `${x * 100}%`, top: `${top * 100}%`, height: `${(bottom - top) * 100}%` }}/>; })}
       </>}
-      {!props.readOnly && selection?.page === number - 1 && !editing && <button type="button" className={'add-note' + (selection.handles ? ' touch' : '')} aria-label={props.group ? t('Add to {group}', { group: groupName(props.group) }) : t('Add note')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={startNote}><Icon name="pencil" size={14}/><GroupAction group={props.group}/></button>}
+      {markable && selection?.page === number - 1 && !editing && (active === 'select' || active === 'note' || selection.handles) && <button type="button" className={'add-note' + (selection.handles ? ' touch' : '')} aria-label={pillTool === 'delete' ? t('Delete') : pillTool === 'magic' ? t('Quick notes') : pillGroup ? t('Add to {group}', { group: groupName(pillGroup) }) : t('Add note')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { if (pillTool) mark(selected(selection)); else startNote(); }}>{pillTool === 'delete' ? <><Icon name="toolStrike" size={14}/>{t('Delete')}</> : pillTool === 'magic' ? <><Icon name="toolMagic" size={14}/>{t('Quick notes')}</> : <><Icon name="pencil" size={14}/><GroupAction group={pillGroup}/></>}</button>}
       {editing?.page === number - 1 && <>
-        {(editing.rects.length ? editing.rects : [editing.rect]).map((rect, index) => <div key={index} className={(editing.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>)}
-        <PdfNoteCard note={{ rect: editing.rect, comment: '' }} number={props.notes.length + 1} index={0} total={1} selected={false} busy={noteLocked} error={noteError}
+        {editing.point ? <div className="note-point draft" style={center(editing.rect)}/> : (editing.rects.length ? editing.rects : [editing.rect]).map((rect, index) => <div key={index} className={(editing.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>)}
+        <PdfNoteCard note={{ rect: editing.rect, comment: '', ...(editing.point ? { kind: 'point' as const } : {}) }} number={props.notes.length + 1} index={0} total={1} selected={false} busy={noteLocked} error={noteError}
           draft={newNoteDraft} onDraftChange={value => setNewNoteDraft(value ?? '')} onDismiss={closeNewNote} onClose={closeNewNote}
           onEditing={props.noteActions?.onEditing} onSave={saveNewNote}/>
       </>}

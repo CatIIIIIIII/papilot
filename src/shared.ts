@@ -72,7 +72,7 @@ export interface TimelineItem { id: string; taskId: string; type: string; text: 
 // those as what they are rather than as the prompt the agent receives.
 // Papilot itself sends the agent a build its own edits broke.
 export interface NoteAnchor { sources: { file: string; lines: [number, number] }[]; round?: number }
-export interface NoteSummary { group?: NoteGroup; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor }
+export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: string; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor }
 export interface NoteChange { round: number; stop: number; units: string[]; state: 'pending' | 'accepted' | 'rejected' | 'commented' | 'mixed'; match: 'source' | 'quote' }
 export interface NoteResult { key: string; itemId: string; index: number; note: NoteSummary; round: number | null; state: 'waiting' | 'unmatched' | 'matched'; changes: NoteChange[] }
 export interface MessageMeta { attachments?: Attachment[]; skill?: { id: string; name: string; icon?: SkillIcon }; notes?: NoteSummary[]; groupInstructions?: GroupInstructions; feedback?: FeedbackSummary; sendsFeedback?: boolean; build?: BuildFailure; author?: Author }
@@ -155,7 +155,18 @@ export function countProblems(problems: Pick<BuildProblem, 'severity' | 'kind' |
 }
 // `key` names the PDF whose pages the locations refer to.
 export interface ManuscriptProblems { status: ManuscriptBuild['status']; key?: string; problems: BuildProblem[]; log: boolean }
-export interface Annotation { aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number }
+// A delete mark asks for the marked text to go, or to be replaced by its
+// comment; a point marks a place rather than a passage. A stamp is the short
+// name of a quick note the author picked; its comment holds the instruction.
+export type MarkKind = 'delete' | 'point';
+export const isMarkKind = (value: unknown): value is MarkKind => value === 'delete' || value === 'point';
+// The magic pen's quick notes, as each person keeps them. A preset that is
+// unchanged stores only its id, so its name and instruction follow the
+// interface language; anything changed or added stores its own text.
+export interface QuickNote { id: string; label?: string; instruction?: string; icon?: string }
+export const QUICK_NOTE_LIMIT = 8;
+export const PRESET_QUICK_NOTES = ['polish', 'tighten', 'runt', 'connect', 'verify'];
+export interface Annotation { aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number }
 // Review findings stay with their task; only explicit copies belong to the manuscript.
 export const isTaskReviewNote = (note: Annotation) => Boolean(note.aiReview && !note.aiReview.sourceId);
 export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[] }
