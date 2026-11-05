@@ -35,6 +35,36 @@ it("treats a run that moves elsewhere as moved, both where it left and where it 
   ).toHaveLength(2);
 });
 
+it("marks only the words an edit changed inside a moved run", () => {
+  // The sentence moves past a longer passage, which therefore stays put, and
+  // one of its words changes on the way.
+  const moved =
+      "the closure keeps its environment until an argument value arrives",
+    edited =
+      "the closure keeps its environment until a type annotation arrives",
+    passage =
+      "beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau";
+  const a = words(`alpha ${moved} ${passage} omega`),
+    b = words(`alpha ${passage} ${edited} omega`),
+    changes = differences(a, b)!,
+    text = (w: Words, [i, j]: [number, number]) =>
+      w.tokens
+        .slice(i, j)
+        .map((t) => t.text)
+        .join(" ");
+  expect(
+    changes
+      .map((c) => text(a, c.old))
+      .filter(Boolean)
+      .join(" "),
+  ).toBe("an argument value");
+  expect(
+    changes
+      .map((c) => text(b, c.new))
+      .filter(Boolean)
+      .join(" "),
+  ).toBe("a type annotation");
+});
 it("leaves out page numbers and running heads but keeps text at the top of a page", () => {
   const line = (text: string, top: number): { text: string; rect: Rect } => ({
     text,

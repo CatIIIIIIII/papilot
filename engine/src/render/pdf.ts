@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import * as mupdf from "mupdf";
-import type { Rect } from "../types.ts";
+import type { Rect, Span } from "../types.ts";
 export { mupdf };
 export const union = (a: Rect, b: Rect): Rect => [
   Math.min(a[0], b[0]),
@@ -88,13 +88,24 @@ export function walkText(
     },
   });
 }
+// How light a colour of a shape is, from 0 (black) to 1 (white).
+function luminance(color: ArrayLike<number>) {
+  const c = Array.from(color);
+  if (c.length === 4)
+    return (1 - c[0] * 0.3 - c[1] * 0.59 - c[2] * 0.11) * (1 - c[3]);
+  if (c.length === 3) return c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+  return c[0] ?? 0;
+}
 export class PdfPage {
   private columns?: boolean;
+  private bands?: Span[];
   raw: mupdf.Page;
   bounds: Rect;
   blocks: TextBlock[] = [];
   lines: Line[] = [];
   words: Word[] = [];
+  /** The boxes of the dark shapes and the images the page prints. */
+  drawings: Rect[] = [];
   label: string;
   constructor(
     document: mupdf.Document,
@@ -104,10 +115,14 @@ export class PdfPage {
     this.bounds = this.raw.getBounds();
     this.label = this.raw.getLabel() || String(number + 1);
     const text = this.raw.toStructuredText(
-      "preserve-whitespace,preserve-ligatures",
+      "preserve-whitespace,preserve-ligatures,vectors,preserve-images",
     );
     let block: TextBlock, line: Line;
     walkText(text, {
+      onVector: (rect, _flags, color) => {
+        if (luminance(color) < 0.8) this.drawings.push([...rect] as Rect);
+      },
+      onImageBlock: (rect) => this.drawings.push([...rect] as Rect),
       beginTextBlock: (rect) => {
         block = { rect, text: "", lines: [] };
         this.blocks.push(block);
@@ -161,6 +176,9 @@ export class PdfPage {
       );
       const left = prose.filter((l) => l.rect[2] < middle),
         right = prose.filter((l) => l.rect[0] > middle);
+      // Lines side by side, and more of them than lines across the middle:
+      // a page of one column may set a few lines side by side, as two
+      // displays in a row.
       this.columns =
         left.filter((a) =>
           right.some(
@@ -168,14 +186,66 @@ export class PdfPage {
               Math.min(a.rect[3], b.rect[3]) - Math.max(a.rect[1], b.rect[1]) >
               3,
           ),
-        ).length >= 3;
+        ).length >= 3 && 2 * (left.length + right.length) > prose.length;
     }
     return this.columns;
   }
-  column(rect: Rect) {
+  // On a page with two columns, the heights at which something prints across
+  // the gutter between them: a title, an abstract, a wide figure or table.
+  // A column's text leaves the gutter blank; a glyph, a dark shape or an
+  // image that crosses it inks it.
+  get spanning(): Span[] {
+    if (this.bands) return this.bands;
+    this.bands = [];
+    if (!this.twoColumns) return this.bands;
+    const middle = this.bounds[0] + this.width / 2,
+      gutter = (r: Rect) => r[0] < middle + 4 && r[2] > middle - 4,
+      inked: Span[] = [
+        ...this.lines.flatMap((l) =>
+          l.chars
+            .filter((c) => c.text.trim() && gutter(c.rect))
+            .map((c): Span => [c.rect[1], c.rect[3]]),
+        ),
+        ...this.drawings
+          .filter(gutter)
+          .map((r): Span => [r[1] - 0.5, r[3] + 0.5]),
+      ].sort((a, b) => a[0] - b[0]);
+    // Inked heights join unless a line of column prose prints between them:
+    // an author block or a table may leave the gutter blank on some rows.
+    const prose = this.lines.filter(
+      (l) =>
+        this.side(l.rect) >= 0 &&
+        l.text.trim().split(/\s+/).length >= 5 &&
+        l.rect[2] - l.rect[0] > this.width * 0.25,
+    );
+    for (const [y0, y1] of inked) {
+      const last = this.bands.at(-1);
+      if (
+        last &&
+        (y0 <= last[1] ||
+          !prose.some((l) => l.rect[1] >= last[1] - 1 && l.rect[3] <= y0 + 1))
+      )
+        last[1] = Math.max(last[1], y1);
+      else this.bands.push([y0, y1]);
+    }
+    return this.bands;
+  }
+  // The half of a page with two columns that a rect lies in, if either.
+  private side(rect: Rect) {
     if (!this.twoColumns) return -1;
     const middle = this.bounds[0] + this.width / 2;
     return rect[2] <= middle ? 0 : rect[0] >= middle ? 1 : -1;
+  }
+  /** The column a rect prints in: -1 on a page without columns, across the
+   * gutter, or in a band printed across both columns, such as a cell of a
+   * wide table. */
+  column(rect: Rect) {
+    const side = this.side(rect),
+      middle = (rect[1] + rect[3]) / 2;
+    return side >= 0 &&
+      this.spanning.some(([a, b]) => middle >= a && middle <= b)
+      ? -1
+      : side;
   }
   columnBounds(column: number): [number, number] {
     const middle = this.bounds[0] + this.width / 2;
@@ -210,14 +280,26 @@ export class PdfPage {
       .filter(Boolean)
       .join("\n");
   }
-  raster(clip: Rect, scale = 2, gray = false): Raster {
-    const matrix: mupdf.Matrix = [scale, 0, 0, scale, 0, 0],
-      rect: Rect = [
-        Math.floor(clip[0] * scale),
-        Math.floor(clip[1] * scale),
-        Math.ceil(clip[2] * scale),
-        Math.ceil(clip[3] * scale),
-      ],
+  // With `origin`, the clip's corner is pixel (0, 0) exactly, so the same
+  // content renders to the same pixels wherever it sits on the page; else
+  // the page's own pixel grid, which shifts content by a fraction of a pixel.
+  raster(clip: Rect, scale = 2, gray = false, origin = false): Raster {
+    const matrix: mupdf.Matrix = origin
+        ? [scale, 0, 0, scale, -clip[0] * scale, -clip[1] * scale]
+        : [scale, 0, 0, scale, 0, 0],
+      rect: Rect = origin
+        ? [
+            0,
+            0,
+            Math.ceil((clip[2] - clip[0]) * scale),
+            Math.ceil((clip[3] - clip[1]) * scale),
+          ]
+        : [
+            Math.floor(clip[0] * scale),
+            Math.floor(clip[1] * scale),
+            Math.ceil(clip[2] * scale),
+            Math.ceil(clip[3] * scale),
+          ],
       pixmap = new mupdf.Pixmap(
         gray ? mupdf.ColorSpace.DeviceGray : mupdf.ColorSpace.DeviceRGB,
         rect,
@@ -238,11 +320,11 @@ export class PdfPage {
     pixmap.destroy();
     return result;
   }
-  svg(top: number, bottom: number) {
+  svg(top: number, bottom: number, left = 0, right = this.width) {
     const buffer = new mupdf.Buffer(),
       writer = new mupdf.DocumentWriter(buffer, "svg", "text=path"),
-      device = writer.beginPage([0, 0, this.width, bottom - top]);
-    this.raw.run(device, [1, 0, 0, 1, 0, -top]);
+      device = writer.beginPage([0, 0, right - left, bottom - top]);
+    this.raw.run(device, [1, 0, 0, 1, -left, -top]);
     writer.endPage();
     writer.close();
     const svg = buffer.asString();

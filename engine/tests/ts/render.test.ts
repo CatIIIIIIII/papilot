@@ -19,9 +19,9 @@ const documents: PdfDocument[] = [];
 const folders: string[] = [];
 it("keeps at least a page of context on each side of an isolated edit", () => {
   const plan = foldContext([
-    { kind: "context", page: 0, top: 0, bottom: 2000 },
-    { kind: "change", page: 0, top: 2000, bottom: 2050 },
-    { kind: "context", page: 0, top: 2050, bottom: 4000 },
+    { kind: "context", lane: 0, top: 0, bottom: 2000 },
+    { kind: "change", lane: 0, top: 2000, bottom: 2050 },
+    { kind: "context", lane: 0, top: 2050, bottom: 4000 },
   ]);
   const visible = plan.filter((p) => p.kind === "context");
   expect(visible).toHaveLength(2);
@@ -199,9 +199,10 @@ it("keeps a moved float outside the edit and pairs relocated sentences", () => {
       unchanged.join("\n"),
       "Since type variables now depend on their bounds, both guards must be context-aware.",
     ]);
+  // Lanes of pages 0 and 1, which have one column.
   const intervals = new Map([
       [0, [[0, 600] as [number, number]]],
-      [1, [[0, 600] as [number, number]]],
+      [3, [[0, 600] as [number, number]]],
     ]),
     a = textRows(old, intervals),
     b = textRows(next, intervals),

@@ -14,7 +14,16 @@ import type {
   Span,
   Strip,
 } from "../types.ts";
-import { Build, sectionIntervals, type Box, type Intervals } from "./locate.ts";
+import {
+  Build,
+  byReading,
+  laneAt,
+  lanePage,
+  laneX,
+  readingKey,
+  sectionIntervals,
+  type Intervals,
+} from "./locate.ts";
 import { containsCenter, intersect, intersects, PdfDocument } from "./pdf.ts";
 import { textChanges } from "./pdfdiff.ts";
 const RUN_GAP = 3,
@@ -34,42 +43,44 @@ interface Group {
   bottom: number;
   pairs: PairRef[];
 }
+// A stretch of a lane: its lane (see locate.ts), top and bottom.
+type Part = [number, number, number];
 interface Piece {
   kind: "context" | "change";
-  page: number;
+  lane: number;
   top: number;
   bottom: number;
   pairs?: PairRef[];
-  parts?: Box[];
+  parts?: Part[];
 }
 type Planned = Piece | { kind: "gap" };
 export function textRows(document: PdfDocument, intervals: Intervals): Row[] {
-  const rows: Row[] = [];
-  for (const [page, spans] of [...intervals].sort((a, b) => a[0] - b[0]))
-    for (const line of document.page(page).lines) {
-      const text = line.text.trim().replace(/\s+/g, " ");
+  const rows: [number[], Row][] = [];
+  for (const [id, spans] of intervals) {
+    const number = lanePage(id),
+      page = document.page(number);
+    for (const line of page.lines) {
+      const text = line.text.trim().replace(/\s+/g, " "),
+        middle = (line.rect[1] + line.rect[3]) / 2;
       if (
         text &&
-        spans.some(
-          ([a, b]) =>
-            a <= (line.rect[1] + line.rect[3]) / 2 &&
-            (line.rect[1] + line.rect[3]) / 2 <= b,
-        )
+        laneAt(document, number, line.rect) === id &&
+        spans.some(([a, b]) => a <= middle && middle <= b)
       )
-        rows.push({
-          page,
-          rect: line.rect,
-          text,
-          column: document.page(page).column(line.rect),
-        });
+        rows.push([
+          [...readingKey(document, id, line.rect[1]), line.rect[0]],
+          {
+            page: number,
+            rect: line.rect,
+            text,
+            column: page.column(line.rect),
+          },
+        ]);
     }
-  return rows.sort(
-    (a, b) =>
-      a.page - b.page ||
-      (document.page(a.page).twoColumns
-        ? 0
-        : a.rect[1] - b.rect[1] || a.rect[0] - b.rect[0]),
-  );
+  }
+  return rows
+    .sort(([a], [b]) => byReading(a, b) || a[4] - b[4])
+    .map(([, row]) => row);
 }
 export function pairRelocated(
   regions: Region[],
@@ -388,14 +399,15 @@ export function snap(
   number: number,
   top: number,
   bottom: number,
-  limit = 10,
+  [x0, x1]: Span = [0, document.page(number).width],
 ): Span {
-  const page = document.page(number),
+  const limit = 10,
+    page = document.page(number),
     ink = (y0: number, y1: number): [Span, boolean[]] => {
       y0 = Math.max(0, y0);
       y1 = Math.min(page.height, y1);
       if (y1 - y0 < 1) return [[y0, y1], []];
-      const image = page.raster([0, y0, page.width, y1], 2, true);
+      const image = page.raster([x0, y0, x1, y1], 2, true);
       return [
         [y0, y1],
         Array.from({ length: image.height }, (_, r) =>
@@ -417,30 +429,87 @@ export function snap(
   else if (rows.length) top = clip[0];
   return [top, bottom];
 }
+// An aligned crop already ends between printed lines, so it never cuts a
+// glyph; only the blank space at its ends goes. Growing it to the nearest
+// blank row, as snap does, would take in the equal line it ends at.
+export function trimmed(
+  document: PdfDocument,
+  number: number,
+  top: number,
+  bottom: number,
+  [x0, x1]: Span = [0, document.page(number).width],
+): Span {
+  const page = document.page(number);
+  top = Math.max(0, top);
+  bottom = Math.min(page.height, bottom);
+  if (bottom - top < 1) return [top, bottom];
+  const image = page.raster([x0, top, x1, bottom], 2, true),
+    rows = Array.from({ length: image.height }, (_, r) =>
+      image.pixels
+        .subarray(r * image.stride, r * image.stride + image.width)
+        .some((p) => p < 200),
+    ),
+    scale = (bottom - top) / rows.length,
+    // A sliver of ink at an end, apart from the rest, is the descender or
+    // accent of the line beyond it.
+    sliver = Math.ceil(1.5 / scale),
+    edge = (list: boolean[]) => {
+      const ink = list.indexOf(true),
+        blank = list.indexOf(false, ink);
+      return ink === 0 &&
+        blank > 0 &&
+        blank <= sliver &&
+        list.indexOf(true, blank) > 0
+        ? list.indexOf(true, blank)
+        : ink;
+    },
+    first = edge(rows),
+    last = first < 0 ? -1 : rows.length - 1 - edge([...rows].reverse());
+  return first < 0
+    ? [top, bottom]
+    : [
+        Math.max(top, top + first * scale - 1),
+        Math.min(bottom, top + (last + 1) * scale + 1),
+      ];
+}
+// The lanes a crop of a page falls in: those of the section's intervals on
+// its page that hold most of its width, or most of whose width it holds.
+function lanesOf(
+  document: PdfDocument,
+  intervals: Intervals,
+  position: Position,
+) {
+  const [x0, , x1] = position.clip;
+  return [...intervals.keys()].filter((id) => {
+    if (lanePage(id) !== position.page) return false;
+    const [a, b] = laneX(document, id);
+    return Math.min(x1, b) - Math.max(x0, a) >= Math.min(x1 - x0, b - a) / 2;
+  });
+}
 export function groupedRegions(
+  document: PdfDocument,
   cards: [number, Card][],
   intervals: Intervals,
-  snapped?: (page: number, top: number, bottom: number) => Span,
+  snapped?: (lane: number, top: number, bottom: number, card: Card) => Span,
 ) {
   const result = new Map<number, Group[]>();
   for (const [index, card] of cards)
     card.pairs.forEach((pair, pairIndex) => {
       const position = pair.new;
       if (!position) return;
-      for (const [start, end] of intervals.get(position.page) ?? []) {
-        let top = Math.max(start, position.clip[1]),
-          bottom = Math.min(end, position.clip[3]);
-        if (bottom > top && snapped)
-          [top, bottom] = snapped(position.page, top, bottom);
-        if (bottom > top) {
-          if (!result.has(position.page)) result.set(position.page, []);
-          result
-            .get(position.page)!
-            .push({ top, bottom, pairs: [[index, pairIndex]] });
+      for (const id of lanesOf(document, intervals, position))
+        for (const [start, end] of intervals.get(id)!) {
+          let top = Math.max(start, position.clip[1]),
+            bottom = Math.min(end, position.clip[3]);
+          if (bottom > top && snapped)
+            [top, bottom] = snapped(id, top, bottom, card);
+          if (bottom > top) {
+            if (!result.has(id)) result.set(id, []);
+            result.get(id)!.push({ top, bottom, pairs: [[index, pairIndex]] });
+          }
         }
-      }
     });
-  for (const [page, regions] of result) {
+  for (const [id, regions] of result) {
     const merged: Group[] = [];
     for (const region of regions.sort((a, b) => a.top - b.top)) {
       const last = merged.at(-1),
@@ -455,31 +524,35 @@ export function groupedRegions(
         last.pairs.push(...region.pairs);
       } else merged.push(region);
     }
-    result.set(page, merged);
+    result.set(id, merged);
   }
   return result;
 }
 export function contextPlan(
+  document: PdfDocument,
   intervals: Intervals,
   groups: Map<number, Group[]>,
 ): Piece[] {
-  const plan: Piece[] = [];
-  for (const [page, spans] of [...intervals].sort((a, b) => a[0] - b[0]))
+  const plan: [number[], Piece][] = [];
+  for (const [lane, spans] of intervals)
     for (const [start, end] of spans) {
+      const pieces: Piece[] = [];
       let cursor = start;
-      for (const group of groups.get(page) ?? []) {
+      for (const group of groups.get(lane) ?? []) {
         const top = Math.max(start, group.top),
           bottom = Math.min(end, group.bottom);
         if (bottom <= top) continue;
         if (top > cursor)
-          plan.push({ kind: "context", page, top: cursor, bottom: top });
-        plan.push({ kind: "change", page, top, bottom, pairs: group.pairs });
+          pieces.push({ kind: "context", lane, top: cursor, bottom: top });
+        pieces.push({ kind: "change", lane, top, bottom, pairs: group.pairs });
         cursor = bottom;
       }
       if (cursor < end)
-        plan.push({ kind: "context", page, top: cursor, bottom: end });
+        pieces.push({ kind: "context", lane, top: cursor, bottom: end });
+      for (const piece of pieces)
+        plan.push([readingKey(document, lane, piece.top), piece]);
     }
-  return plan;
+  return plan.sort(([a], [b]) => byReading(a, b)).map(([, piece]) => piece);
 }
 export function foldContext(plan: Piece[], margin = MARGIN): Planned[] {
   let total = 0;
@@ -537,23 +610,28 @@ export function acrossPages(plan: Planned[]) {
       const previous = k ? result[k - 1] : null;
       if (
         previous?.kind === "change" &&
-        previous.parts!.at(-1)![0] !== piece.page &&
+        previous.parts!.at(-1)![0] !== piece.lane &&
         previous.pairs!.some(
           ([i]) =>
             piece.kind === "change" && piece.pairs!.some(([j]) => i === j),
         )
       ) {
         result.splice(k);
-        previous.parts!.push([piece.page, piece.top, piece.bottom]);
+        previous.parts!.push([piece.lane, piece.top, piece.bottom]);
         previous.pairs!.push(...piece.pairs!);
         continue;
       }
-      piece = { ...piece, parts: [[piece.page, piece.top, piece.bottom]] };
+      piece = { ...piece, parts: [[piece.lane, piece.top, piece.bottom]] };
     }
     result.push(piece);
   }
   return result;
 }
+// The marks a card's strips draw. Moved words are drawn only where the whole
+// comparison found them: text that left one place for another. Compared
+// alone, a card's crops call moved the words a paragraph only rewrapped.
+export const drawn = (card: Card, marks: Mark[]) =>
+  card.aligned ? marks : marks.filter((m) => m.kind !== "moved");
 export class Strips {
   count = 0;
   constructor(public out: string) {}
@@ -564,12 +642,41 @@ export class Strips {
     bottom: number,
     marks: Mark[] = [],
     side = "",
+    [left, right]: Span = [0, document.page(number).width],
   ): Strip | null {
     const page = document.page(number);
     top = Math.max(0, top);
     bottom = Math.min(page.height, bottom);
-    if (bottom - top < 0.1) return null;
-    const svg = page.svg(top, bottom),
+    left = Math.max(0, left);
+    right = Math.min(page.width, right);
+    if (bottom - top < 0.1 || right - left < 0.1) return null;
+    const clip: Rect = [left, top, right, bottom];
+    // A strip that shows nothing, such as the space above a band printed
+    // across both columns, is not written.
+    if (
+      !page.lines.some((line) =>
+        line.chars.some((char) => containsCenter(clip, char.rect)),
+      ) &&
+      page.raster(clip, 1, true).pixels.every((p) => p >= 250)
+    )
+      return null;
+    // Red and green say that words were removed or added; a light blue,
+    // that words moved here or away unchanged (see `drawn`).
+    // Words of an old crop that the context strips also show are veiled in
+    // every version of the strip, so that none reads twice.
+    const veil = marks
+      .map((mark) =>
+        mark.kind === "context" ? intersect(mark.rect, clip) : null,
+      )
+      .filter((r): r is Rect => r !== null && r[2] > r[0] && r[3] > r[1])
+      .map(
+        (r) =>
+          `<rect x="${r[0] - left - 0.5}" y="${r[1] - top - 0.5}" width="${r[2] - r[0] + 1}" height="${r[3] - r[1] + 1}" fill="#fff" fill-opacity=".7"/>`,
+      )
+      .join("");
+    marks = marks.filter((mark) => mark.kind !== "context");
+    const raw = page.svg(top, bottom, left, right),
+      svg = veil ? raw.replace("</svg>", veil + "</svg>") : raw,
       digest = createHash("sha256")
         .update(svg)
         .update(JSON.stringify(marks))
@@ -583,17 +690,19 @@ export class Strips {
       const color = side === "old" ? "#c72938" : "#1f8c52",
         overlays = marks
           .map((mark) => {
-            const r = intersect(mark.rect, [0, top, page.width, bottom]);
+            const r = intersect(mark.rect, clip);
             if (r[2] <= r[0] || r[3] <= r[1]) return "";
-            const x = r[0],
+            const x = r[0] - left,
               y = r[1] - top,
               width = r[2] - r[0],
               height = r[3] - r[1],
               strike = y + height * 0.55;
+            if (mark.kind === "moved")
+              return `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#2563c9" fill-opacity=".14"/>`;
             return (
               `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${color}" fill-opacity=".18"/>` +
               (side === "old"
-                ? `<path d="M ${x} ${strike} H ${r[2]}" stroke="${color}" stroke-width=".45"/>`
+                ? `<path d="M ${x} ${strike} H ${r[2] - left}" stroke="${color}" stroke-width=".45"/>`
                 : "")
             );
           })
@@ -606,15 +715,13 @@ export class Strips {
     const text = page.lines
       .map((line) => {
         const chars = line.chars
-          .filter((char) =>
-            containsCenter([0, top, page.width, bottom], char.rect),
-          )
+          .filter((char) => containsCenter(clip, char.rect))
           .map((char) => ({
             text: char.text,
             rect: [
-              char.rect[0],
+              char.rect[0] - left,
               char.rect[1] - top,
-              char.rect[2],
+              char.rect[2] - left,
               char.rect[3] - top,
             ] as Rect,
           }));
@@ -624,9 +731,10 @@ export class Strips {
     return {
       src: name + ".svg",
       clean,
-      width: Math.round(page.width * 100) / 100,
+      width: Math.round((right - left) * 100) / 100,
       height: Math.round((bottom - top) * 100) / 100,
       top: Math.round(top * 100) / 100,
+      ...(left > 0 ? { left: Math.round(left * 100) / 100 } : {}),
       page: number + 1,
       label: page.label,
       text,
@@ -646,7 +754,9 @@ export function renderSection(
   let oldRows: Row[] = [],
     newRows: Row[] = [],
     opcodes: Op[] = [];
-  if (cards.some(([, card]) => card.comparison === "text")) {
+  // Aligned cards already end at the same lines on both sides; the rows of
+  // the section only balance the crops of the others.
+  if (cards.some(([, card]) => card.comparison === "text" && !card.aligned)) {
     const oldNode = old.outline.find((n) => n.id === node.id);
     if (oldNode)
       try {
@@ -661,7 +771,8 @@ export function renderSection(
       }
   }
   for (const [, card] of cards) {
-    if (card.comparison !== "text" || figureFiles(card.file)) continue;
+    if (card.comparison !== "text" || card.aligned || figureFiles(card.file))
+      continue;
     if (opcodes.length) {
       const balanced = balancedTextPairs(
         card,
@@ -698,16 +809,24 @@ export function renderSection(
   const plan = acrossPages(
       foldContext(
         contextPlan(
+          next.document,
           intervals,
-          groupedRegions(cards, intervals, (p, a, b) =>
-            snap(next.document, p, a, b),
+          groupedRegions(next.document, cards, intervals, (id, a, b, card) =>
+            (card.aligned ? trimmed : snap)(
+              next.document,
+              lanePage(id),
+              a,
+              b,
+              laneX(next.document, id),
+            ),
           ),
         ),
       ),
     ),
     byIndex = new Map(cards),
     blocks: Block[] = [],
-    located = new Set<number>();
+    located = new Set<number>(),
+    oldShown = new Set<string>();
   for (const piece of plan) {
     if (piece.kind === "gap") {
       blocks.push({ kind: "gap" });
@@ -716,9 +835,12 @@ export function renderSection(
     if (piece.kind === "context") {
       const image = strips.write(
         next.document,
-        piece.page,
+        lanePage(piece.lane),
         piece.top,
         piece.bottom,
+        [],
+        "",
+        laneX(next.document, piece.lane),
       );
       if (image) blocks.push({ kind: "context", image });
       continue;
@@ -727,66 +849,107 @@ export function renderSection(
       (a, b) => a - b,
     );
     indices.forEach((i) => located.add(i));
-    const pairs = piece.pairs!.map(([i, j]) => byIndex.get(i)!.pairs[j]),
-      identical = indices.every(
-        (i) => byIndex.get(i)!.comparison === "identical",
-      );
-    const regions = identical
+    const identical = indices.every(
+      (i) => byIndex.get(i)!.comparison === "identical",
+    );
+    // An aligned card shows the whole old side of a region with the first
+    // block that shows the region: the old side can break across pages
+    // where the new side does not, so an old crop need not share its index
+    // with a new one in this piece.
+    const shown = ([i, j]: [number, number]): [Card, Pair][] => {
+        const card = byIndex.get(i)!,
+          group = card.pairs[j].group;
+        if (!card.aligned) return [[card, card.pairs[j]]];
+        const key = `${i}:${group}`;
+        if (oldShown.has(key)) return [];
+        oldShown.add(key);
+        return card.pairs
+          .filter((pair) => pair.group === group)
+          .map((pair): [Card, Pair] => [card, pair]);
+      },
+      regions = identical
         ? []
-        : pairs.flatMap((pair) =>
-            pair.old
+        : piece.pairs!.flatMap(shown).flatMap(([card, pair]) => {
+            return pair.old
               ? [
                   {
-                    page: pair.old.page,
+                    lane: laneAt(old.document, pair.old.page, pair.old.clip),
                     top: pair.old.clip[1],
                     bottom: pair.old.clip[3],
-                    marks: pair.before_marks,
+                    marks: drawn(card, pair.before_marks),
+                    aligned: Boolean(card.aligned),
                   },
                 ]
-              : [],
-          ),
+              : [];
+          }),
       merged: typeof regions = [];
-    for (const region of regions.sort(
-      (a, b) => a.page - b.page || a.top - b.top,
+    for (const region of regions.sort((a, b) =>
+      byReading(
+        readingKey(old.document, a.lane, a.top),
+        readingKey(old.document, b.lane, b.top),
+      ),
     )) {
       const last = merged.at(-1);
       if (
         last &&
-        region.page === last.page &&
+        region.lane === last.lane &&
         region.top <= last.bottom + JOIN_GAP
       ) {
         last.bottom = Math.max(last.bottom, region.bottom);
         last.marks.push(...region.marks);
+        last.aligned &&= region.aligned;
       } else merged.push({ ...region, marks: [...region.marks] });
     }
     const before = merged
-        .map((r) =>
-          strips.write(
+        .map((r) => {
+          const page = lanePage(r.lane),
+            x = laneX(old.document, r.lane);
+          return strips.write(
             old.document,
-            r.page,
-            ...snap(old.document, r.page, r.top, r.bottom),
+            page,
+            ...(r.aligned ? trimmed : snap)(
+              old.document,
+              page,
+              r.top,
+              r.bottom,
+              x,
+            ),
             r.marks,
             "old",
-          ),
-        )
+            x,
+          );
+        })
         .filter((s): s is Strip => s !== null),
       after = piece
-        .parts!.map(([page, top, bottom]) =>
+        .parts!.map(([lane, top, bottom]) =>
           strips.write(
             next.document,
-            page,
+            lanePage(lane),
             top,
             bottom,
-            pairs
-              .filter((p) => p.new?.page === page)
-              .flatMap((p) => p.after_marks),
+            piece.pairs!.flatMap(([i, j]) => {
+              const card = byIndex.get(i)!,
+                pair = card.pairs[j];
+              return pair.new?.page === lanePage(lane)
+                ? drawn(card, pair.after_marks)
+                : [];
+            }),
             "new",
+            laneX(next.document, lane),
           ),
         )
         .filter((s): s is Strip => s !== null),
-      edited = pairs.some((p) =>
-        [...p.before_marks, ...p.after_marks].some((m) => m.kind !== "moved"),
-      );
+      // Text that the whole comparison found moved here is no reflow.
+      kinds = new Set(
+        piece.pairs!.flatMap(([i, j]) => {
+          const card = byIndex.get(i)!,
+            pair = card.pairs[j];
+          return drawn(card, [...pair.before_marks, ...pair.after_marks]).map(
+            (m) => m.kind,
+          );
+        }),
+      ),
+      edited = kinds.has("removed") || kinds.has("added") || kinds.has("moved");
     blocks.push({
       kind: "change",
       units: indices.map((i) => byIndex.get(i)!.id),
@@ -795,6 +958,7 @@ export function renderSection(
         !identical &&
         !edited &&
         indices.every((i) => byIndex.get(i)!.comparison === "text"),
+      ...(kinds.has("moved") ? { moved: true } : {}),
       before,
       after,
     });
