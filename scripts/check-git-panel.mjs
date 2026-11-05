@@ -195,6 +195,23 @@ try {
   await closeSettings();
   await panel.getByRole('region', { name: 'Commit graph', exact: true }).waitFor();
   await panel.getByRole('region', { name: 'Worktrees', exact: true }).waitFor();
+  // A local repository read timing out is not evidence of a network failure.
+  const graph = panel.getByRole('region', { name: 'Commit graph', exact: true });
+  await expect(graph.getByText('No commits yet', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const timeout = AbortSignal.timeout;
+    window.__restoreGitOverviewTimeout = () => { AbortSignal.timeout = timeout; };
+    AbortSignal.timeout = wait => wait === 60000
+      ? AbortSignal.abort(new DOMException('Timed out', 'TimeoutError')) : timeout.call(AbortSignal, wait);
+  });
+  await graph.getByRole('button', { name: 'Refresh worktrees and history', exact: true }).click();
+  await expect(graph.getByRole('alert')).toContainText('The request timed out. Please try again.');
+  await expect(graph.getByRole('alert')).toContainText('Showing the last update.');
+  await expect(graph.getByRole('alert')).not.toContainText(/network/i);
+  await expect(graph.getByText('No commits yet', { exact: true })).toBeVisible();
+  await page.evaluate(() => { window.__restoreGitOverviewTimeout(); delete window.__restoreGitOverviewTimeout; });
+  await graph.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(graph.getByRole('alert')).toHaveCount(0);
   await page.reload();
   await page.getByRole('tab', { name: /^Git/ }).click();
   await panel.getByRole('region', { name: 'Commit graph', exact: true }).waitFor();

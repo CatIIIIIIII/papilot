@@ -221,7 +221,7 @@ export const zhCN: Record<string, string> = {
 
   // Requests
   'Request failed. Please try again.': '请求失败，请重试。',
-  'The connection is taking too long. Check your network and try again.': '连接时间过长。请检查网络后重试。',
+  'The request timed out. Please try again.': '请求超时，请重试。',
   'The request timed out and may still be processing. Check the task status before retrying.': '请求超时，可能仍在处理中。重试前请先检查任务状态。',
 
   // Task status

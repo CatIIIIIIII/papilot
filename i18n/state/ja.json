@@ -4634,11 +4634,6 @@
     "textHash": "d91690b1ac9f7ed0d51af2e21d5de1b941bbacce72d29e21e9eb77699c32d4ff",
     "model": "gemini-4-argon-medium"
   },
-  "The connection is taking too long. Check your network and try again.": {
-    "revision": "35bc1a86fc2f6de0515b949a2916436a93ca9c083d9ce24f4b76bbbc5259e120",
-    "textHash": "b3db526d5611f820c3bb2c19b9211083ccf9d0aa663b0c02eba908ea22e55f8d",
-    "model": "gemini-4-argon-medium"
-  },
   "The dev build needs at least 2 GB of free disk space. Free some space and retry.": {
     "revision": "a2acf72cd62d2bb2c47b3b72451cd74f9609648556f594f34057ae89f99ecbc8",
     "textHash": "f05a9f1dd6206597705913fc8b064d644d890bb58753e285611f4d451495dc5a",

@@ -84,7 +84,7 @@ async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal,
     const value = await response.json(); if (!response.ok) throw new Error(value.error ? errorText(value.error) : t('Request failed. Please try again.')); return value;
   }
   catch (error) {
-    if (timeout.aborted) throw new Error(body === undefined ? t('The connection is taking too long. Check your network and try again.') : t('The request timed out and may still be processing. Check the task status before retrying.'));
+    if (timeout.aborted) throw new Error(body === undefined ? t('The request timed out. Please try again.') : t('The request timed out and may still be processing. Check the task status before retrying.'));
     throw error;
   }
 }
