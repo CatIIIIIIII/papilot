@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "反映先を選択する前に、タスクとレビュー操作が完了するまでお待ちください。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "パスの変更や削除を行う前に、この論文の PDF ビルドが完了するまでお待ちください。",
   "ZIP links and special files are not supported.": "ZIP 内のリンクおよび特殊ファイルはサポートされていません。",
-  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。"
+  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。",
+  "Wait for the answer to finish before deleting this conversation.": "回答が完了してからこの会話を削除してください。",
+  "Choose a valid question session.": "有効なQ&Aの会話を選択してください。",
+  "Question session not found.": "Q&Aの会話が見つかりません。",
+  "Choose a valid question ID.": "有効な質問IDを選択してください。",
+  "Enter a question of at most 20000 characters.": "20000文字以内の質問を入力してください。",
+  "Choose a valid Q&A agent and model.": "有効なQ&Aエージェントとモデルを選択してください。",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "論文Q&AにはCodex、Claude、GLMのいずれかを選択してください。",
+  "Choose a valid reasoning effort.": "有効な推論の強度を選択してください。",
+  "This question ID has already been used.": "この質問IDはすでに使用されています。",
+  "Wait for the current answer before asking another question.": "現在の回答が完了してから次の質問をしてください。",
+  "The agent returned no answer. Retry the question.": "エージェントから回答がありませんでした。質問を再試行してください。",
+  "The server restarted before the answer finished. Retry the question.": "回答が完了する前にサーバーが再起動しました。質問を再試行してください。",
+  "Choose an available model for the Q&A agent.": "Q&Aエージェントで利用可能なモデルを選択してください。",
+  "Choose a reasoning effort supported by this model.": "このモデルが対応している推論の強度を選択してください。"
 }

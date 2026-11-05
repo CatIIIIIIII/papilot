@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Warten Sie, bis die Aufgaben- und Überprüfungsaktionen abgeschlossen sind, bevor Sie ein Ziel auswählen.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Warten Sie, bis die PDF-Erstellung für diesen Artikel abgeschlossen ist, bevor Sie den Pfad ändern oder ihn entfernen.",
   "ZIP links and special files are not supported.": "Links und Spezialdateien in ZIP-Archiven werden nicht unterstützt.",
-  "npm is unavailable to Papilot.": "npm ist für Papilot nicht verfügbar."
+  "npm is unavailable to Papilot.": "npm ist für Papilot nicht verfügbar.",
+  "Wait for the answer to finish before deleting this conversation.": "Warte auf das Ende der Antwort, bevor du diese Unterhaltung löschst.",
+  "Choose a valid question session.": "Wähle eine gültige Frage-Antwort-Unterhaltung.",
+  "Question session not found.": "Frage-Antwort-Unterhaltung nicht gefunden.",
+  "Choose a valid question ID.": "Wähle eine gültige Fragen-ID.",
+  "Enter a question of at most 20000 characters.": "Gib eine Frage mit höchstens 20000 Zeichen ein.",
+  "Choose a valid Q&A agent and model.": "Wähle einen gültigen Q&A-Agenten und ein gültiges Modell.",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "Wähle Codex, Claude oder GLM für Fragen zum Paper.",
+  "Choose a valid reasoning effort.": "Wähle eine gültige Denkintensität.",
+  "This question ID has already been used.": "Diese Fragen-ID wurde bereits verwendet.",
+  "Wait for the current answer before asking another question.": "Warte auf die aktuelle Antwort, bevor du eine weitere Frage stellst.",
+  "The agent returned no answer. Retry the question.": "Der Agent hat keine Antwort geliefert. Versuche die Frage erneut.",
+  "The server restarted before the answer finished. Retry the question.": "Der Server wurde vor Abschluss der Antwort neu gestartet. Versuche die Frage erneut.",
+  "Choose an available model for the Q&A agent.": "Wähle ein verfügbares Modell für den Q&A-Agenten.",
+  "Choose a reasoning effort supported by this model.": "Wähle eine von diesem Modell unterstützte Denkintensität."
 }

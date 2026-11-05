@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "대상 위치를 선택하기 전에 작업 및 검토 동작이 완료될 때까지 기다려 주세요.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "경로를 변경하거나 제거하기 전에 이 논문의 PDF 빌드가 완료될 때까지 기다리세요.",
   "ZIP links and special files are not supported.": "ZIP 링크 및 특수 파일은 지원되지 않습니다.",
-  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다."
+  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다.",
+  "Wait for the answer to finish before deleting this conversation.": "답변이 완료된 후 이 대화를 삭제하세요.",
+  "Choose a valid question session.": "유효한 Q&A 대화를 선택하세요.",
+  "Question session not found.": "Q&A 대화를 찾을 수 없습니다.",
+  "Choose a valid question ID.": "유효한 질문 ID를 선택하세요.",
+  "Enter a question of at most 20000 characters.": "20000자 이내로 질문을 입력하세요.",
+  "Choose a valid Q&A agent and model.": "유효한 Q&A 에이전트와 모델을 선택하세요.",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "논문 Q&A에는 Codex, Claude 또는 GLM을 선택하세요.",
+  "Choose a valid reasoning effort.": "유효한 추론 강도를 선택하세요.",
+  "This question ID has already been used.": "이미 사용된 질문 ID입니다.",
+  "Wait for the current answer before asking another question.": "현재 답변이 완료된 후 다음 질문을 하세요.",
+  "The agent returned no answer. Retry the question.": "에이전트가 답변을 반환하지 않았습니다. 질문을 다시 시도하세요.",
+  "The server restarted before the answer finished. Retry the question.": "답변이 완료되기 전에 서버가 다시 시작되었습니다. 질문을 다시 시도하세요.",
+  "Choose an available model for the Q&A agent.": "Q&A 에이전트에서 사용 가능한 모델을 선택하세요.",
+  "Choose a reasoning effort supported by this model.": "이 모델이 지원하는 추론 강도를 선택하세요."
 }

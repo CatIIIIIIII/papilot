@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Aguarde a conclusão da tarefa e das ações de revisão antes de escolher um destino.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Aguarde a conclusão da compilação do PDF deste artigo antes de alterar o caminho ou removê-lo.",
   "ZIP links and special files are not supported.": "Links e arquivos especiais em ZIP não são suportados.",
-  "npm is unavailable to Papilot.": "O npm não está disponível para o Papilot."
+  "npm is unavailable to Papilot.": "O npm não está disponível para o Papilot.",
+  "Wait for the answer to finish before deleting this conversation.": "Aguarde a conclusão da resposta antes de excluir esta conversa.",
+  "Choose a valid question session.": "Escolha uma conversa de perguntas e respostas válida.",
+  "Question session not found.": "Conversa de perguntas e respostas não encontrada.",
+  "Choose a valid question ID.": "Escolha um ID de pergunta válido.",
+  "Enter a question of at most 20000 characters.": "Digite uma pergunta com no máximo 20000 caracteres.",
+  "Choose a valid Q&A agent and model.": "Escolha um agente e um modelo válidos para perguntas e respostas.",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "Escolha Codex, Claude ou GLM para as perguntas sobre o artigo.",
+  "Choose a valid reasoning effort.": "Escolha um nível de raciocínio válido.",
+  "This question ID has already been used.": "Este ID de pergunta já foi utilizado.",
+  "Wait for the current answer before asking another question.": "Aguarde a resposta atual antes de fazer outra pergunta.",
+  "The agent returned no answer. Retry the question.": "O agente não retornou uma resposta. Tente a pergunta novamente.",
+  "The server restarted before the answer finished. Retry the question.": "O servidor reiniciou antes de concluir a resposta. Tente a pergunta novamente.",
+  "Choose an available model for the Q&A agent.": "Escolha um modelo disponível para o agente de perguntas e respostas.",
+  "Choose a reasoning effort supported by this model.": "Escolha um nível de raciocínio compatível com este modelo."
 }

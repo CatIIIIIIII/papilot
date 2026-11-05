@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Vänta tills uppgiften och granskningsåtgärderna är klara innan du väljer ett mål.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Vänta tills PDF-bygget för den här artikeln är klart innan du ändrar dess sökväg eller tar bort den.",
   "ZIP links and special files are not supported.": "Länkar och specialfiler i ZIP-arkiv stöds inte.",
-  "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot."
+  "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot.",
+  "Wait for the answer to finish before deleting this conversation.": "Vänta tills svaret är klart innan du tar bort konversationen.",
+  "Choose a valid question session.": "Välj en giltig frågekonversation.",
+  "Question session not found.": "Frågekonversationen hittades inte.",
+  "Choose a valid question ID.": "Välj ett giltigt fråge-ID.",
+  "Enter a question of at most 20000 characters.": "Ange en fråga med högst 20000 tecken.",
+  "Choose a valid Q&A agent and model.": "Välj en giltig agent och modell för frågor och svar.",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "Välj Codex, Claude eller GLM för frågor om artikeln.",
+  "Choose a valid reasoning effort.": "Välj en giltig resonemangsnivå.",
+  "This question ID has already been used.": "Detta fråge-ID har redan använts.",
+  "Wait for the current answer before asking another question.": "Vänta på det aktuella svaret innan du ställer en ny fråga.",
+  "The agent returned no answer. Retry the question.": "Agenten gav inget svar. Försök med frågan igen.",
+  "The server restarted before the answer finished. Retry the question.": "Servern startades om innan svaret var klart. Försök med frågan igen.",
+  "Choose an available model for the Q&A agent.": "Välj en tillgänglig modell för frågeagenten.",
+  "Choose a reasoning effort supported by this model.": "Välj en resonemangsnivå som stöds av denna modell."
 }

@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Attendez la fin de la tâche et des actions de révision avant de choisir une destination.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Attendez la fin de la compilation du PDF de cet article avant de modifier son chemin d’accès ou de le supprimer.",
   "ZIP links and special files are not supported.": "Les liens et fichiers spéciaux dans les archives ZIP ne sont pas pris en charge.",
-  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot."
+  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot.",
+  "Wait for the answer to finish before deleting this conversation.": "Attendez la fin de la réponse avant de supprimer cette conversation.",
+  "Choose a valid question session.": "Choisissez une conversation de questions-réponses valide.",
+  "Question session not found.": "Conversation de questions-réponses introuvable.",
+  "Choose a valid question ID.": "Choisissez un identifiant de question valide.",
+  "Enter a question of at most 20000 characters.": "Saisissez une question de 20000 caractères maximum.",
+  "Choose a valid Q&A agent and model.": "Choisissez un agent et un modèle valides pour les questions-réponses.",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "Choisissez Codex, Claude ou GLM pour les questions-réponses sur l’article.",
+  "Choose a valid reasoning effort.": "Choisissez un niveau de raisonnement valide.",
+  "This question ID has already been used.": "Cet identifiant de question a déjà été utilisé.",
+  "Wait for the current answer before asking another question.": "Attendez la réponse en cours avant de poser une autre question.",
+  "The agent returned no answer. Retry the question.": "L’agent n’a fourni aucune réponse. Réessayez la question.",
+  "The server restarted before the answer finished. Retry the question.": "Le serveur a redémarré avant la fin de la réponse. Réessayez la question.",
+  "Choose an available model for the Q&A agent.": "Choisissez un modèle disponible pour l’agent de questions-réponses.",
+  "Choose a reasoning effort supported by this model.": "Choisissez un niveau de raisonnement pris en charge par ce modèle."
 }

@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Espera a que terminen las acciones de la tarea y de la revisión antes de elegir un destino.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Espera a que termine la compilación del PDF de este artículo antes de cambiar su ruta o eliminarlo.",
   "ZIP links and special files are not supported.": "No se admiten enlaces ni archivos especiales en el ZIP.",
-  "npm is unavailable to Papilot.": "npm no está disponible para Papilot."
+  "npm is unavailable to Papilot.": "npm no está disponible para Papilot.",
+  "Wait for the answer to finish before deleting this conversation.": "Espera a que termine la respuesta antes de eliminar esta conversación.",
+  "Choose a valid question session.": "Elige una conversación de preguntas y respuestas válida.",
+  "Question session not found.": "No se encontró la conversación de preguntas y respuestas.",
+  "Choose a valid question ID.": "Elige un ID de pregunta válido.",
+  "Enter a question of at most 20000 characters.": "Introduce una pregunta de hasta 20000 caracteres.",
+  "Choose a valid Q&A agent and model.": "Elige un agente y un modelo válidos para preguntas y respuestas.",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "Elige Codex, Claude o GLM para las preguntas sobre el artículo.",
+  "Choose a valid reasoning effort.": "Elige un nivel de razonamiento válido.",
+  "This question ID has already been used.": "Este ID de pregunta ya se ha utilizado.",
+  "Wait for the current answer before asking another question.": "Espera la respuesta actual antes de hacer otra pregunta.",
+  "The agent returned no answer. Retry the question.": "El agente no devolvió ninguna respuesta. Reintenta la pregunta.",
+  "The server restarted before the answer finished. Retry the question.": "El servidor se reinició antes de terminar la respuesta. Reintenta la pregunta.",
+  "Choose an available model for the Q&A agent.": "Elige un modelo disponible para el agente de preguntas y respuestas.",
+  "Choose a reasoning effort supported by this model.": "Elige un nivel de razonamiento compatible con este modelo."
 }

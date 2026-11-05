@@ -241,5 +241,19 @@
   "Wait for the task and review actions to finish before choosing a destination.": "选择目标位置前，请先等待任务和审阅操作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "请等待此论文的 PDF 构建完成后，再更改其路径或将其移除。",
   "ZIP links and special files are not supported.": "不支持 ZIP 链接和特殊文件。",
-  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。",
+  "Wait for the answer to finish before deleting this conversation.": "请等待回答完成后再删除此会话。",
+  "Choose a valid question session.": "请选择有效的问答会话。",
+  "Question session not found.": "找不到问答会话。",
+  "Choose a valid question ID.": "请选择有效的问题 ID。",
+  "Enter a question of at most 20000 characters.": "请输入不超过 20000 个字符的问题。",
+  "Choose a valid Q&A agent and model.": "请选择有效的问答智能体和模型。",
+  "Choose Codex, Claude, or GLM for paper Q&A.": "论文问答请选择 Codex、Claude 或 GLM。",
+  "Choose a valid reasoning effort.": "请选择有效的推理强度。",
+  "This question ID has already been used.": "此问题 ID 已被使用。",
+  "Wait for the current answer before asking another question.": "请等待当前回答完成后再提问。",
+  "The agent returned no answer. Retry the question.": "智能体未返回回答，请重试此问题。",
+  "The server restarted before the answer finished. Retry the question.": "回答完成前服务器已重启，请重试此问题。",
+  "Choose an available model for the Q&A agent.": "请为问答智能体选择可用的模型。",
+  "Choose a reasoning effort supported by this model.": "请选择此模型支持的推理强度。"
 }
