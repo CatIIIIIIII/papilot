@@ -12,7 +12,8 @@ import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson,
 import { fullPaperPdf, nextPaperPass, paperPassPdf, preparePaper } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
-import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus } from './manuscript.ts';
+import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
+import { gitHistory, gitVersion, gitVersionDiff, gitRestoreVersion } from './git-history.ts';
 import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
@@ -333,14 +334,22 @@ export async function buildApp(options: AppOptions) {
     return confirmEntry(store.project(request.params.id).path, b.id, b.confirmed);
   });
   app.get<{ Params: { id: string } }>('/api/projects/:id/git/overview', project(), request => gitOverview(store.project(request.params.id).path, store.tasks().filter(task => task.projectId === request.params.id)));
-  app.get<{ Params: { id: string }; Querystring: { path?: string } }>('/api/projects/:id/git/diff', project(), request => gitDiff(store.project(request.params.id).path, string(request.query.path, 'File path', 4096)));
+  app.get<{ Params: { id: string }; Querystring: { before?: string } }>('/api/projects/:id/git/history', project(), request => gitHistory(store.project(request.params.id).path, request.query.before));
+  app.get<{ Params: { id: string; hash: string } }>('/api/projects/:id/git/history/:hash', project(), request => gitVersion(store.project(request.params.id).path, request.params.hash));
+  app.get<{ Params: { id: string; hash: string }; Querystring: { path?: string } }>('/api/projects/:id/git/history/:hash/diff', project(), request => gitVersionDiff(store.project(request.params.id).path, request.params.hash, string(request.query.path, 'File path', 4096)));
+  app.post<{ Params: { id: string } }>('/api/projects/:id/git/restore', project(), request => {
+    const project = store.project(request.params.id), b = request.body as any;
+    const hash = string(b?.hash, 'Version', 64), head = string(b?.head, 'Current version', 64);
+    return serialGit(project.id, () => workspace.exclusiveCommit(project.id, () => gitRestoreVersion(project.path, hash, head)));
+  });
+  app.get<{ Params: { id: string }; Querystring: { path?: string; scope?: string } }>('/api/projects/:id/git/diff', project(), request => gitDiff(store.project(request.params.id).path, string(request.query.path, 'File path', 4096), request.query.scope === 'staged' ? 'staged' : request.query.scope === 'unstaged' ? 'unstaged' : 'all'));
   const paths = (value: unknown): string[] => Array.isArray(value) ? value.filter((p: unknown): p is string => typeof p === 'string').slice(0, 5000) : [];
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/commit', project(), request => {
     const project = store.project(request.params.id), b = request.body as any;
     const message = string(b.message, 'Commit message', 5000), chosen = b.staged === true ? null : paths(b.paths);
     let pushError: string | undefined;
     return serialGit(project.id, () => workspace.exclusiveCommit(project.id, async () => {
-      const commit = await gitCommit(project.path, message, chosen);
+      const commit = await gitCommit(project.path, message, chosen, b.amend === true);
       // The commit stands even when the push fails; the author can push again.
       if (b.push === true) try { await gitRemote(project.path, 'push'); } catch (error) { pushError = (error as Error).message; }
       return { commit, git: await gitStatus(project.path), ...(pushError ? { pushError } : {}) };
@@ -379,6 +388,10 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/ignore', project(), request => {
     const project = store.project(request.params.id);
     return serialGit(project.id, async () => ({ git: await gitIgnore(project.path, paths((request.body as any).paths)) }));
+  });
+  app.post<{ Params: { id: string } }>('/api/projects/:id/git/sync', project(), request => {
+    const project = store.project(request.params.id);
+    return serialGit(project.id, () => workspace.exclusiveCommit(project.id, async () => ({ git: await gitSync(project.path) })));
   });
   app.post<{ Params: { id: string; action: string } }>('/api/projects/:id/git/:action', project(), request => {
     const project = store.project(request.params.id), action = request.params.action;

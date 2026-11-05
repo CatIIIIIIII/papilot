@@ -8,7 +8,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { ENGINE, ROOT } from './paths.ts';
-import type { Annotation, BuildProblem, BuildProgress, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
+import type { Annotation, BuildProblem, BuildProgress, GitDiffScope, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
 import { notesInstructions } from '../notes.ts';
 import { ignorePattern } from '../commit.ts';
 import { AnnotationPages, placeAnnotation } from './annotation-placement.ts';
@@ -65,6 +65,23 @@ export async function gitStatus(root: string): Promise<GitStatus> {
   ]);
   const [hash, subject, time] = head.trim().split('\0');
   const parsed = parseStatus(status, numstat), dir = gitDir(root);
+  // Incoming decorations describe the remote side since the common ancestor,
+  // not HEAD versus upstream (which would also include local-only commits).
+  // Read cached tracking refs only; fetching remains an explicit operation.
+  if (parsed.upstream && parsed.behind > 0 && parsed.files.length) {
+    const changes = (await git(root, ['diff', '--name-status', '-z', '--find-renames', 'HEAD...@{upstream}', '--']).catch(() => '')).split('\0');
+    const incoming = new Map<string, string>();
+    for (let i = 0; i + 1 < changes.length;) {
+      const status = changes[i++][0], file = changes[i++];
+      if (!status || !file) continue;
+      incoming.set(file, status);
+      if (status === 'R' || status === 'C') { const destination = changes[i++]; if (destination) incoming.set(destination, status); }
+    }
+    for (const file of parsed.files) {
+      const status = incoming.get(file.path) || (file.from && incoming.get(file.from));
+      if (status) file.incoming = status;
+    }
+  }
   // A merge in progress names the files whose conflict markers remain.
   const merging = dir && fs.existsSync(path.join(dir, 'MERGE_HEAD'))
     ? { message: readText(path.join(dir, 'MERGE_MSG')).split('\n')[0] || 'Merge', conflicts: parsed.files.filter(file => file.status === 'U' && conflictMarkers(root, file.path)).map(file => file.path) }
@@ -104,20 +121,20 @@ const literal = { GIT_LITERAL_PATHSPECS: '1' };
 const DIFF_LIMIT = 400_000;
 
 // One changed file's diff against HEAD; an untracked file shows as all new.
-export async function gitDiff(root: string, file: string) {
+export async function gitDiff(root: string, file: string, scope: GitDiffScope = 'all') {
   const entry = (await gitStatus(root)).files.find(item => item.path === file);
-  if (!entry) throw Object.assign(new Error('That file has no uncommitted changes.'), { statusCode: 404 });
-  const diff = await fileDiff(root, entry);
+  if (!entry || (scope === 'staged' && !entry.staged) || (scope === 'unstaged' && !entry.unstaged)) throw Object.assign(new Error('That file has no uncommitted changes.'), { statusCode: 404 });
+  const diff = await fileDiff(root, entry, scope);
   return { path: file, diff: diff.slice(0, DIFF_LIMIT), truncated: diff.length > DIFF_LIMIT };
 }
 // A file's diff against HEAD, or with staged, what its index holds.
-function fileDiff(root: string, entry: GitFile, staged = false) {
+function fileDiff(root: string, entry: GitFile, scope: GitDiffScope = 'all') {
   const names = ['--', ...(entry.from ? [entry.from] : []), entry.path];
-  if (staged) return git(root, ['diff', '--cached', '--no-color', '--find-renames', ...names], literal);
+  if (scope === 'staged') return git(root, ['diff', '--cached', '--no-color', '--find-renames', ...names], literal);
   return entry.status === '?'
     // `git diff --no-index` exits with 1 when the files differ.
     ? exec('git', ['diff', '--no-index', '--no-color', '--', '/dev/null', entry.path], { cwd: root, maxBuffer: 64 * 1024 * 1024 }).then(r => r.stdout, (e: { stdout?: string }) => e.stdout || '')
-    : git(root, ['diff', '--no-color', '--find-renames', 'HEAD', ...names], literal);
+    : git(root, ['diff', '--no-color', '--find-renames', ...(scope === 'all' ? ['HEAD'] : []), ...names], literal);
 }
 
 // What a commit message is written from: the chosen files' diffs, or what is
@@ -129,7 +146,7 @@ export async function commitChanges(root: string, paths: string[], staged = fals
   let patch = '';
   for (const [index, file] of files.entries()) {
     if (patch.length > 40_000) { patch += `\n[${files.length - index} more changed files are not shown.]\n`; break; }
-    const diff = await fileDiff(root, file, staged);
+    const diff = await fileDiff(root, file, staged ? 'staged' : 'all');
     patch += diff.length > 8_000 ? `${diff.slice(0, 8_000)}\n[The rest of this file's diff is not shown.]\n` : diff;
   }
   const recent = (await git(root, ['log', '-8', '--format=%s']).catch(() => '')).split('\n').filter(Boolean);
@@ -182,12 +199,14 @@ export async function gitDiscard(root: string, paths: string[]) {
 
 // Commit what is staged, or with paths, exactly those files as they are on
 // disk; changes staged for other files then stay staged and out of the commit.
-export async function gitCommit(root: string, message: string, paths: string[] | null) {
+export async function gitCommit(root: string, message: string, paths: string[] | null, amend = false) {
   const status = await gitStatus(root);
   if (status.merging) throw new Error('Finish or abort the merge before committing other changes.');
+  if (amend && !status.head) throw new Error('There is no commit to amend.');
+  const options = amend ? ['--amend'] : [];
   if (!paths) {
     if (!status.files.some(item => item.staged)) throw new Error('Stage at least one change to commit.');
-    await gitAction(root, ['commit', '-m', message]);
+    await gitAction(root, ['commit', ...options, '-m', message]);
     return (await git(root, ['rev-parse', '--short', 'HEAD'])).trim();
   }
   const files = status.files.filter(item => paths.includes(item.path));
@@ -196,7 +215,7 @@ export async function gitCommit(root: string, message: string, paths: string[] |
   // A rename is already staged, so only its new path is added; the commit
   // names the old path too, so the removal is part of it.
   await gitAction(root, ['add', '-A', '--', ...files.map(item => item.path)]);
-  await gitAction(root, ['commit', '--only', '-m', message, '--', ...new Set(files.flatMap(item => item.from ? [item.from, item.path] : [item.path]))]);
+  await gitAction(root, ['commit', ...options, '--only', '-m', message, '--', ...new Set(files.flatMap(item => item.from ? [item.from, item.path] : [item.path]))]);
   return (await git(root, ['rev-parse', '--short', 'HEAD'])).trim();
 }
 
@@ -211,14 +230,35 @@ export async function gitRemote(root: string, action: 'fetch' | 'pull' | 'merge'
     if (!status.upstream) throw new Error('This branch does not track a remote branch yet.');
     // Pull only fast-forwards. Merge also joins a branch that has diverged
     // from its upstream; conflicts leave the merge in progress to resolve.
-    if (action === 'pull') await gitAction(root, ['pull', '--ff-only'], 120_000);
-    else await gitAction(root, ['pull', '--no-rebase', '--ff', '--no-edit'], 120_000).catch(error => { if (!mergeInProgress(root)) throw error; });
+    // A host's merge.autoStash setting must not hide the author's pending edits.
+    if (action === 'pull') await gitAction(root, ['pull', '--ff-only', '--no-autostash'], 120_000);
+    else await gitAction(root, ['pull', '--no-rebase', '--ff', '--no-edit', '--no-autostash'], 120_000).catch(error => { if (!mergeInProgress(root)) throw error; });
   } else if (status.upstream) await gitAction(root, ['push'], 120_000);
   else {
     if (!status.branch) throw new Error('Check out a branch before pushing.');
     const remotes = (await git(root, ['remote'])).split('\n').filter(Boolean);
     await gitAction(root, ['push', '-u', remotes.includes('origin') ? 'origin' : remotes[0], status.branch], 120_000);
   }
+}
+
+// Sync committed history only. Fetch before deciding how to integrate the
+// upstream; Git protects local edits, and conflicts stop before any push.
+// Do not stash, reset or create a commit from the user's pending edits.
+export async function gitSync(root: string): Promise<GitStatus> {
+  const initial = await gitStatus(root);
+  if (!initial.branch) throw new Error('Check out a branch before syncing.');
+  if (initial.merging) throw new Error('Finish or abort the merge first.');
+  await gitRemote(root, 'fetch');
+  let status = await gitStatus(root);
+  if (status.upstream && status.behind > 0) {
+    await gitRemote(root, status.ahead > 0 ? 'merge' : 'pull');
+    status = await gitStatus(root);
+    if (status.merging) return status;
+  }
+  // A newly cloned empty remote may have a configured upstream but no ref
+  // (and therefore no ahead count). Push also creates that first remote ref.
+  await gitRemote(root, 'push');
+  return gitStatus(root);
 }
 
 // A merge in progress ends with its commit once no conflict markers remain,

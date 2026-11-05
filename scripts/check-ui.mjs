@@ -113,6 +113,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/items')) return json({ items: [{ id: 'hello', taskId: task.id, type: 'assistant', text: 'The introduction is ready for review.', createdAt: 1 }] });
   if (url.pathname.endsWith('/git')) return json(gitState);
   if (url.pathname.endsWith('/git/overview')) return overviewFailure ? route.fulfill({ status: 503, json: { error: 'Repository unavailable.' } }) : json(overview());
+  if (url.pathname.endsWith('/git/history')) return json({ versions: [], next: null });
   // Skills and the feedback bar have their own check (check-skills.mjs).
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/git/diff')) return json({ path: url.searchParams.get('path'), diff: 'diff --git a/main.tex b/main.tex\n--- a/main.tex\n+++ b/main.tex\n@@ -1,2 +1,2 @@\n-Old line.\n+New line.\n Context.\n', truncated: false });
@@ -1067,6 +1068,13 @@ try {
   await page.getByRole('heading', { name: 'Manuscript', exact: true }).waitFor();
   await page.getByRole('tab', { name: /^Git/ }).click();
   const gitPanel = page.getByRole('region', { name: 'Git status' });
+  // Advanced Git views are enabled only in the App's existing settings.
+  await gitPanel.getByRole('group', { name: 'Changes', exact: true }).waitFor();
+  assert.equal(await gitPanel.getByRole('region', { name: 'Commit graph', exact: true }).count(), 0);
+  assert.equal(await gitPanel.getByRole('region', { name: 'Worktrees', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Show advanced Git features', exact: true }).check();
+  await page.locator('.settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
   // Cursor's source control: the commit box, then staged and unstaged lists.
   const changes = gitPanel.getByRole('region', { name: 'Changes', exact: true });
   const unstagedList = changes.getByRole('group', { name: 'Changes', exact: true });
@@ -1128,7 +1136,10 @@ try {
   await graph.getByRole('alert').filter({ hasText: 'Showing the last update.' }).waitFor();
   assert.equal(await worktrees.locator('.git-worktree').count(), 4, 'A failed refresh keeps the last known worktrees');
   overviewFailure = false;
-  await graph.getByRole('button', { name: 'Retry', exact: true }).click();
+  // The background refresh can recover while Playwright is locating Retry.
+  await graph.getByRole('button', { name: 'Retry', exact: true }).click({ timeout: 3000 }).catch(async error => {
+    if (await graph.getByRole('alert').count()) throw error;
+  });
   await graph.getByRole('alert').waitFor({ state: 'detached' });
   // Build output goes into .gitignore from the Changes menu, one pattern per kind.
   await unstagedList.getByText('main.aux', { exact: true }).waitFor();
@@ -1145,7 +1156,8 @@ try {
   assert.equal(await commitButton.getAttribute('title'), 'Commit all 3 files');
   assert.equal(await commitButton.isDisabled(), true);
   await unstagedList.getByRole('button', { name: 'main.tex', exact: true }).click();
-  await gitPanel.getByRole('region', { name: 'Changes in main.tex' }).getByText('+New line.', { exact: true }).waitFor();
+  await page.getByRole('region', { name: 'Changes in main.tex' }).getByText('New line.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Back to manuscript', exact: true }).click();
   // + stages a file and − unstages it; Commit then takes only what is staged.
   await unstagedList.getByRole('button', { name: 'Stage main.tex', exact: true }).click();
   await stagedList.getByText('main.tex', { exact: true }).waitFor();
@@ -1187,7 +1199,7 @@ try {
   await page.getByRole('menuitem', { name: 'Commit and push', exact: true }).click();
   await gitPanel.getByRole('status').filter({ hasText: 'Committed def5678 and pushed.' }).waitFor();
   assert.deepEqual(gitCommits.at(-1), { message: 'Add notes', paths: ['notes.md'] });
-  assert.deepEqual(gitActions, ['push']);
+  assert.deepEqual(gitActions.filter(action => action !== 'fetch'), ['push']);
   assert.equal(await graph.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true, 'Nothing is left to push');
   await changes.getByText('No uncommitted changes', { exact: true }).waitFor();
   // A branch and upstream that both moved on merge instead of pulling.
@@ -1206,7 +1218,8 @@ try {
   await merge.getByRole('button', { name: 'Commit merge', exact: true }).click();
   await gitPanel.getByRole('status').filter({ hasText: 'Committed aaa1111.' }).waitFor();
   assert.equal(await merge.count(), 0);
-  assert.deepEqual(gitActions.filter(action => typeof action === 'string'), ['push', 'fetch', 'merge', 'finish']);
+  assert.ok(gitActions.includes('fetch'));
+  assert.deepEqual(gitActions.filter(action => typeof action === 'string' && action !== 'fetch'), ['push', 'merge', 'finish']);
   Object.assign(gitState, structuredClone(originalGit));
   const pdfToolbar = page.getByRole('toolbar', { name: 'PDF controls' });
   await page.locator('.manuscript-side-header').getByRole('button', { name: 'Share', exact: true }).click();

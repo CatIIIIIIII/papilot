@@ -61,6 +61,51 @@ async function fixture() {
   return { updates, diagnosticRequests, manuscripts: shared.manuscripts, store, workspace, review, accounts, local, remote, ada, joined, session, state, as, async close() { updates.close(); await local.close(); await remote.close(); workspace.close(); store.close(); fs.rmSync(dist, { recursive: true }); } };
 }
 
+test('Git sync requires project access and CSRF, publishes commits and respects the review write lock', async () => {
+  const f = await fixture(), base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-api-sync-'));
+  const root = path.join(base, 'paper'), remote = path.join(base, 'remote.git');
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  try {
+    git(base, 'init', '-q', '--bare', '-b', 'main', remote);
+    git(base, 'clone', '-q', remote, root);
+    git(root, 'config', 'user.name', 'Test'); git(root, 'config', 'user.email', 'test@localhost');
+    git(root, 'config', 'commit.gpgsign', 'false'); git(root, 'config', 'core.hooksPath', path.join(base, 'no-hooks'));
+    fs.writeFileSync(path.join(root, 'main.tex'), 'Committed.\n'); git(root, 'add', '.'); git(root, 'commit', '-qm', 'Initial');
+    fs.writeFileSync(path.join(root, 'main.tex'), 'Pending.\n');
+    f.store.saveProject({ ...f.store.project('thesis'), path: root });
+    f.manuscripts.refresh = async () => {};
+    const url = '/api/projects/thesis/git/sync';
+    assert.equal((await f.local.inject({ method: 'POST', url, headers: LOCAL, payload: {} })).statusCode, 403);
+    assert.equal((await f.remote.inject({ method: 'POST', url: '/api/projects/grant/git/sync', headers: f.as, payload: {} })).statusCode, 400);
+    await f.workspace.reviewWrite('thesis-task', true, async () => {
+      const locked = await f.remote.inject({ method: 'POST', url, headers: f.as, payload: {} });
+      assert.equal(locked.statusCode, 400); assert.match(locked.json().error, /review action/);
+    });
+    const synced = await f.remote.inject({ method: 'POST', url, headers: f.as, payload: {} });
+    assert.equal(synced.statusCode, 200, synced.body);
+    assert.equal(synced.json().git.upstream, 'origin/main');
+    assert.equal(synced.json().git.files[0].path, 'main.tex');
+    assert.equal(git(remote, 'show', 'main:main.tex'), 'Committed.');
+    assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Pending.\n');
+    const first = git(root, 'rev-parse', 'HEAD');
+    git(root, 'add', '.'); git(root, 'commit', '-qm', 'Second version');
+    const head = git(root, 'rev-parse', 'HEAD'), restore = '/api/projects/thesis/git/restore', payload = { hash: first, head };
+    const history = await f.remote.inject({ url: '/api/projects/thesis/git/history', headers: f.as });
+    assert.equal(history.statusCode, 200); assert.equal(history.json().versions[0].message, 'Second version');
+    assert.equal((await f.remote.inject({ url: '/api/projects/grant/git/history', headers: f.as })).statusCode, 400);
+    assert.equal((await f.local.inject({ method: 'POST', url: restore, headers: LOCAL, payload })).statusCode, 403);
+    await f.workspace.reviewWrite('thesis-task', true, async () => {
+      const locked = await f.remote.inject({ method: 'POST', url: restore, headers: f.as, payload });
+      assert.equal(locked.statusCode, 400); assert.match(locked.json().error, /review action/);
+    });
+    const restored = await f.remote.inject({ method: 'POST', url: restore, headers: f.as, payload });
+    assert.equal(restored.statusCode, 200, restored.body);
+    assert.equal(git(root, 'rev-parse', 'HEAD^'), head);
+    assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Committed.\n');
+    assert.equal(git(remote, 'rev-parse', 'main'), first, 'Restoring does not write to the remote');
+  } finally { await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
+});
+
 test('task model changes keep the agent fixed and require task access and valid settings', async () => {
   const f = await fixture();
   try {
