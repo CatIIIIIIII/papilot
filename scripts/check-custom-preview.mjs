@@ -45,7 +45,8 @@ try {
  const card=page.locator('.new-task-panel [data-note]').first();
  await card.getByRole('button',{name:'Edit note 1',exact:true}).click();
  await card.getByRole('textbox').fill('Edited inside the packaged app');
- await card.getByRole('button',{name:'Save',exact:true}).click();
+ await card.getByRole('textbox').press('Enter');
+ await expect(card.getByRole('textbox')).toHaveCount(0);
  await expect(card.getByText('Edited inside the packaged app',{exact:true})).toBeVisible();
  assert.equal((await get(`/projects/${project.id}/manuscript`)).annotations[0].comment,'Edited inside the packaged app');
  await app.close();app=null;
@@ -62,13 +63,15 @@ try {
  const existing = page.locator('.new-task-panel [data-note]').first();
  await existing.getByRole('button',{name:'Edit note 1',exact:true}).click();
  await existing.getByRole('textbox').fill('Existing annotation edited after restart');
- await existing.getByRole('button',{name:'Save',exact:true}).click();
+ await existing.getByRole('textbox').press('Enter');
+ await expect(existing.getByRole('textbox')).toHaveCount(0);
  assert.equal((await get(`/projects/${project.id}/manuscript`)).annotations[0].comment,'Existing annotation edited after restart');
  await page.getByRole('button',{name:'My notes',exact:true}).click();
  const library = page.locator('.notes-panel [data-note]').first();
  await library.getByRole('button',{name:'Edit note 1',exact:true}).click();
  await library.getByRole('textbox').fill('Existing annotation saved from note library');
- await library.getByRole('button',{name:'Save',exact:true}).click();
+ await library.getByRole('textbox').press('Enter');
+ await expect(library.getByRole('textbox')).toHaveCount(0);
  assert.equal((await get(`/projects/${project.id}/manuscript`)).annotations[0].comment,'Existing annotation saved from note library');
  await page.getByRole('button',{name:'My notes',exact:true}).click();
  const removeCurrent = async () => {
@@ -100,7 +103,7 @@ try {
  await expect(deleting).toHaveCount(0);
  await expect(page.locator(`.pdf-container [data-note="${noteId}"]`)).toHaveCount(0);
  assert.equal((await get(`/projects/${project.id}/manuscript`)).annotations.length,0);
- await page.locator('.task-note-deleted').getByRole('button',{name:'Undo',exact:true}).click();
+ await page.locator('.new-task-panel .note-dismissed').getByRole('button',{name:'Undo',exact:true}).click();
  await expect(deleting).toBeVisible();
  await expect(page.locator(`.note-tag[data-note="${noteId}"]`)).toBeVisible();
  assert.equal((await get(`/projects/${project.id}/manuscript`)).annotations.length,1);

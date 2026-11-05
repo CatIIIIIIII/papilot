@@ -1,3 +1,5 @@
+> **Ning custom preview — 0.8.9-preview.10.** Based on official 0.8.9 + current upstream changes, with saved paper Q&A, aligned PDF comparison and a compact reasoning slider. See [CUSTOM.md](CUSTOM.md) for build and update instructions.
+
 <div align="center">
 
 <h1>
