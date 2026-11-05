@@ -677,3 +677,47 @@ test('full-access question CLI turns bypass permissions and disable the command 
     assert.equal(fake.launches[0].cwd, dir);
   } finally { agent?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('editing network SDK permissions allow web tools while retaining sandbox and other approvals', async () => {
+  const fake = fakeClaude(async function* (options) {
+    assert.equal(options.tools, undefined, 'editing tools remain available');
+    assert.deepEqual(options.allowedTools, ['WebSearch', 'WebFetch']);
+    assert.equal(options.permissionMode, 'acceptEdits');
+    assert.equal(options.sandbox.enabled, true);
+    assert.deepEqual(options.sandbox.network.allowedDomains, ['*']);
+    const context = { signal: new AbortController().signal };
+    for (const name of ['WebSearch', 'WebFetch']) assert.equal((await options.canUseTool(name, { query: 'paper' }, context)).behavior, 'allow');
+    assert.equal((await options.canUseTool('Bash', { command: 'outside-sandbox-command' }, context)).behavior, 'deny');
+    yield { type: 'result', subtype: 'success', result: 'Done.', session_id: options.sessionId };
+  });
+  const agent = new ClaudeAgent(fake.load, () => null);
+  const requests: any[] = [];
+  agent.on('request', message => { requests.push(message); agent.respond(message.id, { decision: 'decline' }); });
+  try {
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/tmp', sandbox: 'workspace-write', config: { web_search: 'live' } });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find and update a reference.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    assert.equal(requests.length, 1, 'only the non-web action requires approval');
+  } finally { agent.close(); }
+});
+
+test('editing network CLI permissions allow web access without bypassing sandbox or disabling editing', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-edit-web-cli-'));
+  let agent: ClaudeAgent | undefined;
+  try {
+    const fake = fakeClaudeCli(dir, { loggedIn: true, authMethod: 'claude.ai' }, [[{ type: 'result', subtype: 'success', is_error: false, result: 'Done.' }]]);
+    agent = new ClaudeAgent(async () => { throw Error('No SDK needed'); }, () => fake.bin, fake.launch as any);
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/resume', { threadId: 'existing-task', cwd: dir, sandbox: 'workspace-write', config: { web_search: 'live' } });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find and update a reference.' }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args;
+    assert.equal(args.includes('--tools'), false);
+    assert.equal(args[args.indexOf('--allowedTools') + 1], 'WebSearch,WebFetch');
+    assert.equal(args[args.indexOf('--permission-mode') + 1], 'acceptEdits');
+    const sandbox = JSON.parse(args[args.indexOf('--settings') + 1]).sandbox;
+    assert.equal(sandbox.enabled, true);
+    assert.deepEqual(sandbox.network.allowedDomains, ['*']);
+  } finally { agent?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -307,10 +307,11 @@ export class ClaudeAgent extends Adapter {
         content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: bytes.toString('base64') } });
       }
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-        ...(thread.readOnly ? ['--tools', thread.webSearch ? 'WebSearch,WebFetch' : '', ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : [])] : []),
+        ...(thread.readOnly ? ['--tools', thread.webSearch ? 'WebSearch,WebFetch' : ''] : []),
+        ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : []),
         '--permission-mode', thread.fullAccess ? 'bypassPermissions' : 'acceptEdits', '--permission-prompts', 'none',
         ...(thread.fullAccess ? [] : ['--setting-sources', thread.readOnly ? '' : 'project']),
-        '--settings', JSON.stringify({ sandbox: { enabled: !thread.fullAccess, autoAllowBashIfSandboxed: true } }),
+        '--settings', JSON.stringify({ sandbox: { enabled: !thread.fullAccess, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } }),
         // A question cannot be answered in -p; Claude asks in its reply instead.
         '--disallowedTools', 'AskUserQuestion', ...(thread.instructions ? ['--append-system-prompt', thread.instructions] : []),
         ...(thread.model ? ['--model', thread.model] : []), ...(effort ? ['--effort', effort] : []),
@@ -351,11 +352,16 @@ export class ClaudeAgent extends Adapter {
         // The thread ID is the Claude session ID, so a later turn resumes it.
         ...(thread.started ? { resume: turn.threadId } : { sessionId: turn.threadId }),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: thread.instructions },
-        ...(thread.fullAccess ? { permissionMode: 'bypassPermissions' as const, allowDangerouslySkipPermissions: true, settingSources: ['user', 'project', 'local'] } : { settingSources: thread.readOnly ? [] : ['project'], permissionMode: 'acceptEdits' as const }), ...(thread.readOnly ? { tools: thread.webSearch ? ['WebSearch', 'WebFetch'] : [], ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}) } : {}),
-        sandbox: { enabled: !thread.fullAccess, autoAllowBashIfSandboxed: true },
+        ...(thread.fullAccess ? { permissionMode: 'bypassPermissions' as const, allowDangerouslySkipPermissions: true, settingSources: ['user', 'project', 'local'] } : { settingSources: thread.readOnly ? [] : ['project'], permissionMode: 'acceptEdits' as const }), ...(thread.readOnly ? { tools: thread.webSearch ? ['WebSearch', 'WebFetch'] : [] } : {}),
+        ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}),
+        sandbox: { enabled: !thread.fullAccess, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) },
         canUseTool: (name, input, { signal, title, decisionReason }) => new Promise<PermissionResult>(resolve => {
           if (thread.fullAccess) {
             resolve(name === 'AskUserQuestion' ? { behavior: 'deny', message: 'Ask any clarification in your reply.' } : { behavior: 'allow', updatedInput: input });
+            return;
+          }
+          if (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)) {
+            resolve({ behavior: 'allow', updatedInput: input });
             return;
           }
           if (thread.readOnly) {
