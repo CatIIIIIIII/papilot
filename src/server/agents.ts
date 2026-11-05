@@ -38,7 +38,7 @@ export { AGENT_NAMES };
 import { agentDirs, findExecutable, agentPath } from '../../bin/agent-paths.mjs';
 export { agentDirs, findExecutable };
 
-export interface Thread { readOnly?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
+export interface Thread { readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
 export interface Item { id: string; type: string; [key: string]: unknown }
 
@@ -60,7 +60,7 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
       const model = params.model || known?.model || null;
-      this.threads.set(id, { readOnly: params.sandbox === 'read-only', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      this.threads.set(id, { readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
       return { thread: { id }, model };
     }
     if (method === 'turn/start') {
@@ -308,8 +308,9 @@ export class ClaudeAgent extends Adapter {
       }
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
         ...(thread.readOnly ? ['--tools', ''] : []),
+        ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : []),
         '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
-        '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true } }),
+        '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } }),
         // A question cannot be answered in -p; Claude asks in its reply instead.
         '--disallowedTools', 'AskUserQuestion', ...(thread.instructions ? ['--append-system-prompt', thread.instructions] : []),
         ...(thread.model ? ['--model', thread.model] : []), ...(effort ? ['--effort', effort] : []),
@@ -351,8 +352,13 @@ export class ClaudeAgent extends Adapter {
         ...(thread.started ? { resume: turn.threadId } : { sessionId: turn.threadId }),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: thread.instructions },
         settingSources: thread.readOnly ? [] : ['project'], permissionMode: 'acceptEdits', ...(thread.readOnly ? { tools: [] } : {}),
-        sandbox: { enabled: true, autoAllowBashIfSandboxed: true },
+        ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}),
+        sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) },
         canUseTool: (name, input, { signal, title, decisionReason }) => new Promise<PermissionResult>(resolve => {
+          if (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)) {
+            resolve({ behavior: 'allow', updatedInput: input });
+            return;
+          }
           const id = randomUUID(), question = name === 'AskUserQuestion' && Array.isArray(input.questions);
           const questions = question ? (input.questions as { question: string; header?: string; options?: { label: string; description?: string }[] }[]) : [];
           this.approvals.set(id, { resolve, input, kind: question ? 'question' : 'tool', questions: questions.map(q => q.question) });

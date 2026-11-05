@@ -2143,3 +2143,49 @@ test('AI review captures the task worktree before enqueueing and retries keep th
     await assert.rejects(f.workspace.createTask({ id: 'send-private-finding', projectId: f.task.projectId, title: 'Edit', instructions: '', annotations: ['private-finding'] }), /no longer available/);
   } finally { f.close(); }
 });
+
+for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
+  test(`editing network permissions survive ${lifecycle} without removing the file sandbox`, async () => {
+    const f = fixture();
+    try {
+      if (lifecycle !== 'loaded') (f.workspace as any).loaded.clear();
+      if (lifecycle === 'start' || lifecycle === 'fallback') f.store.updateTask(f.task.id, { threadId: null });
+      if (lifecycle === 'fallback') f.codex.handler = async (method, params) => {
+        if (method === 'thread/start' && params.dynamicTools) throw new RpcResponseError('unknown field dynamicTools');
+        return method === 'turn/start' ? { turn: { id: 'turn-new' } } : { thread: { id: 'thread' } };
+      };
+      f.codex.ready = true;
+      await f.workspace.enqueue(f.task.id, 'Find the cited paper online and correct the reference.', `network-${lifecycle}`, false);
+      await tick(); await tick();
+      const threads = f.codex.calls.filter(c => c.method === 'thread/start' || c.method === 'thread/resume');
+      assert.equal(threads.length, lifecycle === 'loaded' ? 0 : lifecycle === 'fallback' ? 2 : 1);
+      for (const call of threads) {
+        assert.deepEqual(call.params.config, { web_search: 'live', 'sandbox_workspace_write.network_access': true });
+        assert.equal(call.params.sandbox, 'workspace-write');
+        assert.equal(call.params.approvalPolicy, 'on-request');
+        assert.match(call.params.developerInstructions, /Cite source URLs/);
+      }
+      const turn = f.codex.calls.find(c => c.method === 'turn/start');
+      assert.ok(turn);
+      assert.equal(Object.hasOwn(turn.params, 'sandboxPolicy'), false,
+        'inherit the resolved thread sandbox, including configured writable roots and temporary-directory exclusions');
+    } finally { f.close(); }
+  });
+}
+
+test('editing network permissions do not change read-only review threads', async () => {
+  const f = fixture();
+  try {
+    (f.workspace as any).loaded.clear();
+    f.store.updateTask(f.task.id, { mode: 'review', threadId: null, aiReview: { key: 'network-review' } });
+    f.store.saveReviewInput(f.task.id, { key: 'network-review', lines: [{ id: 'p1-l1', page: 0, text: 'Review fixture.', rect: [0.1, 0.2, 0.7, 0.25] }] });
+    f.codex.ready = true;
+    await f.workspace.enqueue(f.task.id, 'Review the paper.', 'network-review', false);
+    await tick(); await tick();
+    const start = f.codex.calls.find(c => c.method === 'thread/start');
+    assert.equal(start?.params.sandbox, 'read-only');
+    assert.equal(start?.params.approvalPolicy, 'never');
+    assert.equal(start?.params.config, undefined);
+    assert.equal(f.codex.calls.find(c => c.method === 'turn/start')?.params.sandboxPolicy, undefined);
+  } finally { f.close(); }
+});
