@@ -974,7 +974,9 @@ try {
   await prompt.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   assert.ok((await prompt.inputValue()).length < 'Undo this text'.length, 'native undo edits the text');
   assert.equal(annotations.length, 0); await prompt.fill('');
-  await page.getByRole('button', { name: 'Mark region', exact: true }).focus();
+  const markingTools = page.getByRole('toolbar', { name: 'Marking tools', exact: true });
+  const regionTool = markingTools.getByRole('button', { name: 'Region', exact: true });
+  await regionTool.focus();
   await page.keyboard.press('Meta+Shift+z');
   assert.equal(annotations.length, 0, 'redo is not interpreted as undo');
   failNoteRestore = true;
@@ -1026,7 +1028,7 @@ try {
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   assert.equal(annotations.length, 0);
   // A region marks a figure or equation that has no text to select.
-  await page.getByRole('button', { name: 'Mark region', exact: true }).click();
+  await regionTool.click();
   const firstPage = await pdfPages.first().boundingBox();
   await page.mouse.move(firstPage.x + firstPage.width * 0.2, firstPage.y + firstPage.height * 0.3);
   await page.mouse.down();
@@ -1047,9 +1049,12 @@ try {
   await expect(notesPanel).toHaveCount(0);
   await expect(prompt).toBeFocused();
   assert.equal(annotations.length, 1);
+  // Rail tools stay selected after a mark; Select returns to reading notes.
+  await expect(regionTool).toHaveAttribute('aria-pressed', 'true');
+  await markingTools.getByRole('button', { name: 'Select', exact: true }).click();
   await page.getByRole('button', { name: 'Note 1: Define the operator here.', exact: true }).click();
   await expect(notesPanel).toContainText('Define the operator here.');
-  assert.equal(await page.getByRole('button', { name: 'Mark region', exact: true }).getAttribute('aria-pressed'), 'false');
+  await expect(regionTool).toHaveAttribute('aria-pressed', 'false');
   assert.equal(annotations[0].rects, undefined);
   assert.ok(annotations[0].rect[0] > 0.15 && annotations[0].rect[2] < 0.75 && annotations[0].rect[1] < annotations[0].rect[3]);
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
