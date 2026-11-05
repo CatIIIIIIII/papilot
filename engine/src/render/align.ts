@@ -521,33 +521,23 @@ function framed(
         y0 = Math.min(rect[1], top.rect[3]);
       if (end && end.page === number && same(end.column, column))
         y1 = Math.max(rect[3], end.rect[1]);
-      // A printed line across an edge that ends short of the crop's own
-      // text is outside, as a piece of a display above whose equation
-      // number comes last in reading order: the edge moves past it. A line
-      // that reaches into the crop's text, by more than the 2pt that boxes
-      // of neighbouring lines overlap, is inside: the crop grows over it.
-      let [inner0, inner1] = [rect[1], rect[3]],
-        grown = true;
-      while (grown) {
-        grown = false;
-        for (const line of page.lines) {
-          const [a, ly0, b, ly1] = line.rect;
-          if (
-            a >= x1 ||
-            b <= x0 ||
-            ly0 >= y1 - 1 ||
-            ly1 <= y0 + 1 ||
-            (ly0 >= y0 && ly1 <= y1)
-          )
-            continue;
-          const before = [y0, y1];
-          if (ly0 < y0 && ly1 <= inner0 + 2) y0 = Math.min(ly1, inner0);
-          else if (ly1 > y1 && ly0 >= inner1 - 2) y1 = Math.max(ly0, inner1);
-          else {
-            [y0, y1] = [Math.min(y0, ly0), Math.max(y1, ly1)];
-            [inner0, inner1] = [Math.min(inner0, ly0), Math.max(inner1, ly1)];
-          }
-          grown ||= y0 !== before[0] || y1 !== before[1];
+      // Overlapping ink forms a vertical band with no safe cut through it.
+      // Include every band touching the crop's text, and exclude bands in
+      // its surrounding context. One ordered pass replaces edge-by-edge
+      // growth, and works for text, tall glyphs, rules and images alike.
+      const bands: [number, number][] = [];
+      for (const [a, lo, b, hi] of page.ink) {
+        if (a >= x1 || b <= x0) continue;
+        const last = bands.at(-1);
+        if (last && lo <= last[1]) last[1] = Math.max(last[1], hi);
+        else bands.push([lo, hi]);
+      }
+      for (const [lo, hi] of bands) {
+        if (hi <= rect[1]) y0 = Math.max(y0, hi);
+        else if (lo >= rect[3]) y1 = Math.min(y1, lo);
+        else {
+          y0 = Math.min(y0, lo);
+          y1 = Math.max(y1, hi);
         }
       }
       return {

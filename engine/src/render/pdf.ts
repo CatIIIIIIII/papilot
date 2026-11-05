@@ -99,6 +99,7 @@ function luminance(color: ArrayLike<number>) {
 export class PdfPage {
   private columns?: boolean;
   private bands?: Span[];
+  private inkRects?: Rect[];
   raw: mupdf.Page;
   bounds: Rect;
   blocks: TextBlock[] = [];
@@ -165,6 +166,21 @@ export class PdfPage {
   }
   get width() {
     return this.bounds[2] - this.bounds[0];
+  }
+  // Font metrics describe text layout, but may miss much of a math glyph.
+  // Cropping needs its painted outline instead. Read it only on pages that
+  // need crops; keeping it separate also preserves the text's reading order.
+  get ink(): Rect[] {
+    if (!this.inkRects) {
+      const text = this.raw.toStructuredText("accurate-bboxes"),
+        rects = [...this.drawings];
+      text.walk({ beginLine: (rect) => rects.push([...rect] as Rect) });
+      text.destroy();
+      this.inkRects = rects
+        .filter((r) => r[3] > r[1])
+        .sort((a, b) => a[1] - b[1]);
+    }
+    return this.inkRects;
   }
   get twoColumns() {
     if (this.columns === undefined) {

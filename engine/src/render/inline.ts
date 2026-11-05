@@ -450,21 +450,8 @@ export function trimmed(
         .some((p) => p < 200),
     ),
     scale = (bottom - top) / rows.length,
-    // A sliver of ink at an end, apart from the rest, is the descender or
-    // accent of the line beyond it.
-    sliver = Math.ceil(1.5 / scale),
-    edge = (list: boolean[]) => {
-      const ink = list.indexOf(true),
-        blank = list.indexOf(false, ink);
-      return ink === 0 &&
-        blank > 0 &&
-        blank <= sliver &&
-        list.indexOf(true, blank) > 0
-        ? list.indexOf(true, blank)
-        : ink;
-    },
-    first = edge(rows),
-    last = first < 0 ? -1 : rows.length - 1 - edge([...rows].reverse());
+    first = rows.indexOf(true),
+    last = rows.lastIndexOf(true);
   return first < 0
     ? [top, bottom]
     : [

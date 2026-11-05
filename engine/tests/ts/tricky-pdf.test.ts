@@ -3,7 +3,7 @@ import path from "node:path";
 import { it, expect } from "vitest";
 import { Fixture } from "./helpers.ts";
 import { run, which } from "../../src/core/process.ts";
-import { containsCenter } from "../../src/render/pdf.ts";
+import { containsCenter, PdfDocument } from "../../src/render/pdf.ts";
 import { ROOT } from "../../src/runtime.ts";
 import type { ChangeBlock, Strip, Rect } from "../../src/types.ts";
 const tex = Boolean(which("latexmk") && which("pdflatex"));
@@ -25,8 +25,40 @@ interface Case {
   visual?: string;
   minimumPages?: number;
   relocated?: boolean;
+  completeDisplay?: boolean;
 }
 const cases: Case[] = [
+  {
+    name: "matrix outlines stay whole when a word on the middle row changes",
+    packages: "amsmath",
+    body: String.raw`\section{Matrix}
+Above sentinel stays in the context.
+\[
+ V = \begin{pmatrix}
+ s & 0 & 0 \\
+ 0 & -s & 0 \\
+ -s x_0 & s y_1 & 1
+ \end{pmatrix},\qquad
+ (u\ v\ 1) = (x\ y\ 1)V.
+\]
+Below sentinel stays in the context.`,
+    from: "(x\\ y\\ 1)",
+    to: "(z\\ y\\ 1)",
+    completeDisplay: true,
+  },
+  {
+    name: "large operators and their limits stay whole around a changed relation",
+    packages: "amsmath",
+    body: String.raw`\section{Operators}
+Above sentinel stays in the context.
+\[
+ \sum_{i=0}^{\infty} x_i = \int_0^{\pi+2} f
+\]
+Below sentinel stays in the context.`,
+    from: "x_i =",
+    to: "x_i \\leq",
+    completeDisplay: true,
+  },
   {
     name: "two columns with a repeated sentence",
     options: "twocolumn",
@@ -433,6 +465,66 @@ ${scenario.body}
         }
         if (scenario.name.includes("deletion"))
           expect(text(after)).not.toContain("obsolete");
+        if (scenario.completeDisplay) {
+          const builds = app.review.round(task.name, 1).summary.builds;
+          for (const [key, strips] of [
+            [builds[0], before],
+            [builds.at(-1)!, after],
+          ] as const) {
+            const info = JSON.parse(
+                fs.readFileSync(
+                  path.join(app.state, "cache/builds", key, "result.json"),
+                  "utf8",
+                ),
+              ),
+              document = new PdfDocument(info.pdf);
+            try {
+              const page = document.page(0),
+                above = page.lines.find((l) =>
+                  l.text.includes("Above sentinel"),
+                )!,
+                below = page.lines.find((l) =>
+                  l.text.includes("Below sentinel"),
+                )!,
+                top = above.rect[3] + 1,
+                bottom = below.rect[1] - 1,
+                scale = 4,
+                image = page.raster(
+                  [0, top, page.width, bottom],
+                  scale,
+                  true,
+                  true,
+                );
+              // Count the actual painted pixels of the complete display,
+              // independently of text boxes and the alignment's crop rules.
+              let ink = 0,
+                shown = 0;
+              for (let y = 0; y < image.height; y++)
+                for (let x = 0; x < image.width; x++) {
+                  if (image.pixels[y * image.stride + x] >= 100) continue;
+                  ink++;
+                  const px = (x + 0.5) / scale,
+                    py = top + (y + 0.5) / scale;
+                  if (
+                    strips.some(
+                      (s) =>
+                        s.page === 1 &&
+                        px >= (s.left ?? 0) &&
+                        px < (s.left ?? 0) + s.width &&
+                        py >= (s.top ?? 0) &&
+                        py < (s.top ?? 0) + s.height,
+                    )
+                  )
+                    shown++;
+                }
+              expect(ink).toBeGreaterThan(0);
+              expect(shown / ink).toBeGreaterThan(0.995);
+              expect(text(strips)).not.toContain("sentinel");
+            } finally {
+              document.close();
+            }
+          }
+        }
         // Independently extract both complete PDFs with Poppler, so an extraction mistake
         // in our MuPDF text layer cannot make a wrong expected phrase pass unnoticed.
         if (which("pdftotext")) {
