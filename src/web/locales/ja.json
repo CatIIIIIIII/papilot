@@ -416,7 +416,6 @@
   "Include note {n} in this task": "このタスクに注釈 {n} を含める",
   "Include suggestion {n} in this task": "このタスクに提案 {n} を含める",
   "Include {key} in the task": "タスクに {key} を含める",
-  "Included": "追加済み",
   "Incoming: {status}": "受信する変更: {status}",
   "Individual notes": "個別の注釈",
   "Input needed": "入力が必要",

@@ -416,7 +416,6 @@
   "Include note {n} in this task": "이 작업에 주석 {n} 포함",
   "Include suggestion {n} in this task": "이 작업에 제안 {n} 포함",
   "Include {key} in the task": "작업에 {key} 포함",
-  "Included": "포함됨",
   "Incoming: {status}": "받을 변경: {status}",
   "Individual notes": "개별 주석",
   "Input needed": "입력 필요",

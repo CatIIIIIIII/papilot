@@ -973,7 +973,7 @@ try {
   await expect(notesPanel).toHaveCount(0);
   await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).click();
   await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveText('Included');
+  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveText('');
   // Editing a note that is already in the chat saves it and keeps it there.
   await clickNote(notesPanel.getByText('Only these words, please.', { exact: true }));
   await editingNote.press('Enter');

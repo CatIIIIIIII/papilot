@@ -2034,11 +2034,6 @@
     "textHash": "02419981308d20d0c715a131da1d5a07631e0820c273d98834e720d7d128e488",
     "model": "gemini-4-argon-medium"
   },
-  "Included": {
-    "revision": "cbe428d7bc99a80c5ef18d36c29096ac3fd7689aeaed7968cedf72f9f5153436",
-    "textHash": "f5ecc07b09318f6c1fbfe2a1113dbf9b714071ba32babfd31d21a7cc4df13f7c",
-    "model": "gemini-4-argon-medium"
-  },
   "Individual notes": {
     "revision": "1bb5ea52f7b9cce9242408d70caab83c85cd294ea8735e0a9e0220b39d4b085f",
     "textHash": "c3ca3eb9889759336e9582c68135bc6ec270e460aba7d4ba35573ff5df9190fa",

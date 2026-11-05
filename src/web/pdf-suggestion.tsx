@@ -65,13 +65,13 @@ export function NoteAttachButton({ number, ai = false, selected, disabled, desti
 }
 
 // The popover's main action sends the note to the task, like the chat
-// composer's own send button; a note already there says so and offers × to take it back out.
+// composer's own send button; a note already there offers × to take it back out.
 // Lists use the quiet form: the arrow without its blue disc until hovered.
 function NoteSendButton({ number, ai, selected, disabled, busy, quiet = false, onClick }: {
   number: number; ai: boolean; selected: boolean; disabled: boolean; busy: boolean; quiet?: boolean; onClick: () => void;
 }) {
   return <button type="button" className={'note-send' + (quiet ? ' quiet' : '')} aria-label={ai ? t('Include suggestion {n} in this task', { n: number }) : t('Include note {n} in this task', { n: number })} aria-pressed={selected} title={selected ? ai ? t('Remove suggestion {n} from task', { n: number }) : t('Remove note {n} from task', { n: number }) : t('Quote in chat')} disabled={disabled} onClick={onClick}>
-    {busy ? <span className="spinner light"/> : selected ? <>{t('Included')}<Icon name="close" size={12}/></> : <Icon name="arrowRight" size={15}/>}
+    {busy ? <span className="spinner light"/> : selected ? <Icon name="close" size={12}/> : <Icon name="arrowRight" size={15}/>}
   </button>;
 }
 

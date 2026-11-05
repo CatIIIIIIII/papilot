@@ -416,7 +416,6 @@
   "Include note {n} in this task": "將註解 {n} 納入此任務",
   "Include suggestion {n} in this task": "將建議 {n} 納入此任務",
   "Include {key} in the task": "將 {key} 納入任務",
-  "Included": "已包含",
   "Incoming: {status}": "遠端待同步：{status}",
   "Individual notes": "個別註解",
   "Input needed": "需要輸入",
