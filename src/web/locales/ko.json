@@ -617,7 +617,6 @@
   "PDF comparison": "PDF 비교",
   "PDF compilation": "PDF 컴파일",
   "PDF compiled successfully.": "PDF가 성공적으로 컴파일되었습니다.",
-  "PDF contents": "PDF 목차",
   "PDF controls": "PDF 컨트롤",
   "PDF note library": "PDF 주석 라이브러리",
   "PDF note {n}": "PDF 주석 {n}",
@@ -1248,5 +1247,11 @@
   "{sources} could not be reached.": "{sources}에 연결할 수 없습니다.",
   "{time} ago": "{time} 전",
   "{title} PDF change review": "{title} PDF 변경 사항 검토",
-  "{used}% used": "{used}% 사용됨"
+  "{used}% used": "{used}% 사용됨",
+  "Play a sound": "알림 소리 재생",
+  "Play the system notification sound.": "시스템 알림 소리를 재생합니다.",
+  "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "전송했습니다. 알림이 표시되지 않으면 시스템 설정에서 Papilot의 알림과 소리를 허용하세요.",
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot이 알림을 표시하지 못했습니다. 시스템 알림 설정을 확인하세요.",
+  "Notification sound": "알림 소리",
+  "Notification sounds are managed by your system settings.": "알림 소리는 시스템 설정에서 관리합니다."
 }

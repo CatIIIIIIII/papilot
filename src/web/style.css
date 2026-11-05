@@ -577,14 +577,15 @@ body.resizing iframe{pointer-events:none}
 .new-task-panel.has-notes .new-task-start{flex:1;min-height:0;margin:0;padding:0}
 .new-task-panel.has-notes .composer textarea{min-height:80px;max-height:min(160px,24dvh)}
 .notes-request{margin:8px 0 12px;white-space:pre-wrap;overflow-wrap:anywhere}
-.contents-panel{flex:1;min-height:0;overflow:auto;padding:8px}
-.contents-panel>p{margin:8px 12px;font-size:13px;line-height:1.5}
-.contents-panel ol{list-style:none;margin:0;padding:0}
-.contents-panel button{display:flex;align-items:baseline;gap:12px;width:100%;padding:9px 12px;border-radius:var(--r);text-align:left;font-size:13px;line-height:1.5;color:var(--text-2)}
-.contents-panel button>span:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
-.contents-panel button:hover{background:var(--bg-hover);color:var(--text)}
-.contents-panel button[aria-current]{background:var(--accent-soft);color:var(--accent)}
-.contents-page{flex-shrink:0;color:var(--text-3);font-variant-numeric:tabular-nums}
+.pdf-contents-trigger{display:flex;align-items:center;gap:5px;height:30px;padding:0 8px;border-radius:7px;font-size:13px;font-weight:500;color:var(--text-2);white-space:nowrap}
+.pdf-contents-trigger:hover{background:var(--bg-hover);color:var(--text)}
+.pdf-contents-trigger[aria-expanded=true]{background:var(--accent-soft);color:var(--accent)}
+.action-menu.pdf-contents-menu{width:320px;max-height:min(420px,calc(100dvh - 100px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.pdf-contents-menu>button{flex-shrink:0;align-items:baseline;font-size:13px;line-height:1.5}
+.pdf-contents-menu .menu-label{white-space:normal;overflow-wrap:anywhere}
+.pdf-contents-menu .menu-check{flex-shrink:0;align-self:center}
+.pdf-contents-menu>button[aria-checked=true]{background:var(--accent-soft);color:var(--accent)}
+@container (max-width:760px){.pdf-contents-trigger{width:30px;padding:0;justify-content:center}.pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:none}}
 .git-panel{flex:1;min-height:0;overflow:auto;padding:4px 0 24px}
 .notes-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
 .draft-notes-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;font-size:12px;color:var(--text-3)}
@@ -620,6 +621,7 @@ body.resizing iframe{pointer-events:none}
 /* pdf.js viewer: toolbar, find bar, pages and the note layer above each page */
 .pdf-view{flex:1;min-height:0;display:flex;flex-direction:column;container-type:inline-size}
 .pdf-toolbar{display:flex;align-items:center;gap:6px;height:46px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
+.pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding-block:4px}
 .pdf-toolbar-spacer{flex:1;min-width:0}
 .pdf-pager,.pdf-zoom{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .pdf-pager{font-size:13px;color:var(--text-2)}
@@ -948,8 +950,10 @@ body.resizing iframe{pointer-events:none}
   .manuscript{display:flex;flex-direction:column}
   .manuscript-side{max-height:none;flex:1;border-top:0;padding-bottom:env(safe-area-inset-bottom)}
   .manuscript-side-header{display:none}
-  .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages,.manuscript.show-contents .manuscript-pages,.manuscript.show-git .manuscript-pages{display:none}
-  .contents-panel button{min-height:44px;font-size:15px}
+  .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages,.manuscript.show-git .manuscript-pages{display:none}
+  .pdf-contents-trigger{width:36px;height:40px}
+  .action-menu.pdf-contents-menu{width:auto}
+  .pdf-contents-menu>button{min-height:44px;font-size:15px}
   .note-entry-actions .button{min-height:40px}
   .manuscript-pages{flex:1;display:flex;flex-direction:column}
   .pdf-toolbar{gap:2px;padding:0 4px}
@@ -985,7 +989,14 @@ body.resizing iframe{pointer-events:none}
   .modal-close{width:44px;height:44px;right:6px;top:6px}
   .toast{top:60px}
 }
-/* The paper's four views and its share button fit a large phone when only the open view keeps its label. */
+/* A resized desktop pane needs the same room for controls as a small phone. */
+@container (max-width:480px){
+  .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding:4px}
+  .pdf-toolbar:has(.pdf-contents-trigger) .pdf-toolbar-spacer{flex:0 0 100%;height:0}
+  .pdf-contents-trigger{width:auto;padding:0 8px}
+  .pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:inline}
+}
+/* The paper's views and its share button fit a large phone when only the open view keeps its label. */
 @media(max-width:520px){.manuscript-view-selector>button:not([aria-pressed=true])>span{display:none}}
 @media(max-width:400px){.view-selector>button>span{display:none}.view-selector>button{padding:0 11px}.task-state-actions .button-label{display:none}}
 

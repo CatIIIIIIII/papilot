@@ -1,3 +1,9 @@
 {
-  "Updates are managed by Nix.": "更新由 Nix 管理。"
+  "Updates are managed by Nix.": "更新由 Nix 管理。",
+  "Play a sound": "播放提示音",
+  "Play the system notification sound.": "播放系统通知提示音。",
+  "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "已发送。如果没有看到通知，请在系统设置中允许 Papilot 发送通知和播放提示音。",
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot 无法显示通知。请检查系统通知设置。",
+  "Notification sound": "通知提示音",
+  "Notification sounds are managed by your system settings.": "通知提示音由系统设置管理。"
 }

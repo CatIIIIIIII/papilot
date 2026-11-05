@@ -9,6 +9,7 @@ import http from 'node:http';
 import { buildLayer } from './desktop-layer.mjs';
 import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { selectOption, selectedValue } from './select.mjs';
+import { checkDesktopNotifications } from './check-desktop-notifications.mjs';
 
 const require = createRequire(import.meta.url);
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-test-'));
@@ -149,6 +150,7 @@ try {
   await paperDialog.getByRole('button', { name: /^(Cancel|取消)$/ }).click();
   await application.evaluate(({ dialog }) => { dialog.showOpenDialog = globalThis.originalOpenDialog; delete globalThis.originalOpenDialog; });
   const settings = page.getByRole('button', { name: /^(Settings|设置)$/ });
+  await checkDesktopNotifications(application, page, await (await fetch(`${origin}/api/state`)).json());
   await settings.click();
   await page.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
   await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();

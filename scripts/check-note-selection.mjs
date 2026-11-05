@@ -337,9 +337,33 @@ try {
   await taskEditor.press('Escape');
   await expect(taskText()).toHaveText('This save fails.');
   assert.equal(notes[0].comment, 'This save fails.');
+  // Contents stays over the PDF, leaving even a failed task draft in place.
+  const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+  const contentsMenu = page.getByRole('menu', { name: 'Contents', exact: true });
+  for (const activation of ['keyboard', 'pointer']) {
+    await editTaskNote().click();
+    const draft = `Keep this draft while navigating contents with ${activation}.`;
+    await taskEditor.fill(draft);
+    failEdit = true;
+    await taskEditor.press('Enter');
+    await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+    if (activation === 'keyboard') { await contentsTrigger.focus(); await page.keyboard.press('Enter'); }
+    else await contentsTrigger.click();
+    await expect(contentsMenu).toBeVisible();
+    await contentsMenu.getByRole('menuitemradio', { name: 'Results', exact: true }).click();
+    await expect(contentsMenu).toBeHidden();
+    await expect(page.getByLabel('Page number', { exact: true })).toHaveValue('2');
+    await expect(taskEditor).toHaveValue(draft);
+    await expect(page.getByRole('tab', { name: 'New task', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(send()).toBeDisabled();
+    failEdit = false;
+    await taskEditor.press('Enter');
+    await expect(taskText()).toHaveText(draft);
+    assert.equal(notes[0].comment, draft);
+  }
   // Changing side tabs must await the save and preserve a failed draft. Use
   // the keyboard as well: it does not trigger the card's pointerdown saver.
-  for (const tab of ['Contents', 'Git']) {
+  for (const tab of ['Git']) {
     await editTaskNote().click();
     await taskEditor.fill(`Keep this draft when opening ${tab}.`);
     failEdit = true;
@@ -377,11 +401,19 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   const views = page.getByRole('group', { name: 'Manuscript view' });
   await views.getByRole('button', { name: 'New task', exact: true }).click();
-  for (const tab of ['Contents', 'Git']) {
+  async function openMobileView(tab) {
+    await views.getByRole('button', { name: tab, exact: true }).click();
+    if (tab === 'PDF') {
+      await contentsTrigger.click();
+      await contentsMenu.getByRole('menuitemradio', { name: 'Results', exact: true }).click();
+      await expect(contentsMenu).toBeHidden();
+    }
+  }
+  for (const tab of ['PDF', 'Git']) {
     await editTaskNote().click();
     await taskEditor.fill(`Keep the mobile draft across ${tab}.`);
     failEdit = true;
-    await views.getByRole('button', { name: tab, exact: true }).click();
+    await openMobileView(tab);
     await views.getByRole('button', { name: 'New task', exact: true }).click();
     await expect(taskEditor).toHaveValue(`Keep the mobile draft across ${tab}.`);
     await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
@@ -393,7 +425,7 @@ try {
     await editTaskNote().click();
     await taskEditor.fill(`Wait for the mobile save across ${tab}.`);
     releaseEdit = undefined; holdEdit = true;
-    await views.getByRole('button', { name: tab, exact: true }).click();
+    await openMobileView(tab);
     await expect.poll(() => Boolean(releaseEdit)).toBe(true);
     await views.getByRole('button', { name: 'New task', exact: true }).click();
     await expect(taskEditor).toHaveValue(`Wait for the mobile save across ${tab}.`);

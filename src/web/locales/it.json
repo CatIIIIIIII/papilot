@@ -617,7 +617,6 @@
   "PDF comparison": "Confronto PDF",
   "PDF compilation": "Compilazione PDF",
   "PDF compiled successfully.": "PDF compilato correttamente.",
-  "PDF contents": "Indice del PDF",
   "PDF controls": "Controlli PDF",
   "PDF note library": "Libreria di annotazioni PDF",
   "PDF note {n}": "Annotazione PDF {n}",
@@ -1248,5 +1247,11 @@
   "{sources} could not be reached.": "Impossibile raggiungere {sources}.",
   "{time} ago": "{time} fa",
   "{title} PDF change review": "Revisione delle modifiche al PDF di {title}",
-  "{used}% used": "{used}% utilizzato"
+  "{used}% used": "{used}% utilizzato",
+  "Play a sound": "Riproduci un suono",
+  "Play the system notification sound.": "Riproduci il suono di notifica del sistema.",
+  "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "Inviata. Se non è apparso nulla, consenti le notifiche e i suoni di Papilot nelle impostazioni di sistema.",
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot non ha potuto mostrare la notifica. Controlla le impostazioni delle notifiche di sistema.",
+  "Notification sound": "Suono di notifica",
+  "Notification sounds are managed by your system settings.": "I suoni delle notifiche si gestiscono nelle impostazioni di sistema."
 }

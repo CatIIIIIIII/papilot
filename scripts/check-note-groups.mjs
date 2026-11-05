@@ -135,10 +135,11 @@ try {
   await expect(page.locator('.annotation-group')).toHaveCount(2);
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await expect(page.locator('.note-tag[data-group="yellow"]')).toHaveCount(2);
-  await page.getByRole('tab', { name: 'Contents', exact: true }).click();
+  await page.getByRole('button', { name: 'Contents', exact: true }).click();
   await clickMark(notes[0]);
   await clickMark(notes[2]);
-  await expect(page.getByRole('tab', { name: 'Contents', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: 'Contents', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('tab', { name: 'New task', exact: true })).toHaveAttribute('aria-selected', 'true');
   // Dragging outside the card closes it while keeping normal PDF text selection.
   const dragMark = page.locator(`.note-mark[data-note="${notes[0].id}"]`).first();
   const dragBox = await dragMark.boundingBox();
