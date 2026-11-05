@@ -193,6 +193,8 @@ export class Publisher {
   // its chapters: a host may compile the whole paper meanwhile, without
   // waiting for or competing with a build of the same files here.
   private revisions = new Map<string, string>();
+  // Whether each job lists indirect changes, as its latest request asked.
+  private indirect = new Map<string, boolean>();
   constructor(public app: App) {
     app.store.execute(
       "UPDATE jobs SET status='failed', finished=?, result=? WHERE status IN ('queued','running')",
@@ -203,9 +205,11 @@ export class Publisher {
       }),
     );
   }
-  submit(name: string, requestId?: string) {
+  submit(name: string, requestId?: string, indirect = false) {
     this.app.tasks.get(name);
-    return this.app.store.transaction(() => this.enqueue(name, requestId));
+    const job = this.app.store.transaction(() => this.enqueue(name, requestId));
+    if (job.status === "queued") this.indirect.set(job.id, indirect);
+    return job;
   }
   private enqueue(name: string, requestId?: string) {
     if (requestId) {
@@ -339,6 +343,7 @@ export class Publisher {
       this.update(job.id, { status: "failed", result, finished: now() });
     } finally {
       this.revisions.delete(job.id);
+      this.indirect.delete(job.id);
       this.running.delete(job.task);
       if (this.pending.get(job.task) === job.id) this.pending.delete(job.task);
       else if (!this.stopping) this.queue.push(this.pending.get(job.task)!);
@@ -460,6 +465,7 @@ export class Publisher {
           old,
           new: next,
           units,
+          indirect: this.indirect.get(job.id) ?? false,
         },
         (subset) =>
           builder.build(

@@ -38,6 +38,7 @@ import { ProblemsButton, fixRequest, type ProblemsHandle } from './build-problem
 import { useTheme } from './theme.tsx';
 import { SettingsDialog } from './settings.tsx';
 import { connectStamps } from './stamps.ts';
+import { connectIndirectChanges } from './effect-preferences.ts';
 import type { DiagnosticReport } from '../shared.ts';
 import { CommitDialog } from './commit-dialog.tsx';
 import { TaskCommit } from './task-commit.tsx';
@@ -89,6 +90,7 @@ async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal,
   }
 }
 connectStamps(api);
+connectIndirectChanges(api);
 const uploadAttachment = (projectId: string, file: File, signal: AbortSignal) => api<Attachment>(`/projects/${projectId}/attachments`, file, signal, 120000);
 const detectLatexInstallation = (signal: AbortSignal) => api<LatexInstallation | null>('/runtime/latex', undefined, signal, 30000);
 const checkDiagnostics = (projectId: string | undefined, signal: AbortSignal) => api<DiagnosticReport>('/diagnostics', { projectId }, signal, 60000);

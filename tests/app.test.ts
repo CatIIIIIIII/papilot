@@ -797,6 +797,23 @@ test('each person keeps their own quick notes, presets by id and their own in fu
   } finally { await f.close(); }
 });
 
+test('indirect changes stay off until the owner turns them on', async () => {
+  const f = await fixture();
+  try {
+    const owner = { ...LOCAL, origin: 'http://127.0.0.1:7274', 'x-papilot-token': 'local-csrf' };
+    const read = async () => (await f.local.inject({ url: '/api/indirect-changes', headers: LOCAL })).json().indirectChanges;
+    assert.equal(await read(), false, 'Off by default');
+    const other = await f.remote.inject({ method: 'POST', url: '/api/indirect-changes', headers: f.as, payload: { indirectChanges: true } });
+    assert.notEqual(other.statusCode, 200, 'Only the owner may turn them on');
+    assert.equal(await read(), false);
+    const saved = await f.local.inject({ method: 'POST', url: '/api/indirect-changes', headers: owner, payload: { indirectChanges: true } });
+    assert.equal(saved.json().indirectChanges, true, saved.body);
+    assert.equal(await read(), true);
+    await f.local.inject({ method: 'POST', url: '/api/indirect-changes', headers: owner, payload: { indirectChanges: false } });
+    assert.equal(f.store.preference(f.accounts.owner().id, 'indirect-changes'), undefined, 'Off again forgets the preference');
+  } finally { await f.close(); }
+});
+
 test('group-specific instructions are scoped to selected notes and preserved in the agent prompt and chat', async () => {
   const f = await fixture();
   try {

@@ -366,6 +366,17 @@ test('while a round compiles its changed chapters, its new version is announced 
   } finally { f.close(); }
 });
 
+test('a round lists indirect changes only when Settings track them', async () => {
+  const f = fixture();
+  try {
+    const sent = () => f.calls.filter(call => call.route.endsWith('/publish')).map(call => (call.body as { indirect?: boolean }).indirect);
+    await f.workspace.publish(f.task.id);
+    f.workspace.indirectChanges = () => true;
+    await f.workspace.publish(f.task.id);
+    assert.deepEqual(sent(), [false, true]);
+  } finally { f.close(); }
+});
+
 test('publication records each completed run result once and treats no new edits as no result', async () => {
   let round = 2, outcome = 'published';
   const f = fixture(async (_method, route) => route.includes('/jobs/') ? { status: 'done', outcome, round } : route.endsWith('/publish') ? { job: 'job' } : { ...summary, round });

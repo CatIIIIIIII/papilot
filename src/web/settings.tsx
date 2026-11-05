@@ -7,7 +7,7 @@ import { keepDialogFocus } from './focus.ts';
 import { LANGUAGES, browserLanguage, setLanguage, t, useLanguage, type LanguageChoice } from './i18n.ts';
 import { NotificationSettings } from './notification-settings.tsx';
 import { browserStorage } from './storage.ts';
-import { saveExpandedEffects, useExpandedEffects } from './effect-preferences.ts';
+import { saveIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
 import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
@@ -35,7 +35,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const [peopleVisited, setPeopleVisited] = useState(false);
   const skillControls = useRef<SkillLibraryControls>(null);
   const { choice } = useLanguage();
-  const expandedEffects = useExpandedEffects(), reviewView = useDefaultReviewView();
+  const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
   const advancedGit = useAdvancedGit();
   const [page, setPage] = useState<SettingsPage>(initialPage);
   const [showCategories, setShowCategories] = useState(() => initialPage === 'general' && window.matchMedia('(max-width: 760px)').matches);
@@ -71,7 +71,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')} ${t('Show advanced Git features')}` },
       { page: 'appearance', label: t('Appearance'), icon: 'sun', keywords: `${t('Light')} ${t('Dark')} ${t('System')} ${t('Theme')} ${t('Accent')} ${t('Background')} ${t('Foreground')}` },
       { page: 'notifications', label: t('Notifications'), icon: 'bell' },
-      { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Expand indirect changes')}` },
+      { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Track indirect changes')}` },
       { page: 'quickNotes', label: t('Quick notes'), icon: 'toolMagic', keywords: `${t('Magic pen')} ${t('Polish')} ${t('Shorten')} ${t('Runt')} ${t('Connect')} ${t('Verify')}` },
       { page: 'shortcuts', label: t('Keyboard shortcuts'), icon: 'keyboard' },
     ] },
@@ -146,10 +146,11 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
           </div>
           <div className="settings-row settings-toggle">
             <div className="settings-text">
-              <label className="settings-name" htmlFor="settings-effects">{t('Expand indirect changes')}</label>
-              <p id="settings-effects-detail">{t('Expand changes elsewhere, such as contents and reference numbering. Off by default; edits with no visible change at their source, such as macro definitions, still show their effects.')}</p>
+              <label className="settings-name" htmlFor="settings-effects">{t('Track indirect changes')}</label>
+              <p id="settings-effects-detail">{t('Find and show what each edit changes elsewhere, such as the uses of a macro and renumbered references. Off by default: each edit shows its own lines.')}</p>
+              {indirectChanges && <p className="settings-warning" role="note">{t('Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.')}</p>}
             </div>
-            <input id="settings-effects" type="checkbox" role="switch" className="switch" aria-describedby="settings-effects-detail" checked={expandedEffects} onChange={event => saveExpandedEffects(event.target.checked)}/>
+            <input id="settings-effects" type="checkbox" role="switch" className="switch" aria-describedby="settings-effects-detail" checked={indirectChanges} onChange={event => void saveIndirectChanges(event.target.checked)}/>
           </div>
         </section>}
         {page === 'notifications' && <NotificationSettings/>}

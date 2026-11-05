@@ -212,6 +212,15 @@ export async function buildApp(options: AppOptions) {
     store.savePreference(person(request.viewer!), 'quick-notes', quickNotes);
     return { quickNotes: quickNotes || null };
   });
+  // Whether rounds find and list what each edit changes elsewhere, such as
+  // the uses of a macro. Off by default: finding which edit made such a
+  // change may compile the paper up to sixteen more times.
+  app.get('/api/indirect-changes', any, () => ({ indirectChanges: store.preference<boolean>(accounts.owner().id, 'indirect-changes') === true }));
+  app.post('/api/indirect-changes', owner, request => {
+    const indirectChanges = (request.body as any)?.indirectChanges === true;
+    store.savePreference(accounts.owner().id, 'indirect-changes', indirectChanges || undefined);
+    return { indirectChanges };
+  });
   // Signed-in people get at most a few event streams each.
   const streams = new Map<string, number>();
   app.get('/api/events', any, (request, reply) => {

@@ -363,12 +363,17 @@ The results follow.
     f.repo.run(["add", "."]);
     f.repo.run(["commit", "-qm", "macro fixture"]);
     const app = f.app();
-    const publish = async (name: string) => {
-      const job = app.publisher.submit(name);
+    const publish = async (name: string, indirect = true) => {
+      const job = app.publisher.submit(name, undefined, indirect);
       await app.publisher.join();
       const done = app.publisher.job(job.id);
       expect(done.status, JSON.stringify(done.result)).toBe("done");
     };
+    // The PDFs compiled so far: the cache keeps one folder per build.
+    const builds = () =>
+      fs
+        .readdirSync(path.join(app.state, "cache/builds"))
+        .filter((name) => /^[0-9a-f]{32}$/.test(name)).length;
     const blocks = (name: string) => {
       const detail = app.review.roundDetail(name, 1);
       return [
@@ -403,6 +408,24 @@ The results follow.
         rest = await more(folder, unit.id);
       expect(rest.map((p) => p.section)).toEqual(["4 Discussion", "5 Outlook"]);
       expect(rest.every((p) => p.after.length === 1)).toBe(true);
+
+      // By default an edit shows only its own lines: no places, and no
+      // variant is compiled to find them, only the round's new version.
+      const plain = app.tasks.create("plain");
+      f.edit(plain, "paper/macros.tex", "MacroNet", "MacroFormer");
+      f.edit(
+        plain,
+        "paper/main.tex",
+        "Where Macros Point",
+        "Where Do Macros Point",
+      );
+      f.edit(plain, "paper/main.tex", "results follow", "results follow below");
+      const compiled = builds();
+      await publish(plain.name, false);
+      expect(builds() - compiled).toBe(1);
+      expect(
+        app.review.roundDetail(plain.name, 1).units.some((u) => u.effects),
+      ).toBe(false);
 
       // With other edits in the round, compiling the definition alone tells
       // its places apart from the other edits' own changes.

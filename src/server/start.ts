@@ -18,6 +18,7 @@ if (problem) { console.error(problem); process.exit(1); }
 const store = new Store(path.join(DATA, 'papilot.sqlite'));
 const workspace = new Workspace(store);
 const accounts = new Accounts(store, ACCOUNT_ORIGIN || null);
+workspace.indirectChanges = () => store.preference<boolean>(accounts.owner().id, 'indirect-changes') === true;
 const manuscripts = new Manuscripts(), changes = new Changes();
 const desktop = process.env.PAPILOT_DESKTOP === '1';
 if (desktop) await desktopDemo(ROOT, DATA, store, workspace, manuscripts).catch(error => console.error('Could not prepare the demo paper:', error));
