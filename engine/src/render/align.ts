@@ -521,12 +521,13 @@ function framed(
         y0 = Math.min(rect[1], top.rect[3]);
       if (end && end.page === number && same(end.column, column))
         y1 = Math.max(rect[3], end.rect[1]);
-      // Overlapping ink forms a vertical band with no safe cut through it.
+      // Overlapping glyph ink forms a band with no safe cut through its text.
       // Include every band touching the crop's text, and exclude bands in
       // its surrounding context. One ordered pass replaces edge-by-edge
-      // growth, and works for text, tall glyphs, rules and images alike.
+      // growth. Rules and images keep the extent of their source crops;
+      // a frame around several paragraphs does not bind their text together.
       const bands: [number, number][] = [];
-      for (const [a, lo, b, hi] of page.ink) {
+      for (const [a, lo, b, hi] of page.textInk) {
         if (a >= x1 || b <= x0) continue;
         const last = bands.at(-1);
         if (last && lo <= last[1]) last[1] = Math.max(last[1], hi);

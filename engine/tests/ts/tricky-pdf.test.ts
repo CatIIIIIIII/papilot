@@ -26,8 +26,27 @@ interface Case {
   minimumPages?: number;
   relocated?: boolean;
   completeDisplay?: boolean;
+  outside?: string[];
 }
 const cases: Case[] = [
+  {
+    name: "a frame does not join separate paragraphs into one text change",
+    body: String.raw`\section{Framed text}
+\noindent\fbox{\begin{minipage}{300pt}
+Opening sentinel stays in the context.\par
+${paragraph.repeat(3)}\par
+\medskip
+The protocol keeps oldvalue before committing.\par
+\medskip
+${paragraph.repeat(3)}\par
+Closing sentinel stays in the context.
+\end{minipage}}`,
+    from: "oldvalue",
+    to: "newvalue",
+    removed: "oldvalue",
+    added: "newvalue",
+    outside: ["Opening sentinel", "Closing sentinel"],
+  },
   {
     name: "matrix outlines stay whole when a word on the middle row changes",
     packages: "amsmath",
@@ -378,6 +397,10 @@ ${scenario.body}
           folder = path.join(app.state, "rounds/tricky/001");
         if (scenario.before) expect(text(before)).toContain(scenario.before);
         if (scenario.after) expect(text(after)).toContain(scenario.after);
+        for (const outside of scenario.outside ?? []) {
+          expect(text(before)).not.toContain(outside);
+          expect(text(after)).not.toContain(outside);
+        }
         if (scenario.removed)
           expect(
             normalized(before.map((s) => marked(s, folder)).join("\n")),

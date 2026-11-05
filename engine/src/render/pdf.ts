@@ -168,12 +168,12 @@ export class PdfPage {
     return this.bounds[2] - this.bounds[0];
   }
   // Font metrics describe text layout, but may miss much of a math glyph.
-  // Cropping needs its painted outline instead. Read it only on pages that
+  // Cropping text needs its painted outline instead. Read it only on pages that
   // need crops; keeping it separate also preserves the text's reading order.
-  get ink(): Rect[] {
+  get textInk(): Rect[] {
     if (!this.inkRects) {
       const text = this.raw.toStructuredText("accurate-bboxes"),
-        rects = [...this.drawings];
+        rects: Rect[] = [];
       text.walk({ beginLine: (rect) => rects.push([...rect] as Rect) });
       text.destroy();
       this.inkRects = rects
