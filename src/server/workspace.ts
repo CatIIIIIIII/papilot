@@ -99,7 +99,7 @@ export class Workspace extends EventEmitter {
   // Async tools must never answer a request from an earlier connection.
   private connectionEpochs = new Map<AgentId, number>();
   private loaded = new Set<string>();
-  // Whether rounds list each edit's changes elsewhere (Settings); start.ts
+  // Whether rounds list each edit's changes elsewhere (Settings); buildApp
   // reads it from the owner's preferences.
   indirectChanges: () => boolean = () => false;
   private preparing = new Set<string>();

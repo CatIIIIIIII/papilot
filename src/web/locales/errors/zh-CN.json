@@ -131,6 +131,7 @@
   "Select valid PDF notes for this task.": "请为此任务选择有效的 PDF 批注。",
   "Select valid review notes.": "请选择有效的审阅批注。",
   "Send attachments with a message, separately from review feedback.": "请随消息单独发送附件，勿与审阅反馈一同发送。",
+  "Send indirectChanges as true or false.": "请将 indirectChanges 设为 true 或 false。",
   "Service tiers are only available for Codex.": "服务等级仅适用于 Codex。",
   "Set PAPILOT_ACCOUNT_ORIGIN to the public URL before inviting people.": "邀请成员前，请先将 PAPILOT_ACCOUNT_ORIGIN 设为公共 URL。",
   "Sign in to continue.": "请登录以继续。",

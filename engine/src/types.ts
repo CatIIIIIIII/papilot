@@ -88,6 +88,9 @@ export interface Round {
     targets: string[];
     builds: string[];
     renderer?: string;
+    /** Whether the round lists indirect changes; absent in older rounds,
+     * which did. */
+    indirect?: boolean;
   };
   created: number;
 }

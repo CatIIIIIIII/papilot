@@ -367,7 +367,7 @@ export function createServer(app: App) {
       { schema: { body: { ...objectSchema, properties: { requestId: { type: "string", pattern: "^[a-zA-Z0-9-]{1,80}$" }, indirect: { type: "boolean" } } } } },
       (request) => {
         app.delivery.assertReady(request.params.name);
-        const job = app.publisher.submit(request.params.name, request.body?.requestId, request.body?.indirect === true);
+        const job = app.publisher.submit(request.params.name, request.body?.requestId, request.body?.indirect);
         return { job: job.id, status: job.status };
       },
     );

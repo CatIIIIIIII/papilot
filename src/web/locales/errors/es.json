@@ -131,6 +131,7 @@
   "Select valid PDF notes for this task.": "Selecciona anotaciones de PDF válidas para esta tarea.",
   "Select valid review notes.": "Selecciona anotaciones de revisión válidas.",
   "Send attachments with a message, separately from review feedback.": "Envía los archivos adjuntos con un mensaje, por separado de los comentarios de la revisión.",
+  "Send indirectChanges as true or false.": "Envía indirectChanges como true o false.",
   "Service tiers are only available for Codex.": "Los niveles de servicio solo están disponibles para Codex.",
   "Set PAPILOT_ACCOUNT_ORIGIN to the public URL before inviting people.": "Configura PAPILOT_ACCOUNT_ORIGIN con la URL pública antes de invitar a personas.",
   "Sign in to continue.": "Inicia sesión para continuar.",

@@ -363,11 +363,12 @@ The results follow.
     f.repo.run(["add", "."]);
     f.repo.run(["commit", "-qm", "macro fixture"]);
     const app = f.app();
-    const publish = async (name: string, indirect = true) => {
+    const publish = async (name: string, indirect?: boolean) => {
       const job = app.publisher.submit(name, undefined, indirect);
       await app.publisher.join();
       const done = app.publisher.job(job.id);
       expect(done.status, JSON.stringify(done.result)).toBe("done");
+      return done.result as unknown as { outcome: string };
     };
     // The PDFs compiled so far: the cache keeps one folder per build.
     const builds = () =>
@@ -388,7 +389,7 @@ The results follow.
       // places are the five uses, the first three rendered.
       const single = app.tasks.create("rename");
       f.edit(single, "paper/macros.tex", "MacroNet", "MacroFormer");
-      await publish(single.name);
+      await publish(single.name, true);
       const [unit] = app.review.roundDetail(single.name, 1).units;
       expect(blocks(single.name)).toEqual([[unit.id]]);
       expect(unit.effects?.total).toBe(5);
@@ -426,6 +427,13 @@ The results follow.
       expect(
         app.review.roundDetail(plain.name, 1).units.some((u) => u.effects),
       ).toBe(false);
+      // Turning them on builds the same edits again, with their places; a
+      // request that does not say keeps the task's choice.
+      await publish(plain.name, true);
+      expect(
+        app.review.roundDetail(plain.name, 2).units.some((u) => u.effects),
+      ).toBe(true);
+      expect((await publish(plain.name)).outcome).toBe("unchanged");
 
       // With other edits in the round, compiling the definition alone tells
       // its places apart from the other edits' own changes.
@@ -438,7 +446,7 @@ The results follow.
         "Where Do Macros Point",
       );
       f.edit(mixed, "paper/main.tex", "results follow", "results follow below");
-      await publish(mixed.name);
+      await publish(mixed.name, true);
       const units = app.review.roundDetail(mixed.name, 1).units,
         of = (file: string, line: number) =>
           units.find((u) => u.file === file && u.new_start === line)!;

@@ -236,13 +236,15 @@ export function renderRound(
         request.units.length === 1
           ? changes.map(() => [request.units[0].id])
           : (request.causes ?? changes.map(() => [])),
-      places = placesOf(
-        old,
-        next,
-        changes.map((c) => c.effect),
-        causes,
-        changes.map((c) => c.within),
-      ),
+      places = request.indirect
+        ? placesOf(
+            old,
+            next,
+            changes.map((c) => c.effect),
+            causes,
+            changes.map((c) => c.within),
+          )
+        : {},
       strips = new Strips(out);
     for (const [id, list] of Object.entries(places))
       result.units[id].effects = {

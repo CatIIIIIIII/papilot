@@ -806,9 +806,12 @@ test('indirect changes stay off until the owner turns them on', async () => {
     const other = await f.remote.inject({ method: 'POST', url: '/api/indirect-changes', headers: f.as, payload: { indirectChanges: true } });
     assert.notEqual(other.statusCode, 200, 'Only the owner may turn them on');
     assert.equal(await read(), false);
+    for (const payload of [{}, { indirectChanges: 'true' }, { indirect: true }])
+      assert.equal((await f.local.inject({ method: 'POST', url: '/api/indirect-changes', headers: owner, payload })).statusCode, 400, JSON.stringify(payload));
     const saved = await f.local.inject({ method: 'POST', url: '/api/indirect-changes', headers: owner, payload: { indirectChanges: true } });
     assert.equal(saved.json().indirectChanges, true, saved.body);
     assert.equal(await read(), true);
+    assert.equal(f.workspace.indirectChanges(), true, 'Task rounds follow the setting');
     await f.local.inject({ method: 'POST', url: '/api/indirect-changes', headers: owner, payload: { indirectChanges: false } });
     assert.equal(f.store.preference(f.accounts.owner().id, 'indirect-changes'), undefined, 'Off again forgets the preference');
   } finally { await f.close(); }

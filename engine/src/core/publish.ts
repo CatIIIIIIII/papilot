@@ -193,8 +193,11 @@ export class Publisher {
   // its chapters: a host may compile the whole paper meanwhile, without
   // waiting for or competing with a build of the same files here.
   private revisions = new Map<string, string>();
-  // Whether each job lists indirect changes, as its latest request asked.
+  // Whether each job lists indirect changes, and each task's latest choice:
+  // a request that does not say, such as an inline source edit or the CLI
+  // without --indirect, keeps the task's choice.
   private indirect = new Map<string, boolean>();
+  private tracking = new Map<string, boolean>();
   constructor(public app: App) {
     app.store.execute(
       "UPDATE jobs SET status='failed', finished=?, result=? WHERE status IN ('queued','running')",
@@ -205,10 +208,12 @@ export class Publisher {
       }),
     );
   }
-  submit(name: string, requestId?: string, indirect = false) {
+  submit(name: string, requestId?: string, indirect?: boolean) {
     this.app.tasks.get(name);
+    if (indirect !== undefined) this.tracking.set(name, indirect);
     const job = this.app.store.transaction(() => this.enqueue(name, requestId));
-    if (job.status === "queued") this.indirect.set(job.id, indirect);
+    if (job.status === "queued" && (indirect !== undefined || !this.indirect.has(job.id)))
+      this.indirect.set(job.id, this.tracking.get(name) ?? false);
     return job;
   }
   private enqueue(name: string, requestId?: string) {
@@ -389,11 +394,14 @@ export class Publisher {
         ],
         "Undo edits outside the scope, then publish again.",
       );
+    // A round from before the choice existed listed indirect changes.
+    const indirect = this.indirect.get(job.id) ?? this.tracking.get(name) ?? false;
     if (
       latest &&
       latest.before === before &&
       (await app.repo.treeIdAsync(latest.after)) === (await app.repo.treeIdAsync(after)) &&
-      latest.summary.renderer === codeVersion()
+      latest.summary.renderer === codeVersion() &&
+      (latest.summary.indirect ?? true) === indirect
     )
       return {
         outcome: "unchanged",
@@ -410,7 +418,7 @@ export class Publisher {
         const built = await new Builder(project, app.repo).build(before), number = latest.number + 1;
         await app.exclusive(async () => {
           if (app.review.lastChange(name) !== decided) throw new Stale();
-          app.store.execute("INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)", name, number, before, after, "[]", JSON.stringify({ renderer: codeVersion(), warnings: [], targets: ["full"], builds: [built.key] }), now());
+          app.store.execute("INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)", name, number, before, after, "[]", JSON.stringify({ renderer: codeVersion(), indirect, warnings: [], targets: ["full"], builds: [built.key] }), now());
           await app.repo.updateRefAsync(`refs/latex-review/${name}/round-${number}`, after);
         });
         return { outcome: "empty", round: number, changes: 0 };
@@ -451,6 +459,7 @@ export class Publisher {
     fs.mkdirSync(output, { recursive: true });
     const summary = {
       renderer: codeVersion(),
+      indirect,
       warnings,
       targets,
       builds: [seed, old, next].filter((b) => b !== null).map((b) => b.key),
@@ -465,14 +474,18 @@ export class Publisher {
           old,
           new: next,
           units,
-          indirect: this.indirect.get(job.id) ?? false,
+          indirect,
         },
-        (subset) =>
-          builder.build(
-            withUnits(app.repo, before, after, subset),
-            targets,
-            seed,
-          ),
+        // Only a round that lists indirect changes compiles variants to
+        // find the edits behind them.
+        indirect
+          ? (subset) =>
+              builder.build(
+                withUnits(app.repo, before, after, subset),
+                targets,
+                seed,
+              )
+          : undefined,
       );
       // No decision may come between this check and the new round.
       await app.exclusive(async () => {

@@ -7,7 +7,7 @@ import { keepDialogFocus } from './focus.ts';
 import { LANGUAGES, browserLanguage, setLanguage, t, useLanguage, type LanguageChoice } from './i18n.ts';
 import { NotificationSettings } from './notification-settings.tsx';
 import { browserStorage } from './storage.ts';
-import { saveIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
+import { loadIndirectChanges, saveIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
 import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
@@ -29,7 +29,7 @@ type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'latex-review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, skills, updates, modelDefaults, owner = true, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; owner?: boolean; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const peopleControls = useRef<PeopleSettingsControls>(null);
   const [peopleVisited, setPeopleVisited] = useState(false);
@@ -37,6 +37,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const { choice } = useLanguage();
   const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
   const advancedGit = useAdvancedGit();
+  useEffect(loadIndirectChanges, []);
   const [page, setPage] = useState<SettingsPage>(initialPage);
   const [showCategories, setShowCategories] = useState(() => initialPage === 'general' && window.matchMedia('(max-width: 760px)').matches);
   const [query, setQuery] = useState('');
@@ -144,14 +145,15 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
             </div>
             <input id="settings-references" type="checkbox" role="switch" className="switch" aria-describedby="settings-references-detail" checked={checkReferences} onChange={event => { setCheckReferences(event.target.checked); browserStorage.setItem(REFERENCE_CHECKS, event.target.checked ? 'on' : 'off'); }}/>
           </div>
-          <div className="settings-row settings-toggle">
+          {/* The owner chooses: the setting decides what every round compiles. */}
+          {owner && <div className="settings-row settings-toggle">
             <div className="settings-text">
               <label className="settings-name" htmlFor="settings-effects">{t('Track indirect changes')}</label>
               <p id="settings-effects-detail">{t('Find and show what each edit changes elsewhere, such as the uses of a macro and renumbered references. Off by default: each edit shows its own lines.')}</p>
               {indirectChanges && <p className="settings-warning" role="note">{t('Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.')}</p>}
             </div>
             <input id="settings-effects" type="checkbox" role="switch" className="switch" aria-describedby="settings-effects-detail" checked={indirectChanges} onChange={event => void saveIndirectChanges(event.target.checked)}/>
-          </div>
+          </div>}
         </section>}
         {page === 'notifications' && <NotificationSettings/>}
         {page === 'shortcuts' && <ShortcutSettings/>}

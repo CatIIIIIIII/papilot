@@ -131,6 +131,7 @@
   "Select valid PDF notes for this task.": "このタスクに対して有効な PDF 注釈を選択してください。",
   "Select valid review notes.": "有効なレビュー注釈を選択してください。",
   "Send attachments with a message, separately from review feedback.": "添付ファイルはレビューのフィードバックとは別に、メッセージとともに送信してください。",
+  "Send indirectChanges as true or false.": "indirectChanges は true または false で送信してください。",
   "Service tiers are only available for Codex.": "サービスティアは Codex でのみ利用できます。",
   "Set PAPILOT_ACCOUNT_ORIGIN to the public URL before inviting people.": "ユーザーを招待する前に、PAPILOT_ACCOUNT_ORIGIN に公開 URL を設定してください。",
   "Sign in to continue.": "続行するにはサインインしてください。",
