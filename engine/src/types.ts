@@ -180,7 +180,8 @@ export interface Position {
   label: string;
 }
 export interface Mark {
-  kind: "removed" | "added" | "moved";
+  /** context: words at the end of an old crop that the context strips show. */
+  kind: "removed" | "added" | "moved" | "context";
   rect: Rect;
 }
 export interface Pair {
@@ -188,6 +189,8 @@ export interface Pair {
   new: Position | null;
   before_marks: Mark[];
   after_marks: Mark[];
+  /** Pairs of an aligned card in the same group show one region. */
+  group?: number;
 }
 export type Visual = "unmapped" | "text" | "layout" | "position" | "identical";
 export interface Card {
@@ -197,6 +200,8 @@ export interface Card {
   comparison: Visual;
   own?: { old: SourceBox[]; new: SourceBox[] };
   context_node?: string | null;
+  /** The crops were cut at the same anchors of the whole comparison. */
+  aligned?: boolean;
 }
 export interface TextGlyph {
   text: string;
@@ -213,6 +218,8 @@ export interface Strip {
   height: number;
   /** Where the strip starts on its page, in points; absent in older rounds. */
   top?: number;
+  /** Where the strip starts across its page, when it shows one column. */
+  left?: number;
   page: number;
   label: string;
   text?: TextLine[];
@@ -222,6 +229,8 @@ export interface ChangeBlock {
   units: string[];
   identical: boolean;
   reflow?: boolean;
+  /** Some words of the block moved here or away unchanged, drawn in blue. */
+  moved?: boolean;
   before: Strip[];
   after: Strip[];
 }

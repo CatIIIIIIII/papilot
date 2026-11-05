@@ -9,6 +9,8 @@ import type { ChangeBlock, Strip, Rect } from "../../src/types.ts";
 const tex = Boolean(which("latexmk") && which("pdflatex"));
 const paragraph =
   "A replicated state machine records commands in a durable log. Each replica applies committed commands in order. The invariant remains valid while leadership changes. ";
+const CUT =
+  "This obsolete passage explains an earlier design that the revision drops entirely, together with its long justification about timeouts, retries and the order of acknowledgements. ";
 interface Case {
   name: string;
   body: string;
@@ -188,6 +190,66 @@ if ready:
     visual: "layout",
   },
   {
+    name: "restyled table keeps the sentence above it out of the crop",
+    packages: "booktabs",
+    body: String.raw`\section{Experiments}
+We evaluate on three benchmarks: NarrativeQA, Qasper and a synthetic needle-in-a-haystack task.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\hline
+Method & NarrativeQA & Qasper & Needle \\
+\hline
+Dense & 24.1 & 41.3 & 99.8 \\
+Longformer & 21.7 & 38.9 & 92.1 \\
+\hline
+\end{tabular}
+\caption{Results on three benchmarks.}
+\end{table}
+
+As shown in Table~1, our method is close to dense attention.`,
+    from: String.raw`\hline
+Method & NarrativeQA & Qasper & Needle \\
+\hline
+Dense & 24.1 & 41.3 & 99.8 \\
+Longformer & 21.7 & 38.9 & 92.1 \\
+\hline`,
+    to: String.raw`\toprule
+Method & NarrativeQA & Qasper & Needle \\
+\midrule
+Dense & \textbf{24.1} & \textbf{41.3} & \textbf{99.8} \\
+Longformer & 21.7 & 38.9 & 92.1 \\
+\bottomrule`,
+    visual: "layout",
+  },
+  {
+    name: "shortened paragraph leaves the next page",
+    body: String.raw`\section{Break}
+Opening sentinel line.
+
+\vspace{580pt}
+
+Final sentinel begins. ${paragraph.repeat(2)}${CUT.repeat(3)}Ending sentinel concludes.`,
+    from: CUT.repeat(3),
+    to: "",
+  },
+  {
+    name: "swapped paragraphs show the moved one on both sides",
+    body: String.raw`\section{Order}
+${paragraph.repeat(2)}
+
+Moved paragraph sentinel explains why replicas vote before they apply a command, and why the leader waits for a quorum.
+
+Staying paragraph sentinel describes how followers acknowledge entries and how terms increase across elections.
+
+${paragraph.repeat(2)}`,
+    from: "Moved paragraph sentinel explains why replicas vote before they apply a command, and why the leader waits for a quorum.\n\nStaying paragraph sentinel describes how followers acknowledge entries and how terms increase across elections.",
+    to: "Staying paragraph sentinel describes how followers acknowledge entries and how terms increase across elections.\n\nMoved paragraph sentinel explains why replicas vote before they apply a command, and why the leader waits for a quorum.",
+    before: "Moved paragraph sentinel",
+    after: "Moved paragraph sentinel",
+  },
+  {
     name: "paragraph boundary is not a no-op",
     body: String.raw`\section{Paragraphs}
 The first paragraph states the invariant.
@@ -299,6 +361,32 @@ ${scenario.body}
           expect(
             normalized(after.map((s) => marked(s, folder)).join("\n")),
           ).toBe("a stronger");
+          // A page with two columns is cropped one column at a time.
+          const context = detail.sections.flatMap((s) =>
+            s.blocks.flatMap((b) => (b.kind === "context" ? [b.image] : [])),
+          );
+          for (const strip of [...before, ...after, ...context])
+            expect(strip.width).toBeLessThan(320);
+          for (const strip of after) expect(strip.left).toBeGreaterThan(280);
+        }
+        if (scenario.name.startsWith("swapped paragraphs")) {
+          // Text that moved is shown where it was and where it is now; it
+          // is not a reflow, which would hide the old side.
+          for (const strips of [before, after]) {
+            expect(text(strips)).toContain("Moved paragraph sentinel");
+            expect(text(strips)).toContain("Staying paragraph sentinel");
+          }
+          expect(blocks.some((b) => "reflow" in b && b.reflow)).toBe(false);
+          // It is drawn in blue on both sides, and the block says it moved.
+          const blue = (strips: Strip[]) =>
+            strips.some((s) =>
+              fs
+                .readFileSync(path.join(folder, s.src), "utf8")
+                .includes('fill="#2563c9"'),
+            );
+          expect(blue(before)).toBe(true);
+          expect(blue(after)).toBe(true);
+          expect(blocks.some((b) => "moved" in b && b.moved)).toBe(true);
         }
         if (scenario.relocated)
           expect(before.some((a) => after.some((b) => a.page !== b.page))).toBe(
@@ -319,6 +407,29 @@ ${scenario.body}
         if (scenario.name.includes("duplicate")) {
           expect(text(before)).not.toContain("First sentinel");
           expect(text(after)).not.toContain("First sentinel");
+        }
+        if (scenario.name.startsWith("restyled table")) {
+          expect(text(before)).not.toContain("We evaluate");
+          expect(text(after)).not.toContain("We evaluate");
+          // Restyled cells are the same words: no removed or added marks.
+          expect(
+            normalized(before.map((s) => marked(s, folder)).join("")),
+          ).toBe("");
+          expect(normalized(after.map((s) => marked(s, folder)).join(""))).toBe(
+            "",
+          );
+        }
+        if (scenario.name.startsWith("shortened paragraph")) {
+          // The old paragraph ends on the next page; its review shows that
+          // part too, though the new paragraph fits on one page.
+          expect(before.some((s) => s.page === 2)).toBe(true);
+          expect(after.every((s) => s.page === 1)).toBe(true);
+          expect(text(before)).toContain("Ending sentinel concludes.");
+          const removed = normalized(
+            before.map((s) => marked(s, folder)).join("\n"),
+          );
+          expect(removed).toContain("obsolete");
+          expect(removed).not.toContain("Ending");
         }
         if (scenario.name.includes("deletion"))
           expect(text(after)).not.toContain("obsolete");

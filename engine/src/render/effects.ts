@@ -1,6 +1,6 @@
 import { opcodesWithin } from "../core/diff.ts";
 import { JOIN_GAP, snap, type Strips } from "./inline.ts";
-import { entryFor, position, textBounds, type Build } from "./locate.ts";
+import { headingAt, laneAt, laneX, textBounds, type Build } from "./locate.ts";
 import { containsCenter, union, type PdfDocument } from "./pdf.ts";
 import { extract, mergeRects, tokens, type Glyph } from "./pdfdiff.ts";
 import type {
@@ -22,10 +22,12 @@ import type {
 // found by compiling (publish.ts), and every edit lists the places it changes
 // away from its own crops under its own card.
 
-// Removed words that come back elsewhere are moved, not changed, when the run
-// is long enough to tell: git's rule for moved blocks, at least 20
-// alphanumeric characters.
-const MOVED = 20;
+// The words in a run that pins the documents together.
+const SPAN = 8;
+// A moved run is at least this many letters and digits, git's rule for moved
+// blocks, and pairs with its new place by runs of this many words.
+const MOVED = 20,
+  WINDOW = 4;
 export interface Words {
   glyphs: Glyph[];
   tokens: ReturnType<typeof tokens>;
@@ -101,68 +103,228 @@ export function words(build: Build): Words {
 // The comparison gives up past this long, on documents changed throughout,
 // and the round then lists no effects.
 const PATIENCE = 5000;
+export interface Comparison {
+  /** For each line of the old document, the equal line of the new one, or -1. */
+  match: Int32Array;
+  /** For each word of the old document, the equal word of the new one, or -1. */
+  tokens: Int32Array;
+  /** Changed words, without runs that only moved. */
+  changes: Effect[];
+}
+const compared = new WeakMap<Words, WeakMap<Words, Comparison | null>>();
 export function differences(a: Words, b: Words): Effect[] | null {
+  return comparison(a, b)?.changes ?? null;
+}
+// The whole comparison of two documents, computed once per pair: the edits'
+// crops, their marks and the effects elsewhere all come from it.
+export function comparison(a: Words, b: Words): Comparison | null {
+  const known = compared.get(a)?.get(b);
+  if (known !== undefined) return known;
+  const result = compare(a, b);
+  if (!compared.has(a)) compared.set(a, new WeakMap());
+  compared.get(a)!.set(b, result);
+  return result;
+}
+// The longest chain of pairs increasing in both coordinates; pairs come
+// sorted by the first.
+function increasing(pairs: [number, number][]) {
+  const tails: number[] = [],
+    links = new Int32Array(pairs.length).fill(-1);
+  pairs.forEach(([, j], k) => {
+    let lo = 0,
+      hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pairs[tails[mid]][1] < j) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo) links[k] = tails[lo - 1];
+    tails[lo] = k;
+  });
+  const chain: [number, number][] = [];
+  for (let k = tails.at(-1) ?? -1; k >= 0; k = links[k]) chain.push(pairs[k]);
+  return chain.reverse();
+}
+function compare(a: Words, b: Words): Comparison | null {
   const text = (w: Words, i: number, j: number) =>
       w.tokens
         .slice(i, j)
         .map((t) => t.text)
         .join(" "),
-    long = (text: string) =>
-      text.replace(/[^\p{L}\p{N}]/gu, "").length >= MOVED,
     deadline = Date.now() + PATIENCE,
     within = <T>(x: T[], y: T[]) =>
       opcodesWithin(x, y, Math.max(1, deadline - Date.now()));
-  // Lines first, as the engine compares a section's rows: a whole printed
-  // line rarely recurs, so the words of an inserted paragraph cannot pair
-  // with like words pages away. Then words, within the lines that differ.
-  const rows = within(
-    a.lines.map(([i, j]) => text(a, i, j)),
-    b.lines.map(([x, y]) => text(b, x, y)),
-  );
-  if (!rows) return null;
-  const at = (w: Words, line: number) => w.lines[line]?.[0] ?? w.tokens.length,
-    changed: Op[] = [];
-  for (const [tag, i, j, x, y] of rows) {
-    if (tag === "equal") continue;
-    const [i0, j0, x0, y0] = [at(a, i), at(a, j), at(b, x), at(b, y)],
-      ops = within(
-        a.tokens.slice(i0, j0).map((t) => t.text),
-        b.tokens.slice(x0, y0).map((t) => t.text),
-      );
-    if (!ops) return null;
-    for (const [kind, p, q, r, t] of ops)
-      if (kind !== "equal")
-        changed.push([kind, i0 + p, i0 + q, x0 + r, x0 + t]);
+  // Runs of words that occur once in each document pin the two together,
+  // in the longest chain that keeps their order (patience diff on words),
+  // and each grows over the equal words around it. Words, not lines: a
+  // paragraph that wraps differently prints the same words on other lines,
+  // and a line that happens to recur elsewhere must not pin anything.
+  const ta = a.tokens.map((t) => t.text),
+    tb = b.tokens.map((t) => t.text),
+    gram = (list: string[], i: number) =>
+      list.slice(i, i + SPAN).join("\u0000"),
+    counts = (list: string[]) => {
+      const map = new Map<string, number>();
+      for (let i = 0; i + SPAN <= list.length; i++) {
+        const key = gram(list, i);
+        map.set(key, (map.get(key) ?? 0) + 1);
+      }
+      return map;
+    },
+    inA = counts(ta),
+    inB = counts(tb),
+    whereB = new Map<string, number>(),
+    unique: [number, number][] = [];
+  for (let j = 0; j + SPAN <= tb.length; j++) {
+    const key = gram(tb, j);
+    if (inB.get(key) === 1) whereB.set(key, j);
   }
-  const removed = new Map<string, number>(),
-    added = new Map<string, number>(),
-    count = (counts: Map<string, number>, key: string) =>
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-  for (const [tag, i, j, x, y] of changed) {
-    if (tag === "delete" && long(text(a, i, j))) count(removed, text(a, i, j));
-    if (tag === "insert" && long(text(b, x, y))) count(added, text(b, x, y));
+  for (let i = 0; i + SPAN <= ta.length; i++) {
+    const key = gram(ta, i);
+    if (inA.get(key) === 1 && whereB.has(key))
+      unique.push([i, whereB.get(key)!]);
   }
-  // As many removals and additions of a run as pair up are moves.
-  const pairs = (counts: Map<string, number>, other: Map<string, number>) =>
-      new Map(
-        [...counts].map(([key, n]) => [key, Math.min(n, other.get(key) ?? 0)]),
-      ),
-    left = pairs(removed, added),
-    right = pairs(added, removed),
-    moved = (budget: Map<string, number>, key: string) => {
-      const n = budget.get(key) ?? 0;
-      if (n > 0) budget.set(key, n - 1);
-      return n > 0;
-    };
-  return changed
-    .filter(([tag, i, j, x, y]) =>
-      tag === "delete"
-        ? !moved(left, text(a, i, j))
-        : tag === "insert"
-          ? !moved(right, text(b, x, y))
-          : true,
+  const blocks: [number, number, number][] = [];
+  let endA = 0,
+    endB = 0;
+  for (const [i, j] of increasing(unique)) {
+    if (i < endA || j < endB) continue;
+    let back = 0,
+      ahead = SPAN;
+    while (
+      i - back > endA &&
+      j - back > endB &&
+      ta[i - back - 1] === tb[j - back - 1]
     )
-    .map(([, i, j, x, y]) => ({ old: [i, j], new: [x, y] }));
+      back++;
+    while (
+      i + ahead < ta.length &&
+      j + ahead < tb.length &&
+      ta[i + ahead] === tb[j + ahead]
+    )
+      ahead++;
+    blocks.push([i - back, j - back, back + ahead]);
+    [endA, endB] = [i + ahead, j + ahead];
+  }
+  // Between the pinned runs, the words compared in full.
+  const match = new Int32Array(a.lines.length).fill(-1),
+    tokenMatch = new Int32Array(ta.length).fill(-1),
+    changed: Op[] = [];
+  let previousA = 0,
+    previousB = 0;
+  for (const [i, j, n] of [
+    ...blocks,
+    [ta.length, tb.length, 0] as [number, number, number],
+  ]) {
+    if (i > previousA || j > previousB) {
+      const ops = within(ta.slice(previousA, i), tb.slice(previousB, j));
+      if (!ops) return null;
+      for (const [kind, p, q, r, t] of ops)
+        if (kind !== "equal")
+          changed.push([
+            kind,
+            previousA + p,
+            previousA + q,
+            previousB + r,
+            previousB + t,
+          ]);
+        else
+          for (let k = 0; k < q - p; k++)
+            tokenMatch[previousA + p + k] = previousB + r + k;
+    }
+    for (let k = 0; k < n; k++) tokenMatch[i + k] = j + k;
+    [previousA, previousB] = [i + n, j + n];
+  }
+  // A line is equal when its words pair, in order, with exactly the words of
+  // one line of the other document.
+  const lineOf = new Int32Array(b.tokens.length);
+  b.lines.forEach(([x, y], line) => lineOf.fill(line, x, y));
+  a.lines.forEach(([i, j], line) => {
+    const first = tokenMatch[i];
+    if (first < 0) return;
+    const other = lineOf[first],
+      [x, y] = b.lines[other];
+    if (x !== first || y - x !== j - i) return;
+    for (let k = i; k < j; k++) if (tokenMatch[k] !== first + k - i) return;
+    match[line] = other;
+  });
+  // Words that left one place and arrived at another moved; pagination may
+  // split such a run or hyphenate it anew, so a removed run and an added run
+  // move together when enough of the removed run's runs of words recur in the
+  // added one. Inside a moved pair, the words that pair up are not changes;
+  // the rest of it, an edit made while moving the text, still is.
+  // A run's windows: its runs of four words, or the whole of a shorter run.
+  const windows = (list: string[], i: number, j: number) =>
+      Array.from({ length: Math.max(1, j - i - WINDOW + 1) }, (_, k) =>
+        list.slice(i + k, Math.min(j, i + k + WINDOW)).join("\u0000"),
+      ),
+    long = (list: string[], i: number, j: number) =>
+      list
+        .slice(i, j)
+        .join("")
+        .replace(/[^\p{L}\p{N}]/gu, "").length >= MOVED,
+    removedRuns = changed.filter((op) => op[2] > op[1]),
+    addedRuns = changed.filter((op) => op[4] > op[3]),
+    where = new Map<string, number[]>();
+  addedRuns.forEach(([, , , x, y], run) => {
+    for (const key of windows(tb, x, y)) {
+      if (!where.has(key)) where.set(key, []);
+      where.get(key)!.push(run);
+    }
+  });
+  const movedOld = new Uint8Array(ta.length),
+    movedNew = new Uint8Array(tb.length),
+    taken = new Set<number>();
+  for (const [, i, j] of [...removedRuns].sort(
+    (p, q) => q[2] - q[1] - (p[2] - p[1]),
+  )) {
+    if (!long(ta, i, j)) continue;
+    const keys = windows(ta, i, j),
+      votes = new Map<number, number>();
+    for (const key of keys)
+      for (const run of where.get(key) ?? [])
+        if (!taken.has(run)) votes.set(run, (votes.get(run) ?? 0) + 1);
+    const [best, n] = [...votes].sort((p, q) => q[1] - p[1])[0] ?? [-1, 0];
+    // A few shared runs of four words already tell a moved run from a new
+    // one; pairing two that differ more marks their differences anyway.
+    if (n < Math.min(2, keys.length) || n < keys.length / 4) continue;
+    taken.add(best);
+    const [, , , x, y] = addedRuns[best],
+      ops = within(ta.slice(i, j), tb.slice(x, y));
+    if (!ops) return null;
+    for (const [kind, p, q, r] of ops)
+      if (kind === "equal") {
+        movedOld.fill(1, i + p, i + q);
+        movedNew.fill(1, x + r, x + r + (q - p));
+      }
+  }
+  // The changed words of a side's range, in runs, without the moved ones.
+  const runs = (moved: Uint8Array, from: number, to: number) => {
+    const result: [number, number][] = [];
+    for (let k = from, start = -1; k <= to; k++)
+      if (k < to && !moved[k]) start = start < 0 ? k : start;
+      else if (start >= 0) {
+        result.push([start, k]);
+        start = -1;
+      }
+    return result;
+  };
+  return {
+    match,
+    tokens: tokenMatch,
+    changes: changed.flatMap(([, i, j, x, y]): Effect[] => {
+      const olds = runs(movedOld, i, j),
+        news = runs(movedNew, x, y);
+      if (olds.length <= 1 && news.length <= 1)
+        return olds.length || news.length
+          ? [{ old: olds[0] ?? [i, i], new: news[0] ?? [x, x] }]
+          : [];
+      return [
+        ...olds.map((o): Effect => ({ old: o, new: [x, x] })),
+        ...news.map((n): Effect => ({ old: [i, i], new: n })),
+      ];
+    }),
+  };
 }
 const glyphsOf = (w: Words, [i, j]: [number, number]) =>
   w.tokens.slice(i, j).flatMap((t) => w.glyphs.slice(t.start, t.end));
@@ -261,15 +423,11 @@ function positions(build: Build, w: Words, [i, j]: [number, number]) {
 }
 // The section a point of the PDF belongs to: the last heading before it.
 function sectionAt(build: Build, at: number, y: number) {
-  const toc = build.document.outline;
   let found: [string, number, number] | null = null;
   for (const node of build.outline) {
-    let page: number, top: number;
-    try {
-      [page, top] = position(build.document, toc[entryFor(node, toc)]);
-    } catch {
-      continue;
-    }
+    const heading = headingAt(build, node);
+    if (!heading) continue;
+    const [page, top] = heading;
     const before = page < at || (page === at && top <= y);
     if (
       before &&
@@ -402,13 +560,15 @@ export function renderPlace(
     ] as const) {
       const at = pair[side];
       if (!at) continue;
-      const image = strips.write(
-        build.document,
-        at.page,
-        ...snap(build.document, at.page, at.clip[1], at.clip[3]),
-        marks,
-        side,
-      );
+      const x = laneX(build.document, laneAt(build.document, at.page, at.clip)),
+        image = strips.write(
+          build.document,
+          at.page,
+          ...snap(build.document, at.page, at.clip[1], at.clip[3], x),
+          marks,
+          side,
+          x,
+        );
       if (image) images.push(image);
     }
   return {

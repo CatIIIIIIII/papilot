@@ -940,11 +940,13 @@ export function ReviewApp({
         : block.reflow
         ? t("Reflow")
         : [
-            ...new Set(
-              known
+            ...new Set([
+              ...known
                 .filter((u) => !(u.effects && u.visual === "unmapped"))
                 .map((u) => u.visual ?? "unmapped"),
-            ),
+              // Text that moved, drawn in blue, reads as moved.
+              ...(block.moved ? (["position"] as const) : []),
+            ]),
           ]
             .filter((kind) => kind !== "text")
             .map((kind) => t(KIND[kind]))

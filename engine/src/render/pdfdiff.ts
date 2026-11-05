@@ -56,21 +56,26 @@ export function extract(
           page: position.page,
         });
   });
-  for (let i = glyphs.length - 2; i > 0; i--) {
+  // A hyphen that breaks a word across lines is not a glyph of the word.
+  // Its neighbours are letters, so no two such hyphens touch, and one pass
+  // drops them all.
+  const joined = glyphs.filter((b, i) => {
     const a = glyphs[i - 1],
-      b = glyphs[i],
       c = glyphs[i + 1];
     if (
       b.text === "-" &&
+      a &&
+      c &&
       /\p{L}/u.test(a.text) &&
       /\p{Ll}/u.test(c.text) &&
       (b.pair !== c.pair || c.rect[1] > b.rect[1] + 3)
     ) {
       c.space = false;
-      glyphs.splice(i, 1);
+      return false;
     }
-  }
-  return [glyphs, words];
+    return true;
+  });
+  return [joined, words];
 }
 export function tokens(glyphs: Glyph[]) {
   const result: { text: string; start: number; end: number }[] = [];
@@ -247,26 +252,39 @@ export function textChanges(
     edits,
   };
 }
-export function pixelDifference(old: Raster | null, next: Raster | null) {
+// The pixels whose luminance-weighted color differs by 24 or more, white
+// standing in outside an image. With `stop`, counting ends at that many.
+export function pixelDifference(
+  old: Raster | null,
+  next: Raster | null,
+  stop = Infinity,
+) {
   const width = Math.max(old?.width ?? 0, next?.width ?? 0),
-    height = Math.max(old?.height ?? 0, next?.height ?? 0);
+    height = Math.max(old?.height ?? 0, next?.height ?? 0),
+    weights = [0.299, 0.587, 0.114];
   let count = 0;
-  for (let y = 0; y < height; y++)
+  for (let y = 0; y < height; y++) {
+    const a = old && y < old.height ? y * old.stride : -1,
+      b = next && y < next.height ? y * next.stride : -1;
     for (let x = 0; x < width; x++) {
       let difference = 0;
       for (let c = 0; c < 3; c++) {
-        const value = (image: Raster | null) =>
-          image && x < image.width && y < image.height
-            ? image.pixels[
-                y * image.stride +
-                  x * image.channels +
-                  Math.min(c, image.channels - 1)
-              ]
-            : 255;
-        difference +=
-          Math.abs(value(old) - value(next)) * [0.299, 0.587, 0.114][c];
+        const u =
+            a >= 0 && x < old!.width
+              ? old!.pixels[
+                  a + x * old!.channels + Math.min(c, old!.channels - 1)
+                ]
+              : 255,
+          v =
+            b >= 0 && x < next!.width
+              ? next!.pixels[
+                  b + x * next!.channels + Math.min(c, next!.channels - 1)
+                ]
+              : 255;
+        difference += Math.abs(u - v) * weights[c];
       }
-      if (difference >= 24) count++;
+      if (difference >= 24 && ++count >= stop) return count;
     }
+  }
   return count;
 }

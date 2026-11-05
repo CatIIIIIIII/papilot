@@ -8,6 +8,7 @@ import type {
   BuildInfo,
   Heading,
   Position,
+  Rect,
   Span,
   SourceBox,
 } from "../types.ts";
@@ -441,6 +442,153 @@ export function subtractInterval(
     ),
   );
 }
+// A lane is a stretch of a page that reads in order: the whole page, or, on
+// a page with two columns, each column and the bands printed across the
+// gutter. Intervals of a section are keyed by lane: page × 3 + column + 1.
+export const lane = (page: number, column: number) => page * 3 + column + 1;
+export const lanePage = (id: number) => Math.floor(id / 3);
+export const laneColumn = (id: number) => (id % 3) - 1;
+// The lane a rect of a page prints in.
+export const laneAt = (document: PdfDocument, number: number, rect: Rect) =>
+  lane(number, document.page(number).column(rect));
+// The horizontal extent of a lane's crops: the page, or the printed width of
+// a column.
+export function laneX(document: PdfDocument, id: number): Span {
+  const page = document.page(lanePage(id)),
+    column = laneColumn(id);
+  if (column < 0) return [0, page.width];
+  const [a, b] = page.columnBounds(column),
+    [left, right] = textBounds(page);
+  return [Math.max(a, left), Math.min(b, right)];
+}
+// A page's stretches in reading order between two heights: the whole page,
+// or, with two columns, each band across the gutter and, between bands, the
+// left column and then the right.
+function stretches(page: PdfPage, top: number, bottom: number) {
+  if (!page.twoColumns) return [{ column: -1, top, bottom }];
+  const result: { column: number; top: number; bottom: number }[] = [],
+    columns = (a: number, b: number) =>
+      b > a &&
+      result.push(
+        { column: 0, top: a, bottom: b },
+        { column: 1, top: a, bottom: b },
+      );
+  let cursor = top;
+  for (const [a, b] of page.spanning) {
+    const from = Math.max(a, top),
+      to = Math.min(b, bottom);
+    if (to <= from) continue;
+    columns(cursor, from);
+    result.push({ column: -1, top: from, bottom: to });
+    cursor = to;
+  }
+  columns(cursor, bottom);
+  return result;
+}
+// Where a lane starts in reading order, for sorting: its page, the stretch
+// it is in, and its column.
+export function readingKey(document: PdfDocument, id: number, top: number) {
+  const number = lanePage(id),
+    column = laneColumn(id),
+    page = document.page(number),
+    above = page.twoColumns
+      ? page.spanning.filter(([, b]) => b <= top + 1).length
+      : 0;
+  return [number, column < 0 ? 2 * above + 1 : 2 * above, column, top];
+}
+export const byReading = (a: number[], b: number[]) =>
+  a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3];
+/** Where a heading prints: page, top and column (-1 across the page). */
+export type Spot = [number, number, number];
+// The column of the text at a height of a page, preferring a line with a word.
+function columnAt(document: PdfDocument, number: number, y: number, word = "") {
+  const page = document.page(number);
+  if (!page.twoColumns) return -1;
+  const near = page.lines
+      .filter((l) => l.text.trim() && l.rect[1] >= y - 2 && l.rect[1] <= y + 30)
+      .sort((a, b) => a.rect[1] - b.rect[1]),
+    hit =
+      near.find(
+        (l) => word && l.text.toLowerCase().includes(word.toLowerCase()),
+      ) ?? near[0];
+  return hit ? page.column(hit.rect) : -1;
+}
+const spotOf = (
+  document: PdfDocument,
+  [page, y]: [number, number],
+  title: string,
+): Spot => [page, y, columnAt(document, page, y, title.split(/\s+/)[0])];
+// Where a heading prints: its PDF bookmark, or, in a PDF without bookmarks
+// (no hyperref, or a class that turns them off), where SyncTeX places the
+// line of its command; its column from SyncTeX, or from the text there.
+export function headingAt(build: Build, node: Heading): Spot | null {
+  const document = build.document,
+    toc = document.outline,
+    boxes = build.locator
+      .lookup(build.path(node.file), node.line)
+      .filter((box) => box[0] >= 0 && box[0] < document.length),
+    first = boxes.length
+      ? boxes.reduce((a, b) =>
+          b[0] < a[0] || (b[0] === a[0] && b[1] < a[1]) ? b : a,
+        )
+      : null,
+    at = (place: [number, number]): Spot => {
+      const [page, y] = place,
+        x = first && first[0] === page ? [first[3], first[4]] : [];
+      return x.length === 2 && Number.isFinite(Number(x[0]) + Number(x[1]))
+        ? [
+            page,
+            y,
+            document.page(page).column([x[0]!, first![1], x[1]!, first![2]]),
+          ]
+        : spotOf(document, place, node.title);
+    };
+  try {
+    return at(position(document, toc[entryFor(node, toc)]));
+  } catch {
+    return first && at([first[0], Math.max(0, first[1] - 4)]);
+  }
+}
+// The lanes of the PDF from one spot to another in reading order. A spot
+// on a page with two columns whose column is unknown starts in the left
+// column and ends in the right, so that nothing is left out.
+function flow(build: Build, start: Spot, end: Spot | null): Intervals {
+  const document = build.document,
+    intervals: Intervals = new Map(),
+    last = document.length - 1,
+    to: Spot = end ?? [last, document.page(last).height - 60, 1];
+  for (let number = start[0]; number <= to[0]; number++) {
+    const page = document.page(number),
+      parts = stretches(page, ...build.margins.body(page)),
+      // The stretch a spot is in or before, by reading order.
+      find = ([, y, column]: Spot, unknown: number) => {
+        const c = page.twoColumns && column < 0 ? unknown : column,
+          k = parts.findIndex(
+            (p) => (p.column < 0 || p.column === c) && y <= p.bottom,
+          );
+        return k < 0 ? parts.length : k;
+      },
+      from = number === start[0] ? find(start, 0) : 0,
+      until = number === to[0] ? find(to, 1) : parts.length;
+    parts.forEach((p, k) => {
+      if (k < from || k > until) return;
+      const a =
+          k === from && number === start[0]
+            ? k
+              ? Math.max(p.top, start[1])
+              : start[1]
+            : p.top,
+        b =
+          k === until && number === to[0]
+            ? k < parts.length - 1
+              ? Math.min(p.bottom, to[1])
+              : to[1]
+            : p.bottom;
+      addInterval(intervals, lane(number, p.column), a, b);
+    });
+  }
+  return intervals;
+}
 export function sectionIntervals(
   build: Build,
   node: Heading,
@@ -448,44 +596,62 @@ export function sectionIntervals(
 ): [Intervals, string[]] {
   const document = build.document,
     toc = document.outline,
-    index = entryFor(node, toc),
-    [startPage, top] = position(document, toc[index]),
-    boundary = toc
-      .slice(index + 1)
-      .find((row) => row.level <= toc[index].level && row.page >= 0),
-    [endPage, bottom] = boundary
-      ? position(document, boundary)
-      : [document.length - 1, document.page(document.length - 1).height - 60],
-    intervals: Intervals = new Map();
-  for (let page = startPage; page <= endPage; page++) {
-    const [bodyTop, bodyBottom] = build.margins.body(document.page(page));
-    addInterval(
-      intervals,
-      page,
-      page === startPage ? top : bodyTop,
-      page === endPage ? bottom : bodyBottom,
+    start = headingAt(build, node);
+  if (!start)
+    throw new Error(
+      `Heading ${node.number} ${JSON.stringify(node.title)} is not in the PDF outline.`,
     );
+  // The section ends at the next bookmark of its level or above, or, without
+  // bookmarks, at the next heading of its level or above.
+  let boundary: Spot | null = null,
+    following: Heading | null = null;
+  try {
+    const index = entryFor(node, toc),
+      row = toc
+        .slice(index + 1)
+        .find((r) => r.level <= toc[index].level && r.page >= 0);
+    if (row) {
+      following =
+        build.outline.find((candidate) => {
+          try {
+            return toc[entryFor(candidate, toc)] === row;
+          } catch {
+            return false;
+          }
+        }) ?? null;
+      boundary =
+        (following && headingAt(build, following)) ??
+        spotOf(document, position(document, row), row.title);
+    }
+  } catch {
+    const at = build.outline.findIndex((n) => n.id === node.id);
+    following =
+      build.outline.slice(at + 1).find((n) => n.level <= node.level) ?? null;
+    boundary = following && headingAt(build, following);
   }
+  const intervals = flow(build, start, boundary);
   const own = new Set(node.files.filter(figureFiles));
-  const following = boundary
-    ? build.outline.find((candidate) => {
-        try {
-          return toc[entryFor(candidate, toc)] === boundary;
-        } catch {
-          return false;
-        }
-      })
-    : null;
   if (following)
     for (const file of following.files)
       if (!own.has(file) && figureFiles(file))
         for (const r of build.figures.locate(file))
-          subtractInterval(intervals, r.page, r.clip[1], r.clip[3]);
+          subtractInterval(
+            intervals,
+            laneAt(document, r.page, r.clip),
+            r.clip[1],
+            r.clip[3],
+          );
   const missing: string[] = [];
   for (const file of own) {
     const found = build.figures.locate(file);
     if (!found.length) missing.push(file);
-    for (const r of found) addInterval(intervals, r.page, r.clip[1], r.clip[3]);
+    for (const r of found)
+      addInterval(
+        intervals,
+        laneAt(document, r.page, r.clip),
+        r.clip[1],
+        r.clip[3],
+      );
   }
   return [intervals, missing];
 }
