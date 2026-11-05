@@ -330,7 +330,7 @@ export function parseSynctex(output: string) {
 // One task for every pending note, quoting the marked text and its source so
 // the agent can find each place without guessing.
 export function annotationTask(notes: Annotation[]) {
-  const first = notes[0].comment.split('\n').find(line => line.trim())?.trim() || 'Address a PDF note';
+  const lead = notes[0], first = lead.kind === 'delete' ? lead.comment.trim() ? 'Replace marked text' : 'Delete marked text' : lead.comment.split('\n').find(line => line.trim())?.trim() || 'Address a PDF note';
   const title = notes.length === 1 ? (first.length > 80 ? first.slice(0, 79).replace(/\s+\S*$/, '') + '…' : first) : `Address ${notes.length} PDF notes`;
   return { title, instructions: notesInstructions(notes) };
 }

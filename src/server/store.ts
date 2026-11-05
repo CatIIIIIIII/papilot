@@ -27,6 +27,7 @@ export class Store extends EventEmitter {
       CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, id TEXT UNIQUE NOT NULL, user_id TEXT NOT NULL, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS members(project_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY(project_id, user_id));
       CREATE TABLE IF NOT EXISTS migrations(key TEXT PRIMARY KEY, done INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS preferences(user_id TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(user_id, key));
       CREATE INDEX IF NOT EXISTS task_items ON items(task_id,created);
       CREATE INDEX IF NOT EXISTS task_runs ON runs(task_id,status);`);
   }
@@ -50,6 +51,12 @@ export class Store extends EventEmitter {
     });
     for (const task of tasks) this.itemRevisions.delete(task);
     this.emit('change');
+  }
+  // A person's own settings that follow them between devices.
+  preference<T>(userId: string, key: string) { const row = this.db.prepare('SELECT data FROM preferences WHERE user_id=? AND key=?').get(userId, key) as { data: string } | undefined; return row ? JSON.parse(row.data) as T : undefined; }
+  savePreference(userId: string, key: string, value: unknown) {
+    if (value === undefined) this.db.prepare('DELETE FROM preferences WHERE user_id=? AND key=?').run(userId, key);
+    else this.db.prepare('INSERT INTO preferences VALUES(?,?,?) ON CONFLICT(user_id, key) DO UPDATE SET data=excluded.data').run(userId, key, JSON.stringify(value));
   }
   saveTask(t: Task) { t.updatedAt = Date.now(); this.db.prepare('INSERT INTO tasks VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(t.id, t.projectId, JSON.stringify(t)); this.emit('change'); return t; }
   updateTask(id: string, update: Partial<Task>) { return this.saveTask({ ...this.task(id), ...update }); }
