@@ -17,8 +17,9 @@ export function parseGroupInstructions(value: unknown): GroupInstructions {
   }
   return result;
 }
-export const groupsWithoutInstructions = (notes: { group?: NoteGroup; comment: string }[], instructions: GroupInstructions) =>
-  NOTE_GROUPS.filter(group => !instructions[group]?.trim() && notes.some(note => note.group && canonicalGroup(note.group) === group && !note.comment.trim()));
+// A deletion says what to do by itself, so its group needs no instruction for it.
+export const groupsWithoutInstructions = (notes: { group?: NoteGroup; comment: string; kind?: string }[], instructions: GroupInstructions) =>
+  NOTE_GROUPS.filter(group => !instructions[group]?.trim() && notes.some(note => note.group && canonicalGroup(note.group) === group && !note.comment.trim() && note.kind !== 'delete'));
 export const GROUP_COLORS: Record<NoteGroup, string> = { yellow: '#eab308', blue: '#eab308', green: '#16a34a', purple: '#a855f7', orange: '#ea860c', red: '#e05260' };
 export const GROUP_NAMES: Record<NoteGroup, string> = { yellow: 'Yellow', blue: 'Yellow', green: 'Green', purple: 'Purple', orange: 'Orange', red: 'Red' };
 export function noteGroups<T extends { group?: NoteGroup }>(notes: T[]) {

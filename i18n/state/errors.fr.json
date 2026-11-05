@@ -369,6 +369,11 @@
     "textHash": "be575d15dbca0dc785ecd936520e9d152f026ca171278120bb1984195cb509b3",
     "model": "gemini-4-argon-medium"
   },
+  "Invalid kind of mark.": {
+    "revision": "3725424ae822e35676ce86dc88fa86a398c1bd3ad5db13f8589dfb91fcaa3abd",
+    "textHash": "8d35b6e73778a421cd73cbd64de8458c6a0c29d253bb361f28abb6bc703f47cf",
+    "model": "gemini-4-argon-medium"
+  },
   "Invalid model.": {
     "revision": "a1e8102065fae20ab7c578e4580641bb94e35b53aab938ffcdfb17f2cb2f3496",
     "textHash": "3cbf7cac3254369f1aa507d99211cc659ea41b037b31391bc010333796f79fd7",
@@ -377,6 +382,11 @@
   "Invalid note location.": {
     "revision": "dabe5557558139364f33240d9f9451447bd00da46a26577705f787da834e3b80",
     "textHash": "5b7627e0b0611e419cc6e8b4e2b6536ad416fee87c8eb004f8e4211e4efd67df",
+    "model": "gemini-4-argon-medium"
+  },
+  "Invalid quick notes.": {
+    "revision": "4a6cd4fdabca3bdbea87a861805e3e44f09bd22eaa91d9b4062550d7fba3449d",
+    "textHash": "761b966285f13a194a213a3a91a931b1ee9b8a88c9a5e55d359bc7ee628377af",
     "model": "gemini-4-argon-medium"
   },
   "Invalid reasoning effort.": {
