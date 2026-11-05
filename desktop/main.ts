@@ -6,7 +6,9 @@ import { backendEnvironment, startBackend, startServer, switchServer, type Bundl
 
 const nix = process.env.PAPILOT_INSTALL_METHOD === 'nix';
 const releases = 'https://github.com/PapilotAI/papilot/releases';
-app.setName('Papilot');
+app.setName('Papilot Preview');
+app.setPath('userData', path.join(app.getPath('appData'), 'Papilot Preview'));
+app.setAppLogsPath();
 if (process.env.PAPILOT_DESKTOP_DATA) app.setPath('userData', path.resolve(process.env.PAPILOT_DESKTOP_DATA));
 let window: BrowserWindow | null = null;
 let backend: ReturnType<typeof startBackend> | undefined;
@@ -17,7 +19,7 @@ function external(url: string) {
 function showWindow() {
   if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); return; }
   if (!origin) return;
-  window = new BrowserWindow({ title: 'Papilot', width: 1380, height: 900, minWidth: 900, minHeight: 620,
+  window = new BrowserWindow({ title: 'Papilot Preview', width: 1380, height: 900, minWidth: 900, minHeight: 620,
     titleBarStyle: 'hidden', trafficLightPosition: { x: 18, y: 16 },
     autoHideMenuBar: process.platform !== 'darwin',
     icon: process.platform === 'linux' ? path.join(nix && process.env.PAPILOT_DESKTOP_ROOT ? process.env.PAPILOT_DESKTOP_ROOT : app.isPackaged ? process.resourcesPath : path.resolve(fileURLToPath(new URL('../..', import.meta.url))), 'desktop/assets/icon.png') : undefined,

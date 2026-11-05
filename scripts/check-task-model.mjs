@@ -145,6 +145,8 @@ try {
   defaults.runtime.models[1].isDefault = true;
   defaults.runtimes.codex = defaults.runtime;
   await composer.route('**/api/**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+    if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
     const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
     if (url.pathname === '/api/state') return json(defaults);
     if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
@@ -193,7 +195,7 @@ try {
   defaults.runtime.models[1].isDefault = false;
   await composer.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(modelName).toHaveText('Default model');
-  await composer.getByRole('button', { name: 'Agent settings', exact: true }).click();
+  await composer.locator('.new-task-panel').getByRole('button', { name: 'Agent settings', exact: true }).click();
   const unknown = composer.getByRole('dialog', { name: 'Agent settings', exact: true });
   await expect(unknown.getByRole('option', { name: 'Default model · Codex', exact: true })).toHaveAttribute('aria-selected', 'true');
   await composer.keyboard.press('Escape');

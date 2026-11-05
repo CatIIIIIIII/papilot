@@ -58,6 +58,8 @@ function detail(round) {
 }
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
+  if (url.pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
+  if (url.pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
