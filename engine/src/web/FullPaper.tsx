@@ -32,7 +32,7 @@ const CMapData = cMapData(
 
 // The whole paper with its changes in place: the new PDF's pages, opened up
 // where a change's new lines are, and that change shown there as in the
-// changes view, old lines above new. Pages are painted only near the
+// changes view, old lines beside new. Pages are painted only near the
 // viewport, so a long thesis scrolls like a short paper.
 interface Cut {
   top: number;
@@ -273,13 +273,11 @@ function Pages({
   useLayoutEffect(() => ready.current(), [paper]);
   const slice = (page: number, top: number, bottom: number) =>
     bottom - top > 0.5 && (
-      <div className="paper-context" key={`${page}:${top}`}>
-        <div
-          className="paper-slice"
-          data-top={top}
-          data-bottom={bottom}
-          style={{ aspectRatio: `${paper.width} / ${bottom - top}` }}
-        />
+      <div className="comparison-row paper-context-pair" key={`${page}:${top}`}>
+        {(["before", "after"] as const).map(side => <div className="paper-context" key={side}>
+          <div className="paper-slice" data-top={top} data-bottom={bottom}
+            style={{ aspectRatio: `${paper.width} / ${bottom - top}` }}/>
+        </div>)}
       </div>
     );
   return (

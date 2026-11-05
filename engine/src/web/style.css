@@ -1890,3 +1890,29 @@ body {
     max-width: 135px;
   }
 }
+
+/* Every pair is one grid row inside the same scroller. The taller side sets
+   its height, so insertions, deletions and wrapped text cannot desynchronize. */
+.comparison{--comparison-gap:20px;max-width:1600px;min-width:680px}
+.comparison-row,.comparison-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--comparison-gap)}
+.comparison-row>*{min-width:0}
+.comparison-head{position:sticky;top:0;z-index:5;padding:10px 0;margin-bottom:12px;background:var(--frame);font:600 13px/1.4 var(--sans)}
+.comparison-head>span{padding:0 14px}
+.comparison-head>span:first-child{color:var(--before-edge)}
+.comparison-head>span:last-child{color:var(--after-edge)}
+.comparison .sheet,.comparison .paper-page{background:linear-gradient(to right,var(--pdf-page,var(--paper)) calc(50% - var(--comparison-gap)/2),transparent 0,transparent calc(50% + var(--comparison-gap)/2),var(--pdf-page,var(--paper)) 0);box-shadow:none}
+.comparison .change .side{display:block;align-self:stretch;border:0;padding:0;min-height:30px}
+.comparison .side:empty{background:repeating-linear-gradient(135deg,transparent 0 8px,var(--line) 8px 9px);opacity:.4}
+.comparison .side::after{display:none}
+.comparison .context,.comparison .paper-context{background:var(--pdf-page,var(--paper))}
+.comparison .pdf-strip{max-width:none}
+.comparison .paper-slice{width:100%;margin-left:0}
+.comparison .change-head{scroll-margin-top:45px}
+.comparison .reviewed-change>.change-head{display:flex}
+.comparison .mixed-reviewed .comparison-row{display:none}
+.comparison .change.current{box-shadow:0 0 0 2px var(--accent);border-radius:4px}
+.comparison .fold{margin:0;background:var(--frame)}
+@media(max-width:680px){.comparison{--comparison-gap:12px}.comparison-head{position:static}}
+
+/* Resolved source editors stay in History; do not expose a toggle for a hidden editor. */
+.comparison .reviewed-change>.change-head>.link:not(.undo):not(.copy-reference){display:none}

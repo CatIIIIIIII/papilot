@@ -874,8 +874,10 @@ export function ReviewApp({
                         })}`
                       : ""}
                   </p>
-                  {strips(place.before, "before")}
-                  {strips(place.after, "after")}
+                  <div className="comparison-row">
+                    <div>{strips(place.before, "before")}</div>
+                    <div>{strips(place.after, "after")}</div>
+                  </div>
                 </div>
               ))}
               {total > places.length && (
@@ -1005,6 +1007,7 @@ export function ReviewApp({
             {location}
           </span>
           {actionBar(index)}
+          {reviewed && state?.undo?.changes.some(id => block.units.includes(id)) && <button className="link undo" disabled={!latest || busy || Boolean(state.decisionLock)} onClick={() => void undo()}>{t("Undo")}</button>}
           {kindLabel && <span className="change-kind">{kindLabel}</span>}
           {status !== "pending" && (
             <span className="badge">{stateLabel(status)}</span>
@@ -1044,11 +1047,10 @@ export function ReviewApp({
               ))}
           </div>
         )}
-        {!block.identical &&
-          !block.reflow &&
-          block.before.length > 0 &&
-          images(block.before, "before")}
-        {block.after.length > 0 && images(block.after, "after")}
+        <div className="comparison-row">
+          {images(block.before.length ? block.before : block.identical || block.reflow ? block.after : [], "before")}
+          {images(resolved === "before" ? block.before : block.after, "after")}
+        </div>
         {block.identical && !bib.length && (
           <p className="caption">
             {t("No visible change in the PDF; see the LaTeX source.")}
@@ -1581,7 +1583,8 @@ export function ReviewApp({
                 onRetry={references.retry}
               />
             )}
-          <div className="document">
+          <div className="document comparison">
+            {detail && <div className="comparison-head" aria-label={t("Before") + " / " + t("After")}><span>{t("Before")}</span><span>{t("After")}</span></div>}
             {detail && paperView ? (
               <>
                 <Suspense fallback={<div className="paper-status" role="status"><div className="pulse" /></div>}>
@@ -1615,12 +1618,10 @@ export function ReviewApp({
                     <div className="sheet">
                       {section.blocks.map((block, b) =>
                         block.kind === "context" ? (
-                          <div className="context" key={`context-${b}`}>
-                            <PdfStrip
-                              image={block.image}
-                              base={detail.files}
-                              label={t("Unchanged text")}
-                            />
+                          <div className="comparison-row context-pair" key={`context-${b}`}>
+                            {(["before", "after"] as const).map(side => <div className="context" key={side}>
+                              <PdfStrip image={block.image} base={detail.files} label={t("Unchanged text")}/>
+                            </div>)}
                           </div>
                         ) : block.kind === "gap" ? (
                           <div
