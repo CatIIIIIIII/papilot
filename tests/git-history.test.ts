@@ -244,12 +244,14 @@ for (const concurrentEdit of [false, true]) test(`restore handles a rejected ref
   fs.mkdirSync(path.join(root, 'cache')); write('cache/notes.tex', 'Private ignored notes\n');
   const hooks = path.join(root, '.git/failing-hooks'), script = path.join(hooks, 'reject.cjs');
   fs.mkdirSync(hooks);
-  fs.writeFileSync(script, `if (process.argv[2] === 'prepared') {\n  ${concurrentEdit ? `require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'main.tex'))}, 'Concurrent edit\\n');` : ''}\n  process.exit(1);\n}\n`);
+  fs.writeFileSync(script, `if (process.argv[2] === 'prepared') {\n  ${concurrentEdit ? `require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'main.tex'))}, 'Concurrent edit\\n');` : ''}\n  process.stderr.write('fixture: rejected reference transaction\\n');\n  process.exit(1);\n}\n`);
   const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
   fs.writeFileSync(path.join(hooks, 'reference-transaction'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(script)} "$@"\n`, { mode: 0o755 });
   git('config', 'core.hooksPath', hooks);
   const index = path.join(root, '.git/index'), before = fs.readFileSync(index);
-  await assert.rejects(gitRestoreVersion(root, first, head), concurrentEdit ? /Restore failed\. Previous files are saved at/ : /ref updates aborted/);
+  // Git versions phrase hook rejection differently; assert our fixture's
+  // diagnostic, then verify the actual rollback below.
+  await assert.rejects(gitRestoreVersion(root, first, head), concurrentEdit ? /Restore failed\. Previous files are saved at/ : /fixture: rejected reference transaction/);
   assert.equal(git('rev-parse', 'HEAD'), head); assert.deepEqual(fs.readFileSync(index), before);
   assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), concurrentEdit ? 'Concurrent edit\n' : 'Current paper\n');
   assert.equal(fs.readFileSync(path.join(root, 'new.tex'), 'utf8'), 'Current addition\n');
