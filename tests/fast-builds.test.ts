@@ -268,8 +268,12 @@ test('a delivery preview is exactly what applying the task writes, with pending 
 // A pdflatex that takes a moment per pass, so a build can be watched while it runs.
 function slowTeX(base: string) {
   const bin = path.join(base, 'bin'), real = execFileSync('which', ['pdflatex'], { encoding: 'utf8' }).trim(), runs = path.join(base, 'runs');
+  const latexmk = execFileSync('which', ['latexmk'], { encoding: 'utf8' }).trim();
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, 'pdflatex'), `#!/bin/sh\ncase "$1" in --version) exec "${real}" --version;; esac\necho run >> "${runs}"\nsleep 0.6\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  // Nix's latexmk wrapper prepends its own TeX binaries to PATH. Select the
+  // slow compiler explicitly so the test observes its passes on every system.
+  fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\nexec "${latexmk}" '-pdflatex="${path.join(bin, 'pdflatex')}" %O %S' "$@"\n`, { mode: 0o755 });
   const previous = process.env.PATH;
   process.env.PATH = `${bin}:${previous}`;
   return { runs: () => fs.existsSync(runs) ? fs.readFileSync(runs, 'utf8').trim().split('\n').length : 0, restore: () => { process.env.PATH = previous; } };
@@ -342,7 +346,7 @@ test('someone who starts waiting for a background build sees its passes from the
     const done = await background;
     assert.equal(waited.key, done.key);
     assert.ok(shown.length >= 1 && shown[0] === 1, `the pass before the waiter came is shown first: ${shown}`);
-    const passes = (fs.readFileSync(path.join(path.dirname(done.root), 'latexmk.log'), 'utf8').match(/^Running 'pdflatex/gm) || []).length;
+    const passes = teX.runs();
     assert.ok(shown.every(pass => pass < passes), 'the last pass is the result itself');
     // A background build nobody waited for keeps no passes.
     const alone = await builder.build(f.commit({ 'main.tex': document('\\section{One}\\label{one}See~\\pageref{two}.\n\\section{Two}\\label{two}Again.\n') }), ['full'], null, { priority: 'background' });

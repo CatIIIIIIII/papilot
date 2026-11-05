@@ -2,7 +2,7 @@ module.exports = {
   appId: 'ai.papilot.desktop',
   productName: 'Papilot',
   directories: { app: '.desktop/app', output: 'release/desktop', buildResources: 'desktop/assets' },
-  files: ['*.js', '*.cjs', 'package.json', '!node_modules{,/**/*}'],
+  files: ['*.js', '*.mjs', '*.cjs', 'package.json', '!node_modules{,/**/*}'],
   extraResources: [
     { from: '.desktop/server', to: 'server' },
     // electron-builder's generic file copier skips root node_modules.

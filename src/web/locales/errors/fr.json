@@ -224,6 +224,7 @@
   "Too many open Papilot tabs. Close one and try again.": "Trop d’onglets Papilot sont ouverts. Fermez-en un et réessayez.",
   "Unknown Git action.": "Action Git inconnue.",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "Les pièces jointes inutilisées ont atteint 500 Mo. Supprimez des pièces jointes de vos brouillons avant d’en téléverser d’autres.",
+  "Updates are managed by Nix.": "Les mises à jour sont gérées par Nix.",
   "Upload a file as binary data.": "Téléversez un fichier sous forme de données binaires.",
   "Wait for repository preparation to finish.": "Patientez jusqu’à la fin de la préparation du dépôt.",
   "Wait for task creation to finish before deleting it.": "Attendez la fin de la création de la tâche avant de la supprimer.",

@@ -1,0 +1,27 @@
+name: Nix
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['nix/**', 'flake.*', 'bin/**', 'desktop/**', 'src/**', 'package*.json', 'engine/**', '.github/workflows/nix.yml']
+  push:
+    branches: [main]
+    paths: ['nix/**', 'flake.*', 'bin/**', 'desktop/**', 'src/**', 'package*.json', 'engine/**', '.github/workflows/nix.yml']
+concurrency:
+  group: nix-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  nixos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - name: Build and boot the NixOS desktop VM
+        run: nix build .#checks.x86_64-linux.desktop-vm -L
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: nixos-desktop-evidence
+          path: result/

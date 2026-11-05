@@ -224,6 +224,7 @@
   "Too many open Papilot tabs. Close one and try again.": "開いている Papilot タブが多すぎます。タブを閉じてからもう一度お試しください。",
   "Unknown Git action.": "不明な Git アクションです。",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "未使用の添付ファイルが 500 MB に達しました。新しくアップロードする前に、下書きから添付ファイルを削除してください。",
+  "Updates are managed by Nix.": "更新は Nix で管理されています。",
   "Upload a file as binary data.": "ファイルをバイナリデータとしてアップロードしてください。",
   "Wait for repository preparation to finish.": "リポジトリの準備が完了するまでお待ちください。",
   "Wait for task creation to finish before deleting it.": "削除する前に、タスクの作成が完了するまでお待ちください。",

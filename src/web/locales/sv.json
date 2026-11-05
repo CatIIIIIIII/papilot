@@ -963,6 +963,7 @@
   "Update ready": "Uppdatering klar",
   "Update to {version}": "Uppdatera till {version}",
   "Updates": "Uppdateringar",
+  "Updates are managed by Nix.": "Uppdateringar hanteras av Nix.",
   "Updating…": "Uppdaterar…",
   "Upload failed. Please retry.": "Uppladdningen misslyckades. Försök igen.",
   "Uploading…": "Laddar upp…",

@@ -224,6 +224,7 @@
   "Too many open Papilot tabs. Close one and try again.": "För många öppna Papilot-flikar. Stäng en och försök igen.",
   "Unknown Git action.": "Okänd Git-åtgärd.",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "Oanvända bilagor har nått 500 MB. Ta bort bilagor från dina utkast innan du laddar upp fler.",
+  "Updates are managed by Nix.": "Uppdateringar hanteras av Nix.",
   "Upload a file as binary data.": "Ladda upp en fil som binärdata.",
   "Wait for repository preparation to finish.": "Vänta tills förberedelsen av arkivet är klar.",
   "Wait for task creation to finish before deleting it.": "Vänta tills uppgiften har skapats innan du tar bort den.",

@@ -251,7 +251,8 @@ test('GLM runs Claude Code on Zhipu\'s endpoint with only the GLM key, and offer
     assert.equal(options.env.ANTHROPIC_AUTH_TOKEN, 'zhipu-key');
     assert.equal(options.env.ANTHROPIC_API_KEY, undefined, 'an Anthropic key never goes to Zhipu');
     assert.equal(options.env.CLAUDE_CODE_USE_BEDROCK, undefined);
-    assert.equal(options.env.PATH, '/usr/bin');
+    assert.ok(options.env.PATH.startsWith('/usr/bin' + path.delimiter));
+    assert.ok(options.env.PATH.split(path.delimiter).includes(path.join(os.homedir(), '.nix-profile/bin')));
   }
   assert.equal(fake.calls.at(-1)!.options.model, 'glm-5.3-flash');
 });

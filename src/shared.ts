@@ -10,6 +10,7 @@ export interface Attachment { id: string; projectId: string; name: string; size:
 export type UpdateChannel = 'stable' | 'dev';
 export interface UpdateStatus {
   // Present when the update must be downloaded as a new desktop app.
+  packageManager?: 'nix';
   downloadUrl?: string;
   channel?: UpdateChannel;
   currentVersion: string; latestVersion: string | null;

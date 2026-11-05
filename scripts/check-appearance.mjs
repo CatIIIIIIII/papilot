@@ -101,6 +101,9 @@ try {
   const other = await context.newPage();
   await other.goto(origin);
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#fef9ed');
+  // Keep the window receiving pointer input active; the second tab only
+  // observes storage changes and may otherwise throttle the first renderer.
+  await page.bringToFront();
   await choose('Theme', 'slate');
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#f6f7f8');
   await dialog.getByRole('radio', { name: 'System', exact: true }).check();

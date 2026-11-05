@@ -93,6 +93,12 @@ jobs:
     needs: [check, changes, desktop]
     runs-on: ubuntu-latest
     steps:
-      - name: Fail when a job failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
-        run: exit 1
+      - uses: actions/checkout@v5
+      - name: Require explicit success from every required job
+        env:
+          CHECK_RESULT: ${{ needs.check.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+          DESKTOP_VERIFIED: ${{ needs.desktop.outputs.verified }}
+        run: bash scripts/ci-passed.sh

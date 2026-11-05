@@ -268,10 +268,15 @@ export const PdfView = forwardRef<PdfHandle, {
   }, [flash]);
 
   useEffect(() => {
-    const box = container.current!, bus = new EventBus();
+    const box = container.current!, bus = new EventBus(), lifetime = new AbortController();
     const links = new PDFLinkService({ eventBus: bus, externalLinkTarget: LinkTarget.BLANK, externalLinkRel: 'noopener noreferrer' });
     const find = new PDFFindController({ eventBus: bus, linkService: links });
-    const viewer = new PDFViewer({ container: box, viewer: inner.current!, eventBus: bus, linkService: links, findController: find, removePageBorders: true, annotationMode: pdfjs.AnnotationMode.ENABLE });
+    // Papilot owns notes and clipboard attachments. The built-in PDF editor
+    // installs document-wide paste/drop handlers even in its default NONE mode.
+    // PDF.js 6 accepts abortSignal at runtime but omits it from its option type.
+    const viewerOptions = { container: box, viewer: inner.current!, eventBus: bus, linkService: links, findController: find, removePageBorders: true, annotationMode: pdfjs.AnnotationMode.ENABLE,
+      annotationEditorMode: pdfjs.AnnotationEditorType.DISABLE, enableSelectionRendering: false, abortSignal: lifetime.signal };
+    const viewer = new PDFViewer(viewerOptions);
     links.setViewer(viewer);
     // pdf.js moves focus into the target page's text layer the next time that
     // page renders. For a page already on screen that happens later, on any
@@ -465,7 +470,7 @@ export const PdfView = forwardRef<PdfHandle, {
       box.removeEventListener('pointerdown', pressNote); box.removeEventListener('scroll', cancelPress);
       document.removeEventListener('pointermove', moveNote); document.removeEventListener('pointerup', releaseNote); document.removeEventListener('pointercancel', cancelPress);
       box.removeEventListener('wheel', wheel); box.removeEventListener('touchstart', touchStart); box.removeEventListener('touchmove', touchMove); box.removeEventListener('touchend', touchEnd);
-      viewer.cleanup(); void loaded.current?.loadingTask.destroy(); loaded.current = null; tools.current = null; layerMap.current.clear();
+      viewer.setDocument(null); lifetime.abort(); void loaded.current?.loadingTask.destroy(); loaded.current = null; tools.current = null; layerMap.current.clear();
     };
   }, []);
 

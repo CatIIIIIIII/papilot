@@ -1,3 +1,4 @@
+import { agentDirs } from './agent-paths.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +13,7 @@ export function backendEnvironment(node: string, root: string, data: string, inh
   // An installed release has its dependencies beside it in node_modules.
   const hoisted = path.basename(path.dirname(root)) === 'node_modules' ? [path.join(path.dirname(root), '.bin')] : [];
   const directories = [path.dirname(node), path.join(root, 'node_modules/.bin'), ...hoisted,
-    ...(inherited.PATH || '').split(path.delimiter),
+    ...(inherited.PATH || '').split(path.delimiter), ...agentDirs(inherited),
     ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin', '.volta/bin', '.asdf/shims'].map(dir => path.join(home, dir)), ...nodeBins,
     '/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
   const env = { ...inherited, PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),

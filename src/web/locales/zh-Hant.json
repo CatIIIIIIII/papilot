@@ -963,6 +963,7 @@
   "Update ready": "更新已就緒",
   "Update to {version}": "更新至 {version}",
   "Updates": "更新",
+  "Updates are managed by Nix.": "更新由 Nix 管理。",
   "Updating…": "正在更新…",
   "Upload failed. Please retry.": "上傳失敗，請重試。",
   "Uploading…": "正在上傳…",
