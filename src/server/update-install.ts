@@ -47,7 +47,10 @@ export async function probeInstallation(root: string, version: string, stage: st
   let ended = false, error: Error | undefined;
   child.once('error', e => { error = e; ended = true; }); child.once('exit', () => { ended = true; });
   try {
-    for (let i = 0; i < 40 && !ended; i++) { if (await health(port, version)) return; await sleep(250); }
+    // A fresh desktop data directory also seeds the example paper. Cold disks
+    // and concurrent builds can take longer than ten seconds to initialize it.
+    const deadline = Date.now() + 60000;
+    while (Date.now() < deadline && !ended) { if (await health(port, version)) return; await sleep(250); }
     throw error || new Error('The new version did not pass its startup check. Your current version is still running.');
   } finally {
     if (!ended) {
