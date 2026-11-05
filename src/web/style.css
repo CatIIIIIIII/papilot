@@ -98,12 +98,13 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .nav-link.active>svg{color:var(--accent)}
 .nav-label{flex-shrink:0}
 .nav-meta{flex:1;min-width:0;text-align:right;font-size:12px;font-weight:400;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.manuscript-link{min-height:36px;gap:8px;font-weight:400}
+.manuscript-link,.git-link{min-height:36px;gap:8px;font-weight:400}
 .manuscript-link.active{background:var(--bg-hover);font-weight:400}
 .manuscript-link.active>svg{color:var(--text-3)}
 .manuscript-link .nav-meta{font-size:11.5px}
 .manuscript-link:active:not(:disabled){background:var(--bg-active)}
 .paper-tools{min-height:36px;gap:8px;font-weight:400;color:var(--text-2)}
+.paper-tools .nav-label{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .paper-tools>svg:last-child{margin-left:auto}
 .paper-tools[aria-expanded=true]{background:var(--bg-hover);color:var(--text)}
 .paper-tools-menu{min-width:240px}
@@ -587,7 +588,7 @@ body.resizing iframe{pointer-events:none}
 .pdf-contents-menu .menu-hint{order:2}
 .pdf-contents-menu>button[aria-checked=true]{background:var(--accent-soft);color:var(--accent)}
 @container (max-width:760px){.pdf-contents-trigger{width:30px;padding:0;justify-content:center}.pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:none}}
-.git-panel{flex:1;min-height:0;overflow:auto;padding:4px 0 24px}
+.git-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .notes-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
 .draft-notes-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;font-size:12px;color:var(--text-3)}
 .note-selection-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
@@ -951,7 +952,7 @@ body.resizing iframe{pointer-events:none}
   .manuscript{display:flex;flex-direction:column}
   .manuscript-side{max-height:none;flex:1;border-top:0;padding-bottom:env(safe-area-inset-bottom)}
   .manuscript-side-header{display:none}
-  .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages,.manuscript.show-git .manuscript-pages{display:none}
+  .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages{display:none}
   .pdf-contents-trigger{width:36px;height:40px}
   .action-menu.pdf-contents-menu{width:auto}
   .pdf-contents-menu>button{min-height:44px;font-size:15px}

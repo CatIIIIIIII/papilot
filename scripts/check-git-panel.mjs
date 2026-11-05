@@ -20,12 +20,13 @@ page.on('pageerror', error => errors.push(error.message));
 const files = [{ path: 'main.tex', status: 'M', staged: false, unstaged: true, incoming: 'M', lines: [18, 4] }, { path: 'chapters/results.tex', status: 'M', staged: false, unstaged: true, lines: [6, 2] }, { path: 'references.bib', status: '?', staged: false, unstaged: true }];
 const longDiff = '@@ -1,9002 +1,9002 @@\n-First result.\n+Updated result.\n' + Array.from({ length: 9000 }, (_, index) => ` Context ${index + 2}\n`).join('') + '-Late result.\n+Late updated result.\n';
 let git = { remote: true, branch: 'main', upstream: 'origin/main', ahead: 1, behind: 1, head: { hash: 'abc1234', subject: 'Initial', date: 1 }, files: structuredClone(files), merging: null };
-let syncFailure = false, syncConflict = false, syncGate = null, overviewRequests = 0, fetches = 0, incoming = 0;
+let syncFailure = false, syncConflict = false, syncGate = null, overviewRequests = 0, fetches = 0, incoming = 0, historyDiffs = 0;
 const project = { id: 'paper', name: 'Example paper', path: '/tmp/git-panel-fixture', createdAt: 1 };
 const history = [{ hash: 'abc1234'.padEnd(40, '0'), message: 'Refine the discussion\n\nExplain the limitations and next steps.', author: 'Chen', date: Date.now() }, { hash: '1'.repeat(40), message: 'Add comparison results\n\nInclude the baseline and shared workspace results.', author: 'Lin', date: Date.now() - 86400000 }];
 const runtime = { connected: true, authenticated: true, account: null, error: null, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: ['high'], defaultEffort: 'high' }] };
 await context.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/state') return json({ version: 'test', csrf: 'fixture', projects: [project], tasks: [], requests: [], runtime });
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', checkedAt: 1, error: null, canUpdate: true });
@@ -39,7 +40,7 @@ await context.route('**/api/**', async route => {
   if (url.pathname.endsWith('/git/fetch')) { fetches++; if (incoming) git = { ...git, behind: incoming }; return json({ git }); }
   if (url.pathname.endsWith('/git/overview')) { overviewRequests++; return json({ commits: [], worktrees: [], truncated: false }); }
   if (url.pathname.endsWith('/git/history')) return json({ versions: history, next: null });
-  if (/\/git\/history\/[a-f0-9]+\/diff$/.test(url.pathname)) return json({ path: 'main.tex', diff: '@@ -1 +1 @@\n-First draft\n+Historical result\n', truncated: false });
+  if (/\/git\/history\/[a-f0-9]+\/diff$/.test(url.pathname)) { historyDiffs++; return json({ path: 'main.tex', diff: '@@ -1 +1 @@\n-First draft\n+Historical result\n', truncated: false }); }
   if (/\/git\/history\/[a-f0-9]+$/.test(url.pathname)) return json({ version: history.find(version => url.pathname.endsWith(version.hash)), files: [{ path: 'main.tex', status: 'M' }] });
   if (url.pathname.endsWith('/git/restore')) { requests.push({ action: 'restore', ...route.request().postDataJSON() }); git = { ...git, ahead: git.ahead + 1, head: { hash: '2'.repeat(40), subject: 'Restore version: Add comparison results', date: Date.now() } }; history.unshift({ ...git.head, message: git.head.subject, author: 'Chen' }); return json({ git }); }
   if (url.pathname.endsWith('/git/diff')) {
@@ -68,7 +69,8 @@ await context.route('**/api/**', async route => {
   }
   throw new Error('Unexpected Git panel request: ' + url.pathname);
 });
-const panel = page.getByRole('region', { name: 'Git status', exact: true });
+const panel = page.getByRole('region', { name: 'Version Management', exact: true });
+const showHistory = () => panel.locator('.git-detail-switcher').getByRole('button', { name: 'Version history', exact: true }).click();
 const settings = page.locator('.settings-dialog');
 async function openSettings() { await page.getByRole('button', { name: 'Settings', exact: true }).click(); }
 async function closeSettings() { await settings.getByRole('button', { name: 'Close', exact: true }).click(); }
@@ -81,13 +83,14 @@ try {
   await page.locator('.manuscript-link').click();
   const pdfPage = page.locator('.pdfViewer .page').first();
   await pdfPage.waitFor();
-  await page.getByRole('tab', { name: /^Git/ }).click();
+  await page.locator('.git-link').click();
   await panel.getByRole('group', { name: 'Changes', exact: true }).waitFor();
   assert.equal(await panel.getByRole('region', { name: 'Commit graph' }).count(), 0);
   assert.equal(await panel.getByRole('region', { name: 'Worktrees' }).count(), 0);
   assert.equal(overviewRequests, 0, 'Hidden advanced views do not load or poll');
   assert.equal(await panel.getByRole('button', { name: /Settings/ }).count(), 0, 'The panel has no settings entry');
   const versions = panel.getByRole('region', { name: 'Version history', exact: true });
+  await showHistory();
   await versions.getByRole('button', { name: /Add comparison results/ }).click();
   await expect(versions.locator('.git-version-message')).toContainText('Include the baseline');
   await versions.getByRole('button', { name: 'Restore this version', exact: true }).click();
@@ -96,9 +99,14 @@ try {
   await expect(panel.getByRole('textbox', { name: 'Commit message' })).toBeFocused();
   await versions.locator('.git-version-file').click();
   await expect(page.locator('.git-diff-view')).toContainText('Historical result');
-  // The PDF stays mounted to preserve reading state, but must not intercept
-  // search, zoom, or tool shortcuts intended for the source view.
-  const pdfWidth = await pdfPage.evaluate(element => getComputedStyle(element).width);
+  const historicalRequests = historyDiffs, liveRequests = diffs.length;
+  await page.clock.fastForward(16000);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.git-diff-view')).toContainText('Historical result');
+  assert.equal(historyDiffs, historicalRequests, 'Immutable historical diffs do not poll');
+  assert.equal(diffs.length, liveRequests, 'Leaving the working-tree diff stops its refresh');
+  // The dedicated workspace releases the PDF and its keyboard shortcuts.
+  await expect(page.locator('.manuscript')).toHaveCount(0);
   const swallowed = await page.evaluate(() => {
     document.activeElement?.blur();
     return ['f', '=', '-', '0', 'h', ' '].map(key => {
@@ -109,8 +117,7 @@ try {
   });
   assert.deepEqual(swallowed, [false, false, false, false, false, false]);
   await expect(page.locator('input[aria-label="Search the PDF"]')).toHaveCount(0);
-  assert.equal(await pdfPage.evaluate(element => getComputedStyle(element).width), pdfWidth);
-  await page.getByRole('button', { name: 'Back to manuscript', exact: true }).click();
+  await page.locator('.manuscript-link').click();
   await expect(pdfPage).toBeVisible();
   assert.equal(await page.evaluate(() => {
     const event = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
@@ -118,7 +125,8 @@ try {
   }), true);
   await page.getByRole('textbox', { name: 'Search the PDF', exact: true }).waitFor();
   await page.getByRole('textbox', { name: 'Search the PDF', exact: true }).press('Escape');
-  await versions.getByRole('button', { name: /Add comparison results/ }).click();
+  await page.locator('.git-link').click();
+  await showHistory();
   await expect(panel.getByRole('button', { name: 'Commit', exact: true })).toBeDisabled();
   await expect(panel.getByRole('button', { name: 'Sync', exact: true })).toHaveCount(0);
   const changes = panel.getByRole('group', { name: 'Changes', exact: true });
@@ -155,7 +163,7 @@ try {
   await expect(staged).toHaveCount(0);
   await panel.getByRole('button', { name: 'main.tex', exact: true }).click();
   await page.getByRole('region', { name: 'Changes in main.tex', exact: true }).getByText('Updated.', { exact: true }).waitFor();
-  await expect(panel.locator('.git-diff-view,.git-diff-wrap')).toHaveCount(0);
+  await expect(panel.locator('.git-panel .git-diff-view,.git-panel .git-diff-wrap')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'main.tex', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await panel.getByRole('button', { name: 'results.tex chapters', exact: true }).click();
   const sourceDiff = page.getByRole('region', { name: 'Changes in chapters/results.tex', exact: true });
@@ -189,7 +197,7 @@ try {
   releaseSync(); syncGate = null;
   await panel.getByRole('status').filter({ hasText: 'Committed def5678 and synced.' }).waitFor();
   assert.deepEqual(requests.slice(-2), [{ action: 'commit', message: 'Revise the paper', paths: files.map(f => f.path) }, { action: 'sync' }]);
-  await panel.getByText('No uncommitted changes', { exact: true }).waitFor();
+  await panel.locator('.git-panel').getByText('No uncommitted changes', { exact: true }).waitFor();
   await expect(panel.getByRole('button', { name: 'Synced', exact: true })).toBeDisabled();
   // Remote-only changes become the primary action without a manual refresh.
   const beforeFetch = fetches;
@@ -219,6 +227,7 @@ try {
   await advanced.check();
   await settings.screenshot({ path: 'test-results/git-app-settings.png' });
   await closeSettings();
+  await showHistory();
   await panel.getByRole('region', { name: 'Commit graph', exact: true }).waitFor();
   await panel.getByRole('region', { name: 'Worktrees', exact: true }).waitFor();
   // A local repository read timing out is not evidence of a network failure.
@@ -239,7 +248,7 @@ try {
   await graph.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(graph.getByRole('alert')).toHaveCount(0);
   await page.reload();
-  await page.getByRole('tab', { name: /^Git/ }).click();
+  await page.locator('.git-link').click();
   await panel.getByRole('region', { name: 'Commit graph', exact: true }).waitFor();
   git = { ...git, files: [{ ...files[0], staged: true, unstaged: false }, files[1]] };
   await panel.getByRole('button', { name: 'Refresh changes', exact: true }).click();
@@ -263,7 +272,7 @@ try {
   await page.getByRole('menuitem', { name: 'Commit and sync', exact: true }).click();
   await panel.getByRole('alert').filter({ hasText: 'Remote rejected the push.' }).waitFor();
   await expect(panel.getByRole('textbox', { name: 'Commit message' })).toHaveValue('');
-  await panel.getByText('No uncommitted changes', { exact: true }).waitFor();
+  await panel.locator('.git-panel').getByText('No uncommitted changes', { exact: true }).waitFor();
   assert.equal(git.ahead, 1);
   syncFailure = false; await panel.getByRole('button', { name: 'Sync', exact: true }).click();
   await panel.getByRole('status').filter({ hasText: 'Synced with the remote.' }).waitFor();
@@ -283,6 +292,7 @@ try {
   await page.keyboard.press('Escape');
   git = { ...git, files: [], remote: true, upstream: 'origin/main', ahead: 0, behind: 0 };
   await panel.getByRole('button', { name: 'Refresh changes', exact: true }).click();
+  await showHistory();
   await versions.getByRole('button', { name: /Add comparison results/ }).click();
   await versions.getByRole('button', { name: 'Restore this version', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Restore this version', exact: true }).click();
@@ -293,7 +303,7 @@ try {
   git = { ...git, files: structuredClone(files) };
   await context.addInitScript(() => localStorage.setItem('papilot:language', 'zh-CN'));
   await page.reload();
-  await page.getByRole('tab', { name: /^Git/ }).click();
+  await page.locator('.git-link').click();
   const chinesePanel = page.locator('.git-panel');
   await chinesePanel.getByRole('button', { name: '提交', exact: true }).waitFor();
   await chinesePanel.screenshot({ path: 'test-results/git-simple-zh.png' });
@@ -304,7 +314,7 @@ try {
   }
   await chinesePanel.getByRole('button', { name: 'results.tex chapters', exact: true }).click();
   await expect(page.locator('.git-diff-view')).toBeVisible();
-  await expect(chinesePanel).not.toBeVisible();
+  await expect(chinesePanel).toBeVisible();
   await page.locator('.git-diff-view').getByRole('button', { name: '下一处改动', exact: true }).click();
   await page.locator('.git-diff-view').getByText('Late updated result.', { exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/git-diff-phone.png' });
