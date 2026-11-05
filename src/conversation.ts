@@ -47,7 +47,7 @@ export function summarizeFeedback(feedback: { feedback?: FeedbackItem[]; build_e
     else if ((item.kind === 'comment' || item.kind === 'note') && item.text?.trim()) {
       const first = changes.find(change => typeof change === 'object' && change.file) as { file: string; lines?: [number, number] } | undefined;
       const where = first ? `${first.file}${first.lines ? `:${first.lines[0]}` : ''}${changes.length > 1 ? ` +${changes.length - 1}` : ''}` : item.kind === 'note' ? 'Note on the review' : `Round ${item.round ?? ''}`.trim();
-      summary.comments.push({ where, text: item.text.trim().slice(0, 2000) });
+      summary.comments.push({ where, text: item.text.trim() });
     }
   }
   return summary;

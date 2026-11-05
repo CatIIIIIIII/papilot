@@ -104,7 +104,7 @@ export const useReviewDraft = (taskId: string) => {
 export const reviewNoteSummary = (note: ReviewNote): NoteSummary => ({
   id: note.id, ...(note.group ? { group: note.group } : {}),
   where: note.where + (note.region ? ` · Region in displayed strip: ${note.rects[0].map(v => `${Math.round(v * 100)}%`).join(', ')}` : ''),
-  quote: note.quote.slice(0, 2000), comment: note.comment.trim(), anchor: { ...noteAnchor(note), round: note.round },
+  quote: note.quote, comment: note.comment.trim(), anchor: { ...noteAnchor(note), round: note.round },
 });
 
 // Unwritten individual comments remain drafts. A color group's shared direction

@@ -547,7 +547,7 @@ test('notes can be edited, deleted and restored in order without changing their 
     const note = { id: 'editable-note', projectId: 'thesis', key: 'pdf', page: 2, rect: [0.1, 0.2, 0.6, 0.3] as [number, number, number, number], rects: [[0.1, 0.2, 0.6, 0.3]] as [number, number, number, number][], quote: 'Original sentence.', comment: 'Shorten.', source: { file: 'main.tex', lines: [10, 12] as [number, number], excerpt: 'Original source.' }, createdAt: 1, author: { id: f.ada.id, name: 'Ada' } };
     f.store.saveAnnotation(note); f.store.saveAnnotation({ ...note, id: 'next-note' });
     const post = (suffix: string, payload: Record<string, unknown> = {}) => f.remote.inject({ method: 'POST', url: '/api/projects/thesis/annotations/editable-note' + suffix, headers: f.as, payload });
-    for (const comment of ['', '  ', 'x'.repeat(4001), 42]) assert.equal((await post('', { comment })).statusCode, 400);
+    for (const comment of ['', '  ', 42]) assert.equal((await post('', { comment })).statusCode, 400);
     const edited = await post('', { comment: '  Keep the technical terms.  ', quote: 'Forged quote', author: { name: 'Someone else' }, page: 9 });
     const expected = { ...note, comment: 'Keep the technical terms.' };
     assert.equal(edited.statusCode, 200, edited.body); assert.deepEqual(edited.json(), expected);
@@ -835,7 +835,7 @@ test('group-specific instructions are scoped to selected notes and preserved in 
     const notes = [make('yellow-1', 'blue'), make('yellow-later', 'yellow'), make('green-1', 'green'), make('with-comment')];
     notes.forEach(note => f.store.saveAnnotation(note));
     const payload = { id: 'group-directions-001', projectId: 'thesis', title: 'Work on these passages', instructions: '', annotations: ['yellow-1', 'green-1', 'with-comment'] };
-    for (const groupInstructions of [null, [], { yellow: 42 }, { yellow: 'x'.repeat(4001) }, { unknown: 'Explain' }, { yellow: 'Explain only one group' }, { yellow: 'Explain', green: 'Shorten', purple: 'Unselected group' }]) {
+    for (const groupInstructions of [null, [], { yellow: 42 }, { unknown: 'Explain' }, { yellow: 'Explain only one group' }, { yellow: 'Explain', green: 'Shorten', purple: 'Unselected group' }]) {
       const response = await f.remote.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { ...payload, groupInstructions } });
       assert.equal(response.statusCode, 400, response.body);
       assert.equal(f.store.annotations('thesis').filter(note => !note.taskId).length, 4);
@@ -1162,4 +1162,50 @@ test('the review page shows each TeX pass of a round\'s new version in the full 
     for (const url of [`${detail.json().pdf}?pass=99`, `${detail.json().pdf}?pass=0`, `${detail.json().passes}?after=-1`])
       assert.equal((await f.local.inject({ url, headers: LOCAL })).statusCode, 404, url);
   } finally { engine.close(); await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+
+test('large instructions and note batches reach tasks and follow-ups without content limits', async () => {
+  const f = await fixture();
+  try {
+    f.review.post = async () => ({ worktree: '/unused/review-copy', deferred: true }) as any;
+    const instructions = 'Review the reasoning and all its assumptions. '.repeat(25000) + 'FINAL REQUEST';
+    const comment = 'Explain this inference. '.repeat(250) + 'FINAL COMMENT';
+    const quote = 'Original passage. '.repeat(200) + 'FINAL QUOTATION';
+    const notes = Array.from({ length: 600 }, (_, index): Annotation => ({ id: `large-note-${index}`, projectId: 'thesis', key: 'pdf', page: 0, rect: [0.1, 0.1, 0.8, 0.2], comment, quote, source: null, createdAt: 1 }));
+    notes.forEach(note => f.store.saveAnnotation(note));
+    const created = await f.remote.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { id: 'large-input-task', projectId: 'thesis', title: 'Review all passages', instructions, annotations: notes.map(note => note.id) } });
+    assert.equal(created.statusCode, 200, created.body);
+    const run = f.store.runs().find(run => run.taskId === 'large-input-task')!;
+    assert.ok(run.prompt.includes(instructions));
+    assert.equal(f.store.items('large-input-task')[0].meta?.notes?.length, 600);
+    assert.ok(run.prompt.includes(comment));
+    assert.ok(run.prompt.includes(quote));
+    const sources = Array.from({ length: 50 }, (_, index) => ({ file: 'main.tex', lines: [index + 1, index + 1] }));
+    const followup = await f.remote.inject({ method: 'POST', url: '/api/tasks/thesis-task/messages', headers: f.as, payload: { requestKey: 'large-followup', text: instructions, notes: notes.map(note => ({ where: 'Page 1', quote, comment, anchor: { sources } })) } });
+    assert.equal(followup.statusCode, 200, followup.body);
+    const item = f.store.items('thesis-task')[0];
+    assert.equal(item.text, instructions);
+    assert.equal(item.meta?.notes?.length, 600);
+    assert.equal(item.meta?.notes?.[599].comment, comment);
+    assert.equal(item.meta?.notes?.[599].quote, quote);
+    assert.equal(item.meta?.notes?.[599].anchor?.sources.length, 50);
+  } finally { await f.close(); }
+});
+
+test('long annotation edits and quotes retain every selected line', async () => {
+  const f = await fixture();
+  try {
+    const quote = 'Long selected passage. '.repeat(200), comment = 'Detailed review comment. '.repeat(200);
+    const rect = [0.1, 0.1, 0.8, 0.2], rects = Array.from({ length: 100 }, () => rect);
+    f.manuscripts.locate = async (_project, _key, _page, _rect, clips, selected) => {
+      assert.equal(clips?.length, 100); assert.equal(selected, quote);
+      return { quote: selected!, source: null };
+    };
+    const saved = await f.remote.inject({ method: 'POST', url: '/api/projects/thesis/annotations', headers: f.as, payload: { key: 'pdf', page: 0, rect, rects, quote, comment } });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.equal(saved.json().quote, quote); assert.equal(saved.json().rects.length, 100);
+    const updated = await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${saved.json().id}`, headers: f.as, payload: { comment: comment + 'TAIL' } });
+    assert.equal(updated.statusCode, 200, updated.body); assert.equal(updated.json().comment, comment + 'TAIL');
+  } finally { await f.close(); }
 });

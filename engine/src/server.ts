@@ -121,7 +121,7 @@ export class App {
   }
 }
 export function createServer(app: App) {
-  const server = Fastify({ logger: false, bodyLimit: 999999 });
+  const server = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   server.register(compress, { threshold: 1024 });
   server.addHook("onRequest", async (request, reply) => {
     app.activity = now();
@@ -374,7 +374,7 @@ export function createServer(app: App) {
     // The task's typeset pages as images, for its agent to look at.
     server.post<{ Params: { name: string }; Body: ViewRequest }>(
       "/api/tasks/:name/view",
-      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", maxItems: 8, items: { type: "string", maxLength: 1000 } }, pages: { type: "array", maxItems: 8, items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
+      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", items: { type: "string", maxLength: 1000 } }, pages: { type: "array", items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
       (request) => view(app, request.params.name, request.body),
     );
     server.post<{ Params: { name: string }; Body: { keepCurrent?: boolean; mode?: "workspace" | "commit"; message?: string; confirmation?: string } }>(

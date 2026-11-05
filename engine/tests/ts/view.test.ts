@@ -91,3 +91,22 @@ Main content.
     await f.close();
   }
 });
+
+
+it.skipIf(!tex)("draws every requested page beyond the former page limit", async () => {
+  const f = new Fixture();
+  try {
+    f.write("paper/main.tex", String.raw`\documentclass{article}
+\usepackage{hyperref}
+\begin{document}
+\pagenumbering{roman}
+` + Array.from({ length: 10 }, (_, index) => `Page ${index + 1}.`).join("\\newpage\n") + "\n\\end{document}\n");
+    const app = f.app(), task = app.tasks.create("all-pages");
+    const pages = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"];
+    const shown = await view(app, task.name, { pages });
+    expect(shown.error).toBeUndefined();
+    expect(shown.missing).toEqual([]);
+    expect(shown.pages.map(page => page.label)).toEqual(pages);
+    expect(shown.pages.every(page => png(page) === "PNG")).toBe(true);
+  } finally { await f.close(); }
+});

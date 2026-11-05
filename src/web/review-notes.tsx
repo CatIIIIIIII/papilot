@@ -28,7 +28,7 @@ function mark(layer: Layer, rects: Rect[], quote: string, region: boolean): Mark
   const number = change?.querySelector<HTMLElement>('.change-number'), place = change?.querySelector<HTMLElement>('.change-where');
   const where = [`Round ${layer.round}`, `PDF page ${layer.strip.dataset.page || '?'}`, side,
     number?.dataset.change ? `Change ${number.dataset.change}` : number?.textContent, place?.dataset.location || place?.getAttribute('title') || place?.textContent].filter(Boolean).join(' · ');
-  return { strip: layer.key, round: layer.round, ...(change?.getAttribute('data-stop') ? { stop: Number(change.getAttribute('data-stop')) } : {}), where, quote: quote.slice(0, 2000), rects, region };
+  return { strip: layer.key, round: layer.round, ...(change?.getAttribute('data-stop') ? { stop: Number(change.getAttribute('data-stop')) } : {}), where, quote, rects, region };
 }
 function rangeMark(layer: Layer, range: Range) {
   const box = layer.strip.getBoundingClientRect();
@@ -179,7 +179,7 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
       const layer = layers.find(layer => change.contains(layer.strip) && layer.strip.closest('.after')) || layers.find(layer => change.contains(layer.strip));
       const location = change.querySelector<HTMLElement>('.change-where');
       const base = layer ? mark(layer, [], '', false) : { strip: '', round: detail.round, where: `Round ${detail.round} · ${location?.dataset.location || location?.textContent || ''}`, rects: [], region: false, quote: '' };
-      store.add({ ...base, whole: true, stop: detail.stop, quote: Array.from(change.querySelectorAll('.after .pdf-text')).map(el => el.textContent).join(' ').trim().slice(0, 2000) });
+      store.add({ ...base, whole: true, stop: detail.stop, quote: Array.from(change.querySelectorAll('.after .pdf-text')).map(el => el.textContent).join(' ').trim() });
       onComment();
     };
     view.addEventListener('latex-review:comment', comment);
@@ -220,7 +220,7 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
         const rect: Rect = [Math.min(start.x, x), Math.min(start.y, y), Math.max(start.x, x), Math.max(start.y, y)];
         if ((rect[2] - rect[0]) * box.width < 4 || (rect[3] - rect[1]) * box.height < 4) return;
         // Keep nearby PDF text as a locator for figures and equations too.
-        const quote = (start.layer.strip.querySelector('.pdf-text')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+        const quote = (start.layer.strip.querySelector('.pdf-text')?.textContent || '').replace(/\s+/g, ' ').trim();
         edit(mark(start.layer, [rect], quote, true));
       }} onPointerCancel={() => { origin.current = null; setDrag(null); }}/>}
       {drag?.key === layer.key && <div className="review-note-box" style={percent(drag.rect)}/>}

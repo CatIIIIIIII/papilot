@@ -57,13 +57,13 @@ function readQuickNotes(value: unknown): QuickNote[] {
     const { id, label, instruction, icon } = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
     if (typeof id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(id) || ids.has(id)) throw invalid();
     ids.add(id);
-    const text = (field: unknown, max: number) => {
+    const text = (field: unknown, max?: number) => {
       if (field === undefined) return undefined;
       const clean = typeof field === 'string' ? field.trim() : '';
-      if (!clean || clean.length > max) throw invalid();
+      if (!clean || (max !== undefined && clean.length > max)) throw invalid();
       return clean;
     };
-    const name = text(label, 40)?.replace(/[·\s]+/g, ' '), said = text(instruction, 1000);
+    const name = text(label, 40)?.replace(/[·\s]+/g, ' '), said = text(instruction);
     if ((!name || !said) && !PRESET_QUICK_NOTES.includes(id)) throw invalid();
     if (icon !== undefined && (typeof icon !== 'string' || !/^[a-zA-Z]{1,40}$/.test(icon))) throw invalid();
     return { id, ...(name ? { label: name } : {}), ...(said ? { instruction: said } : {}), ...(icon ? { icon } : {}) };
@@ -95,7 +95,7 @@ export async function buildApp(options: AppOptions) {
   const indirectChanges = () => store.preference<boolean>(accounts.owner().id, 'indirect-changes') === true;
   workspace.indirectChanges = changes.indirectChanges = indirectChanges;
   // A public request must arrive in full within a minute; held-open bodies tie up nothing.
-  const app = Fastify({ logger: false, bodyLimit: 1024 * 1024, ...(listener.kind === 'account' ? { requestTimeout: 60000 } : {}) });
+  const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER, ...(listener.kind === 'account' ? { requestTimeout: 60000 } : {}) });
   const { csrfFor } = guard(app, { listener, accounts, store, csrf: options.csrf, request: id => workspace.requests.get(id) });
   const updateRequests = new WeakMap<object, () => void>();
   app.addHook('onRequest', async (request, reply) => {
@@ -259,7 +259,7 @@ export async function buildApp(options: AppOptions) {
   // Codex names reasoning efforts with short lowercase words (low, medium, xhigh).
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
-  const string = (value: unknown, name: string, max = 20000) => { if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
+  const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
   // Adding a paper names a folder on this host, so only the owner can.
   app.post('/api/projects', owner, async request => { const b = request.body as any; return workspace.addProject(string(b.path, 'Repository path', 4000), b.name ? string(b.name, 'Paper name', 120) : undefined); });
   app.post('/api/projects/open', owner, request => openFolder((request.body || {}) as any, root => store.projectByPath(root), (root, name) => workspace.addProject(root, name)));
@@ -283,11 +283,11 @@ export async function buildApp(options: AppOptions) {
   // A skill's name: what the author typed after "/".
   const skillName = (value: unknown) => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,47}$/.test(value) ? value : undefined;
   // Text the author may leave empty when a skill or review feedback says enough.
-  const optional = (value: unknown, name: string, max = 20000) => value === undefined || value === '' ? '' : string(value, name, max);
+  const optional = (value: unknown, name: string, max?: number) => value === undefined || value === '' ? '' : string(value, name, max);
   app.get<{ Params: { id: string } }>('/api/projects/:id/skills', project(), request => ({ skills: loadSkills(store.project(request.params.id).path).map(listedSkill) }));
   app.post('/api/tasks', { config: { access: { project: 'projectId', from: 'body' } } }, async request => {
     const b = request.body as any, skill = skillName(b.skill), attachments = attachmentIds(b.attachments);
-    if (b.annotations !== undefined && (!Array.isArray(b.annotations) || b.annotations.length > 500 || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64))) throw new Error('Select valid PDF notes for this task.');
+    if (b.annotations !== undefined && (!Array.isArray(b.annotations) || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64))) throw new Error('Select valid PDF notes for this task.');
     const annotations: string[] | undefined = b.annotations, groupInstructions = parseGroupInstructions(b.groupInstructions);
     const id = string(b.id, 'Task ID', 64), projectId = string(b.projectId, 'Paper ID', 64);
     // A skill submission uses the same task endpoint and retry identity as editing.
@@ -318,17 +318,17 @@ export async function buildApp(options: AppOptions) {
     const skill = name ? findSkill(store.project(task.projectId).path, name) : undefined;
     let reviewNotes: NoteSummary[] | undefined;
     if (b.notes !== undefined) {
-      if (!Array.isArray(b.notes) || !b.notes.length || b.notes.length > 500 || feedback) throw new Error('Select valid review notes.');
+      if (!Array.isArray(b.notes) || !b.notes.length || feedback) throw new Error('Select valid review notes.');
       reviewNotes = b.notes.map((note: any) => {
         if (!note || typeof note !== 'object') throw new Error('Select valid review notes.');
         if (note.group !== undefined && !isNoteGroup(note.group)) throw new Error('Invalid annotation group.');
         const anchor = note.anchor;
-        if (anchor && (!Array.isArray(anchor.sources) || anchor.sources.length > 40 || (anchor.round !== undefined && (!Number.isSafeInteger(anchor.round) || anchor.round < 1 || anchor.round > (task.review?.round || 0))))) throw new Error('Invalid note location.');
+        if (anchor && (!Array.isArray(anchor.sources) || (anchor.round !== undefined && (!Number.isSafeInteger(anchor.round) || anchor.round < 1 || anchor.round > (task.review?.round || 0))))) throw new Error('Invalid note location.');
         const sources = anchor?.sources.map((source: any) => {
           if (!source || !Array.isArray(source.lines) || source.lines.length !== 2 || !source.lines.every((line: unknown) => Number.isSafeInteger(line) && Number(line) >= 1) || source.lines[1] < source.lines[0]) throw new Error('Invalid note location.');
           return { file: string(source.file, 'Source file', 4096), lines: source.lines as [number, number] };
         });
-        return { ...(note.id ? { id: string(note.id, 'Note ID', 100) } : {}), where: string(note.where, 'Note location', 4000), quote: optional(note.quote, 'PDF text', 2000), comment: note.group ? optional(note.comment, 'Note', 4000) : string(note.comment, 'Note', 4000), ...(note.group ? { group: note.group } : {}), ...(anchor ? { anchor: { sources, ...(anchor.round ? { round: anchor.round } : {}) } } : {}) };
+        return { ...(note.id ? { id: string(note.id, 'Note ID', 100) } : {}), where: string(note.where, 'Note location'), quote: optional(note.quote, 'PDF text'), comment: note.group ? optional(note.comment, 'Note') : string(note.comment, 'Note'), ...(note.group ? { group: note.group } : {}), ...(anchor ? { anchor: { sources, ...(anchor.round ? { round: anchor.round } : {}) } } : {}) };
       });
     }
     const text = feedback || skill || reviewNotes || attachments.length ? optional(b.text, 'Revision instructions') : string(b.text, 'Revision instructions');
@@ -390,7 +390,7 @@ export async function buildApp(options: AppOptions) {
     return serialGit(project.id, () => workspace.exclusiveCommit(project.id, () => gitRestoreVersion(project.path, hash, head)));
   });
   app.get<{ Params: { id: string }; Querystring: { path?: string; scope?: string } }>('/api/projects/:id/git/diff', project(), request => gitDiff(store.project(request.params.id).path, string(request.query.path, 'File path', 4096), request.query.scope === 'staged' ? 'staged' : request.query.scope === 'unstaged' ? 'unstaged' : 'all'));
-  const paths = (value: unknown): string[] => Array.isArray(value) ? value.filter((p: unknown): p is string => typeof p === 'string').slice(0, 5000) : [];
+  const paths = (value: unknown): string[] => Array.isArray(value) ? value.filter((p: unknown): p is string => typeof p === 'string') : [];
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/commit', project(), request => {
     const project = store.project(request.params.id), b = request.body as any;
     const message = string(b.message, 'Commit message', 5000), chosen = b.staged === true ? null : paths(b.paths);
@@ -454,14 +454,14 @@ export async function buildApp(options: AppOptions) {
     const project = store.project(request.params.id), b = request.body as any;
     const isRect = (value: unknown): value is [number, number, number, number] => Array.isArray(value) && value.length === 4 && value.every(v => typeof v === 'number' && v >= 0 && v <= 1) && value[2] > value[0] && value[3] > value[1];
     if (!isRect(b.rect)) throw new Error('Select text or mark a region on the page first.');
-    const rects = Array.isArray(b.rects) ? b.rects.slice(0, 80).filter(isRect) : [];
+    const rects = Array.isArray(b.rects) ? b.rects.filter(isRect) : [];
     if (b.group !== undefined && !isNoteGroup(b.group)) throw new Error('Invalid annotation group.');
     if (b.kind !== undefined && !isMarkKind(b.kind)) throw new Error('Invalid kind of mark.');
     // A quick note's name labels its mark; its comment is the instruction.
     const stamp = b.stamp === undefined ? '' : string(b.stamp, 'Quick note name', 40).replace(/[·\n]/g, ' ').trim();
     // A delete mark may name a replacement; with none, the text simply goes.
-    const comment = b.group || b.kind === 'delete' ? optional(b.comment, 'Note', 4000) : string(b.comment, 'Note', 4000), key = string(b.key, 'Preview key', 64), page = Number(b.page);
-    const selected = typeof b.quote === 'string' ? b.quote.slice(0, 2000) : '';
+    const comment = b.group || b.kind === 'delete' ? optional(b.comment, 'Note') : string(b.comment, 'Note'), key = string(b.key, 'Preview key', 64), page = Number(b.page);
+    const selected = typeof b.quote === 'string' ? b.quote : '';
     const { quote, source } = await manuscripts.locate(project.id, key, page, b.rect, rects, selected);
     const by = author(request.viewer);
     return store.saveAnnotation({ id: randomUUID(), projectId: project.id, key, page, rect: b.rect, ...(b.group ? { group: b.group } : {}), ...(b.kind ? { kind: b.kind } : {}), ...(stamp ? { stamp } : {}), ...(rects.length ? { rects } : {}), comment, quote, source, createdAt: Date.now(), ...(by ? { author: by } : {}) });
@@ -473,7 +473,7 @@ export async function buildApp(options: AppOptions) {
     if (note.taskId) throw new Error('This note has already been sent.');
     if (note.deletedAt !== undefined) throw new Error('This note has been deleted. Undo the deletion first.');
     const comment = (request.body as any)?.comment;
-    return store.saveAnnotation({ ...note, comment: note.group || note.kind === 'delete' ? optional(comment, 'Note', 4000) : string(comment, 'Note', 4000) });
+    return store.saveAnnotation({ ...note, comment: note.group || note.kind === 'delete' ? optional(comment, 'Note') : string(comment, 'Note') });
   });
   app.post<{ Params: { id: string; note: string } }>('/api/projects/:id/annotations/:note/delete', project(), request => {
     const note = store.annotation(request.params.id, request.params.note);
@@ -496,7 +496,7 @@ export async function buildApp(options: AppOptions) {
     // A retried send returns its task; an ID from another paper is refused.
     const existing = store.tasks().find(task => task.id === id);
     if (existing) { if (existing.projectId !== project.id) throw new Error('Invalid task ID.'); return existing; }
-    if (!Array.isArray(b.annotations) || !b.annotations.length || b.annotations.length > 500 || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64)) throw new Error('Select valid PDF notes for this task.');
+    if (!Array.isArray(b.annotations) || !b.annotations.length || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64)) throw new Error('Select valid PDF notes for this task.');
     const notes = [...new Set<string>(b.annotations)].map(id => store.annotation(project.id, id));
     if (notes.some(note => note.taskId || isTaskReviewNote(note) || note.deletedAt !== undefined)) throw new Error('Select unsent PDF notes for this task.');
     const { title } = annotationTask(notes);
@@ -604,7 +604,7 @@ export async function buildApp(options: AppOptions) {
     changesToken(request);
     const project = store.project(request.params.projectId), b = request.body as any, action = CHANGE_ACTIONS[String(b?.action)];
     if (!action) throw new Error('Choose stage, unstage or revert.');
-    const ids = Array.isArray(b.changes) ? b.changes.filter((id: unknown): id is string => typeof id === 'string').slice(0, 2000) : [];
+    const ids = Array.isArray(b.changes) ? b.changes.filter((id: unknown): id is string => typeof id === 'string') : [];
     const act = () => changes.act(project.id, project.path, csrfFor(request.viewer!), action, Number(b.round), ids);
     return serialGit(project.id, () => action === 'revert' ? workspace.exclusiveCommit(project.id, act) : act());
   });

@@ -80,7 +80,7 @@ test('skill writes validate identifiers, content and scope, and built-ins stay r
   const f = fixture();
   try {
     for (const id of ['../escape', '/absolute', 'a/b', '', 'CAPS', 'a'.repeat(49)]) assert.throws(() => f.library.save('user', id, 'Instructions.', undefined));
-    for (const content of ['', '  ', '---\nname: Empty\n---\n', 'x'.repeat(20001), 'x\0y', 123]) assert.throws(() => f.library.save('user', 'custom', content, undefined));
+    for (const content of ['', '  ', '---\nname: Empty\n---\n', 'x\0y', 123]) assert.throws(() => f.library.save('user', 'custom', content, undefined));
     assert.throws(() => f.library.save('builtin', 'polish', 'Replace.', undefined), { statusCode: 403 });
     assert.throws(() => f.library.remove('builtin', 'polish', 'anything'), { statusCode: 403 });
     assert.throws(() => f.library.save('paper', 'custom', 'Instructions.', undefined));
@@ -106,5 +106,17 @@ test('paper skills cannot write through symlinked directories, files or hard lin
     fs.unlinkSync(saved.location); fs.linkSync(target, saved.location);
     assert.throws(() => f.library.remove('paper', 'custom', saved.revision, f.paper), /Linked/);
     assert.equal(fs.readFileSync(target, 'utf8'), 'Untouched.');
+  } finally { f.close(); }
+});
+
+
+test('long skills are saved, loaded and passed to the agent without truncation', () => {
+  const f = fixture();
+  try {
+    const content = 'Follow the author’s review instructions. '.repeat(1000) + 'FINAL INSTRUCTION';
+    const saved = f.library.save('user', 'long-review', content, undefined);
+    assert.equal(saved.content, content);
+    assert.equal(f.library.read('user', 'long-review').content, content);
+    assert.equal(loadSkills(undefined, f.roots).find(skill => skill.id === 'long-review')?.body, content);
   } finally { f.close(); }
 });

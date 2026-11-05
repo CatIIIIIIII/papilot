@@ -74,7 +74,11 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
       this.turns.set(turn.id, turn);
       // Papilot records the turn ID before the first event arrives.
       const settings = { ...thread, cwd: params.cwd || thread.cwd };
-      setImmediate(() => { if (turn.status === 'inProgress') this.run(turn, settings, text, params.effort || null, images); });
+      setImmediate(() => {
+        if (turn.status !== 'inProgress') return;
+        try { this.run(turn, settings, text, params.effort || null, images); }
+        catch (error) { this.finish(turn, 'failed', error instanceof Error ? error.message : String(error)); }
+      });
       return { turn: { id: turn.id } };
     }
     if (method === 'turn/interrupt') { this.turns.get(String(params.turnId))?.stop(); return {}; }
@@ -298,6 +302,7 @@ export class ClaudeAgent extends Adapter {
   // thread ID is the Claude session ID, so a later turn resumes it.
   private async print(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
     let stopped = false, error = '', stderr = '', denied: string[] = [];
+    let promptDirectory: string | undefined;
     const tools = new Map<string, Item>(), texts = new Map<string, string>();
     try {
       const content: Record<string, unknown>[] = [{ type: 'text', text }];
@@ -306,13 +311,20 @@ export class ClaudeAgent extends Adapter {
         if (!mime) throw new Error('This image format is not supported.');
         content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: bytes.toString('base64') } });
       }
+      // System instructions can be as long as the manuscript; argv cannot.
+      let promptFile: string | undefined;
+      if (thread.instructions) {
+        promptDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-claude-prompt-'));
+        promptFile = path.join(promptDirectory, 'instructions.txt');
+        fs.writeFileSync(promptFile, thread.instructions, { mode: 0o600 });
+      }
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
         ...(thread.readOnly ? ['--tools', ''] : []),
         ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : []),
         '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
         '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } }),
         // A question cannot be answered in -p; Claude asks in its reply instead.
-        '--disallowedTools', 'AskUserQuestion', ...(thread.instructions ? ['--append-system-prompt', thread.instructions] : []),
+        '--disallowedTools', 'AskUserQuestion', ...(promptFile ? ['--append-system-prompt-file', promptFile] : []),
         ...(thread.model ? ['--model', thread.model] : []), ...(effort ? ['--effort', effort] : []),
         ...(thread.started ? ['--resume', turn.threadId] : ['--session-id', turn.threadId])];
       const env = this.environment() || process.env;
@@ -329,13 +341,15 @@ export class ClaudeAgent extends Adapter {
         this.translate(turn, thread, message as SDKMessage, tools, texts, value => { error = value; });
       });
       const code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Claude could not use ${[...new Set(denied)].join(', ')}: with claude -p, Papilot cannot ask for approval, so anything outside the worktree and Claude Code's sandbox is declined.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Claude could not use ${[...new Set(denied)].join(', ')}: with claude -p, Papilot cannot ask for approval, so anything outside the worktree and Claude Code's sandbox is declined.` });
       if (stopped) this.finish(turn, 'interrupted');
       else if (error) this.finish(turn, 'failed', error);
       else if (code !== 0) this.finish(turn, 'failed', stderr.trim().split('\n').slice(-3).join(' ') || `claude exited with code ${code}.`);
       else this.finish(turn, 'completed');
     } catch (e) {
       this.finish(turn, stopped ? 'interrupted' : 'failed', stopped ? undefined : e instanceof Error ? e.message : String(e));
+    } finally {
+      if (promptDirectory) fs.rmSync(promptDirectory, { recursive: true, force: true });
     }
   }
   private async execute(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
@@ -463,7 +477,7 @@ export class GlmAgent extends ClaudeAgent {
   protected explain(error: string) { return error; }
 }
 
-// Antigravity runs as `agy -p` with streamed JSON, one process per turn,
+// Antigravity uses streamed JSON on stdin/stdout, one process per turn,
 // resuming its conversation by ID. Headless agy cannot ask for permission, so
 // it runs in accept-edits mode: it edits files inside the task worktree, and
 // anything else that needs approval (shell commands, edits elsewhere) is
@@ -472,7 +486,7 @@ export class AntigravityAgent extends Adapter {
   private catalog: { model: string; displayName: string; efforts: string[]; ids: Record<string, string>; isDefault: boolean; defaultEffort: string | null }[] = [];
   private conversations: Record<string, string> = {};
   constructor(private binary = process.env.PAPILOT_AGY_BIN || 'agy', private file = path.join(DATA, 'antigravity-conversations.json'),
-    private launch: (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess = (command, args, options) => spawn(command, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] })) {
+    private launch: (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess = (command, args, options) => spawn(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] })) {
     super();
     try { this.conversations = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { /* None yet. */ }
   }
@@ -516,7 +530,7 @@ export class AntigravityAgent extends Adapter {
     const model = entry ? entry.ids[effort || entry.defaultEffort || ''] || Object.values(entry.ids)[0] : thread.model;
     // agy has no separate system prompt: the first turn carries Papilot's instructions.
     const prompt = conversation ? text : `${thread.instructions}\n\n---\n\n${text}`;
-    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
+    const child = this.launch(findExecutable(this.binary) || this.binary, ['--input-format', 'stream-json', '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
@@ -538,13 +552,16 @@ export class AntigravityAgent extends Adapter {
     });
     child.stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4000); });
     child.on('error', error => this.finish(turn, 'failed', error.message));
+    child.stdin!.on('error', error => { child.kill(); this.finish(turn, 'failed', error.message); });
     child.on('close', () => {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
       if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });
+    // One NDJSON user message followed by EOF runs one turn without argv limits.
+    child.stdin!.end(JSON.stringify({ event: 'user', message: { content: prompt } }) + '\n');
   }
   private save() {
     try { fs.mkdirSync(path.dirname(this.file), { recursive: true }); fs.writeFileSync(this.file, JSON.stringify(this.conversations)); } catch { /* A later turn starts a new conversation. */ }

@@ -69,7 +69,7 @@ function pointAt(pageDiv: HTMLElement, clientX: number, clientY: number): Target
   if (nearest && distance < 0.12) {
     const middle = (nearest.top + nearest.bottom) / 2, height = nearest.bottom - nearest.top;
     const line = words.filter(word => Math.abs((word.top + word.bottom) / 2 - middle) < height / 2).sort((a, b) => a.left - b.left);
-    quote = [...line.filter(word => (word.left + word.right) / 2 < x).map(word => word.text), '‸', ...line.filter(word => (word.left + word.right) / 2 >= x).map(word => word.text)].join(' ').slice(0, 600);
+    quote = [...line.filter(word => (word.left + word.right) / 2 < x).map(word => word.text), '‸', ...line.filter(word => (word.left + word.right) / 2 >= x).map(word => word.text)].join(' ');
   }
   return { page: Number(pageDiv.dataset.pageNumber) - 1, rect: [Math.max(0, x - 0.006), Math.max(0, y - 0.004), Math.min(1, x + 0.006), Math.min(1, y + 0.004)], rects: [], quote, point: true };
 }

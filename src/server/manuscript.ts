@@ -142,17 +142,13 @@ function fileDiff(root: string, entry: GitFile, scope: GitDiffScope = 'all') {
 }
 
 // What a commit message is written from: the chosen files' diffs, or what is
-// staged in them, each shortened so that a large change still fits, and the
+// staged in them, and the
 // repository's recent commit subjects, whose style and language the message follows.
 export async function commitChanges(root: string, paths: string[], staged = false) {
   const files = (await gitStatus(root)).files.filter(item => paths.includes(item.path) && (!staged || item.staged));
   if (!files.length) throw new Error(staged ? 'Stage at least one change.' : 'Select at least one changed file.');
   let patch = '';
-  for (const [index, file] of files.entries()) {
-    if (patch.length > 40_000) { patch += `\n[${files.length - index} more changed files are not shown.]\n`; break; }
-    const diff = await fileDiff(root, file, staged ? 'staged' : 'all');
-    patch += diff.length > 8_000 ? `${diff.slice(0, 8_000)}\n[The rest of this file's diff is not shown.]\n` : diff;
-  }
+  for (const file of files) patch += await fileDiff(root, file, staged ? 'staged' : 'all');
   const recent = (await git(root, ['log', '-8', '--format=%s']).catch(() => '')).split('\n').filter(Boolean);
   return { files, patch, recent };
 }
@@ -842,15 +838,12 @@ export class Manuscripts extends EventEmitter {
   async snapshotPdf(pdf: string, key: string): Promise<ReviewSnapshot> {
     const { PdfDocument } = await engine();
     const document = new PdfDocument(pdf), lines: ReviewSnapshot['lines'] = [];
-    let length = 0;
     try {
       for (let index = 0; index < document.length; index++) {
         const page = document.page(index), [left, top, right, bottom] = page.bounds;
         for (const [number, line] of page.lines.entries()) {
           const text = line.chars.map((char: { text: string }) => char.text).join('').trim();
           if (!text) continue;
-          length += text.length;
-          if (length > 180000) throw new Error('This PDF is too long for one AI review (180,000 characters maximum).');
           const [x0, y0, x1, y1] = line.rect;
           const rect = [(x0 - left) / (right - left), (y0 - top) / (bottom - top), (x1 - left) / (right - left), (y1 - top) / (bottom - top)].map(value => Math.max(0, Math.min(1, value))) as Rect;
           if (rect[2] <= rect[0] || rect[3] <= rect[1]) continue;
@@ -898,7 +891,7 @@ export class Manuscripts extends EventEmitter {
       const current = document.page(page), [x0, y0, x1, y1] = current.bounds, width = x1 - x0, height = y1 - y0;
       const toPage = (r: Rect) => [x0 + r[0] * width, y0 + r[1] * height, x0 + r[2] * width, y0 + r[3] * height];
       const clips = (rects.length ? rects : [rect]).map(toPage);
-      const quote = (selected || clips.map(clip => current.text(clip)).join(' ')).replace(/\uFFFD/g, '').replace(/\s+/g, ' ').trim().slice(0, 600);
+      const quote = (selected || clips.map(clip => current.text(clip)).join(' ')).replace(/\uFFFD/g, '').replace(/\s+/g, ' ').trim();
       // Ask SyncTeX about the first and last marked character of every line, so
       // the source range covers the whole selection rather than its first line.
       const points: [number, number][] = [], centre = (r: number[]): [number, number] => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];

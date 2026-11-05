@@ -1,4 +1,5 @@
 import type { NoteSummary, ReviewSummary } from '../shared.ts';
+import { requestId } from './request-id.ts';
 export { reviewInstructions } from '../conversation.ts';
 export { sendsMessage } from '../../engine/src/web/send-key.ts';
 
@@ -50,13 +51,7 @@ export class ComposerDraft {
     const text = source === 'draft' ? [draftText.trim(), instructions.trim()].filter(Boolean).join('\n\n') : '';
     if (this.sending || (source === 'draft' && !text.trim() && !skill && !attachments.length && !notes.length)) return false;
     const requestStorage = this.key + (source === 'draft' ? ':request' : ':feedback-request');
-    {
-      const signature = JSON.stringify([text.trim(), skill || '', attachments, notes]);
-      let previous: { signature?: string; id?: string } = {};
-      try { previous = JSON.parse(this.storage.getItem(requestStorage) || '{}'); } catch { /* Invalid saved request. */ }
-      this.requestKeys[source] = previous?.signature === signature && previous.id ? previous.id : this.newId();
-      this.storage.setItem(requestStorage, JSON.stringify({ signature, id: this.requestKeys[source] }));
-    }
+    this.requestKeys[source] = requestId(this.storage, requestStorage, JSON.stringify([text.trim(), skill || '', attachments, notes]), this.newId);
     this.sending = true; this.sendingSource = source;
     this.changed();
     const revision = this.revision;

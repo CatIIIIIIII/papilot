@@ -75,6 +75,53 @@ test('a failed submission retains its text and reuses its request ID on retry', 
   assert.equal(draft.text, '');
 });
 
+test('a multi-megabyte draft keeps its retry ID across reload within browser storage quota', async () => {
+  const durable = new Map<string, string>();
+  let nextId = 0;
+  const reload = () => {
+    // Match browserStorage: writes beyond the quota are only kept in this tab.
+    const fallback = new Map<string, string>();
+    return new ComposerDraft('draft', {
+      getItem: key => fallback.get(key) ?? durable.get(key) ?? null,
+      setItem: (key, value) => {
+        const next = new Map(durable).set(key, value);
+        if ([...next].reduce((size, [k, v]) => size + k.length + v.length, 0) > 5 * 1024 * 1024) fallback.set(key, value);
+        else { durable.set(key, value); fallback.delete(key); }
+      },
+      removeItem: key => { durable.delete(key); fallback.delete(key); },
+    }, () => String(++nextId));
+  };
+  const text = 'x'.repeat(3_000_000) + '末尾请求';
+  const draft = reload(); draft.edit(text);
+  let requestKey = '';
+  await assert.rejects(draft.submit('draft', async message => {
+    assert.equal(message.text, text);
+    requestKey = message.requestKey;
+    throw new Error('Response lost');
+  }), /Response lost/);
+  assert.ok((durable.get('draft:request')?.length ?? Infinity) < 200);
+  const reopened = reload();
+  assert.equal(reopened.text, text);
+  await reopened.submit('draft', async message => {
+    assert.equal(message.text, text);
+    assert.equal(message.requestKey, requestKey);
+  });
+  assert.equal(durable.has('draft:request'), false);
+});
+
+test('pending legacy requests retain their ID while migrating to compact records', async () => {
+  const { draft, create, storage } = setup();
+  const text = 'Please review the proof. '.repeat(1000);
+  draft.edit(text);
+  storage.setItem('draft:request', JSON.stringify({ signature: JSON.stringify([text.trim(), 'proofread', [], []]), id: 'legacy-request' }));
+  await assert.rejects(draft.submit('draft', async message => {
+    assert.equal(message.requestKey, 'legacy-request');
+    throw new Error('Offline');
+  }, 'proofread'), /Offline/);
+  assert.ok(storage.getItem('draft:request')!.length < 200);
+  await create().submit('draft', async message => assert.equal(message.requestKey, 'legacy-request'), 'proofread');
+});
+
 test('a late response cannot erase a draft saved after reopening the task', async () => {
   const { draft, create, storage } = setup();
   draft.edit('Previous instruction');

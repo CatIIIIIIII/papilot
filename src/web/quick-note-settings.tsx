@@ -78,7 +78,7 @@ export function QuickNoteSettings() {
     <IconPicker value={draft.icon} onChange={icon => setDraft({ ...draft, icon })} disabled={busy} icons={stampIcons()} name={t('Quick note icon')}/>
     <div className="quick-note-fields">
       <label>{t('Short name')}<input autoFocus value={draft.label} maxLength={20} disabled={busy} placeholder={t('A word or two for the wheel')} onChange={event => setDraft({ ...draft, label: event.target.value })}/></label>
-      <label>{t('Instruction')}<textarea rows={3} value={draft.instruction} maxLength={1000} disabled={busy} placeholder={t('What the agent should do with the marked text')} onChange={event => setDraft({ ...draft, instruction: event.target.value })}/></label>
+      <label>{t('Instruction')}<textarea rows={3} value={draft.instruction} disabled={busy} placeholder={t('What the agent should do with the marked text')} onChange={event => setDraft({ ...draft, instruction: event.target.value })}/></label>
       <div className="quick-note-editor-actions">
         <button type="button" className="button secondary compact" disabled={busy} onClick={() => setDraft(null)}>{t('Cancel')}</button>
         <button type="button" className="button primary compact" disabled={busy || !label || !instruction} onClick={() => void commit()}>{busy ? t('Saving…') : t('Save')}</button>

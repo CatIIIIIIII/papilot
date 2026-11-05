@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { parseAiReview, reviewPrompt, type ReviewSnapshot } from '../src/server/ai-review.ts';
 import { Manuscripts } from '../src/server/manuscript.ts';
 
@@ -22,10 +24,10 @@ test('review findings use saved PDF geometry and remove identical duplicate note
 });
 
 test('malformed, nonexistent, backwards and cross-page anchors are rejected as one batch', () => {
-  for (const note of [{ ...finding, start: 'imaginary' }, { ...finding, end: 'p2-l1' }, { ...finding, start: 'p1-l2', end: 'p1-l1' }, { ...finding, comment: '' }, { ...finding, comment: 'a'.repeat(4001) }]) {
+  for (const note of [{ ...finding, start: 'imaginary' }, { ...finding, end: 'p2-l1' }, { ...finding, start: 'p1-l2', end: 'p1-l1' }, { ...finding, comment: '' }]) {
     assert.throws(() => parseAiReview(reply([finding, note]), snapshot));
   }
-  for (const text of ['not JSON', '{}', reply(Array(31).fill(finding)), JSON.stringify({ summary: '', notes: [] })]) assert.throws(() => parseAiReview(text, snapshot));
+  for (const text of ['not JSON', '{}', JSON.stringify({ summary: '', notes: [] })]) assert.throws(() => parseAiReview(text, snapshot));
 });
 
 test('a valid same-page passage may exceed the preferred highlight length', () => {
@@ -59,4 +61,41 @@ test('a real PDF produces stable line IDs and normalized highlights on the origi
   const first = captured.lines[0];
   const result = parseAiReview(reply([{ start: first.id, end: first.id, comment: 'Clarify this heading.' }]), captured);
   assert.deepEqual(result.notes[0].rect, first.rect);
+});
+
+
+test('review output retains large batches, long comments, summaries and complete quotations', () => {
+  const text = 'A passage that must reach the reviewer intact. '.repeat(100);
+  const input: ReviewSnapshot = { key: 'long', lines: [{ ...snapshot.lines[0], text }] };
+  const summary = 'Review summary. '.repeat(1000), comment = 'Explain the missing assumption. '.repeat(200);
+  const notes = Array.from({ length: 600 }, (_, index) => ({ start: 'p1-l1', end: 'p1-l1', comment: `${index}: ${comment}` }));
+  const result = parseAiReview(JSON.stringify({ summary, notes }), input);
+  assert.equal(result.summary, summary.trim());
+  assert.equal(result.notes.length, 600);
+  assert.equal(result.notes[599].comment, notes[599].comment.trim());
+  assert.equal(result.notes[599].quote, text);
+});
+
+test('PDF extraction and agent input preserve manuscripts beyond 180,000 characters', async () => {
+  const mupdf = await import('mupdf'), document = new mupdf.PDFDocument();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-long-review-'));
+  try {
+    const resources = document.addObject(document.newDictionary()), fonts = document.newDictionary();
+    fonts.put('F1', document.addSimpleFont(new mupdf.Font('Times-Roman'))); resources.put('Font', fonts);
+    const line = 'This is a complete manuscript line with assumptions and evidence for the review. ';
+    for (let page = 0; page < 50; page++) {
+      const content = `BT /F1 8 Tf 10 TL 20 760 Td ${Array.from({ length: 60 }, (_, index) => `(${page + 1}-${index + 1}: ${line}) Tj T*`).join(' ')} ET`;
+      document.insertPage(-1, document.addPage([0, 0, 600, 800], 0, resources, content));
+    }
+    const pdf = path.join(root, 'long.pdf');
+    fs.writeFileSync(pdf, document.saveToBuffer('').asUint8Array());
+    const captured = await new Manuscripts().snapshotPdf(pdf, 'long-pdf');
+    assert.ok(captured.lines.reduce((sum, line) => sum + line.text.length, 0) > 180000);
+    assert.equal(captured.lines.length, 3000);
+    assert.match(captured.lines.at(-1)!.text, /^50-60:/);
+    const prompt = reviewPrompt('Review chapter 50 in detail.', { ...captured, pdf });
+    assert.ok(prompt.includes(captured.lines.at(-1)!.text));
+    assert.ok(prompt.includes('Review chapter 50 in detail.'));
+    assert.ok(prompt.includes(pdf));
+  } finally { document.destroy(); fs.rmSync(root, { recursive: true, force: true }); }
 });

@@ -1710,7 +1710,6 @@ export function ReviewApp({
             ref={fitComposer}
             autoFocus
             rows={3}
-            maxLength={20000}
             value={draft}
             onKeyDown={(event) => {
               if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) {

@@ -39,9 +39,9 @@ export function ReviewDraftCards({ task, feedbackCount, onReveal }: { task: Task
         <div className="review-draft-location"><button type="button" onClick={() => { links?.clearFocus(); draft.reveal(note); onReveal(); }} title={t('Show quoted passage')}><span className="review-draft-number">{index + 1}</span>{place(note)}{note.group && <i className="group-dot"/>}<Icon name="arrowRight" size={12}/></button><button type="button" aria-label={t('Delete review note {n}', { n: index + 1 })} disabled={state.busy} onClick={() => draft.remove(note.id)}><Icon name="close" size={13}/></button></div>
         {note.quote && <blockquote>{note.quote}</blockquote>}
         {note.round !== task.review?.round && <small>{t('From review round {n}', { n: note.round })}</small>}
-        <textarea data-note-id={note.id} aria-label={t('Comment {n}', { n: index + 1 })} placeholder={note.group ? t('Comment for {group} (optional)', { group: groupName(note.group) }) : t('What should change here?')} rows={2} maxLength={4000} value={note.comment} readOnly={state.busy} onChange={event => draft.edit(note.id, event.target.value)} onKeyDown={event => { event.stopPropagation(); }}/>
+        <textarea data-note-id={note.id} aria-label={t('Comment {n}', { n: index + 1 })} placeholder={note.group ? t('Comment for {group} (optional)', { group: groupName(note.group) }) : t('What should change here?')} rows={2} value={note.comment} readOnly={state.busy} onChange={event => draft.edit(note.id, event.target.value)} onKeyDown={event => { event.stopPropagation(); }}/>
       </div>)}
-      {state.notes.some(note => note.group) && <textarea className="review-group-instructions" aria-label={t('Instructions for color groups')} placeholder={t('What should change in each color group?')} rows={2} maxLength={4000} value={state.instructions} readOnly={state.busy} onChange={event => draft.instructions(event.target.value)}/>}
+      {state.notes.some(note => note.group) && <textarea className="review-group-instructions" aria-label={t('Instructions for color groups')} placeholder={t('What should change in each color group?')} rows={2} value={state.instructions} readOnly={state.busy} onChange={event => draft.instructions(event.target.value)}/>}
     </div>}
   </div>;
 }
