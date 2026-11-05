@@ -99,6 +99,9 @@ export class Workspace extends EventEmitter {
   // Async tools must never answer a request from an earlier connection.
   private connectionEpochs = new Map<AgentId, number>();
   private loaded = new Set<string>();
+  // Whether rounds list each edit's changes elsewhere (Settings); buildApp
+  // reads it from the owner's preferences.
+  indirectChanges: () => boolean = () => false;
   private preparing = new Set<string>();
   private preparingNotes = new Set<string>();
   private reviewWrites = new Set<string>();
@@ -859,7 +862,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
           // New writes require our engine version, which understands request IDs.
           // Read-only recovery may have connected to an older installed engine.
           client = undefined; reuse = false;
-          const job = await request(client => client.post<{ job: string }>(`${taskRoute(task.name)}/publish`, { requestId: pending.requestId }), true);
+          const job = await request(client => client.post<{ job: string }>(`${taskRoute(task.name)}/publish`, { requestId: pending.requestId, indirect: this.indirectChanges() }), true);
           pending = { ...pending, job: job.job };
           this.store.updateTask(taskId, { pendingBuild: pending });
         }

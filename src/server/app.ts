@@ -88,6 +88,12 @@ export async function buildApp(options: AppOptions) {
   let imports = importsByWorkspace.get(workspace);
   if (!imports) { imports = new PaperImports(manuscripts, DATA, root => Boolean(store.projectByPath(root))); importsByWorkspace.set(workspace, imports); }
   workspace.importsBusy = () => imports!.busy;
+  // Whether rounds list what each edit changes elsewhere, such as the uses of
+  // a macro: the owner's choice in Settings, off by default, since finding
+  // which edit made such a change may compile the paper up to sixteen more
+  // times. Task rounds and the manuscript's Changes both follow it.
+  const indirectChanges = () => store.preference<boolean>(accounts.owner().id, 'indirect-changes') === true;
+  workspace.indirectChanges = changes.indirectChanges = indirectChanges;
   // A public request must arrive in full within a minute; held-open bodies tie up nothing.
   const app = Fastify({ logger: false, bodyLimit: 1024 * 1024, ...(listener.kind === 'account' ? { requestTimeout: 60000 } : {}) });
   const { csrfFor } = guard(app, { listener, accounts, store, csrf: options.csrf, request: id => workspace.requests.get(id) });
@@ -211,6 +217,13 @@ export async function buildApp(options: AppOptions) {
     const quickNotes = value === null ? undefined : readQuickNotes(value);
     store.savePreference(person(request.viewer!), 'quick-notes', quickNotes);
     return { quickNotes: quickNotes || null };
+  });
+  app.get('/api/indirect-changes', any, () => ({ indirectChanges: indirectChanges() }));
+  app.post('/api/indirect-changes', owner, (request, reply) => {
+    const value = (request.body as any)?.indirectChanges;
+    if (typeof value !== 'boolean') return reply.code(400).send({ error: 'Send indirectChanges as true or false.' });
+    store.savePreference(accounts.owner().id, 'indirect-changes', value || undefined);
+    return { indirectChanges: value };
   });
   // Signed-in people get at most a few event streams each.
   const streams = new Map<string, number>();

@@ -17,7 +17,7 @@ type Op = ['equal' | 'replace' | 'insert' | 'delete', number, number, number, nu
 export interface Unit { id: string; file: string; status: 'added' | 'deleted' | 'modified'; kind: string; whole_file: boolean; ops: Op[]; old_start: number; old_end: number; new_start: number; new_end: number; old_text: string; new_text: string; truncated: boolean }
 type Decision = 'pending' | 'accepted' | 'rejected' | 'commented';
 export type ChangeAction = 'stage' | 'unstage' | 'revert';
-interface Round { number: number; before: string; after: string; units: Unit[]; folder: string; warnings: string[]; decisions: Record<string, Decision>; pdf?: string }
+interface Round { number: number; before: string; after: string; indirect: boolean; units: Unit[]; folder: string; warnings: string[]; decisions: Record<string, Decision>; pdf?: string }
 interface Job { key: string; phase: 'build' | 'render'; status: 'running' | 'failed'; created: number; error?: string; details?: string[]; log?: string }
 interface Snapshot { before: string | null; after: string }
 interface Entry { mode: string; sha: string }
@@ -83,6 +83,8 @@ export class Changes {
   get busyForUpdate() { return [...this.comparisons.values()].some(comparison => comparison.job?.status === 'running'); }
   busyForProject(id: string) { return this.comparisons.get(id)?.job?.status === 'running'; }
   forgetProject(id: string) { this.comparisons.delete(id); }
+  // Whether the comparison lists each change's effects elsewhere (Settings).
+  indirectChanges: () => boolean = () => false;
   constructor(private dir = path.join(DATA, 'changes')) { fs.rmSync(dir, { recursive: true, force: true }); }
 
   private comparison(projectId: string) {
@@ -130,11 +132,12 @@ export class Changes {
     return staged;
   }
 
-  // Compile both trees once the working tree or the last commit changes, and
-  // render their comparison. The previous comparison stays readable meanwhile.
+  // Compile both trees once the working tree, the last commit or the choice
+  // of indirect changes changes, and render their comparison. The previous
+  // comparison stays readable meanwhile.
   private schedule(projectId: string, root: string, snapshot: Snapshot) {
-    const comparison = this.comparison(projectId), latest = comparison.rounds.at(-1), key = `${snapshot.before}:${snapshot.after}`;
-    if (!snapshot.before || (latest && `${latest.before}:${latest.after}` === key) || comparison.job?.status === 'running' || comparison.job?.key === key) return;
+    const indirect = this.indirectChanges(), comparison = this.comparison(projectId), latest = comparison.rounds.at(-1), key = `${snapshot.before}:${snapshot.after}:${indirect}`;
+    if (!snapshot.before || (latest && `${latest.before}:${latest.after}:${latest.indirect}` === key) || comparison.job?.status === 'running' || comparison.job?.key === key) return;
     const job: Job = { key, phase: 'build', status: 'running', created: Date.now() };
     comparison.job = job;
     void (async () => {
@@ -154,14 +157,15 @@ export class Changes {
         await Promise.allSettled(builds);
         const old = await builds[0], next = await builds[1];
         job.phase = 'render';
-        // The engine compiles the commit with some of the changes when it must
-        // tell which of them changes the PDF elsewhere, such as a macro's uses.
-        await render(folder, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units },
-          (subset: Unit[]) => builder.build(withUnits(repo, snapshot.before!, snapshot.after, subset), ['full']));
+        // With indirect changes tracked, the engine compiles the commit with
+        // some of the changes when it must tell which of them changes the PDF
+        // elsewhere, such as a macro's uses.
+        await render(folder, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units, indirect },
+          indirect ? (subset: Unit[]) => builder.build(withUnits(repo, snapshot.before!, snapshot.after, subset), ['full']) : undefined);
         warnings = next.warnings.filter((warning: string) => !old.warnings.includes(warning));
         pdf = next.pdf;
       } else fs.writeFileSync(path.join(folder, 'round.json'), JSON.stringify({ units: {}, sections: [], loose: [] }));
-      comparison.rounds.push({ number, before: snapshot.before!, after: snapshot.after, units, folder, warnings, decisions: {}, pdf });
+      comparison.rounds.push({ number, before: snapshot.before!, after: snapshot.after, indirect, units, folder, warnings, decisions: {}, pdf });
       // The viewer may still show the round before; older ones go.
       for (const old of comparison.rounds.splice(0, Math.max(0, comparison.rounds.length - 3))) fs.rmSync(old.folder, { recursive: true, force: true });
       if (comparison.job === job) comparison.job = null;
@@ -188,7 +192,7 @@ export class Changes {
       }));
     } else if (round) decisionLock ??= 'The last commit changed. The comparison is being updated.';
     const job = comparison.job, decisions = round?.decisions ?? {}, values = Object.values(decisions);
-    const building = job?.status === 'running' && (!latest || job.key !== `${latest.before}:${latest.after}`);
+    const building = job?.status === 'running' && (!latest || job.key !== `${latest.before}:${latest.after}:${latest.indirect}`);
     const undo = comparison.undo && round ? round.units.filter(unit => comparison.undo!.signatures.includes(signature(unit))).map(unit => unit.id) : [];
     return {
       csrf, task: 'changes', title: 'Uncommitted changes', closed: false, decisionLock, commentLock: null,

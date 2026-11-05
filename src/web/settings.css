@@ -58,6 +58,7 @@
 .settings-card .settings-choice{flex-wrap:wrap}
 .settings-card .settings-text{min-width:0}
 .settings-card .settings-text p{margin:5px 0 0;max-width:62ch}
+.settings-card .settings-text .settings-warning{color:var(--amber-text)}
 .settings-card .segmented,.settings-card .chip-select{flex:none}
 .settings-card .settings-test{margin:0 0 20px;padding:0}
 .settings-content .settings-card .settings-row.settings-notification-event{flex-direction:row;align-items:center}

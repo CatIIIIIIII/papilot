@@ -11,7 +11,7 @@ import { useNoteResults } from './note-results.tsx';
 import { ReviewNoteConnections } from './review-note-connections.tsx';
 import { SHORTCUT_EVENT, useShortcuts } from './shortcuts.ts';
 import { installReviewScroll } from './review-scroll.ts';
-import { EFFECTS_EVENT, useExpandedEffects } from './effect-preferences.ts';
+import { EFFECTS_EVENT, loadIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
 import { useDefaultReviewView, VIEW_EVENT, type ReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
 import { readPlace, savePlace } from './places.ts';
@@ -242,7 +242,8 @@ function cropMargins(doc: Document) {
 // and the viewer's own waiting message shows while they are compared.
 export function ReviewFrame({ task, changesOf, tools, lead, completion, onSendNotes, onDecided }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onSendNotes?: (message: { text: string; requestKey: string; notes?: NoteSummary[] }) => Promise<void>; onDecided?: () => void }) {
   const shortcuts = useShortcuts();
-  const expandedEffects = useExpandedEffects();
+  const expandedEffects = useIndirectChanges();
+  useEffect(loadIndirectChanges, []);
   // A review opens on the default from Settings, or on the view the author
   // last chose for this task, and follows the default when it changes.
   const viewPlace = task ? 'review-view:' + task.id : '';

@@ -131,6 +131,7 @@
   "Select valid PDF notes for this task.": "Välj giltiga PDF-anteckningar för den här uppgiften.",
   "Select valid review notes.": "Välj giltiga granskningsanteckningar.",
   "Send attachments with a message, separately from review feedback.": "Skicka bilagor med ett meddelande, separat från granskningsåterkoppling.",
+  "Send indirectChanges as true or false.": "Skicka indirectChanges som true eller false.",
   "Service tiers are only available for Codex.": "Tjänstenivåer är endast tillgängliga för Codex.",
   "Set PAPILOT_ACCOUNT_ORIGIN to the public URL before inviting people.": "Ange PAPILOT_ACCOUNT_ORIGIN till den offentliga webbadressen innan du bjuder in personer.",
   "Sign in to continue.": "Logga in för att fortsätta.",

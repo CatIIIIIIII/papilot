@@ -1704,16 +1704,6 @@
     "textHash": "87a5ad1d0fc1d79f4be7f9d1c5aa8f9e284e80de776857999f5d4e95b8856ddb",
     "model": "gemini-4-argon-medium"
   },
-  "Expand changes elsewhere, such as contents and reference numbering. Off by default; edits with no visible change at their source, such as macro definitions, still show their effects.": {
-    "revision": "a7cc3f9afc2e6750b5b81ebd7bade89d2105dfebe2f4a79c4a910acbbe5f205f",
-    "textHash": "a6ac148dbc8b00895e3f529b94ac8ca0cf2e9a9d6c35e337544fad76e52b049d",
-    "model": "gemini-4-argon-medium"
-  },
-  "Expand indirect changes": {
-    "revision": "defa849defe59ab87f02311284252c792b3f9d970320177110e4e2c679eacb78",
-    "textHash": "30abcba4d0c0e6c9c6bb810f30bed6b751ea734c34b5a06d1aa6bbb6455be6f3",
-    "model": "gemini-4-argon-medium"
-  },
   "Expand manuscript panel": {
     "revision": "1fe0fe7b4a464d65f8de6f11d020a61f543986ef4d25c18b7e95418816e3b5de",
     "textHash": "8fecbb4b8510d6a2fc994b543aec09ad4989e4a28fac146746cdb7ed86b426e5",
@@ -1782,6 +1772,11 @@
   "Find (⌘F)": {
     "revision": "5971f02e01a51992156b6dd356b7f497c3bfa463d3bc827767f4253011bb3ac4",
     "textHash": "9ad517b8e2801cd8814cafa42180a04ed27b873891ff30fa869d8dc6d2e4d5eb",
+    "model": "gemini-4-argon-medium"
+  },
+  "Find and show what each edit changes elsewhere, such as the uses of a macro and renumbered references. Off by default: each edit shows its own lines.": {
+    "revision": "a33b69f5a25b40f75b94ad66b3470be62acedf395bcfb279351cc06dcdd99518",
+    "textHash": "f2370959fd4e5f4cbff62e1d809a4d7db3e9bea5e775dffd3a0074fd9485d532",
     "model": "gemini-4-argon-medium"
   },
   "Find errors in notation, equations and proofs": {
@@ -4434,6 +4429,11 @@
     "textHash": "650629cf6e969cd064d0ada985e003ec4cef8ff908e90a3194ccfab031124544",
     "model": "gemini-4-argon-medium"
   },
+  "Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.": {
+    "revision": "5fb546e19352f2def3c096e4b540230a028b5d3b714f6bcf5aea7b212eb65881",
+    "textHash": "237168b19fc32c19a3e6134b946c3f3e5bd7b8fbfd65c62c7ba3fc6f202ed6ca",
+    "model": "gemini-4-argon-medium"
+  },
   "Some note positions need confirmation. Their original text and comments are kept.": {
     "revision": "40e52e2749e752534e04b3895dfadd93c7d08258b221ba57c0425bbd88ac6186",
     "textHash": "1698960b7159e3cdc70aaaddcc1dffb1e425c111c40e1a12dc49eceb23f3afbe",
@@ -4902,6 +4902,11 @@
   "Tools": {
     "revision": "7f38b748c0bb649d55b6c5d2f32253463eb19a863e1e46283e837bce8ab947fe",
     "textHash": "5ca6730d441522017552bf309fcddbed161b77440dc3a11d9945788d802afdb3",
+    "model": "gemini-4-argon-medium"
+  },
+  "Track indirect changes": {
+    "revision": "27e0a9e455c94fe427ce8bad375675e9bc2407ca52ee6db8c2d1c3d338687f97",
+    "textHash": "5405b62e24d13bfd6d8924b6f7c4209e096748ea18751d257621185978a3d52f",
     "model": "gemini-4-argon-medium"
   },
   "Tracking": {
