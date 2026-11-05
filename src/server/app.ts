@@ -492,7 +492,8 @@ export async function buildApp(options: AppOptions) {
   app.get<{ Params: { id: string }; Querystring: { key?: string } }>('/api/projects/:id/manuscript/annotated.pdf', project(), async (request, reply) => {
     const project = store.project(request.params.id), key = String(request.query.key || '');
     const notes = store.annotations(project.id).filter(note => !note.taskId && !isTaskReviewNote(note) && note.key === key)
-      .map(note => ({ page: note.page, rect: note.rect, rects: note.rects, comment: note.comment, group: note.group, review: Boolean(note.aiReview), author: note.author?.name }));
+      // A deletion's card, if any, gives its replacement.
+      .map(note => ({ page: note.page, rect: note.rect, rects: note.rects, comment: note.kind === 'delete' && note.comment.trim() ? `→ ${note.comment}` : note.comment, group: note.group, review: Boolean(note.aiReview), author: note.author?.name, ...(note.kind === 'delete' ? { strike: true } : {}) }));
     const pdf = await manuscripts.annotatedPdf(project.id, key, notes);
     return reply.type('application/pdf').header('Content-Disposition', `attachment; filename="${pdfName(project.name, '-annotated')}"`).header('Cache-Control', 'no-store').send(Buffer.from(pdf.buffer, pdf.byteOffset, pdf.byteLength));
   });

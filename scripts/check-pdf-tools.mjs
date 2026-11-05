@@ -57,6 +57,17 @@ async function selectText(index, release = true) {
     }
   }, release);
 }
+// Floating cards are placed on animation frames and settings scroll a row into
+// view smoothly; act on an element once its box has held still.
+async function settled(target) {
+  let previous = '', changedAt = Date.now();
+  await expect.poll(async () => {
+    const box = await target.boundingBox(), value = JSON.stringify(box);
+    if (value !== previous) { previous = value; changedAt = Date.now(); }
+    return Boolean(box) && Date.now() - changedAt >= 200;
+  }).toBe(true);
+  return target.boundingBox();
+}
 const key = async value => { await page.locator('.pdf-container').focus(); await page.keyboard.press(value); };
 try {
   await page.goto(origin);
@@ -88,6 +99,15 @@ try {
   await expect(card).toContainText('Delete this text');
   await card.getByRole('button', { name: /^Edit note \d+$/ }).click();
   await expect(card.getByRole('textbox')).toHaveAttribute('placeholder', 'Replace with… (leave empty to delete)');
+  // Left empty, the deletion still goes into the task.
+  await page.keyboard.press('Enter');
+  await expect(card).toHaveCount(0);
+  await page.locator('.note-tag[data-kind="delete"]').click();
+  const include = card.getByRole('button', { name: 'Include note 1 in this task' });
+  await expect(include).toHaveAttribute('aria-pressed', 'true');
+  await settled(include); await include.click();
+  await expect(include).toHaveAttribute('aria-pressed', 'false');
+  await card.getByRole('button', { name: /^Edit note \d+$/ }).click();
   await card.getByRole('textbox').fill('plainer words');
   await page.keyboard.press('Escape');
   await expect.poll(() => notes[0].comment).toBe('plainer words');
@@ -104,7 +124,12 @@ try {
   await expect(page.locator('.stamp-caption')).toContainText('last line of this paragraph');
   await page.screenshot({ path: 'test-results/pdf-tools-wheel.png' });
   await expect(page.locator('.stamp-center-name')).toContainText('Runt');
-  await page.keyboard.press('3');
+  // Arrow keys move focus with the light, so Enter takes the lit slot.
+  await page.keyboard.press('Tab');
+  await expect(wheel.getByRole('menuitem', { name: 'Polish' })).toBeFocused();
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+  await expect(wheel.getByRole('menuitem', { name: 'Runt' })).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(wheel).toHaveCount(0);
   await expect.poll(() => notes.length).toBe(2);
   assert.equal(notes[1].stamp, 'Runt');
@@ -177,7 +202,7 @@ try {
   await page.keyboard.press('ArrowUp');
   await expect.poll(() => quickNotes[4].label).toBe('Define');
   await expect(handle('Define')).toBeFocused();
-  const from = await handle('Polish').boundingBox(), to = await list.getByRole('listitem').last().boundingBox();
+  const from = await settled(handle('Polish')), to = await settled(list.getByRole('listitem').last());
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2, to.y + to.height - 4, { steps: 8 }); await page.mouse.up();
   await expect.poll(() => quickNotes.at(-1).id).toBe('polish');
@@ -239,6 +264,15 @@ try {
   await page.keyboard.up(' ');
   await expect(page.locator('.pdf-view')).toHaveClass(/tool-select/);
   await expect.poll(() => box.evaluate(element => element.scrollTop)).toBeGreaterThan(top + 100);
+  // Space over the region tool drags the page and draws no box.
+  await key('m');
+  await page.keyboard.down(' ');
+  await page.mouse.move(view.x + view.width / 2, view.y + 400); await page.mouse.down();
+  await page.mouse.move(view.x + view.width / 2 + 80, view.y + 250, { steps: 6 }); await page.mouse.up();
+  await page.keyboard.up(' ');
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('dialog', { name: /^PDF note/ })).toHaveCount(0);
+  await key('v');
 
   // Keys typed into a note stay there.
   await page.locator('.note-tag[data-kind="point"]').last().click();

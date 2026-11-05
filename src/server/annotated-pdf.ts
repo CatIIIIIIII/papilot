@@ -4,7 +4,7 @@ import { GROUP_COLORS, canonicalGroup, type NoteGroup } from '../note-groups.ts'
 type Rect = [number, number, number, number];
 // A note as the export draws it. Rectangles are fractions of the page, as the
 // PDF view stores them; a note without rects marks a region.
-export interface ExportNote { page: number; rect: Rect; rects?: Rect[]; comment: string; group?: NoteGroup; review?: boolean; author?: string }
+export interface ExportNote { page: number; rect: Rect; rects?: Rect[]; comment: string; group?: NoteGroup; review?: boolean; author?: string; strike?: boolean }
 
 type Rgb = [number, number, number];
 const rgb = (hex: string): Rgb => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255) as Rgb;
@@ -13,6 +13,7 @@ const TEXT = rgb('#1c1c1c'), AUTHOR = rgb('#6b6b6b');
 // The PDF view's colours: blue for a personal note, amber for an AI finding,
 // and each colour group's own swatch, with dark ink on yellow.
 function colors(note: ExportNote) {
+  if (note.strike) return { mark: rgb('#dc2626'), tag: rgb('#dc2626'), ink: rgb('#ffffff') };
   if (note.group) {
     const group = canonicalGroup(note.group), color = rgb(GROUP_COLORS[group]);
     return { mark: color, tag: color, ink: rgb(group === 'yellow' ? '#422f00' : '#ffffff') };
@@ -233,7 +234,11 @@ export function annotatePdf(mupdf: typeof Mupdf, input: Uint8Array, notes: Expor
       // Marks first, under every tag and line.
       for (const note of list) {
         const color = colors(note).mark;
-        if (note.rects?.length) {
+        // A deletion is struck through, as a proofreader would, not highlighted.
+        if (note.strike && note.rects?.length) {
+          canvas.gs(states.solid);
+          for (const [a, b, c, d] of note.rects) canvas.rect(a * w, (b + (d - b) * 0.54) * h - 0.6, (c - a) * w, 1.2, color);
+        } else if (note.rects?.length) {
           canvas.gs(states.mark);
           for (const [a, b, c, d] of note.rects) canvas.rect(a * w, b * h - 0.4, (c - a) * w, (d - b) * h + 0.8, color);
         } else {

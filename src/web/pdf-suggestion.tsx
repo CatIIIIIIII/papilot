@@ -108,14 +108,15 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
   async function save(action: 'keep' | 'close' | 'quote' = 'keep', restoreFocus = true) {
     if (busy || saving.current) return;
     const comment = draft?.trim();
-    if (editing && !comment && !(deleting && note.comment)) { if (action === 'close') close(restoreFocus); return; }
+    // A deletion needs no text: left empty, it stays a deletion.
+    if (editing && !comment && !deleting) { if (action === 'close') close(restoreFocus); return; }
     // Adding a note to the task closes its popover, so the card itself seems
     // to fly there; taking one out keeps it open for the copy to land on.
     const adding = action === 'quote' && !destination && !selected;
     const flight = action === 'quote' && !destination && !inTask && card.current ? adding ? noteToTask(card.current) : note.id ? noteFromTask(note.id, card.current) : null : null;
-    if (editing && comment !== note.comment) {
+    if (editing && (comment || '') !== note.comment) {
       saving.current = true;
-      try { if (!await onSave(comment!, action)) return; }
+      try { if (!await onSave(comment || '', action)) return; }
       finally { saving.current = false; }
     } else if (action === 'quote') onToggle?.();
     flight?.();

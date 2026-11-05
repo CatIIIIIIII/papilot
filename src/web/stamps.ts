@@ -56,7 +56,8 @@ function stored(stamps: Stamp[]): QuickNote[] | null {
 // again whenever the window regains focus after that.
 type Api = <T>(route: string, body?: unknown) => Promise<T>;
 const CACHE = 'papilot:quick-notes';
-let request: Api | null = null, loaded = false, loading: Promise<void> | null = null;
+// Each save or sign-out starts a new version; a load begun before it is stale.
+let request: Api | null = null, loaded = false, loading: Promise<void> | null = null, version = 0;
 let saved = cached();
 const listeners = new Set<() => void>();
 function cached(): QuickNote[] | null {
@@ -69,12 +70,21 @@ function apply(value: QuickNote[] | null) {
 }
 export function connectStamps(api: Api) { request = api; }
 export function loadStamps() {
-  if (request && !loading) loading = request<{ quickNotes: QuickNote[] | null }>('/quick-notes').then(value => apply(value.quickNotes), () => {}).finally(() => { loading = null; });
+  if (!request || loading) return;
+  const asked = version;
+  loading = request<{ quickNotes: QuickNote[] | null }>('/quick-notes').then(value => { if (asked === version) apply(value.quickNotes); }, () => {}).finally(() => { loading = null; });
 }
 if (typeof window !== 'undefined') window.addEventListener('focus', () => { if (loaded) loadStamps(); });
 export async function saveStamps(stamps: Stamp[]) {
   if (!request) throw new Error(t('Request failed. Please try again.'));
-  apply((await request<{ quickNotes: QuickNote[] | null }>('/quick-notes', { quickNotes: stored(stamps) })).quickNotes);
+  version++;
+  try { apply((await request<{ quickNotes: QuickNote[] | null }>('/quick-notes', { quickNotes: stored(stamps) })).quickNotes); }
+  finally { version++; }
+}
+// Signing out forgets this person's list here too, not only in storage.
+export function forgetStamps() {
+  version++; loaded = false; saved = null;
+  listeners.forEach(listener => listener());
 }
 export function useStamps() {
   const value = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => saved);

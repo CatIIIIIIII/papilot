@@ -60,8 +60,10 @@ export function StampWheel({ x, y, stamps, onPick, onFree, onClose }: { x: numbe
       else if (/^[0-9]$/.test(event.key)) { const stamp = stamps[(Number(event.key) + 9) % 10]; if (stamp) { event.preventDefault(); onPick(stamp); } }
       else if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
         event.preventDefault();
+        // Focus follows, so Enter takes the slot that is lit.
         const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown';
-        setHover(current => current === null ? forward ? 0 : stamps.length - 1 : (current + (forward ? 1 : -1) + stamps.length) % stamps.length);
+        const next = hover === null ? forward ? 0 : stamps.length - 1 : (hover + (forward ? 1 : -1) + stamps.length) % stamps.length;
+        overlay.current?.querySelectorAll<HTMLButtonElement>('.stamp-slot')[next]?.focus(); setHover(next);
       } else if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); if (hover === null) onFree(); else onPick(stamps[hover]); }
     }}>
     <div className="stamp-wheel" style={{ left: cx, top: cy, width: SIZE, height: SIZE }}>

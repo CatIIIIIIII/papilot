@@ -680,6 +680,7 @@ export const PdfView = forwardRef<PdfHandle, {
   // Each tool's response to what was marked with it.
   function mark(target: Target, at?: { x: number; y: number }) {
     const tool = toolRef.current;
+    if (tool === 'hand') return;
     if (tool === 'delete') { if (!target.point) createMark(target, '', { kind: 'delete' }); return; }
     if (tool === 'magic') {
       const slot = lockedRef.current, stamp = slot === null ? undefined : stamps[slot];
@@ -851,7 +852,8 @@ export const PdfView = forwardRef<PdfHandle, {
           catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); return false; }
           finally { setNoteBusy(false); }
         }} onPrevious={() => adjacentNote(-1)} onNext={() => adjacentNote(1)}/>}
-      {props.region && <div className="region-capture"
+      {/* Holding Space lends the hand, so the page drags instead of boxing. */}
+      {props.region && active !== 'hand' && <div className="region-capture"
         onPointerDown={e => {
           if (editing || e.button > 0) return;
           e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
