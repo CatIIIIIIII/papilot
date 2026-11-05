@@ -1092,7 +1092,7 @@ function App() {
         if (removed) setProjectId(removed.projectId);
         token = next.csrf; snapshotRef.current = next; setState(next); setOnline(true); setConnectionError('');
         // Tell the author what changed while they were in another tab or app.
-        if (previous && notifying() && (document.hidden || !document.hasFocus())) for (const alert of taskAlerts(previous, next, notificationState().events)) notify(alert, id => { setSelected(id); setSidebar(false); });
+        if (previous && notifying() && (document.hidden || !document.hasFocus())) for (const alert of taskAlerts(previous, next, notificationState().events)) void notify(alert, id => { setSelected(id); setSidebar(false); setSettings(false); });
         for (const id of composers.current.keys()) if (!next.tasks.some(t => t.id === id)) { composers.current.delete(id); timelineCache.current.delete(id); browserStorage.removeItem('papilot:draft:' + id); }
         setDeleteTarget(current => current && !next.tasks.some(t => t.id === current.id) ? null : current);
         setEditingPaper(current => current && !next.projects.some(p => p.id === current.id) ? null : current);
@@ -1195,6 +1195,10 @@ function App() {
   // File › Open Folder… in the desktop app's menu picks the folder natively.
   const openFolderRef = useRef(openFolder); openFolderRef.current = openFolder;
   useEffect(() => window.papilotDesktop?.onOpenFolder?.(folder => void openFolderRef.current(folder)), []);
+  useEffect(() => window.papilotDesktop?.onOpenTask?.(id => {
+    if (!snapshotRef.current?.tasks.some(task => task.id === id && task.status !== 'deleting')) return;
+    setSelected(id); setSidebar(false); setSettings(false);
+  }), []);
   // A remembered choice the host no longer offers falls back to its default;
   // the preference is kept in case another model offers it again.
   const runtimes: Partial<Record<AgentId, RuntimeStatus>> = state?.runtimes || (state ? { codex: state.runtime } : {});
