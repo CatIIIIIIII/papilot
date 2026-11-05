@@ -17,6 +17,7 @@
   "An AI review comment spans multiple PDF pages. Ask the reviewer to anchor it on a single page.": "AI 검토 의견이 여러 PDF 페이지에 걸쳐 있습니다. 단일 페이지에 고정하도록 검토자에게 요청하세요.",
   "Another Papilot instance is already updating.": "다른 Papilot 인스턴스가 이미 업데이트 중입니다.",
   "Answer every question before submitting.": "제출하기 전에 모든 질문에 답변하세요.",
+  "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity가 이 이미지 경로에 대한 접근 권한을 안전하게 부여할 수 없습니다. Papilot 데이터 폴더를 괄호나 와일드카드가 없는 경로로 이동하세요.",
   "Attachment not found.": "첨부파일을 찾을 수 없습니다.",
   "Attachments must total 100 MB or less.": "첨부파일의 총 크기는 100MB 이하여야 합니다.",
   "Check for a newer release before updating.": "업데이트하기 전에 새 릴리스가 있는지 확인하세요.",

@@ -490,13 +490,27 @@ export class AntigravityAgent extends Adapter {
     return { data: this.catalog.map(model => ({ model: model.model, displayName: model.displayName, isDefault: model.isDefault, supportedReasoningEfforts: model.efforts.map(effort => ({ reasoningEffort: effort })), defaultReasoningEffort: model.defaultEffort })) };
   }
   protected run(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
-    // agy's CLI accepts text prompts; its file tools open the supplied images.
-    if (images.length) text += '\n\nOpen the attached images with your file/image tools: ' + images.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
+    // Attachments live outside the worktree. Grant read access to only the
+    // selected files for this invocation; adding their directory as a workspace
+    // would also expose other tasks' attachments and permit writes there.
+    let imageSettings: string[] = [];
+    try {
+      const files = images.map(file => {
+        const resolved = fs.realpathSync(file);
+        if (!fs.statSync(resolved).isFile() || /[()*\r\n]/.test(resolved)) throw new Error('Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.');
+        return resolved;
+      });
+      if (files.length) {
+        for (const [index, file] of files.entries()) text = text.replaceAll(images[index], file);
+        text += '\n\nOpen the attached images with your file/image tools: ' + files.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
+        imageSettings = ['--settings', JSON.stringify({ permissions: { allow: files.map(file => `read_file(${file})`) } })];
+      }
+    } catch (error) { this.finish(turn, 'failed', error instanceof Error ? error.message : String(error)); return; }
     const conversation = this.conversations[turn.threadId], entry = this.catalog.find(model => model.model === thread.model);
     const model = entry ? entry.ids[effort || entry.defaultEffort || ''] || Object.values(entry.ids)[0] : thread.model;
     // agy has no separate system prompt: the first turn carries Papilot's instructions.
     const prompt = conversation ? text : `${thread.instructions}\n\n---\n\n${text}`;
-    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
+    const child = this.launch(findExecutable(this.binary) || this.binary, ['-p', prompt, '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
@@ -521,7 +535,7 @@ export class AntigravityAgent extends Adapter {
     child.on('close', () => {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: in Papilot it works without approval prompts, so it edits files in the task worktree but does not run commands.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'agentMessage', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
       if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });
