@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- **Changes with dingbat symbols show in the review again.** When a page used a symbol from the ZapfDingbats font, such as the ✗ and ✓ of `pifont`'s `\ding{55}` and `\ding{51}`, the review showed a broken image for every part of the page with that symbol, often the "after" side of the change itself. The PDF renderer wrote those symbols' text as characters an SVG image may not contain, so the browser refused the whole image. Papilot now leaves that unused text out of the images, which also makes them about 8% smaller.
+
 ## [0.8.9] - 2026-11-04
 
 Papilot 0.8.9 displays CJK text from PDFs whose fonts lack Unicode maps and removes the global two-task concurrency limit.
