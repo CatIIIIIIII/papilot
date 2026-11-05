@@ -17,6 +17,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
+      - name: Free runner disk space for the NixOS VM
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
       - uses: cachix/install-nix-action@v31
       - name: Build and boot the NixOS desktop VM
         run: nix build .#checks.x86_64-linux.desktop-vm -L

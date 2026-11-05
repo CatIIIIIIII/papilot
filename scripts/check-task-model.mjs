@@ -64,6 +64,18 @@ try {
   await taskModelMenu.getByRole('combobox').fill('');
   await taskModelMenu.getByRole('option', { name: 'Deep model · Codex', exact: true }).last().click();
   await expect.poll(() => task.model).toBe('deep-model');
+  // The slimmer visual track retains a large input target, without covering
+  // the reset button. Pointer and keyboard changes both reach the endpoint.
+  const inputBox = await taskEffort.boundingBox();
+  const resetBox = await taskModelMenu.getByRole('button', { name: 'Model default', exact: true }).boundingBox();
+  assert.ok(inputBox.height >= 44, 'effort keeps a 44px pointer target');
+  assert.ok(inputBox.y + inputBox.height <= resetBox.y, 'the target does not cover reset');
+  await taskEffort.click({ position: { x: 1, y: inputBox.height / 2 } });
+  await expect.poll(() => task.effort).toBe('low');
+  await taskEffort.click({ position: { x: inputBox.width - 1, y: inputBox.height / 2 } });
+  await expect.poll(() => task.effort).toBe('xhigh');
+  fs.mkdirSync('test-results', { recursive: true });
+  await taskModelMenu.screenshot({ path: 'test-results/reasoning-effort.png', animations: 'disabled' });
   await taskEffort.press('End');
   await expect.poll(() => task.effort).toBe('xhigh');
   await expect(taskSettings).toContainText('Xhigh');
