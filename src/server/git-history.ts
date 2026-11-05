@@ -75,21 +75,22 @@ function overwritesIgnoredFiles(root: string, targets: string[], ignored: string
     if (!cache.has(filename)) {
       try {
         const stat = lstatSync(filename, { bigint: true });
-        let paths: string[];
-        if (stat.isSymbolicLink()) {
-          // Canonicalize the link's name without following its destination.
-          const names = listings.get(parent) ?? readdirSync(parent);
-          listings.set(parent, names);
-          paths = (names.includes(name) ? [name] : names.filter(candidate => {
-            const other = lstatSync(join(parent, candidate), { bigint: true });
-            return other.dev === stat.dev && other.ino === stat.ino;
-          })).map(candidate => join(parent, candidate));
-          if (!paths.length) throw Object.assign(new Error('The current version changed. Refresh the history and try again.'), { statusCode: 409 });
-        } else {
-          // Filesystem spelling handles case/Unicode aliases, while separate
-          // hardlink directory entries remain distinct despite sharing an inode.
-          paths = [realpathSync.native(filename)];
+        // Exact directory entries distinguish hardlinks. For case/Unicode
+        // aliases, ask the filesystem which stored entries match instead of
+        // assuming realpath canonicalizes spelling on every filesystem.
+        const names = listings.get(parent) ?? readdirSync(parent);
+        listings.set(parent, names);
+        let paths = (names.includes(name) ? [name] : names.filter(candidate => {
+          const other = lstatSync(join(parent, candidate), { bigint: true });
+          return other.dev === stat.dev && other.ino === stat.ino;
+        })).map(candidate => join(parent, candidate));
+        if (paths.length > 1 && !stat.isSymbolicLink()) {
+          const canonical = realpathSync.native(filename);
+          // Some filesystems can also identify an aliased hardlink's name.
+          // Otherwise keep all candidates, conservatively protecting them.
+          if (paths.includes(canonical)) paths = [canonical];
         }
+        if (!paths.length) throw Object.assign(new Error('The current version changed. Refresh the history and try again.'), { statusCode: 409 });
         cache.set(filename, { paths, directory: stat.isDirectory() });
       } catch (error) {
         if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code || '')) throw error;
