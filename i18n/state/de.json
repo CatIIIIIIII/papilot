@@ -509,11 +509,6 @@
     "textHash": "ce026ee43c69538af3838a8a576c054e46d27b285a0bdaddf650eac016801bef",
     "model": "gemini-4-argon-medium"
   },
-  "Cancel": {
-    "revision": "aec1a2856e6ab731ac1252864030dfcdb39b9423588c1b3c4bc6d527ae933e83",
-    "textHash": "f7ff1178af202f6ffb67b9572c3fcf88059d030657e6e07447123f4e48c78e50",
-    "model": "gemini-4-argon-medium"
-  },
   "Change shortcut: {action}": {
     "revision": "91ab38e66e46386ede7d436896b653b4403cc1d8edc54ce1d44a79f8514a9d23",
     "textHash": "d72065d430043b7f3a3c654517e94820b097d852df66d69eb6878bf961713a0d",
@@ -1444,11 +1439,6 @@
     "textHash": "132f43b25bee3313e3772487aed448ac9b9588e6075ea14e9fb5083429ab3de6",
     "model": "gemini-4-argon-medium"
   },
-  "Deleting…": {
-    "revision": "99f5eb4fdd39c1f7aec5f7011bf8f596521011054c96d6a004ecbe7300bca854",
-    "textHash": "b9f81f771fa85d1666501fa423ad3621b2b1848abd2c865e2e3ced0fa1df7c4a",
-    "model": "gemini-4-argon-medium"
-  },
   "Deletion has already started. Retry to confirm the cleanup and remove the task.": {
     "revision": "397d0eae6abe45a5e77a981dfc4f00c90ba33e6c62395f6c6987b4ccbb552bfc",
     "textHash": "da12e0469a50e2da327a3073e4f5a7026721c259e6aa5ff902671ed6567a44d7",
@@ -2292,11 +2282,6 @@
   "Loading PDF review…": {
     "revision": "d13d5e2301691041d5b8cbd78f52b01c44c1c5a924f0e03a6143d9cc14fd977a",
     "textHash": "bf36eb497a5d925ff19a22fbb5d4926cce4c73b8f10b93e7ccf139ded2c7b66f",
-    "model": "gemini-4-argon-medium"
-  },
-  "Loading conversation…": {
-    "revision": "b6bd543adda04dfb891951c9259b6a7e5249ae53806a9f5c1d1fef712ebc9253",
-    "textHash": "38e922fc3dc24e5f03e5572153bb07861ebb2772ddbacc8ed58312c65d4271d8",
     "model": "gemini-4-argon-medium"
   },
   "Loading license notices…": {
@@ -3474,11 +3459,6 @@
     "textHash": "a1a0724a141f5dc786451bcd448a833d0e0c8f539947140f33fbc8e2d08617a3",
     "model": "gemini-4-argon-medium"
   },
-  "Reconnect": {
-    "revision": "a188c1aa1bd07e05ece45d932ddb982a477657f7d2cb9b4e1b78c7758dcd1401",
-    "textHash": "4c47a5aab836b0f579f78301e479272c3d5baaa454004d9d6fa316163c02bffc",
-    "model": "gemini-4-argon-medium"
-  },
   "Reconnecting": {
     "revision": "0cf092523e4a813fe50e55a03bc29bf6db0174889cf1cbd1ea78fb600240357e",
     "textHash": "90cfca312aed2a9c9f254b282dfac755c0c37e3e34421e5b29260b49b5ce8184",
@@ -3757,11 +3737,6 @@
   "Restored the preset notes.": {
     "revision": "522176e1cad9ad367302b18adefaaea8ac54366069d1c362eeb4e280a0423f50",
     "textHash": "95ec8c4ce2cda65684fe3c7ac666e12f425175112ced9f867a80ecd7e167e634",
-    "model": "gemini-4-argon-medium"
-  },
-  "Retry": {
-    "revision": "b905d2326c630e7ef9065d32e6ab00259c32af9f694844e1fe83e7c0bfc7d8e3",
-    "textHash": "948643cb59e8274f40500593ac6029afcf419fc434c870fb8177b5185e0a2e9b",
     "model": "gemini-4-argon-medium"
   },
   "Retry build": {
