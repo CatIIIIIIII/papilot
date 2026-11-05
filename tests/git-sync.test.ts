@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { gitCommit, gitDiff, gitStage, gitStatus, gitSync } from '../src/server/manuscript.ts';
+import { parseGitDiff } from '../src/web/git-diff.ts';
 
 function fixture() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-sync-'));
@@ -103,6 +104,20 @@ test('sync merges diverged history before pushing, and stops at conflicts', asyn
     const conflict = await gitSync(f.mine);
     assert.deepEqual(conflict.merging?.conflicts, ['main.tex']);
     assert.equal(f.git(f.remote, 'rev-parse', 'main'), before, 'Conflicts are never pushed');
+    const index = fs.readFileSync(path.join(f.mine, '.git', 'index'));
+    const contents = fs.readFileSync(path.join(f.mine, 'main.tex'), 'utf8');
+    assert.match(f.git(f.mine, 'diff', '--', 'main.tex'), /^diff --cc /, 'The real unmerged index produces a combined diff');
+    for (const scope of ['all', 'unstaged', 'staged'] as const) {
+      const patch = (await gitDiff(f.mine, 'main.tex', scope)).diff;
+      assert.match(patch, /^@@ /m); assert.doesNotMatch(patch, /^@@@/m);
+      const parsed = parseGitDiff(patch), visible = parsed.lines.map(line => line.text).join('\n');
+      assert.ok(parsed.changes.length > 0, 'A conflicted file must never appear as no textual changes');
+      assert.match(visible, /^<<<<<<< HEAD$/m); assert.match(visible, /^=======$/m); assert.match(visible, /^>>>>>>> /m);
+      assert.match(visible, /^Local interpretation\.$/m); assert.match(visible, /^Remote interpretation\.$/m);
+      assert.deepEqual(parsed.lines.filter(line => line.after !== undefined && line.kind !== 'hunk').map(line => line.after), [1, 2, 3, 4, 5]);
+    }
+    assert.deepEqual(fs.readFileSync(path.join(f.mine, '.git', 'index')), index, 'Reading conflicts must not stage them');
+    assert.equal(fs.readFileSync(path.join(f.mine, 'main.tex'), 'utf8'), contents);
     await assert.rejects(gitSync(f.mine), /Finish or abort the merge/);
   } finally { f.close(); }
 });

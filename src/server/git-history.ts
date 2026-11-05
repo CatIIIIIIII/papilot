@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { GitDiff, GitHistory, GitVersion, GitVersionDetail } from '../shared.ts';
 import { gitStatus } from './manuscript.ts';
@@ -65,6 +65,35 @@ export async function gitVersionDiff(root: string, hash: string, file: string): 
   return { path: file, diff: diff.slice(0, 400_000), truncated: diff.length > 400_000 };
 }
 
+function overwritesIgnoredFiles(root: string, targets: string[], ignored: string[]) {
+  if (!ignored.length) return false;
+  const ancestors = (name: string) => name.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'));
+  const cache = new Map<string, string | null>();
+  // Ask the filesystem, not core.ignorecase or a Unicode/case-folding guess.
+  // lstat also protects an ignored symlink itself without following its target.
+  const identity = (name: string) => {
+    if (!cache.has(name)) {
+      try {
+        const stat = lstatSync(resolve(root, name), { bigint: true });
+        cache.set(name, `${stat.dev}:${stat.ino}`);
+      } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code || '')) throw error;
+        cache.set(name, null);
+      }
+    }
+    return cache.get(name)!;
+  };
+  const identities = (names: string[]) => new Set(names.map(identity).filter((id): id is string => id !== null));
+  const ignoredFiles = identities(ignored), ignoredParents = identities(ignored.flatMap(ancestors));
+  return targets.some(name => {
+    const file = identity(name);
+    // A target file can replace an ignored file or a directory containing one.
+    // A target directory can also replace an ignored file, including aliases.
+    return (file !== null && (ignoredFiles.has(file) || ignoredParents.has(file)))
+      || ancestors(name).some(parent => { const id = identity(parent); return id !== null && ignoredFiles.has(id); });
+  });
+}
+
 // Restore the selected tree as a NEW child of HEAD. No reset, lost history,
 // stash, or remote write. Check ignored files explicitly: Git's two-tree
 // merge protects ordinary edits but may overwrite ignored build output.
@@ -85,11 +114,9 @@ export async function gitRestoreVersion(root: string, hash: string, expectedHead
   const entries = await git(root, ['ls-tree', '-r', hash]);
   const currentEntries = await git(root, ['ls-tree', '-r', head]);
   if (/^160000 /m.test(entries + currentEntries)) throw new Error('Restore repositories with submodules using Git.');
-  const targetPaths = new Set((await git(root, ['ls-tree', '-r', '-z', '--name-only', hash])).split('\0').filter(Boolean));
-  const ancestors = (name: string) => name.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'));
-  const targetParents = new Set([...targetPaths].flatMap(ancestors));
+  const targetPaths = (await git(root, ['ls-tree', '-r', '-z', '--name-only', hash])).split('\0').filter(Boolean);
   const ignored = (await git(root, ['ls-files', '--others', '--ignored', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
-  if (ignored.some(name => targetPaths.has(name) || targetParents.has(name) || ancestors(name).some(parent => targetPaths.has(parent)))) {
+  if (overwritesIgnoredFiles(root, targetPaths, ignored)) {
     throw Object.assign(new Error('Move local ignored files out of the way before restoring this version.'), { statusCode: 409 });
   }
   const subject = (await git(root, ['log', '-1', '--format=%s', hash])).trim();

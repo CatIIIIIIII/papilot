@@ -92,6 +92,45 @@ test('ignored files that collide with an old version are protected', async t => 
   assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Second');
 });
 
+test('restore checks ignored files using filesystem identity, including aliased ancestors', async t => {
+  const cases = [
+    { name: 'case-only file alias', target: 'output.pdf', local: 'OUTPUT.PDF', probe: 'output.pdf', localProbe: 'OUTPUT.PDF' },
+    { name: 'Unicode normalization alias', target: 'résumé.pdf', local: 're\u0301sume\u0301.pdf', probe: 'résumé.pdf', localProbe: 're\u0301sume\u0301.pdf' },
+    { name: 'ignored file blocks a target directory alias', target: 'cache/report.tex', local: 'CACHE', probe: 'cache', localProbe: 'CACHE' },
+    { name: 'ignored directory blocks a target file alias', target: 'cache', local: 'CACHE/output.pdf', probe: 'cache', localProbe: 'CACHE' },
+    { name: 'unrelated ignored file in a shared directory', target: 'cache/report.tex', local: 'cache/preview.pdf', probe: 'cache/report.tex', localProbe: 'cache/preview.pdf' },
+  ];
+  for (const item of cases) await t.test(item.name, async t => {
+    const { root, git, write, commit } = fixture(t);
+    write('.gitignore', '*\n'); write('main.tex', 'First');
+    fs.mkdirSync(path.dirname(path.join(root, item.target)), { recursive: true });
+    write(item.target, 'Old version');
+    git('add', '-f', '--', '.gitignore', 'main.tex', item.target);
+    const first = commit('Old version');
+    git('rm', '--', item.target); write('main.tex', 'Second'); const head = commit('Current version');
+    fs.mkdirSync(path.dirname(path.join(root, item.local)), { recursive: true });
+    write(item.local, 'Unsaved local content');
+    // The safety check must reflect the real filesystem, even if Git's
+    // case/Unicode preferences disagree. Both spellings are distinct on Linux.
+    git('config', 'core.ignorecase', 'false'); git('config', 'core.precomposeUnicode', 'false');
+    const aliases = fs.existsSync(path.join(root, item.probe))
+      && fs.lstatSync(path.join(root, item.probe)).ino === fs.lstatSync(path.join(root, item.localProbe)).ino;
+    assert.equal(git('status', '--porcelain'), '');
+    const index = path.resolve(root, git('rev-parse', '--git-path', 'index')), before = fs.readFileSync(index);
+    if (aliases) {
+      await assert.rejects(gitRestoreVersion(root, first, head), /ignored files/);
+      assert.equal(git('rev-parse', 'HEAD'), head);
+      assert.deepEqual(fs.readFileSync(index), before, 'Refusing restore must preserve the index');
+      assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Second');
+    } else {
+      const restored = await gitRestoreVersion(root, first, head);
+      assert.deepEqual(restored.git.files, []);
+      assert.equal(fs.readFileSync(path.join(root, item.target), 'utf8'), 'Old version');
+    }
+    assert.equal(fs.readFileSync(path.join(root, item.local), 'utf8'), 'Unsaved local content');
+  });
+});
+
 test('restoring a linked worktree changes only its branch and checkout', async t => {
   const { root, git, write, commit } = fixture(t);
   write('main.tex', 'First'); const first = commit('First'); write('main.tex', 'Second'); const head = commit('Second');

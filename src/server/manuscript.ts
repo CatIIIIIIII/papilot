@@ -130,6 +130,10 @@ export async function gitDiff(root: string, file: string, scope: GitDiffScope = 
 // A file's diff against HEAD, or with staged, what its index holds.
 function fileDiff(root: string, entry: GitFile, scope: GitDiffScope = 'all') {
   const names = ['--', ...(entry.from ? [entry.from] : []), entry.path];
+  // An unmerged index has multiple stages, not a single staged version.
+  // Compare the working file with HEAD so conflict markers and both sides
+  // reach the two-column viewer as an ordinary diff, rather than diff --cc.
+  if (entry.status === 'U') return git(root, ['diff', '--no-color', '--no-ext-diff', '--no-textconv', 'HEAD', ...names], literal);
   if (scope === 'staged') return git(root, ['diff', '--cached', '--no-color', '--find-renames', ...names], literal);
   return entry.status === '?'
     // `git diff --no-index` exits with 1 when the files differ.
