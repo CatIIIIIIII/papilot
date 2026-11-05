@@ -188,7 +188,7 @@ A skill is a named set of instructions for a common revision, so you do not have
 
 The owner can open **Settings → Skills** to search, preview, create, edit and delete skills. New skills default to **Global** (`~/.papilot/skills/<id>/SKILL.md`); choose **This paper** to save in `<paper>/.papilot/skills/<id>/SKILL.md` instead. Global skills belong to the user and stay in the home folder even when `--data` or `PAPILOT_DATA` points the workspace database elsewhere. Saving updates the composer immediately. Built-in skills are read-only: use **Copy and edit** to customize one. The Markdown editor preserves front matter and supporting files. If a file changed elsewhere, reload it before saving. Deleting removes only the skill's Markdown file and leaves supporting files intact; a same-ID skill from a lower-priority scope becomes available again.
 
-The editor has fields for the name and description, a Markdown instruction area, and an icon button beside the skill's title. Click the icon to choose from 16 matching line icons; the choice appears in the library, composer and new chat messages. **Preview** renders the instructions; **Source** edits the complete file, including fields such as `hint` and `order`. Editing the form preserves other front-matter fields. Copying a skill also keeps its icon.
+The editor has fields for the name and description, a Markdown instruction area, and an icon button beside the skill's title. Click the icon to choose from 48 matching line icons for writing, references, research, data and collaboration; search by the icon's English name, translated name or ID. Arrow keys move through the grid, Home and End jump to its first and last icons, and Enter confirms the choice. The choice appears in the library, composer and new chat messages. **Preview** renders the instructions; **Source** edits the complete file, including fields such as `hint` and `order`. Editing the form preserves other front-matter fields. Copying a skill also keeps its icon.
 
 Papilot includes these skills:
 
@@ -215,7 +215,15 @@ order: 10
 Follow the style guide in style.md: …
 ```
 
-The optional `icon` field accepts `spark`, `pen`, `spellcheck`, `compress`, `sigma`, `checklist`, `notes`, `book`, `search`, `code`, `tool`, `chart`, `globe`, `lightbulb`, `link` or `branch`. Omit it to use the default icon; unknown values also fall back to the default.
+The optional `icon` field accepts these IDs:
+
+- Original icons: `spark`, `pen`, `spellcheck`, `compress`, `sigma`, `checklist`, `notes`, `book`, `search`, `code`, `tool`, `chart`, `globe`, `lightbulb`, `link`, `branch`.
+- Writing and references: `paper`, `bookmark`, `quote`, `library`, `languages`, `heading`, `list`, `highlighter`.
+- Figures and data: `table`, `image`, `presentation`, `diagram`, `database`, `calculator`, `ruler`, `target`.
+- Research: `flask`, `atom`, `dna`, `microscope`, `brain`, `network`, `shield`, `scale`.
+- Collaboration and organization: `people`, `graduation`, `calendar`, `clock`, `folder`, `tag`, `layers`, `workflow`.
+
+Omit it to use the default icon; unknown values also fall back to the default.
 
 Papilot reads the skills again when you return to its window, so a new skill file appears without a restart.
 

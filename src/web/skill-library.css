@@ -45,9 +45,16 @@
 .skill-icon-trigger:focus-visible{outline-offset:-3px}
 .skill-icon-trigger>span{position:absolute;right:-3px;bottom:-3px;display:flex;align-items:center;justify-content:center;width:17px;height:17px;border:1px solid var(--line);border-radius:50%;background:var(--bg);color:var(--text-3)}
 .skill-icon-popover{position:fixed;inset:auto;margin:0;width:240px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;padding:14px;border:1px solid var(--line);border-radius:16px;box-shadow:var(--float);background:var(--bg);color:var(--text)}
+.skill-icon-popover-expanded{width:352px}
 .skill-icon-popover::backdrop{background:transparent}
 .skill-icon-popover>p{margin:0 0 12px;font-size:12px;font-weight:500;color:var(--text-2)}
+.skill-icon-search{display:block;width:100%;min-width:0;margin:0 0 12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg-subtle);color:var(--text);font:inherit;font-size:13px}
+.skill-icon-search::placeholder{color:var(--text-3)}
+.skill-icon-results{max-height:min(304px,calc(100dvh - 144px));overflow-y:auto;overscroll-behavior:contain;padding:3px}
 .skill-icon-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.skill-icon-popover-expanded .skill-icon-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+.skill-icon-empty{margin:20px 0;text-align:center;font-size:13px;color:var(--text-3)}
+@media(max-width:379px){.skill-icon-popover-expanded .skill-icon-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .skill-icon-grid>button{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid transparent;border-radius:10px;color:var(--text-2)}
 .skill-icon-grid>button:hover{background:var(--bg-hover);color:var(--text)}
 .skill-icon-grid>button[aria-checked=true]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
