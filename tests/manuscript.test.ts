@@ -238,6 +238,12 @@ test('build output goes into .gitignore by kind, and a commit message reads only
     assert.match(changes.patch, /\+x/);
     assert.doesNotMatch(changes.patch, /gitignore/);
     assert.deepEqual(changes.recent, ['Start the paper']);
+    const long = 'Detailed manuscript change. '.repeat(3000) + 'END OF FIRST FILE';
+    fs.appendFileSync(path.join(root, 'main.tex'), long);
+    const complete = await commitChanges(root, ['main.tex', 'figure.tex']);
+    assert.ok(complete.patch.includes(long));
+    assert.match(complete.patch, /figure\.tex/);
+    assert.match(complete.patch, /\+x/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

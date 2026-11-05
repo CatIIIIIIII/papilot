@@ -65,13 +65,13 @@ export function NoteAttachButton({ number, ai = false, selected, disabled, desti
 }
 
 // The popover's main action sends the note to the task, like the chat
-// composer's own send button; a note already there says so and offers × to take it back out.
+// composer's own send button; a note already there offers × to take it back out.
 // Lists use the quiet form: the arrow without its blue disc until hovered.
 function NoteSendButton({ number, ai, selected, disabled, busy, quiet = false, onClick }: {
   number: number; ai: boolean; selected: boolean; disabled: boolean; busy: boolean; quiet?: boolean; onClick: () => void;
 }) {
   return <button type="button" className={'note-send' + (quiet ? ' quiet' : '')} aria-label={ai ? t('Include suggestion {n} in this task', { n: number }) : t('Include note {n} in this task', { n: number })} aria-pressed={selected} title={selected ? ai ? t('Remove suggestion {n} from task', { n: number }) : t('Remove note {n} from task', { n: number }) : t('Quote in chat')} disabled={disabled} onClick={onClick}>
-    {busy ? <span className="spinner light"/> : selected ? <>{t('Included')}<Icon name="close" size={12}/></> : <Icon name="arrowRight" size={15}/>}
+    {busy ? <span className="spinner light"/> : selected ? <Icon name="close" size={12}/> : <Icon name="arrowRight" size={15}/>}
   </button>;
 }
 
@@ -167,7 +167,7 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
   return <section ref={card} className={'pdf-note-card ' + (ai ? 'pdf-suggestion' : 'pdf-personal-note') + (inline ? ' pdf-note-inline' : '') + (compose ? ' pdf-note-compose' : '')} role={inline ? 'group' : 'dialog'} aria-modal={inline ? undefined : false} aria-label={ai ? t('AI suggestion {n}', { n: number }) : t('PDF note {n}', { n: number })} tabIndex={inline ? undefined : -1}>
     {header}
     <div className="pdf-note-content"><div className="pdf-suggestion-body">{note.stamp && <span className="pdf-note-stamp"><Icon name="spark" size={12}/>{note.stamp}</span>}{editing ?
-      <textarea ref={input} className="pdf-note-input" aria-label={deleting ? t('Replacement for mark {n}', { n: number }) : t('Edit note {n}', { n: number })} placeholder={deleting ? t('Replace with… (leave empty to delete)') : t('Write a note…')} value={draft} rows={1} maxLength={4000} readOnly={busy} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); void save(enterAction); } }}/>
+      <textarea ref={input} className="pdf-note-input" aria-label={deleting ? t('Replacement for mark {n}', { n: number }) : t('Edit note {n}', { n: number })} placeholder={deleting ? t('Replace with… (leave empty to delete)') : t('Write a note…')} value={draft} rows={1} readOnly={busy} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); void save(enterAction); } }}/>
       : ai ? <p>{note.comment}</p> : <p ref={text} className="pdf-note-text note-edit-trigger" role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy} aria-label={t('Edit note {n}: {comment}', { n: number, comment: shown })} title={deleting ? t('Give a replacement') : t('Edit note')} onClick={() => {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed && text.current?.contains(selection.anchorNode)) return;

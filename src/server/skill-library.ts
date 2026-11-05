@@ -77,7 +77,7 @@ export class SkillLibrary {
 
   save(source: unknown, id: unknown, content: unknown, expected: unknown, paper?: string): SkillDocument {
     if (source === 'builtin') fail('Built-in skills are read-only. Make a custom copy first.', 403);
-    if (typeof content !== 'string' || content.length > 20000 || !content.trim() || content.includes('\0')) fail('Skill content must contain 1–20,000 characters.');
+    if (typeof content !== 'string' || !content.trim() || content.includes('\0')) fail('The skill must contain instructions.');
     if (!parseSkill(content as string, String(id), source as Skill['source'])) fail('The skill must contain instructions.');
     const { file, found } = this.locate(source, id, paper);
     if (found) {

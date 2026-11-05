@@ -35,9 +35,9 @@ export function skillFiles(dir: string): { id: string; file: string; folder?: st
 
 export function parseSkill(text: string, id: string, source: Skill['source'], folder?: string): SkillFile | null {
   text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-  const fields = skillMetadata(text), body = skillInstructions(text).trim().slice(0, 20000);
+  const fields = skillMetadata(text), body = skillInstructions(text).trim();
   if (!body) return null;
-  return { id, name: (fields.name || id).slice(0, 60), description: (fields.description || '').slice(0, 300), hint: (fields.hint || '').slice(0, 200), ...(isSkillIcon(fields.icon) ? { icon: fields.icon } : {}), source, body, ...(fields.output === 'annotations' ? { output: 'annotations' as const } : {}), ...(folder ? { folder } : {}), order: fields.order && Number.isFinite(Number(fields.order)) ? Number(fields.order) : 1000 };
+  return { id, name: fields.name || id, description: fields.description || '', hint: fields.hint || '', ...(isSkillIcon(fields.icon) ? { icon: fields.icon } : {}), source, body, ...(fields.output === 'annotations' ? { output: 'annotations' as const } : {}), ...(folder ? { folder } : {}), order: fields.order && Number.isFinite(Number(fields.order)) ? Number(fields.order) : 1000 };
 }
 
 function read(dir: string, source: Skill['source']): SkillFile[] {

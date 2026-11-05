@@ -1,76 +1,68 @@
 <div align="center">
 
-<h1>
-  <img src="docs/assets/wordmark.svg#gh-light-mode-only" width="280" height="88" alt="Papilot">
-  <img src="docs/assets/wordmark-dark.svg#gh-dark-mode-only" width="280" height="88" alt="Papilot">
-</h1>
+<img src="docs/assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="docs/assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**Next-Generation AI LaTeX Editor**
 
-<p><b>Revise LaTeX papers with AI, and review the changes on the PDF.</b></p>
+# Don't read or write `.tex`<br>Just work on the <img src="docs/assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF">
 
-<p><a href="https://papilot.ai">Website</a> · <a href="docs/guide.md">Documentation</a></p>
+A **new paradigm** for responsible writing and typesetting with AI.
 
-<p data-language-switcher><a href="README.md">English</a> · <a href="docs/readme/README.zh-CN.md">简体中文</a> · <a href="docs/readme/README.zh-Hant.md">繁體中文</a> · <a href="docs/readme/README.ja.md">日本語</a> · <a href="docs/readme/README.ko.md">한국어</a> · <a href="docs/readme/README.de.md">Deutsch</a> · <a href="docs/readme/README.fr.md">Français</a> · <a href="docs/readme/README.es.md">Español</a> · <a href="docs/readme/README.pt.md">Português</a> · <a href="docs/readme/README.it.md">Italiano</a> · <a href="docs/readme/README.sv.md">Svenska</a></p>
+**[Download Papilot](https://github.com/PapilotAI/papilot/releases/latest)** for <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-icons/apple-dark.svg"><img src="docs/assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>and <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-icons/linux-dark.svg"><img src="docs/assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="docs/assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="docs/assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="docs/assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS),<br>or run `npm install -g papilot`.
 
-[![CI](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2563eb)](LICENSE)
-
-<p><img src="docs/assets/demo.gif" alt="Papilot: mark up a passage on the PDF, hand it to an agent, and review the typeset change" width="100%"></p>
+<a href="https://papilot.ai">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/readme-showcase/hero-compact-dark.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-showcase/hero-dark.png">
+  <source media="(max-width: 600px)" srcset="docs/assets/readme-showcase/hero-compact.png">
+  <img src="docs/assets/readme-showcase/hero.png" alt="Papilot shows an AI edit as a typeset before-and-after on the PDF, with Accept, Reject and Comment." width="900">
+</picture>
+</a>
 
 </div>
 
-Papilot is a local workspace for writing and revising LaTeX papers with AI agents. Mark up passages and equations on the PDF, let an agent edit a separate copy of the source, then review the typeset changes and choose which ones to keep.
+## 📄 You care about the PDF<br>Not the `.tex` behind it
 
-## Features
+Papers, theses, books, slides: readers only ever see the typeset page.<br>
+**So the page is where you should work, too.**
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<a href="docs/assets/readme-note.jpg"><img src="docs/assets/readme-note.jpg" alt="Color-grouped passage notes and a boxed equation note on the PDF"></a>
-<h3>Annotate the PDF</h3>
-Select a sentence or box an equation and say what should change. Group related notes by color to give several passages one instruction.
-</td>
-<td width="50%" valign="top">
-<a href="docs/assets/readme-review.jpg"><img src="docs/assets/readme-review.jpg" alt="Before-and-after typeset diff on the page with Accept, Reject, and Comment buttons"></a>
-<h3>Review each change</h3>
-Compare the typeset pages before and after, including changes elsewhere such as renumbered equations. Accept, reject, or comment on each edit, and undo decisions as you review.
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<a href="docs/assets/readme-deliver.jpg"><img src="docs/assets/readme-deliver.jpg" alt="Apply accepted edits to the manuscript"></a>
-<h3>Choose where edits go</h3>
-Each new task works on its own copy of the paper. Review the edits, then choose **Commit to manuscript** to save this task as one commit on your current branch, or **Apply to workspace** to leave the edits uncommitted. If the same passage changed meanwhile, AI resolves the conflict automatically and asks you only when the intended content is unclear. Review the merged PDF before saving. Push from the Git panel when you are ready.
-</td>
-<td width="50%" valign="top">
-<a href="docs/assets/readme-git.jpg"><img src="docs/assets/readme-git.jpg" alt="Git panel with staged files, generated commit message, and commit graph"></a>
-<h3>Work with Git</h3>
-Stage and commit files, pull, and push from the workspace. An agent can draft commit messages and help resolve merge conflicts; the commit graph shows each task’s worktree.
-</td>
-</tr>
-</table>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/readme-showcase/paradigm-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-showcase/paradigm-dark.png">
+    <source media="(max-width: 600px)" srcset="docs/assets/readme-showcase/paradigm-compact.png">
+    <img src="docs/assets/readme-showcase/paradigm.png" alt="Writing LaTeX by hand, then checking LaTeX diffs from AI, and now Papilot: reviewing the PDF." width="900">
+  </picture>
+</p>
 
-- **[Skills](docs/guide.md#skills) and [attachments](docs/guide.md#task-attachments):** Run `/` skills to polish prose, proofread, or check math, define custom skills in Settings, and attach reference files or images to tasks and messages.
-- **Reading and workspace:** Navigate manuscripts with the PDF table of contents and full-text search, with light and dark themes and an English or Chinese interface.
+**No more compiling diffs in your head.**<br>
+A source diff makes you *imagine* the PDF. Papilot *shows* it to you, typeset.
 
-## Quick start
+## 👉 Point at the page and say what you want
 
-For the macOS and Linux desktop apps and local build instructions, see [Papilot Desktop](desktop/README.md). Desktop CI builds Apple Silicon and Intel Mac installers, plus Linux x64 AppImage and deb packages.
+Mark a sentence, an equation or a figure, and write a note.<br>
+**Your agent finds the source. You never open a `.tex` file.**
 
-Papilot requires **Node.js 22.22+**, **Git**, and a full **TeX** distribution with `latexmk` and `synctex` ([MacTeX](https://www.tug.org/mactex/) or [TeX Live](https://www.tug.org/texlive/)). Revising a paper also requires at least one configured [agent](#agents).
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/readme-showcase/notes-app-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-showcase/notes-app-dark.png">
+    <source media="(max-width: 600px)" srcset="docs/assets/readme-showcase/notes-app-compact.png">
+    <img src="docs/assets/readme-showcase/notes-app.png" alt="Papilot with a box around an equation and a highlighted sentence on the PDF, each with a note, both added to the next task." width="900">
+  </picture>
+</p>
 
-```sh
-npm install -g papilot
-papilot demo
-```
+<a id="features"></a>
 
-Open [http://127.0.0.1:7274](http://127.0.0.1:7274) and select **Manuscript** in the sidebar to explore the bundled example paper.
+## 🔒 Your files stay yours
 
-To work on your own manuscript, run `papilot` and choose **Add paper…** to open a local LaTeX folder or ZIP archive. Papilot looks for the main `.tex` file, prepares Git history when needed, and attempts compilation. If the main file is ambiguous or the build fails, the import dialog helps you choose a file or fix the problem.
+<img src="docs/assets/readme-icons/folder.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Plain files on your machine.** Every change lands in your Git history.
 
-Check your setup in **Settings → Runtime**, under **Agents** or **LaTeX**. Run `papilot doctor` for environment checks, or `papilot doctor --repo /path/to/paper` to check a manuscript too ([diagnostics](docs/guide.md#diagnostics)).
+<img src="docs/assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Sync with coauthors through Git.** Pull, push, and let an agent resolve conflicts.
 
-## Agents
+<img src="docs/assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Free and open source.** MIT licensed, for macOS and Linux.
+
+<a id="agents"></a>
+
+## 🤖 Bring the AI agent you already use
 
 <!-- BEGIN AGENT ICONS -->
 <p align="center">
@@ -85,18 +77,32 @@ Check your setup in **Settings → Runtime**, under **Agents** or **LaTeX**. Run
 </p>
 <!-- END AGENT ICONS -->
 
-You can choose an agent and model for each task. Depending on the integration, Papilot runs agents using their local CLI sign-in or provider API credentials you supply, without storing your keys.
+<a id="quick-start"></a>
 
-Open **Settings → Runtime → Agents** to check status, models, and setup instructions (such as `papilot codex login`). Click **Reconnect** after installing or signing in to an agent while Papilot is running, or restart `papilot` after changing environment variables. See the [agent guide](docs/guide.md#agents) for per-agent requirements and capabilities.
+## 🚀 Get started
 
-## Documentation and community
+1. **Install.** [Download the app](https://github.com/PapilotAI/papilot/releases/latest) for macOS or Linux, or run `npm install -g papilot` (Node.js 22.22+). You also need Git and TeX Live or MacTeX.
+2. **Open your project.** Choose the folder with your `.tex` files. Papilot builds the PDF.
+3. **Pick an agent.** Use the CLI login or API key you already have, then mark up the page.
 
-- **Documentation:** Read the [User Guide](docs/guide.md) for workspace workflows, configuration, [in-app updates](docs/guide.md#updates), [remote access with Tailscale](docs/guide.md#remote-access-with-tailscale), and [passkey sharing for collaborators](docs/guide.md#collaborators).
-- **Design and history:** Explore [`examples/papilot-paper`](examples/papilot-paper) for the formal design paper and proofs, and check the [Changelog](CHANGELOG.md) for release notes.
-- **Community and support:** Ask questions in [Discussions](https://github.com/PapilotAI/papilot/discussions), report bugs in [Issues](https://github.com/PapilotAI/papilot/issues), or read [CONTRIBUTING.md](.github/CONTRIBUTING.md) to contribute.
+Want a sample first? Run `papilot demo`. Details are in the [guide](docs/guide.md#install-and-run).
+
+<a id="documentation-and-community"></a>
+
+## 🤝 Community
+
+<img src="docs/assets/readme-icons/issue.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Found a bug or missing a feature?** [Open an issue](https://github.com/PapilotAI/papilot/issues/new/choose), even a rough one.
+
+<img src="docs/assets/readme-icons/discussion.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Have a question or an idea?** [Start a discussion](https://github.com/PapilotAI/papilot/discussions).
+
+<img src="docs/assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Become a contributor.** Pull requests are very welcome, including ones written with AI agents. Start with the [contributing guide](.github/CONTRIBUTING.md).
 
 ---
 
-[MIT](LICENSE) © 2026 PapilotAI
+<div align="center">
 
-Friends: [LINUX DO](https://linux.do/).
+<p data-language-switcher><sub><a href="README.md">English</a>&nbsp;· <a href="docs/readme/README.zh-CN.md">简体中文</a>&nbsp;· <a href="docs/readme/README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="docs/readme/README.ja.md">日本語</a>&nbsp;· <a href="docs/readme/README.ko.md">한국어</a>&nbsp;· <a href="docs/readme/README.de.md">Deutsch</a>&nbsp;· <a href="docs/readme/README.fr.md">Français</a>&nbsp;· <a href="docs/readme/README.es.md">Español</a>&nbsp;· <a href="docs/readme/README.pt.md">Português</a>&nbsp;· <a href="docs/readme/README.it.md">Italiano</a>&nbsp;· <a href="docs/readme/README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center"><sub><a href="LICENSE">MIT</a> © 2026 PapilotAI. Thanks to our friends at <a href="https://linux.do/">LINUX DO</a>.</sub></p>

@@ -30,11 +30,14 @@ const detail = { task: 'places', round: 1, before: 'b', after: 'a', warnings: []
 const reviewState = { task: 'places', title: task.title, csrf: 'fixture', closed: false, state: 'reviewing', latest: 1, history: [{ number: 1, created: 1 }], round: 1, revision: 'a', decisions: Object.fromEntries(ids.map(id => [id, 'pending'])), comments: {}, undo: null, job: null };
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/git')) return json({ branch: 'main', files: [] });
+  if (url.pathname.endsWith('/git/history')) return json({ versions: [], next: null });
+  if (url.pathname.endsWith('/git/overview')) return json({ commits: [], worktrees: [], truncated: false });
   if (url.pathname.endsWith('/manuscript')) return json({ git: { branch: 'main', files: [] }, build: { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]] }, annotations: [] });
   if (url.pathname.endsWith('/manuscript.pdf')) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname.endsWith('/manuscript/words')) return json(words[Number(url.searchParams.get('page'))]);
@@ -65,6 +68,14 @@ try {
   await page.waitForTimeout(300);
   const pdfTop = await scrollOf(box);
   assert.ok(pdfTop > 500, 'the PDF is scrolled to its second page');
+
+  await page.locator('.git-link').click();
+  await expect(page.locator('.git-workspace')).toBeVisible();
+  await expect(page.locator('.manuscript')).toHaveCount(0);
+  await manuscript();
+  await page.locator('.pdf-view .page[data-page-number="2"]').waitFor();
+  await expect.poll(() => scrollOf(box)).toBeGreaterThan(500);
+  near(await scrollOf(box), pdfTop, 'PDF position after the Git workspace');
 
   // Leave for the task, scroll its chat and review, and come back.
   await openTask();

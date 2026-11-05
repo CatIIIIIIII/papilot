@@ -261,5 +261,6 @@
   "{sources} could not be reached.": "Não foi possível acessar {sources}.",
   "{source} has this work with other details. Compare them below.": "{source} contém este trabalho com outros detalhes. Compare-os abaixo.",
   "{staged} of {total} staged": "{staged} de {total} preparadas",
-  "↵ send · Esc cancel": "↵ enviar · Esc cancelar"
+  "↵ send · Esc cancel": "↵ enviar · Esc cancelar",
+  "Your comments are saved. Continue in Chat to request a revision.": "Seus comentários foram salvos. Continue no chat para solicitar uma revisão."
 }

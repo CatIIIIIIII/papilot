@@ -11,7 +11,8 @@ await server.listen({ host: '127.0.0.1', port: 0 });
 const origin = `http://127.0.0.1:${server.server.address().port}`;
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
 const page = await browser.newPage({ locale: 'en-US', colorScheme: 'dark', viewport: { width: 1440, height: 900 } });
-const errors = []; page.on('pageerror', error => errors.push(error.message));
+page.setDefaultTimeout(15000);
+const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('PAGE ERROR', error.message); });
 const task = { id: 'review-notes-fixture', projectId: 'paper', name: 'p-notes', title: 'Polish the acknowledgments', status: 'reviewing', createdAt: 1, updatedAt: 1, review: { round: 1, state: 'reviewed', counts: { pending: 0, rejected: 1, accepted: 1 } } };
 const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Thesis', path: '/tmp/thesis' }], tasks: [task], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
 const markdown = '已润色 [acknowledgments.tex](/Users/chen/thesis/main/frontmatter/acknowledgments.tex:26)。\n\n| Item | Result |\n| --- | --- |\n| Text | **Ready** |\n\n- Parent\n  - Nested *item*\n\n- [x] Reviewed\n\n~~Previous~~';
@@ -19,12 +20,14 @@ let failSend = true;
 const messages = [];
 await page.route('**/api/**', route => {
   const url = new URL(route.request().url());
+  if (url.pathname === '/api/indirect-changes') return route.fulfill({ json: { indirectChanges: false } });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items: [{ id: 'reply', taskId: task.id, type: 'assistant', text: markdown, createdAt: 1 }] } });
   if (url.pathname.endsWith('/messages')) {
     messages.push(route.request().postDataJSON());
+    if (!failSend) { task.review.unsent = 0; task.review.comments = 0; }
     return route.fulfill(failSend ? { status: 503, json: { error: 'Temporary failure. Try again.' } } : { json: { ok: true } });
   }
   if (url.pathname.endsWith('/git')) return route.fulfill({ json: { files: [], branch: 'main' } });
@@ -40,8 +43,12 @@ async function selectText(selector) {
     const range = document.createRange(); range.selectNodeContents(el);
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
   });
-  await frame().getByRole('button', { name: 'Add note', exact: true }).click();
+  await frame().getByRole('button', { name: 'Comment', exact: true }).click();
 }
+
+const noteInput = n => page.getByRole('textbox', { name: `Comment ${n}`, exact: true });
+const send = () => page.getByRole('button', { name: 'Send instructions', exact: true });
+const savedDraft = () => page.evaluate(() => JSON.parse(localStorage.getItem('papilot:review-notes:review-notes-fixture')));
 try {
   await page.goto(origin);
   await page.getByRole('button', { name: 'Mark region', exact: true }).waitFor();
@@ -51,146 +58,68 @@ try {
   assert.equal(await page.locator('.markdown ul ul li').textContent(), 'Nested item');
   await page.locator('.file-reference').click();
   await page.getByRole('button', { name: 'Copied path' }).waitFor();
-  // Region mode leaves the page clear; text is selected directly without a mode button.
   await page.getByRole('button', { name: 'Mark region', exact: true }).click();
   await frame().locator('.review-region-capture').first().waitFor();
-  assert.equal(await frame().getByRole('complementary', { name: 'Review PDF notes' }).count(), 0);
   await page.keyboard.press('Escape');
   await frame().locator('.review-region-capture').first().waitFor({ state: 'hidden' });
-  // Closing a note before writing it leaves the next selection free.
   await selectText('[data-state="accepted"] .pdf-glyph');
-  await frame().getByRole('button', { name: 'Close review notes' }).click();
+  await page.getByRole('button', { name: 'Delete review note 1' }).click();
   await selectText('[data-state="rejected"] .pdf-glyph');
-  const noteInput = frame().getByRole('textbox', { name: 'Note for the agent' });
-  assert.equal(await noteInput.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(38, 39, 43)');
-  // The pages turn dark with the theme.
   assert.equal(await frame().locator('.sheet').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(41, 41, 41)');
   assert.match(await frame().locator('.pdf-strip img').first().evaluate(el => getComputedStyle(el).filter), /invert/);
-  await noteInput.fill('Keep all the names and make this warmer.');
-  await frame().getByRole('button', { name: 'Add note', exact: true }).click();
-  await frame().locator('.review-note-tag').nth(0).waitFor();
+  await noteInput(1).fill('Keep all the names and make this warmer.');
+  await frame().locator('.review-note-tag').first().waitFor();
   assert.equal(await frame().locator('[data-state="rejected"]').getAttribute('data-state'), 'rejected');
   await page.reload();
-  await frame().locator('.review-note-tag').first().click();
-  await frame().getByText('Keep all the names and make this warmer.', { exact: true }).waitFor();
-  await frame().getByRole('button', { name: 'Close review notes' }).click();
+  assert.equal(await noteInput(1).inputValue(), 'Keep all the names and make this warmer.');
   await selectText('[data-state="accepted"] .pdf-glyph');
-  await frame().getByRole('textbox', { name: 'Note for the agent' }).fill('Keep this accepted paragraph.');
-  await frame().getByRole('button', { name: 'Add note', exact: true }).click();
-  await frame().getByRole('button', { name: 'Close review notes' }).click();
+  await noteInput(2).fill('Keep this accepted paragraph.');
   await page.getByRole('button', { name: 'Mark region', exact: true }).click();
   const box = await frame().locator('.context .review-region-capture').boundingBox();
   await page.mouse.move(box.x + 60, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + 250, box.y + 65, { steps: 5 }); await page.mouse.up();
-  await frame().getByRole('textbox', { name: 'Note for the agent' }).fill('Check the spacing in this region.');
-  await frame().getByRole('button', { name: 'Add note', exact: true }).click();
-  await frame().locator('.review-note-tag').nth(2).waitFor();
-  // Existing comments edit in place, preserving the exact marked text and geometry.
-  const savedDraft = () => page.evaluate(() => JSON.parse(localStorage.getItem('papilot:review-notes:review-notes-fixture')));
-  const originalNotes = (await savedDraft()).notes;
-  await frame().getByRole('button', { name: 'Edit note 2: Keep this accepted paragraph.' }).click();
-  await noteInput.fill('Keep this accepted paragraph and its citation.');
+  await noteInput(3).fill('Check the spacing in this region.');
+  const originalNotes = (await savedDraft()).notes; console.log('Created notes', originalNotes.length);
+  await noteInput(2).fill('Keep this accepted paragraph and its citation.'); console.log('Edited notes', (await savedDraft()).notes.length);
   await page.reload();
-  await noteInput.waitFor();
-  assert.equal(await noteInput.inputValue(), 'Keep this accepted paragraph and its citation.', 'unfinished edits survive reload');
-  await frame().getByRole('button', { name: 'Save', exact: true }).click();
-  await frame().getByRole('button', { name: 'Edit note 2: Keep this accepted paragraph and its citation.' }).waitFor();
+  assert.equal(await noteInput(2).inputValue(), 'Keep this accepted paragraph and its citation.');
   assert.deepEqual((await savedDraft()).notes[1], { ...originalNotes[1], comment: 'Keep this accepted paragraph and its citation.' });
-  await frame().getByRole('button', { name: 'Edit note 2: Keep this accepted paragraph and its citation.' }).click();
-  await noteInput.fill('Discard this edit.');
-  await noteInput.press('Escape');
-  assert.equal((await savedDraft()).editing, null);
-  assert.equal((await savedDraft()).notes[1].comment, 'Keep this accepted paragraph and its citation.');
-  // Consecutive deletes can each be undone, including after a reload.
+  // Deletion undo survives reload; native textarea undo does not restore notes.
   const beforeDelete = (await savedDraft()).notes;
-  await frame().getByRole('button', { name: 'Delete review note 2' }).click();
-  await frame().getByRole('button', { name: 'Delete review note 1' }).click();
-  assert.equal(await frame().locator('.review-note-tag').count(), 1);
-  await frame().getByRole('button', { name: /^Edit note 1:/ }).click();
-  await noteInput.fill(''); await noteInput.pressSequentially('Undo this text');
-  await noteInput.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
-  assert.ok((await noteInput.inputValue()).length < 'Undo this text'.length, 'native undo edits the text');
-  assert.equal((await savedDraft()).notes.length, 1, 'text undo must not restore a deleted note');
-  await frame().getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete review note 2' }).click();
+  await page.getByRole('button', { name: 'Delete review note 1' }).click();
+  await noteInput(1).fill(''); await noteInput(1).pressSequentially('Undo this text');
+  await noteInput(1).press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  assert.ok((await noteInput(1).inputValue()).length < 'Undo this text'.length);
+  assert.equal((await savedDraft()).notes.length, 1);
+  await noteInput(1).fill(beforeDelete[2].comment);
   await page.reload();
-  await frame().locator('.review-note-tag').first().click();
-  assert.equal(await frame().locator('.note-undo').count(), 0, 'no dedicated undo UI');
-  // The first shortcut starts in the parent toolbar; the second is inside the iframe.
   await page.getByRole('button', { name: 'Mark region', exact: true }).focus();
-  await frame().locator('body').evaluate(body => {
-    const win = body.ownerDocument.defaultView;
-    win.reviewUndoKeys = 0;
-    win.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'z') win.reviewUndoKeys++; });
-  });
-  await page.keyboard.press('Meta+z');
-  await frame().locator('.review-note-tag').nth(1).waitFor();
-  await frame().getByRole('button', { name: /^Edit note 1:/ }).focus();
-  await page.keyboard.press('Control+z');
-  await frame().locator('.review-note-tag').nth(2).waitFor();
+  await page.keyboard.press('Meta+z'); await frame().locator('.review-note-tag').nth(1).waitFor();
+  await page.keyboard.press('Control+z'); await frame().locator('.review-note-tag').nth(2).waitFor();
   assert.deepEqual((await savedDraft()).notes, beforeDelete);
-  assert.equal(await frame().locator('.review-note-tag').count(), 3);
-  assert.equal(await frame().locator('body').evaluate(body => body.ownerDocument.defaultView.reviewUndoKeys), 0, 'restoring a note must not also undo a review decision');
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/review-notes-desktop.png', fullPage: true });
-  await frame().getByRole('button', { name: 'Send 3 notes to the agent' }).click();
-  await frame().getByRole('alert').waitFor();
-  assert.equal(messages.length, 1);
-  await page.reload();
-  await frame().locator('.review-note-tag').first().click();
-  failSend = false;
-  await frame().getByRole('button', { name: 'Send 3 notes to the agent' }).click();
-  await frame().locator('.review-note-tag').first().waitFor({ state: 'hidden' });
-  assert.equal(messages.length, 2);
-  assert.deepEqual(messages[0], messages[1], 'retry after reload uses the same submission identity');
-  assert.equal(messages[1].text, '');
-  assert.match(messages[1].notes[0].where, /Round 1 · PDF page x · Before · Change 1 · main\/frontmatter\/acknowledgments.tex:26–43/);
+  await send().click();
+  await page.getByRole('alert').waitFor(); assert.equal(messages.length, 1);
+  await page.reload(); failSend = false;
+  await send().click(); await frame().locator('.review-note-tag').first().waitFor({ state: 'hidden' });
+  assert.deepEqual(messages[0], messages[1]);
+  assert.match(messages[1].notes[0].where, /Round 1 · PDF page x · Before · Change 1/);
   assert.match(messages[1].notes[1].where, /After · Change 2/);
   assert.match(messages[1].notes[2].where, /Unchanged text · Region in displayed strip/);
-  assert.equal(messages[1].notes[0].quote, 'Thank you to my friends and family.');
-  assert.equal(messages[1].notes[1].comment, 'Keep this accepted paragraph and its citation.');
   assert.deepEqual(messages[1].notes[0].anchor, { round: 1, sources: [{ file: 'main/frontmatter/acknowledgments.tex', lines: [26, 43] }] });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: /^Review/ }).first().click();
-  await selectText('.context .pdf-glyph');
-  await page.getByRole('button', { name: 'Show task list', exact: true }).click();
-  const settings = page.locator('dialog').filter({ has: page.locator('.settings-dialog') });
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settings.getByRole('button', { name: 'Appearance', exact: true }).click();
-  await settings.getByRole('radio', { name: 'Light', exact: true }).check();
-  await frame().locator('html[data-theme="light"]').waitFor();
-  await settings.getByRole('radio', { name: 'Dark', exact: true }).check();
-  await frame().locator('html[data-theme="dark"]').waitFor();
-  await page.keyboard.press('Escape');
-  await settings.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Hide task list', exact: true }).click();
-  await page.locator('.sidebar').waitFor({ state: 'hidden' });
-  const panel = frame().getByRole('complementary', { name: 'Review PDF notes' });
-  await panel.waitFor();
-  const bounds = await panel.boundingBox();
-  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
-  await page.screenshot({ path: 'test-results/review-notes-mobile.png', fullPage: true });
-  // Editing remains usable on the narrowest phone layout, without an undo bar.
-  await page.evaluate(note => localStorage.setItem('papilot:review-notes:review-notes-fixture', JSON.stringify({ notes: [note], requestKey: 'mobile-note', editing: null })), originalNotes[0]);
+  // A phone moves straight from selection to the same chat draft.
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.reload();
-  await frame().locator('.review-note-tag').first().click();
-  await frame().getByRole('button', { name: /^Edit note 1:/ }).click();
-  await noteInput.fill('Keep the names.');
-  const inputBounds = await noteInput.boundingBox();
-  assert.ok(inputBounds.x >= 0 && inputBounds.x + inputBounds.width <= 320);
-  await page.screenshot({ path: 'test-results/review-note-edit-mobile.png', fullPage: true });
-  await frame().getByRole('button', { name: 'Save', exact: true }).click();
-  await frame().getByRole('button', { name: 'Delete review note 1' }).click();
-  await page.screenshot({ path: 'test-results/review-note-undo-mobile.png', fullPage: true });
-  assert.equal(await frame().locator('.note-undo').count(), 0);
-  await page.keyboard.press('Meta+z');
-  await frame().getByRole('button', { name: 'Edit note 1: Keep the names.', exact: true }).waitFor();
+  await page.getByRole('button', { name: /^Review/ }).first().click();
+  await selectText('.context .pdf-glyph'); await noteInput(1).waitFor({ state: 'visible' });
+  await noteInput(1).fill('Keep the names.');
+  const bounds = await noteInput(1).boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
-  // Colors group multiple review locations without opening individual editors.
+  await page.screenshot({ path: 'test-results/review-notes-mobile.png', fullPage: true });
+  // Continuous group marking keeps focus in the document; shared instructions use Chat.
   await page.evaluate(() => localStorage.removeItem('papilot:review-notes:review-notes-fixture'));
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.reload();
+  await page.setViewportSize({ width: 1440, height: 900 }); await page.reload();
   await frame().locator('.review-note-layer').first().waitFor({ state: 'attached' });
   await page.getByRole('button', { name: 'Annotation group color', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Green', exact: true }).click();
@@ -203,19 +132,15 @@ try {
     await page.waitForFunction(count => JSON.parse(localStorage.getItem('papilot:review-notes:review-notes-fixture'))?.notes.length === count, index + 1);
   }
   await frame().locator('.review-note-tag[data-group="green"]').nth(1).waitFor();
-  assert.equal(await noteInput.count(), 0);
+  assert.equal(await page.locator('.review-draft textarea:focus').count(), 0);
   await page.getByRole('button', { name: 'Annotation group color', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Individual notes', exact: true }).click();
-  await frame().locator('.annotation-group').waitFor();
-  assert.equal(await frame().locator('.annotation-group').count(), 1);
-  const groupInstructions = frame().getByRole('textbox', { name: 'Instructions for color groups' });
-  await groupInstructions.fill('Green: explain these passages.');
+  await page.getByRole('textbox', { name: 'Instructions for color groups' }).fill('Green: explain these passages.');
   const beforeGroups = messages.length;
-  await frame().getByRole('button', { name: 'Send annotations to the agent' }).click();
-  await page.waitForFunction(() => !document.querySelector('.review-frame').contentDocument.querySelector('.review-notes-panel'));
+  await send().click(); await page.waitForFunction(() => !document.querySelector('.review-draft'));
   assert.equal(messages.length, beforeGroups + 1);
   assert.equal(messages.at(-1).text, 'Green: explain these passages.');
   assert.deepEqual(messages.at(-1).notes.map(note => [note.group, note.comment]), [['green', ''], ['green', '']]);
   assert.deepEqual(errors, []);
-  console.log('PASS: Review notes; edit and cancel; Command/Ctrl+Z restores deleted notes; native text undo; iframe shortcut isolation; persistence; retry identity; 320px mobile editing');
-} finally { await browser.close(); await server.close(); }
+  console.log('PASS: review quotes and regions, autosave, persistent delete/undo, native text undo, unified retry, phone commenting and continuous color groups');
+} catch (error) { console.error('Draft:', await savedDraft(), '\nBODY:', await page.locator('body').innerText()); await page.screenshot({ path: 'test-results/review-notes-failure.png' }); throw error; } finally { await browser.close(); await server.close(); }

@@ -1,82 +1,76 @@
 <div align="center">
 
-<h1>
-  <img src="../assets/wordmark.svg#gh-light-mode-only" width="280" height="88" alt="Papilot">
-  <img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="280" height="88" alt="Papilot">
-</h1>
+<img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**次世代 AI LaTeX エディタ**
 
-<p><b>AI で LaTeX 論文を改訂し、PDF 上で変更をレビューします。</b></p>
+# `.tex` の読み書きは不要<br><img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF"> 上で直接作業
 
-<p><a href="https://papilot.ai">ウェブサイト</a> · <a href="../guide.md">ドキュメント</a></p>
+AI を用いた責任ある執筆と組版のための**新しいパラダイム**。
 
-<p data-language-switcher><a href="../../README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-Hant.md">繁體中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.pt.md">Português</a> · <a href="README.it.md">Italiano</a> · <a href="README.sv.md">Svenska</a></p>
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>および <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) 向けに **[Papilot をダウンロード](https://github.com/PapilotAI/papilot/releases/latest)**、<br>または `npm install -g papilot` を実行してください。
 
-[![CI](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml/badge.svg)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/papilot?color=2563eb&logo=npm)](https://www.npmjs.com/package/papilot)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2563eb)](../../LICENSE)
-
-<p><img src="../assets/demo.gif" alt="Papilot: PDF 上の箇所を指定してエージェントに渡し、組版された変更をレビュー" width="100%"></p>
+<a href="https://papilot.ai">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/hero-dark.png">
+  <source media="(max-width: 600px)" srcset="../assets/readme-showcase/hero-compact.png">
+  <img src="../assets/readme-showcase/hero.png" alt="Papilot は AI による編集を組版済みの変更前後として PDF 上に表示し、承認・却下・コメントを行えます。" width="900">
+</picture>
+</a>
 
 </div>
 
-Papilot は、AI エージェントとともに LaTeX 論文を執筆・改訂するためのローカルワークスペースです。PDF 上で文章や数式を指定し、ソースの別コピーをエージェントに編集させ、組版された変更をレビューして採用する変更を選択できます。
+<a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
+
+## 📄 重要なのは PDF であり<br>裏側の `.tex` ではありません
+
+論文、学位論文、書籍、スライド——読者が目にするのは組版されたページだけです。<br>
+**だからこそ、作業もそのページ上で行うべきです。**
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/paradigm-dark.png">
+    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact.png">
+    <img src="../assets/readme-showcase/paradigm.png" alt="手書きの LaTeX、AI による LaTeX 差分の確認、そして Papilot による PDF のレビューへ。" width="900">
+  </picture>
+</p>
+
+**頭の中で差分をコンパイルする必要はもうありません。**<br>
+ソースの差分では PDF を*想像*するしかありませんが、Papilot は組版された状態でそれを*表示*します。
+
+<a id="-point-at-the-page-and-say-what-you-want"></a>
+
+## 👉 ページを指して指示するだけ
+
+文、数式、または図を選択して、注釈を書き込むだけ。<br>
+**エージェントが該当するソースを見つけます。`.tex` ファイルを開く必要は一切ありません。**
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/notes-app-dark.png">
+    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact.png">
+    <img src="../assets/readme-showcase/notes-app.png" alt="PDF 上の数式を囲む枠とハイライトされた文にそれぞれ注釈が付けられ、次のタスクに追加されている Papilot の画面。" width="900">
+  </picture>
+</p>
 
 <a id="features"></a>
 
-## 機能
+<a id="-your-files-stay-yours"></a>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<a href="../assets/readme-note.jpg"><img src="../assets/readme-note.jpg" alt="PDF 上の色分けされた文章の注釈と矩形で囲まれた数式の注釈"></a>
-<h3>PDF に注釈を付ける</h3>
-文を選択するか数式を矩形で囲み、変更内容を指示します。関連する注釈を色分けしてグループ化すれば、複数の箇所にまとめて 1 つの指示を出せます。
-</td>
-<td width="50%" valign="top">
-<a href="../assets/readme-review.jpg"><img src="../assets/readme-review.jpg" alt="承認・却下・コメントボタンを備えたページ上の組版前後の差分表示"></a>
-<h3>各変更をレビュー</h3>
-数式番号の振り直しなど他箇所への影響も含め、変更前後の組版ページを比較できます。各編集に対して承認、却下、またはコメントを行い、レビュー中に判断を元に戻すことも可能です。
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<a href="../assets/readme-deliver.jpg"><img src="../assets/readme-deliver.jpg" alt="承認した編集を原稿に適用"></a>
-<h3>編集の反映先を選択</h3>
-新しいタスクはそれぞれ論文の独立したコピー上で動作します。編集をレビューしたら、現在のブランチに 1 つのコミットとして保存する場合は **原稿にコミット** を、コミットせずに編集を反映する場合は **ワークスペースに適用** を選択します。その間に同じ箇所が変更されていた場合、AI が自動的に競合を解決し、意図された内容が不明確な場合にのみ確認を求めます。保存前にマージ後の PDF をレビューし、準備ができたら Git パネルからプッシュできます。
-</td>
-<td width="50%" valign="top">
-<a href="../assets/readme-git.jpg"><img src="../assets/readme-git.jpg" alt="ステージされたファイル、生成されたコミットメッセージ、コミットグラフを表示した Git パネル"></a>
-<h3>Git との連携</h3>
-ワークスペースからファイルのステージやコミット、プル、プッシュを行えます。エージェントがコミットメッセージの下書きやマージ競合の解決を支援し、コミットグラフには各タスクの作業ツリーが表示されます。
-</td>
-</tr>
-</table>
+## 🔒 ファイルは常にあなたの手元に
 
-- **[スキル](../guide.md#skills)と[添付ファイル](../guide.md#task-attachments):** `/` スキルを実行して文章の推敲、校正、数式のチェックを行えるほか、設定でカスタムスキルを定義したり、タスクやメッセージに参考ファイルや画像を添付したりできます。
-- **閲覧とワークスペース:** PDF の目次や全文検索を使って原稿内を移動でき、ライト・ダークテーマおよび英語または中国語のインターフェースに対応しています。
+<img src="../assets/readme-icons/folder.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**ローカルマシン上のプレーンファイル。** すべての変更は Git の履歴に記録されます。
 
-<a id="quick-start"></a>
+<img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Git を介して共著者と同期。** プルやプッシュを行い、コンフリクトの解決はエージェントに任せられます。
 
-## クイックスタート
-
-macOS および Linux 向けデスクトップアプリとローカルでのビルド手順については、[Papilot Desktop](../../desktop/README.md) を参照してください。デスクトップ CI は、Apple Silicon および Intel Mac 向けインストーラーと、Linux x64 向けの AppImage および deb パッケージをビルドします。
-
-Papilot には **Node.js 22.22+**、**Git**、および `latexmk` と `synctex` を含む完全な **TeX** ディストリビューション（[MacTeX](https://www.tug.org/mactex/) または [TeX Live](https://www.tug.org/texlive/)）が必要です。論文の改訂には、設定済みの[エージェント](#agents)も少なくとも 1 つ必要です。
-
-```sh
-npm install -g papilot
-papilot demo
-```
-
-[http://127.0.0.1:7274](http://127.0.0.1:7274) を開き、サイドバーで **原稿** を選択すると、同梱のサンプル論文を確認できます。
-
-自身の原稿で作業するには、`papilot` を実行し、**論文を追加…** を選択してローカルの LaTeX フォルダまたは ZIP アーカイブを開きます。Papilot はメインの `.tex` ファイルを検出し、必要に応じて Git 履歴を準備してコンパイルを試みます。メインファイルが一意に定まらない場合やビルドに失敗した場合は、インポートダイアログからファイルを選択したり問題を修正したりできます。
-
-環境設定は **設定 → ランタイム** の **エージェント** または **LaTeX** で確認できます。環境のチェックには `papilot doctor` を実行し、原稿もあわせてチェックするには `papilot doctor --repo /path/to/paper` を実行してください（[診断](../guide.md#diagnostics)）。
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**無料かつオープンソース。** MIT ライセンスで提供され、macOS と Linux に対応しています。
 
 <a id="agents"></a>
 
-## エージェント
+<a id="-bring-the-ai-agent-you-already-use"></a>
+
+## 🤖 普段使っている AI エージェントをそのまま利用
 
 <!-- BEGIN AGENT ICONS -->
 <p align="center">
@@ -91,20 +85,36 @@ papilot demo
 </p>
 <!-- END AGENT ICONS -->
 
-タスクごとにエージェントとモデルを選択できます。連携方式に応じて、Papilot はローカル CLI のサインイン情報またはユーザーが指定したプロバイダーの API 認証情報を使用してエージェントを実行し、キーを保存しません。
+<a id="quick-start"></a>
 
-ステータス、モデル、およびセットアップ手順（`papilot codex login` など）を確認するには、**設定 → ランタイム → エージェント** を開きます。Papilot の実行中にエージェントをインストールまたはサインインした後は **再接続** をクリックし、環境変数を変更した後は `papilot` を再起動してください。各エージェントの要件と機能については、[エージェントガイド](../guide.md#agents)を参照してください。
+<a id="-get-started"></a>
+
+## 🚀 はじめに
+
+1. **インストール。** macOS または Linux 向けの[アプリをダウンロード](https://github.com/PapilotAI/papilot/releases/latest)するか、`npm install -g papilot`（Node.js 22.22 以降）を実行します。また、Git と TeX Live または MacTeX が必要です。
+2. **プロジェクトを開く。** `.tex` ファイルが含まれるフォルダを選択すると、Papilot が PDF をビルドします。
+3. **エージェントを選択。** 既存の CLI ログインまたは API キーを使用し、ページに注釈を付けます。
+
+まずはサンプルを試したいですか？ `papilot demo` を実行してください。詳細は[ガイド](../guide.md#install-and-run)を参照してください。
 
 <a id="documentation-and-community"></a>
 
-## ドキュメントとコミュニティ
+<a id="-community"></a>
 
-- **ドキュメント:** ワークスペースのワークフロー、設定、[アプリ内アップデート](../guide.md#updates)、[Tailscale によるリモートアクセス](../guide.md#remote-access-with-tailscale)、および[共同執筆者とのパスキー共有](../guide.md#collaborators)については、[ユーザーガイド](../guide.md)を参照してください。
-- **設計と変更履歴:** 正式な設計論文と証明については [`examples/papilot-paper`](../../examples/papilot-paper) を、リリースノートについては[変更履歴](../../CHANGELOG.md)を確認してください。
-- **コミュニティとサポート:** [Discussions](https://github.com/PapilotAI/papilot/discussions) で質問したり、[Issues](https://github.com/PapilotAI/papilot/issues) でバグを報告したりできます。コントリビュートする場合は [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) を参照してください。
+## 🤝 コミュニティ
+
+<img src="../assets/readme-icons/issue.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**バグの発見や機能の要望がありますか？** 簡単な内容でも構いませんので、[Issue を作成](https://github.com/PapilotAI/papilot/issues/new/choose)してください。
+
+<img src="../assets/readme-icons/discussion.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**質問やアイデアがありますか？** [Discussion を開始](https://github.com/PapilotAI/papilot/discussions)してください。
+
+<img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**コントリビューターになる。** AI エージェントを用いて作成されたものを含め、プルリクエストを歓迎します。まずは[コントリビューションガイド](../../.github/CONTRIBUTING.md)をご覧ください。
 
 ---
 
-[MIT](../../LICENSE) © 2026 PapilotAI
+<div align="center">
 
-フレンド: [LINUX DO](https://linux.do/).
+<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center"><sub><a href="../../LICENSE">MIT</a> © 2026 PapilotAI. <a href="https://linux.do/">LINUX DO</a> の皆様に感謝いたします。</sub></p>

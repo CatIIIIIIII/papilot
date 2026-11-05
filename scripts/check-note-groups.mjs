@@ -21,6 +21,7 @@ const routeApi = async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/git')) return json(git);
@@ -101,6 +102,7 @@ try {
   await page.locator('.pdf-container').focus();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   await expect.poll(() => notes.length).toBe(1);
+  await expect(page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name: 'Redo', exact: true })).toBeEnabled();
   await selectText(2); await expect.poll(() => notes.length).toBe(2);
   // Color belongs to the note tool and carries over to the region tool in the rail.
   await page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name: 'Region', exact: true }).click();

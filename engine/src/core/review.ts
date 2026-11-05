@@ -458,8 +458,6 @@ export class Review {
       throw new Error("These changes were already decided. Reload the page.");
     const body = (data.body || "").trim();
     if (kind === "comment" && !body) throw new Error("Write a comment first.");
-    if (body.length > 20000)
-      throw new Error("Comments are limited to 20,000 characters.");
     const selected = chosen.map((c) => latest.units.find((u) => u.id === c)!);
     if (kind === "accept") await this.accept(task, latest, identity, selected);
     else if (kind === "reject") await this.reject(task, latest, identity, selected);
@@ -715,8 +713,7 @@ export class Review {
   }
   note(name: string, body: string) {
     body = (body || "").trim();
-    if (!body || body.length > 20000)
-      throw new Error("Write a message (at most 20,000 characters).");
+    if (!body) throw new Error("Write a message.");
     this.app.tasks.get(name);
     this.message(
       name,

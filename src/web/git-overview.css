@@ -1,4 +1,40 @@
-.git-panel{--graph-purple:#9771d2;--graph-pink:#cb6e9d;padding:0 0 12px}
+.git-workspace{--graph-purple:#9771d2;--graph-pink:#cb6e9d;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+.git-workspace-header{flex:none;display:flex;align-items:center;gap:9px;min-height:48px;padding:6px 14px;border-bottom:1px solid var(--line)}
+.git-workspace-header>svg{color:var(--text-3)}
+.git-workspace-header h2{flex:none;margin:0;font-size:14px;font-weight:600}
+.git-workspace-body{flex:1;min-height:0;min-width:0;display:grid;grid-template-columns:clamp(300px,30%,360px) minmax(0,1fr)}
+.git-workspace .git-panel{min-width:0;border-right:1px solid var(--line)}
+/* If the draft and minimum file list cannot fit, scroll the whole content. */
+.git-workspace .git-panel-content{overflow:auto;display:flex;flex-direction:column;padding-bottom:0}
+.git-workspace .git-changes{flex:1;min-height:0;display:flex;flex-direction:column;overflow:visible}
+.git-workspace .git-changes>.git-pane-header,.git-workspace .git-commit-form{flex:none}
+.git-workspace .git-merge{flex:0 1 auto;overflow:auto;max-height:60%}
+.git-file-lists{flex:1;min-height:72px;overflow:auto;padding-bottom:12px}
+.git-details{min-width:0;min-height:0;display:flex;flex-direction:column}
+.git-detail-switcher{flex:none;align-self:flex-start;flex-wrap:wrap;max-width:calc(100% - 24px);margin:8px 12px}
+.git-details .git-detail-switcher>button>span{display:inline}
+.git-file-preview{flex:1;min-height:0;display:flex;flex-direction:column}
+.git-empty-diff{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:20px;font-size:13px;color:var(--text-3)}
+.git-repository-view{flex:1;min-height:0;overflow:auto;border-top:1px solid var(--line);padding:4px 8px 16px}
+.git-repository-view .git-graph-scroll{max-height:none}
+.git-file-preview[hidden],.git-repository-view[hidden]{display:none}
+@media(max-width:680px){
+  .git-workspace-header{padding:4px 8px}
+  .git-workspace-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(220px,45%) minmax(0,1fr)}
+  .git-workspace .git-panel{border-right:0;border-bottom:1px solid var(--line)}
+  .git-detail-switcher{margin:6px 8px}
+  .git-details .git-detail-switcher>button{min-height:36px;width:auto;padding-inline:10px}
+}
+.git-toolbar{flex:none;padding:8px 12px 10px;border-bottom:1px solid var(--line);background:var(--bg)}
+.git-toolbar-branch{display:flex;align-items:center;gap:8px;min-width:0;min-height:28px}
+.git-toolbar-branch .git-branch{flex:1;margin:0}
+.git-toolbar-branch .icon-button{width:28px;height:28px;flex:none}
+.git-toolbar-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.git-toolbar-actions>.button{flex:1;min-width:0;min-height:30px;white-space:normal}
+.git-action-count{font-variant-numeric:tabular-nums;font-size:11px}
+.git-panel-content{flex:1;min-height:0;overflow:auto;padding-bottom:12px;scroll-padding-top:4px}
+.git-panel>.git-message{flex:none;max-height:25%;overflow:auto}
+@media(pointer:coarse){.git-toolbar-actions>.button,.git-toolbar-branch .icon-button{min-height:40px}.git-toolbar-branch .icon-button{width:40px}}
 /* Views, as in an editor's source control: a title, its actions, its content. */
 .git-pane+.git-pane{border-top:1px solid var(--line)}
 .git-pane-header{display:flex;align-items:center;gap:4px;min-height:30px;padding:0 6px 0 4px}
@@ -9,8 +45,7 @@
 .git-pane-actions{display:flex;align-items:center;gap:1px;min-width:0}
 .git-pane-actions .icon-button{width:24px;height:24px;color:var(--text-2)}
 .git-pane-actions .icon-button:disabled{opacity:.4}
-@media(hover:hover){.git-changes>.git-pane-header .git-pane-actions{opacity:0}.git-changes>.git-pane-header:hover .git-pane-actions,.git-changes>.git-pane-header:focus-within .git-pane-actions{opacity:1}}
-/* The graph's header names the branch and how it compares with its upstream. */
+/* The fixed toolbar names the branch and its upstream status. */
 .git-branch{display:inline-flex;align-items:center;gap:4px;min-width:0;margin-right:4px;font-size:11.5px;color:var(--text-3)}
 .git-branch>svg{flex:none}
 .git-branch code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--text-2)}
@@ -19,7 +54,7 @@
 .git-status-counts{display:flex;flex-wrap:wrap;align-items:center;gap:2px 7px;font-size:11px;line-height:16px;color:var(--text-2);font-weight:400}
 .git-status-counts>span{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .git-status-counts .is-clean{color:var(--green)}
-.git-panel .has-conflicts,.git-worktree-unavailable{color:var(--red)}
+.git-workspace .has-conflicts,.git-worktree-unavailable{color:var(--red)}
 @media(pointer:coarse){.git-pane-header,.git-pane-toggle{min-height:40px}.git-pane-actions .icon-button,.git-row-actions .icon-button{width:34px;height:34px}.git-row,.git-group-header,.git-file{min-height:36px}}
 .git-overview-note{margin:0;padding:3px 12px 6px;font-size:11px;line-height:1.4;color:var(--text-3);overflow-wrap:anywhere}
 .git-overview-note.inline-error{color:var(--red)}
@@ -41,8 +76,8 @@
 .git-worktree-meta{display:flex;align-items:center;flex-wrap:wrap;gap:2px 7px;min-height:16px;padding-left:17px;color:var(--text-3);font-size:10px;line-height:16px}
 .git-worktree-sync{white-space:nowrap}
 .git-worktree-flag{color:var(--amber-text)}
-.git-panel .git-open-task{width:26px;height:28px;margin-right:2px;color:var(--text-3)}
-.git-panel .git-open-task:hover{color:var(--accent)}
+.git-workspace .git-open-task{width:26px;height:28px;margin-right:2px;color:var(--text-3)}
+.git-workspace .git-open-task:hover{color:var(--accent)}
 .git-worktree-detail{border-top:1px solid var(--line);padding:4px 8px 6px 23px;background:var(--bg);font-size:11px;color:var(--text-2)}
 .git-worktree-detail p{margin:2px 0 4px;overflow-wrap:anywhere}
 .git-worktree-branch{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px}
@@ -83,4 +118,4 @@
 .worktree-ref{background:var(--accent-soft);color:var(--accent)}
 .worktree-ref:hover{box-shadow:inset 0 0 0 1px var(--accent-line)}
 .git-history-end{padding-top:5px}
-@media(pointer:coarse){.git-worktree-button{min-height:44px}.git-panel .git-open-task{height:40px;width:32px}.git-graph-row{min-height:36px}}
+@media(pointer:coarse){.git-worktree-button{min-height:44px}.git-workspace .git-open-task{height:40px;width:32px}.git-graph-row{min-height:36px}}

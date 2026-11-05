@@ -29,6 +29,7 @@ await context.addInitScript(() => {
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', canUpdate: false });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
@@ -133,6 +134,7 @@ try {
   await composer.route('**/api/**', async route => {
     const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
     if (url.pathname === '/api/state') return json(defaults);
+    if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
     if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
     if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', canUpdate: false });
     if (url.pathname.endsWith('/skills')) return json({ skills: [] });

@@ -25,9 +25,11 @@ let notes = [note('n1', 1), note('n2', 2, 'yellow'), note('n3', 3, 'yellow'), no
 const otherNote = { ...note('other-note', 6), projectId: 'other' };
 const original = structuredClone(notes), sent = [], attempts = [], items = new Map();
 let failDelete = false, holdDelete = false, releaseDelete, deletedFixture, restores = 0;
-let fail = false, hold = false, release, failEdit = false, holdEdit = false, releaseEdit;
+let fail = false, hold = false, release, failEdit = false, holdEdit = false, failHeldEdit = false, releaseEdit;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
+  if (url.pathname.endsWith('/git/history')) return json({ versions: [], next: null });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
@@ -53,7 +55,11 @@ await page.route('**/api/**', async route => {
   }
   if (/\/annotations\/[^/]+$/.test(url.pathname)) {
     if (failEdit) return route.fulfill({ status: 503, json: { error: 'Could not save the note.' } });
-    if (holdEdit) { holdEdit = false; await new Promise(resolve => { releaseEdit = resolve; }); }
+    if (holdEdit) {
+      holdEdit = false; const reject = failHeldEdit; failHeldEdit = false;
+      await new Promise(resolve => { releaseEdit = resolve; });
+      if (reject) return route.fulfill({ status: 503, json: { error: 'First save failed.' } });
+    }
     const note = notes.find(note => note.id === url.pathname.split('/').at(-1));
     note.comment = route.request().postDataJSON().comment; return json(note);
   }
@@ -99,6 +105,38 @@ try {
   await expect(deletingCard.getByRole('button', { name: 'Edit note 1', exact: true })).toBeVisible();
   await expect(deletingCard.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveCount(0);
   await expect(deletingCard.getByText('Included', { exact: true })).toHaveCount(0);
+  // Both panels may edit the same note. Only successful writes belong in
+  // history, even when the next editor started from optimistic text.
+  const historyTool = name => page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name, exact: true });
+  for (const firstFails of [true, false]) {
+    await notesReady();
+    const libraryCard = page.locator('.notes-panel [data-note="n1"]');
+    await deletingCard.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+    await deletingCard.getByRole('textbox').fill('First draft.');
+    holdEdit = true; failHeldEdit = firstFails; releaseEdit = undefined;
+    await deletingCard.getByRole('textbox').press('Enter');
+    await expect.poll(() => Boolean(releaseEdit)).toBe(true);
+    await libraryCard.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+    await expect(libraryCard.getByRole('textbox')).toHaveValue('First draft.');
+    await libraryCard.getByRole('textbox').fill('Second draft.');
+    await libraryCard.getByRole('textbox').press('Enter');
+    releaseEdit(); releaseEdit = undefined;
+    await expect.poll(() => notes[0].comment).toBe('Second draft.');
+    await expect(libraryCard.getByRole('textbox')).toHaveCount(0);
+    if (firstFails) {
+      // Dismiss the failed editor without introducing another server write.
+      await deletingCard.getByRole('textbox').fill('Second draft.');
+      await deletingCard.getByRole('textbox').press('Enter');
+    }
+    await expect(deletingCard.getByRole('textbox')).toHaveCount(0);
+    await page.getByRole('button', { name: 'My notes', exact: true }).click();
+    const before = firstFails ? 'Revise n1.' : 'First draft.';
+    await historyTool('Undo').click(); await expect.poll(() => notes[0].comment).toBe(before);
+    await historyTool('Redo').click(); await expect.poll(() => notes[0].comment).toBe('Second draft.');
+    await historyTool('Undo').click(); await expect.poll(() => notes[0].comment).toBe(before);
+    if (!firstFails) { await historyTool('Undo').click(); await expect.poll(() => notes[0].comment).toBe('Revise n1.'); }
+  }
+  await notesReady();
   await deletingCard.getByRole('button', { name: 'Remove note 1 from task', exact: true }).click();
   await expect(deletingCard).toHaveCount(0);
   assert.ok(notes.some(note => note.id === 'n1'));
@@ -106,6 +144,27 @@ try {
   await setSelection(check('n1'), true);
   await page.getByRole('button', { name: 'My notes', exact: true }).click();
   await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
+  // Undo and redo must finish before a task can snapshot its selected notes.
+  await deletingCard.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await deletingCard.getByRole('textbox').fill('Changed instruction.');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => notes[0].comment).toBe('Changed instruction.');
+  await expect(deletingCard.getByRole('textbox')).toHaveCount(0);
+  for (const [action, comment] of [['Undo', 'Revise n1.'], ['Redo', 'Changed instruction.'], ['Undo', 'Revise n1.']]) {
+    holdEdit = true; releaseEdit = undefined;
+    await page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name: action, exact: true }).click();
+    await expect.poll(() => Boolean(releaseEdit)).toBe(true);
+    await expect(send()).toBeDisabled();
+    await page.getByRole('textbox', { name: 'Describe the revision', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    // Also exercise the submit handler independently of the disabled button.
+    await send().evaluate(button => button.form.requestSubmit());
+    await page.waitForTimeout(100);
+    assert.equal(attempts.length, 0, `${action} must finish before task submission`);
+    releaseEdit(); releaseEdit = undefined;
+    await expect.poll(() => notes[0].comment).toBe(comment);
+    await expect(send()).toBeEnabled();
+  }
   failDelete = true;
   await deletingCard.getByRole('button', { name: 'Delete note 1', exact: true }).click();
   await expect(deletingCard.getByRole('alert')).toHaveText('Could not delete the note.');
@@ -361,26 +420,27 @@ try {
     await expect(taskText()).toHaveText(draft);
     assert.equal(notes[0].comment, draft);
   }
-  // Changing side tabs must await the save and preserve a failed draft. Use
+  // Opening Version Management must save and preserve a failed draft. Use
   // the keyboard as well: it does not trigger the card's pointerdown saver.
-  for (const tab of ['Git']) {
+  for (const tab of ['Version Management']) {
     await editTaskNote().click();
     await taskEditor.fill(`Keep this draft when opening ${tab}.`);
     failEdit = true;
-    await page.getByRole('tab', { name: tab, exact: true }).focus();
+    await page.locator('.git-link').focus();
     await page.keyboard.press('Enter');
     await expect(taskEditor).toHaveValue(`Keep this draft when opening ${tab}.`);
     await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
     await expect(page.getByRole('tab', { name: 'New task', exact: true })).toHaveAttribute('aria-selected', 'true');
     failEdit = false;
-    await page.getByRole('tab', { name: tab, exact: true }).click();
-    await expect(page.getByRole('tab', { name: tab, exact: true })).toHaveAttribute('aria-selected', 'true');
+    await page.locator('.git-link').click();
+    await expect(page.getByRole('region', { name: 'Version Management', exact: true })).toBeVisible();
     assert.equal(notes[0].comment, `Keep this draft when opening ${tab}.`);
-    await page.getByRole('tab', { name: 'New task', exact: true }).click();
+    await page.locator('.manuscript-link').click();
     await expect(taskText()).toHaveText(`Keep this draft when opening ${tab}.`);
   }
   // The library's deselection button must also save the task's draft before
   // removing the card, including when activated without a pointer event.
+  await page.getByRole('button', { name: 'My notes', exact: true }).click();
   await editTaskNote().click();
   await taskEditor.fill('Keep this draft when deselecting elsewhere.');
   failEdit = true;
@@ -409,7 +469,7 @@ try {
       await expect(contentsMenu).toBeHidden();
     }
   }
-  for (const tab of ['PDF', 'Git']) {
+  for (const tab of ['PDF']) {
     await editTaskNote().click();
     await taskEditor.fill(`Keep the mobile draft across ${tab}.`);
     failEdit = true;
@@ -436,6 +496,26 @@ try {
     await expect(taskText()).toHaveText(`Wait for the mobile save across ${tab}.`);
     await expect(send()).toBeEnabled();
   }
+  const openVersionManagement = async () => {
+    await page.getByRole('button', { name: 'Show task list', exact: true }).click();
+    await page.locator('.git-link').click();
+  };
+  await editTaskNote().click();
+  await taskEditor.fill('Keep the mobile draft across Version Management.');
+  failEdit = true;
+  await openVersionManagement();
+  await expect(taskCard.getByRole('alert')).toHaveText('Could not save the note.');
+  await expect(page.getByRole('region', { name: 'Version Management', exact: true })).toHaveCount(0);
+  await expect(taskEditor).toHaveValue('Keep the mobile draft across Version Management.');
+  failEdit = false;
+  // The failed navigation leaves the sidebar open for a retry.
+  await page.locator('.git-link').click();
+  await expect(page.getByRole('region', { name: 'Version Management', exact: true })).toBeVisible();
+  assert.equal(notes[0].comment, 'Keep the mobile draft across Version Management.');
+  await page.getByRole('button', { name: 'Show task list', exact: true }).click();
+  await page.locator('.manuscript-link').click();
+  await views.getByRole('button', { name: 'New task', exact: true }).click();
+  await expect(taskText()).toHaveText('Keep the mobile draft across Version Management.');
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // Review skills hide attachments; returning to the ordinary task recovers

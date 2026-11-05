@@ -9,8 +9,8 @@ const ROW_HEIGHT = 24;
 // Tab stops and wide characters need room even when their row is off screen.
 const columns = (text: string) => Array.from(text).reduce((n, char) => n + (char === '\t' ? 4 - n % 4 : char.codePointAt(0)! > 255 ? 2 : 1), 0);
 
-export function GitDiffView({ path, scopeLabel, revision, load, onClose, closeLabel, lead, tools }: {
-  path: string; scopeLabel: string; revision: string; load: (path: string, signal: AbortSignal) => Promise<GitDiff>;
+export function GitDiffView({ path, scopeLabel, revision, live = false, load, onClose, closeLabel, lead, tools }: {
+  path: string; scopeLabel: string; revision: string; live?: boolean; load: (path: string, signal: AbortSignal) => Promise<GitDiff>;
   onClose: () => void; closeLabel: string; lead?: ReactNode; tools?: ReactNode;
 }) {
   const [diff, setDiff] = useState<GitDiff | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(true), [retry, setRetry] = useState(0);
@@ -20,12 +20,43 @@ export function GitDiffView({ path, scopeLabel, revision, load, onClose, closeLa
   const jumpTarget = useRef<number | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined, pending = false;
+    // Status and line counts can stay identical after an edit. Refresh mutable
+    // diffs directly, waiting for each request before scheduling the next one.
+    const refresh = async () => {
+      if (pending || controller.signal.aborted) return;
+      clearTimeout(timer);
+      pending = true;
+      try {
+        const result = await load(path, controller.signal);
+        if (!controller.signal.aborted) { setDiff(result); setError(''); }
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : String(error));
+      } finally {
+        pending = false;
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          if (live) timer = setTimeout(poll, 5000);
+        }
+      }
+    };
+    const poll = () => {
+      if (document.hidden) timer = setTimeout(poll, 5000);
+      else void refresh();
+    };
+    const resume = () => { if (!document.hidden) void refresh(); };
     setLoading(true); setError('');
-    load(path, controller.signal).then(result => { if (!controller.signal.aborted) setDiff(result); }, error => {
-      if (!controller.signal.aborted) setError(error instanceof Error ? error.message : String(error));
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [path, revision, load, retry]);
+    void refresh();
+    if (live) {
+      window.addEventListener('focus', resume);
+      document.addEventListener('visibilitychange', resume);
+    }
+    return () => {
+      controller.abort(); clearTimeout(timer);
+      window.removeEventListener('focus', resume);
+      document.removeEventListener('visibilitychange', resume);
+    };
+  }, [path, revision, live, load, retry]);
   useEffect(() => {
     const box = scroll.current!;
     box.focus({ preventScroll: true });

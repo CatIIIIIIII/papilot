@@ -42,9 +42,8 @@ export function GitPane({ title, count, actions, open, onToggle, className = '',
   </section>;
 }
 
-// The commit graph and the worktrees beside the manuscript, as two views.
-// actions are the remote commands the graph's header offers.
-export function GitRepository({ git, load, tasks, onOpenTask, taskStatus, actions }: { git: GitStatus; load: (signal: AbortSignal) => Promise<GitOverview>; tasks: Task[]; onOpenTask: (id: string) => void; taskStatus: (task: Task) => ReactNode; actions?: ReactNode }) {
+// Repository history and related task worktrees in the Git workspace.
+export function GitRepository({ git, load, tasks, onOpenTask, taskStatus }: { git: GitStatus; load: (signal: AbortSignal) => Promise<GitOverview>; tasks: Task[]; onOpenTask: (id: string) => void; taskStatus: (task: Task) => ReactNode }) {
   const [data, setData] = useState<GitOverview | null>(null), [error, setError] = useState('');
   const [loading, setLoading] = useState(true), [refresh, setRefresh] = useState(0);
   const [selectedPath, setSelectedPath] = useState(''), [expandedPath, setExpandedPath] = useState('');
@@ -78,7 +77,7 @@ export function GitRepository({ git, load, tasks, onOpenTask, taskStatus, action
   const graph = graphRows(data?.commits || []), graphWidth = 12 + graph.lanes * 12;
   const reveal = (tree: GitWorktree) => { setSelectedPath(tree.path); setExpandedPath(tree.path); toggleTrees(true); };
   return <>
-    <GitPane className="git-history" title={t('Commit graph')} open={graphOpen} onToggle={() => toggleGraph()} actions={<>{actions}
+    <GitPane className="git-history" title={t('Commit graph')} open={graphOpen} onToggle={() => toggleGraph()} actions={<>
       <button type="button" className="icon-button" aria-label={t('Refresh worktrees and history')} title={t('Refresh worktrees and history')} disabled={loading} onClick={() => setRefresh(value => value + 1)}>{loading ? <span className="spinner"/> : <Icon name="refresh" size={14}/>}</button></>}>
       {error && <p className="inline-error git-overview-note" role="alert">{t('Could not refresh the repository.')}{data && <> {t('Showing the last update.')}</>} <span>{error}</span><button type="button" className="button ghost compact" onClick={() => setRefresh(value => value + 1)}>{t('Retry')}</button></p>}
       {!data && !error && <p className="git-overview-note" role="status">{t('Reading worktrees and history…')}</p>}

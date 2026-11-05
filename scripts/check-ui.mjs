@@ -700,7 +700,8 @@ try {
   console.log('PASS: Content toolbars retain view-switch focus and reopen the sidebar in every desktop layout');
 
   const pdfLink = page.locator('.manuscript-link');
-  await pdfLink.locator('.nav-meta').filter({ hasText: 'main · 2 changed · ↑1' }).waitFor();
+  await expect(page.locator('.git-link')).toHaveAttribute('title', /main · 2 changed · ↑1/);
+  await expect(page.locator('.git-link .count')).toHaveText('2');
   // A previously saved percentage must not prevent the divider from fitting the PDF.
   await page.evaluate(() => localStorage.setItem('papilot:pdf-zoom', '0.95'));
   await pdfLink.click();
@@ -759,7 +760,7 @@ try {
 
   await page.setViewportSize({ width: 1440, height: 900 });
   // Contents opens beside PDF / Changes without replacing the task panel.
-  assert.deepEqual((await page.getByRole('tablist', { name: 'Manuscript panels' }).getByRole('tab').allInnerTexts()).map(text => text.replace(/\s+/g, ' ')), ['New task', 'Git 2']);
+  assert.deepEqual((await page.getByRole('tablist', { name: 'Manuscript panels' }).getByRole('tab').allInnerTexts()).map(text => text.replace(/\s+/g, ' ')), ['New task']);
   const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
   await contentsTrigger.click();
   const contents = page.getByRole('menu', { name: 'Contents', exact: true });
@@ -973,7 +974,7 @@ try {
   await expect(notesPanel).toHaveCount(0);
   await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).click();
   await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveText('Included');
+  await expect(notesPanel.getByRole('button', { name: 'Include note 1 in this task', exact: true })).toHaveText('');
   // Editing a note that is already in the chat saves it and keeps it there.
   await clickNote(notesPanel.getByText('Only these words, please.', { exact: true }));
   await editingNote.press('Enter');
@@ -1109,8 +1110,8 @@ try {
   gitState.files.push({ path: 'main.aux', status: '?', staged: false, unstaged: true }, { path: 'main.log', status: '?', staged: false, unstaged: true });
   await pdfLink.click();
   await page.getByRole('heading', { name: 'Manuscript', exact: true }).waitFor();
-  await page.getByRole('tab', { name: /^Git/ }).click();
-  const gitPanel = page.getByRole('region', { name: 'Git status' });
+  await page.locator('.git-link').click();
+  const gitPanel = page.getByRole('region', { name: 'Version Management' });
   // Advanced Git views are enabled only in the App's existing settings.
   await gitPanel.getByRole('group', { name: 'Changes', exact: true }).waitFor();
   assert.equal(await gitPanel.getByRole('region', { name: 'Commit graph', exact: true }).count(), 0);
@@ -1126,9 +1127,11 @@ try {
   await unstagedList.getByText('notes.md', { exact: true }).waitFor();
   assert.equal(await changes.getByRole('textbox', { name: 'Commit message' }).getAttribute('placeholder'), 'Message (↵ to commit on “main”)');
   assert.equal(await gitPanel.getByRole('checkbox').count(), 0, 'Files are staged with + and −, not checkboxes');
+  await gitPanel.locator('.git-detail-switcher').getByRole('button', { name: 'Version history', exact: true }).click();
+  const gitToolbar = gitPanel.locator('.git-toolbar');
   const graphPane = gitPanel.getByRole('region', { name: 'Commit graph', exact: true });
-  assert.match(await graphPane.locator('.git-branch').innerText(), /main\s*↑1/);
-  assert.equal(await graphPane.locator('.git-branch').getAttribute('title'), 'Tracking origin/main');
+  assert.match(await gitToolbar.locator('.git-branch').innerText(), /main\s*↑1/);
+  assert.equal(await gitToolbar.locator('.git-branch').getAttribute('title'), 'Tracking origin/main');
   await graphPane.locator('.git-graph-row.head').getByText('Draft the introduction', { exact: true }).waitFor();
   await graphPane.locator('.current-ref').getByText('main', { exact: true }).waitFor();
   await graphPane.locator('.remote-ref').getByText('origin/main', { exact: true }).waitFor();
@@ -1200,7 +1203,7 @@ try {
   assert.equal(await commitButton.isDisabled(), true);
   await unstagedList.getByRole('button', { name: 'main.tex', exact: true }).click();
   await page.getByRole('region', { name: 'Changes in main.tex' }).getByText('New line.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Back to manuscript', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to files', exact: true }).click();
   // + stages a file and − unstages it; Commit then takes only what is staged.
   await unstagedList.getByRole('button', { name: 'Stage main.tex', exact: true }).click();
   await stagedList.getByText('main.tex', { exact: true }).waitFor();
@@ -1230,6 +1233,7 @@ try {
   assert.deepEqual(gitCommits, [{ message: 'Tighten the introduction', staged: true }]);
   assert.deepEqual(gitState.files.map(file => file.path), ['notes.md', '.gitignore'], 'Unstaged files stay for the next commit');
   assert.equal(await commitMessage.inputValue(), '');
+  await gitPanel.locator('.git-detail-switcher').getByRole('button', { name: 'Version history', exact: true }).click();
   await graph.locator('.git-graph-row.head').getByText('Tighten the introduction', { exact: true }).waitFor();
   // Confirming deletes an untracked file.
   await unstagedList.getByRole('button', { name: 'Discard changes in .gitignore', exact: true }).click();
@@ -1243,17 +1247,17 @@ try {
   await gitPanel.getByRole('status').filter({ hasText: 'Committed def5678 and pushed.' }).waitFor();
   assert.deepEqual(gitCommits.at(-1), { message: 'Add notes', paths: ['notes.md'] });
   assert.deepEqual(gitActions.filter(action => action !== 'fetch'), ['push']);
-  assert.equal(await graph.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true, 'Nothing is left to push');
+  assert.equal(await gitToolbar.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true, 'Nothing is left to push');
   await changes.getByText('No uncommitted changes', { exact: true }).waitFor();
   // A branch and upstream that both moved on merge instead of pulling.
   Object.assign(gitState, { ahead: 1, behind: 2 });
-  await graph.getByRole('button', { name: 'Fetch from the remote', exact: true }).click();
-  await graph.getByRole('button', { name: 'Merge', exact: true }).click();
+  await gitToolbar.getByRole('button', { name: 'Fetch from the remote', exact: true }).click();
+  await gitToolbar.getByRole('button', { name: 'Merge', exact: true }).click();
   const merge = gitPanel.getByRole('group', { name: 'Merge in progress' });
   await merge.getByText('Merging: 1 file has conflicts', { exact: true }).waitFor();
   assert.equal(await gitPanel.getByLabel('Conflict').innerText(), '!');
   assert.equal(await gitPanel.getByRole('textbox', { name: 'Commit message' }).count(), 0);
-  assert.equal(await graph.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true);
+  assert.equal(await gitToolbar.getByRole('button', { name: 'Push', exact: true }).isDisabled(), true);
   await merge.getByRole('button', { name: /^Resolve with / }).click();
   await gitPanel.getByRole('status').filter({ hasText: 'Conflicts resolved. Read the diffs, then commit the merge.' }).waitFor();
   assert.equal(await merge.locator('.git-merge-summary strong').innerText(), 'both');
@@ -1264,6 +1268,7 @@ try {
   assert.ok(gitActions.includes('fetch'));
   assert.deepEqual(gitActions.filter(action => typeof action === 'string' && action !== 'fetch'), ['push', 'merge', 'finish']);
   Object.assign(gitState, structuredClone(originalGit));
+  await pdfLink.click();
   const pdfToolbar = page.getByRole('toolbar', { name: 'PDF controls' });
   await page.locator('.manuscript-side-header').getByRole('button', { name: 'Share', exact: true }).click();
   assert.equal(await page.getByRole('menuitem', { name: 'Open PDF', exact: true }).getAttribute('href'), '/api/projects/fixture-paper/manuscript.pdf?key=fixture');
@@ -1271,6 +1276,8 @@ try {
   await page.keyboard.press('Escape');
   await pdfToolbar.getByRole('button', { name: 'Recompile PDF', exact: true }).waitFor();
   assert.equal(await page.title(), 'Example paper · Papilot');
+  await page.locator('.git-link').click();
+  await gitPanel.locator('.git-detail-switcher').getByRole('button', { name: 'Version history', exact: true }).click();
   await worktrees.getByRole('button', { name: `Open task: ${task.title}`, exact: true }).click();
   await page.getByRole('heading', { name: task.title }).waitFor();
   console.log('PASS: Each paper has a PDF view with contents, paging, zoom and find; text and region notes are added, deleted and sent as one task; Git changes are diffed, committed and pushed');
@@ -1294,16 +1301,15 @@ try {
   const copy = page.getByRole('button', { name: 'Copy message' });
   await copy.click();
   await page.getByRole('button', { name: 'Copied' }).waitFor();
-  await page.getByText('1 review update not sent yet', { exact: true }).waitFor();
-  await page.getByText('1 review update will be sent with this message', { exact: true }).waitFor();
+  await page.getByText('1 review update included', { exact: true }).waitFor();
   task.review.unsent = 0;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('.review-draft').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('.composer-hint').count(), 0);
   delete task.review.unsent;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor();
-  console.log('PASS: The chat divider drags, nudges, persists and resets; replies copy; only unsent review updates offer Send feedback');
+  await page.locator('.review-draft').waitFor();
+  console.log('PASS: The chat divider drags, nudges, persists and resets; replies copy; only unsent review feedback appears in the composer');
 
 
   await page.locator('.manuscript-link').click();
@@ -1512,21 +1518,20 @@ try {
   const previousReview = structuredClone(task.review);
   task.review = { state: 'done', round: 1, counts: { pending: 0, accepted: 1, rejected: 1, commented: 0 }, unsent: 2 };
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByText('2 review updates not sent yet', { exact: true }).waitFor();
+  await page.getByText('2 review updates included', { exact: true }).waitFor();
   await input.fill('Keep this unsent draft.');
   await page.screenshot({ path: 'test-results/send-review-decisions.png', fullPage: true });
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
-  await page.getByRole('button', { name: 'Send instructions', exact: true }).waitFor();
-  await page.waitForFunction(() => !document.querySelector('.send-button').disabled);
-  assert.equal(await input.inputValue(), 'Keep this unsent draft.');
-  assert.equal(messages[0].feedback, true);
-  assert.equal(messages[0].text, '');
+  await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
+  await expect(input).toHaveValue('');
+  assert.equal(messages[0].feedback, undefined);
+  assert.equal(messages[0].text, 'Keep this unsent draft.');
   task.review.unsent = 0;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('.review-draft').waitFor({ state: 'hidden' });
   task.review = previousReview;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor();
+  await page.locator('.review-draft').waitFor();
+  await input.fill('Next instruction with review feedback.');
   holdMessage = new Promise(resolve => { releaseMessage = resolve; });
   await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
   await page.getByText('Sending…', { exact: true }).waitFor();
@@ -1541,7 +1546,7 @@ try {
   await page.getByRole('button', { name: /^Clarify the introduction/ }).click();
   await input.waitFor();
   assert.equal(await input.inputValue(), 'New text typed during submission.');
-  console.log('PASS: Feedback and in-flight submission preserve drafts, including after reload');
+  console.log('PASS: Feedback shares the chat submission, and in-flight typing survives reload');
   const secondTask = { ...task, id: 'fixture-task-0002', name: 'p-second', title: 'Check the notation', review: null };
   snapshot.tasks.push(secondTask);
   await page.getByRole('button', { name: /^Check the notation/ }).waitFor();
@@ -1795,8 +1800,10 @@ try {
       await expect(page.getByRole('menu', { name: 'Contents', exact: true })).toBeHidden();
       await pdfPage.waitFor();
       await page.waitForFunction(() => document.querySelector('[aria-label="Page number"]').value === '2');
-      await page.getByRole('button', { name: 'Git, 2 changed' }).click();
-      await page.getByRole('region', { name: 'Git status' }).getByText('main.tex', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Show task list', exact: true }).click();
+      await page.locator('.git-link').click();
+      await page.getByRole('region', { name: 'Version Management' }).locator('.git-panel').getByText('main.tex', { exact: true }).waitFor();
+      await page.locator('.git-detail-switcher').getByRole('button', { name: 'Version history', exact: true }).click();
       const treesToggle = page.getByRole('region', { name: 'Worktrees', exact: true }).locator('.git-pane-toggle');
       if (await treesToggle.getAttribute('aria-expanded') !== 'true') await treesToggle.click();
       await page.getByRole('region', { name: 'Worktrees', exact: true }).locator(`[data-task-id="${task.id}"]`).waitFor();
@@ -1804,14 +1811,15 @@ try {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
       await page.screenshot({ path: `test-results/git-overview-mobile-${width}.png` });
       assert.equal(await pdfPage.isVisible(), false);
-      await page.getByRole('button', { name: 'PDF', exact: true }).click();
+      await page.getByRole('button', { name: 'Show task list', exact: true }).click();
+      await page.locator('.manuscript-link').click();
       await pdfPage.waitFor();
       await page.getByRole('button', { name: 'New task', exact: true }).click();
       await prompt.fill('A task beside the PDF\nKeep the manuscript composer visible.');
       await page.getByRole('button', { name: 'Start task' }).click();
       await page.waitForFunction(() => document.querySelector('.new-task-panel textarea')?.value === '');
       assert.equal(await prompt.isVisible(), true);
-      assert.equal(await page.locator('.sidebar').isVisible(), false);
+      await expect(page.locator('.sidebar')).toBeHidden();
       assert.equal(await page.getByRole('button', { name: 'New task', exact: true }).getAttribute('aria-pressed'), 'true');
       await page.getByRole('button', { name: 'Show task list', exact: true }).click();
       await page.locator(`[data-task="${task.id}"] .task-link`).click();
@@ -1822,7 +1830,7 @@ try {
   console.log('PASS: 320px, 390px, and tablet layouts; draft persistence; zoom; drawer; project dialog');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: /^Review/ }).first().click();
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
+  await page.getByRole('button', { name: 'Chat (reply needed)', exact: true }).click();
   await input.waitFor({ state: 'visible' });
   assert.equal(await page.getByRole('button', { name: 'Chat (reply needed)', exact: true }).getAttribute('aria-pressed'), 'true');
   assert.equal(await input.inputValue(), 'New text typed during submission.');
@@ -1831,7 +1839,7 @@ try {
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: `Task actions for ${task.title}`, exact: true }).evaluate(el => el === document.activeElement), true);
   await page.keyboard.press('Escape');
-  console.log('PASS: Mobile review feedback opens the conversation without clearing drafts; task menu dialogs restore drawer focus');
+  console.log('PASS: Mobile Chat keeps the unified feedback draft; task menu dialogs restore drawer focus');
 
   await page.setViewportSize({ width: 1440, height: 900 });
   snapshot.requests = []; task.status = 'reviewing';

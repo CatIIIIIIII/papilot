@@ -261,5 +261,6 @@
   "{sources} could not be reached.": "{sources} kunde inte nås.",
   "{source} has this work with other details. Compare them below.": "{source} har detta verk med andra uppgifter. Jämför dem nedan.",
   "{staged} of {total} staged": "{staged} av {total} köade",
-  "↵ send · Esc cancel": "↵ skicka · Esc avbryt"
+  "↵ send · Esc cancel": "↵ skicka · Esc avbryt",
+  "Your comments are saved. Continue in Chat to request a revision.": "Dina kommentarer är sparade. Fortsätt i chatten för att begära en revidering."
 }

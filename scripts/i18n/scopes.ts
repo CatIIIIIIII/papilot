@@ -64,6 +64,13 @@ export function renderReadme(root: string, translations: Record<string, string>,
   const headings = [...source.matchAll(/^## (.+)$/gm)].map(match => match[1].toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/ /g, '-'));
   let index = 0;
   result = result.replace(/^## /gm, () => `<a id="${headings[index++]}"></a>\n\n## `);
+  // An image may have a translated copy beside it, such as hero.zh-CN.png.
+  // Catalogs keep the English path; only the rendered document points to the copy.
+  result = result.replace(/\b(src|srcset)="([^"#]+)"/g, (match, attribute, url) => {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(url)) return match;
+    const localized = url.replace(/(\.(?:png|jpe?g|gif|svg|webp))$/i, `.${locale}$1`);
+    return localized !== url && fs.existsSync(path.join(root, localized)) ? `${attribute}="${localized}"` : match;
+  });
   const directory = 'docs/readme';
   fs.mkdirSync(path.join(root, directory), { recursive: true });
   fs.writeFileSync(path.join(root, directory, `README.${locale}.md`), readmeLinks(result, directory));

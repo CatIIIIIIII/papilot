@@ -10,7 +10,7 @@ export function parseGroupInstructions(value: unknown): GroupInstructions {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Use valid instructions for each color group.');
   const result: GroupInstructions = {};
   for (const [key, text] of Object.entries(value)) {
-    if (!isNoteGroup(key) || typeof text !== 'string' || text.length > 4000) throw new Error('Use valid instructions for each color group (up to 4000 characters).');
+    if (!isNoteGroup(key) || typeof text !== 'string') throw new Error('Use valid instructions for each color group.');
     const group = canonicalGroup(key);
     if (result[group] && result[group] !== text.trim()) throw new Error('Use one instruction for each color group.');
     if (text.trim()) result[group] = text.trim();

@@ -36,10 +36,9 @@ export interface ViewResult {
   error?: string;
   details?: string[];
 }
-// Pages drawn per request, and how far from an asked-for line SyncTeX may
-// look for one that printed something (blank lines and comments print nothing).
-const PAGES = 4,
-  NEARBY = 10,
+// How far from an asked-for line SyncTeX may look for one that printed
+// something (blank lines and comments print nothing).
+const NEARBY = 10,
   SCALE = 1.5,
   // Drawn pages are kept this long, for an agent that opens them later in its turn.
   KEEP = 6 * 3600 * 1000;
@@ -177,12 +176,8 @@ export async function view(
       }
     }
     const indices = [...wanted.keys()].sort((a, b) => a - b);
-    if (indices.length > PAGES)
-      missing.push(
-        `Only the first ${PAGES} pages are shown; ask for more specific source locations to see the remaining pages (physical positions ${indices.slice(PAGES).join(", ")} in this build).`,
-      );
     const out = indices.length ? folder(app, name) : "";
-    const pages = indices.slice(0, PAGES).map((index) => {
+    const pages = indices.map((index) => {
       const page = document.loadPage(index - 1),
         pixmap = page.toPixmap(
           [SCALE, 0, 0, SCALE, 0, 0],
