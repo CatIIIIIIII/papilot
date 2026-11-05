@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, lstatSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, lstatSync, readdirSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { GitDiff, GitHistory, GitVersion, GitVersionDetail } from '../shared.ts';
 import { gitStatus } from './manuscript.ts';
 
@@ -67,30 +67,59 @@ export async function gitVersionDiff(root: string, hash: string, file: string): 
 
 function overwritesIgnoredFiles(root: string, targets: string[], ignored: string[]) {
   if (!ignored.length) return false;
-  const ancestors = (name: string) => name.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'));
-  const cache = new Map<string, string | null>();
-  // Ask the filesystem, not core.ignorecase or a Unicode/case-folding guess.
-  // lstat also protects an ignored symlink itself without following its target.
-  const identity = (name: string) => {
-    if (!cache.has(name)) {
+  const checkout = realpathSync.native(root);
+  type Entry = { paths: string[]; directory: boolean };
+  const cache = new Map<string, Entry | null>(), listings = new Map<string, string[]>();
+  const entry = (parent: string, name: string) => {
+    const filename = join(parent, name);
+    if (!cache.has(filename)) {
       try {
-        const stat = lstatSync(resolve(root, name), { bigint: true });
-        cache.set(name, `${stat.dev}:${stat.ino}`);
+        const stat = lstatSync(filename, { bigint: true });
+        let paths: string[];
+        if (stat.isSymbolicLink()) {
+          // Canonicalize the link's name without following its destination.
+          const names = listings.get(parent) ?? readdirSync(parent);
+          listings.set(parent, names);
+          paths = (names.includes(name) ? [name] : names.filter(candidate => {
+            const other = lstatSync(join(parent, candidate), { bigint: true });
+            return other.dev === stat.dev && other.ino === stat.ino;
+          })).map(candidate => join(parent, candidate));
+          if (!paths.length) throw Object.assign(new Error('The current version changed. Refresh the history and try again.'), { statusCode: 409 });
+        } else {
+          // Filesystem spelling handles case/Unicode aliases, while separate
+          // hardlink directory entries remain distinct despite sharing an inode.
+          paths = [realpathSync.native(filename)];
+        }
+        cache.set(filename, { paths, directory: stat.isDirectory() });
       } catch (error) {
         if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code || '')) throw error;
-        cache.set(name, null);
+        cache.set(filename, null);
       }
     }
-    return cache.get(name)!;
+    return cache.get(filename)!;
   };
-  const identities = (names: string[]) => new Set(names.map(identity).filter((id): id is string => id !== null));
-  const ignoredFiles = identities(ignored), ignoredParents = identities(ignored.flatMap(ancestors));
+  function* entries(name: string) {
+    const parts = name.split('/');
+    let parent = checkout;
+    for (let i = 0; i < parts.length; i++) {
+      const found = entry(parent, parts[i]);
+      if (!found) return;
+      yield { paths: found.paths, leaf: i === parts.length - 1 };
+      // Git replaces a tracked file/link when a target needs a directory;
+      // it does not write through that link into its destination.
+      if (!found.directory) return;
+      parent = found.paths[0];
+    }
+  }
+  const ignoredFiles = new Set<string>(), ignoredParents = new Set<string>();
+  for (const name of ignored) for (const item of entries(name)) {
+    for (const filename of item.paths) (item.leaf ? ignoredFiles : ignoredParents).add(filename);
+  }
   return targets.some(name => {
-    const file = identity(name);
-    // A target file can replace an ignored file or a directory containing one.
-    // A target directory can also replace an ignored file, including aliases.
-    return (file !== null && (ignoredFiles.has(file) || ignoredParents.has(file)))
-      || ancestors(name).some(parent => { const id = identity(parent); return id !== null && ignoredFiles.has(id); });
+    for (const item of entries(name)) {
+      if (item.paths.some(filename => ignoredFiles.has(filename) || (item.leaf && ignoredParents.has(filename)))) return true;
+    }
+    return false;
   });
 }
 

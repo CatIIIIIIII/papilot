@@ -92,7 +92,7 @@ test('ignored files that collide with an old version are protected', async t => 
   assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Second');
 });
 
-test('restore checks ignored files using filesystem identity, including aliased ancestors', async t => {
+test('restore checks ignored directory entries, including filesystem aliases and ancestors', async t => {
   const cases = [
     { name: 'case-only file alias', target: 'output.pdf', local: 'OUTPUT.PDF', probe: 'output.pdf', localProbe: 'OUTPUT.PDF' },
     { name: 'Unicode normalization alias', target: 'résumé.pdf', local: 're\u0301sume\u0301.pdf', probe: 'résumé.pdf', localProbe: 're\u0301sume\u0301.pdf' },
@@ -138,4 +138,70 @@ test('restoring a linked worktree changes only its branch and checkout', async t
   await gitRestoreVersion(linked, first, head);
   assert.equal(git('rev-parse', 'HEAD'), head); assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Second');
   assert.equal(fs.readFileSync(path.join(linked, 'main.tex'), 'utf8'), 'First');
+});
+
+test('restore preserves ignored hardlink backups while replacing the tracked entry', async t => {
+  const { root, git, write, commit } = fixture(t);
+  write('.gitignore', 'backup.tex\n'); write('main.tex', 'Old version\n');
+  const first = commit('Old version'); write('main.tex', 'New version\n'); const head = commit('Current version');
+  fs.linkSync(path.join(root, 'main.tex'), path.join(root, 'backup.tex'));
+  const backup = fs.lstatSync(path.join(root, 'backup.tex'), { bigint: true });
+  assert.equal(git('status', '--porcelain'), '');
+  const restored = await gitRestoreVersion(root, first, head);
+  assert.equal(git('rev-parse', 'HEAD^'), head);
+  assert.deepEqual(restored.git.files, []);
+  assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Old version\n');
+  assert.equal(fs.readFileSync(path.join(root, 'backup.tex'), 'utf8'), 'New version\n');
+  assert.equal(fs.lstatSync(path.join(root, 'backup.tex'), { bigint: true }).ino, backup.ino);
+});
+
+test('restore replaces a tracked symlink ancestor without traversing into ignored files', async t => {
+  const { root, git, write, commit } = fixture(t);
+  write('.gitignore', 'cache/\n'); fs.mkdirSync(path.join(root, 'view')); write('view/paper.tex', 'Old version\n');
+  const first = commit('Old version');
+  git('rm', '-r', 'view'); fs.mkdirSync(path.join(root, 'cache')); write('cache/paper.tex', 'Private ignored content\n');
+  fs.symlinkSync('cache', path.join(root, 'view'));
+  const head = commit('Current version'), ignored = fs.lstatSync(path.join(root, 'cache/paper.tex'), { bigint: true });
+  assert.equal(git('status', '--porcelain'), '');
+  const restored = await gitRestoreVersion(root, first, head);
+  assert.equal(git('rev-parse', 'HEAD^'), head);
+  assert.deepEqual(restored.git.files, []);
+  assert.ok(fs.lstatSync(path.join(root, 'view')).isDirectory());
+  assert.equal(fs.readFileSync(path.join(root, 'view/paper.tex'), 'utf8'), 'Old version\n');
+  assert.equal(fs.readFileSync(path.join(root, 'cache/paper.tex'), 'utf8'), 'Private ignored content\n');
+  assert.equal(fs.lstatSync(path.join(root, 'cache/paper.tex'), { bigint: true }).ino, ignored.ino);
+});
+
+test('restore still protects ignored symlinks themselves, including dangling aliases', async t => {
+  const cases = [
+    { target: 'output.pdf', local: 'output.pdf', probe: 'output.pdf' },
+    { target: 'output.pdf', local: 'OUTPUT.PDF', probe: 'output.pdf' },
+    { target: 'résumé.pdf', local: 're\u0301sume\u0301.pdf', probe: 'résumé.pdf' },
+    { target: 'cache/report.tex', local: 'CACHE', probe: 'cache' },
+  ];
+  for (const item of cases) await t.test(`${item.target} / ${item.local}`, async t => {
+    const { root, git, write, commit } = fixture(t);
+    write('.gitignore', '*\n'); write('main.tex', 'First');
+    fs.mkdirSync(path.dirname(path.join(root, item.target)), { recursive: true }); write(item.target, 'Old version');
+    git('add', '-f', '--', '.gitignore', 'main.tex', item.target); const first = commit('Old version');
+    git('rm', '--', item.target); write('main.tex', 'Second'); const head = commit('Current version');
+    fs.symlinkSync('missing-local-backup', path.join(root, item.local));
+    git('config', 'core.ignorecase', 'false'); git('config', 'core.precomposeUnicode', 'false');
+    assert.equal(git('status', '--porcelain'), '');
+    const local = fs.lstatSync(path.join(root, item.local), { bigint: true });
+    const probe = fs.lstatSync(path.join(root, item.probe), { bigint: true, throwIfNoEntry: false });
+    const index = path.resolve(root, git('rev-parse', '--git-path', 'index')), before = fs.readFileSync(index);
+    if (probe?.ino === local.ino) {
+      await assert.rejects(gitRestoreVersion(root, first, head), /ignored files/);
+      assert.equal(git('rev-parse', 'HEAD'), head);
+      assert.deepEqual(fs.readFileSync(index), before);
+      assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), 'Second');
+    } else {
+      const restored = await gitRestoreVersion(root, first, head);
+      assert.deepEqual(restored.git.files, []);
+      assert.equal(fs.readFileSync(path.join(root, item.target), 'utf8'), 'Old version');
+    }
+    assert.equal(fs.readlinkSync(path.join(root, item.local)), 'missing-local-backup');
+    assert.equal(fs.lstatSync(path.join(root, item.local), { bigint: true }).ino, local.ino);
+  });
 });
