@@ -2166,7 +2166,9 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
         assert.match(call.params.developerInstructions, /Cite source URLs/);
       }
       const turn = f.codex.calls.find(c => c.method === 'turn/start');
-      assert.deepEqual(turn?.params.sandboxPolicy, { type: 'workspaceWrite', writableRoots: [f.task.worktree], networkAccess: true });
+      assert.ok(turn);
+      assert.equal(Object.hasOwn(turn.params, 'sandboxPolicy'), false,
+        'inherit the resolved thread sandbox, including configured writable roots and temporary-directory exclusions');
     } finally { f.close(); }
   });
 }

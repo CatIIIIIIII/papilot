@@ -498,7 +498,8 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     const model = task.model ? models.find(model => model.id === task.model) : models.find(model => model.isDefault);
     // Explicit defaults replace a previous turn's reasoning override.
     const effort = task.effort || (this.agentOf(task) === 'codex' ? model?.defaultEffort : undefined);
-    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, clientUserMessageId: run.id, ...(this.agentOf(task) === 'codex' && task.mode !== 'review' ? { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [task.worktree], networkAccess: true } } : {}), ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
+    // Inherit the thread sandbox to preserve configured writable roots and temporary-directory exclusions.
+    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
     catch (error) {
       if (this.active.get(task.id)?.id !== run.id) return;
       if (error instanceof RpcResponseError) throw error;
