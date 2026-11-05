@@ -473,7 +473,7 @@ export async function buildApp(options: AppOptions) {
     if (note.taskId) throw new Error('This note has already been sent.');
     if (note.deletedAt !== undefined) throw new Error('This note has been deleted. Undo the deletion first.');
     const comment = (request.body as any)?.comment;
-    return store.saveAnnotation({ ...note, comment: note.kind === 'delete' ? optional(comment, 'Note', 4000) : string(comment, 'Note', 4000) });
+    return store.saveAnnotation({ ...note, comment: note.group || note.kind === 'delete' ? optional(comment, 'Note', 4000) : string(comment, 'Note', 4000) });
   });
   app.post<{ Params: { id: string; note: string } }>('/api/projects/:id/annotations/:note/delete', project(), request => {
     const note = store.annotation(request.params.id, request.params.note);

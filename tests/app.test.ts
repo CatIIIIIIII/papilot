@@ -726,6 +726,15 @@ test('color groups persist without per-location comments and take their meaning 
     const a = await create(), b = await create();
     assert.equal(a.statusCode, 200, a.body); assert.equal(b.statusCode, 200, b.body);
     assert.equal(a.json().group, 'yellow'); assert.equal(a.json().comment, '');
+    // Editing a highlight can be undone back to its original empty comment.
+    const edit = (comment: string) => f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${a.json().id}`, headers: f.as, payload: { comment } });
+    assert.equal((await edit('Explain this passage.')).statusCode, 200);
+    const undone = await edit('');
+    assert.equal(undone.statusCode, 200, undone.body);
+    assert.equal(undone.json().comment, '');
+    assert.equal(undone.json().group, 'yellow');
+    assert.equal((await edit('Explain this passage.')).statusCode, 200);
+    assert.equal((await edit('')).statusCode, 200);
     const invalid = await f.remote.inject({ method: 'POST', url: '/api/projects/thesis/annotations', headers: f.as, payload: { ...mark, group: 'delete' } });
     assert.equal(invalid.statusCode, 400);
     await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${a.json().id}/delete`, headers: f.as, payload: {} });
@@ -762,6 +771,8 @@ test('deletions need no comment, quick notes keep their name, and a task of dele
     assert.equal((await post({ kind: 'erase', comment: 'x' })).statusCode, 400);
     const stamped = await post({ comment: 'Say this more concisely.', stamp: 'Tight·en\n' });
     assert.equal(stamped.json().stamp, 'Tight en', 'A name cannot break the heading it is written into');
+    const blankNote = await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${stamped.json().id}`, headers: f.as, payload: { comment: '' } });
+    assert.equal(blankNote.statusCode, 400, 'Only grouped highlights and deletion marks allow empty comments');
     const replaced = await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${deletion.json().id}`, headers: f.as, payload: { comment: 'a plain idea' } });
     assert.equal(replaced.json().comment, 'a plain idea');
     const cleared = await f.remote.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${deletion.json().id}`, headers: f.as, payload: { comment: '' } });

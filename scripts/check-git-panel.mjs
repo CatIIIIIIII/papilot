@@ -35,6 +35,7 @@ await context.route('**/api/**', async route => {
   if (url.pathname.endsWith('/manuscript/words')) return json(JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'))[Number(url.searchParams.get('page'))]);
   if (url.pathname.endsWith('/manuscript')) return json({ git, build: { status: 'ready', key: 'fixture', pages: [[612, 792], [612, 792]], builtAt: 1, current: true }, annotations: [] });
   if (url.pathname.endsWith('/git')) return json(git);
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname.endsWith('/git/fetch')) { fetches++; if (incoming) git = { ...git, behind: incoming }; return json({ git }); }
   if (url.pathname.endsWith('/git/overview')) { overviewRequests++; return json({ commits: [], worktrees: [], truncated: false }); }
   if (url.pathname.endsWith('/git/history')) return json({ versions: history, next: null });

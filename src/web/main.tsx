@@ -69,7 +69,7 @@ import { UsageSummary } from './usage.tsx';
 import { useNoteUndo } from './use-note-undo.ts';
 import { NoteResultsProvider, NoteResultLinks, useNoteResults } from './note-results.tsx';
 import { usePanelWidth } from './panel-width.tsx';
-import type { OutlineItem, PdfHandle, Rect } from './pdf-view.tsx';
+import type { OutlineItem, PdfHandle, PdfHistoryActions, Rect } from './pdf-view.tsx';
 // pdf.js is large, so the PDF view loads the first time it opens.
 const PdfView = lazy(() => import('./pdf-view.tsx').then(module => ({ default: module.PdfView })));
 import './style.css';
@@ -668,7 +668,9 @@ function NotePlacementWarning() {
   return <small className="note-placement-warning" title={t('The position in the new PDF could not be confirmed. The original text and note are kept.')}><Icon name="alert" size={12}/>{t('Position needs confirmation')}</small>;
 }
 
+type AnnotationChange = { note: Annotation; selected?: boolean } & ({ kind: 'add' | 'remove' } | { kind: 'edit'; comment: string });
 interface NoteActions {
+  history?: PdfHistoryActions;
   selection: ReturnType<typeof useNoteSelection>;
   instructions: ReturnType<typeof useGroupInstructions>;
   group: NoteGroup | null;
@@ -968,7 +970,7 @@ function ManuscriptView({ taskCards, project, data, error, view, setView, region
         ? <div className="manuscript-note error brief" role="alert"><span>{t('The latest changes did not compile. This is the last PDF that did.')}</span><button type="button" className="note-link" onClick={() => problems.current?.open()}>{t('Show problems')}</button></div>
         : <div className="manuscript-note error" role="alert"><strong>{t('The manuscript did not compile.')}</strong><pre>{build.error}</pre></div>)}
       {build?.key ? <Suspense fallback={<div className="review-loading"><p role="status">{t('Opening the PDF…')}</p></div>}><PdfView ref={pdf} suspended={sourceVisible} place={'pdf:' + project.id} url={`/api/projects/${project.id}/manuscript.pdf?key=${build.key}`} words={`/api/projects/${project.id}/manuscript/words?key=${build.key}`} notes={numbered.filter(item => item.note.key === build.key)} active={active} region={region} setRegion={setRegion} group={actions.group} onGroupChange={actions.setGroup} markingDisabled={actions.sending}
-          noteActions={{ has: actions.selection.has, toggle: note => actions.selection.set([note.id], !actions.selection.has(note.id)), remove: actions.remove, restore: actions.restore, edit: actions.edit, onEditing: actions.onEditing, onBusy: actions.onReviewBusy, disabled: actions.sending }} onDeselect={() => setActive('')}
+          history={actions.history} noteActions={{ has: actions.selection.has, toggle: note => actions.selection.set([note.id], !actions.selection.has(note.id)), remove: actions.remove, restore: actions.restore, edit: actions.edit, onEditing: actions.onEditing, onBusy: actions.onReviewBusy, disabled: actions.sending }} onDeselect={() => setActive('')}
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
       {readingNotes && <aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} currentKey={build?.key} active={active} actions={actions} onShow={show} onAnnotate={annotate}/></aside>}
@@ -1076,11 +1078,19 @@ function App() {
   const [activeNote, setActiveNote] = useState('');
   const [noteGroup, setNoteGroup] = useState<NoteGroup | null>(null);
   const [marking, setMarking] = useState(0);
-  // A deleted note that was in the task returns to it when undone.
-  const annotationUndo = useRef<{ kind: 'add' | 'remove'; note: Annotation; selected?: boolean }[]>([]);
-  const noteEditVersion = useRef(0), noteWrites = useRef(new Map<string, Promise<unknown>>());
-  const undoingAnnotation = useRef(false);
-  useEffect(() => { setNoteGroup(null); annotationUndo.current = []; }, [projectId]);
+  // History belongs to this paper session. A restored note also returns to
+  // the task draft it was in; late requests cannot populate another session.
+  const annotationHistory = useRef({ projectId, undo: [] as AnnotationChange[], redo: [] as AnnotationChange[], busy: false });
+  if (annotationHistory.current.projectId !== projectId) annotationHistory.current = { projectId, undo: [], redo: [], busy: false };
+  const history = annotationHistory.current;
+  const [, refreshHistory] = useState(0);
+  const historyChanged = () => { if (annotationHistory.current === history) refreshHistory(value => value + 1); };
+  const recordAnnotation = (entry: AnnotationChange) => {
+    if (annotationHistory.current !== history || entry.note.projectId !== history.projectId) return;
+    history.undo.push(entry); history.redo = []; historyChanged();
+  };
+  const noteEditVersion = useRef(0), noteWrites = useRef(new Map<string, { saved: Annotation; tail: Promise<void> }>());
+  useEffect(() => { setNoteGroup(null); }, [projectId]);
   const [pdfNoteEditing, setNoteEditing] = useState(false);
   const [reviewNoteBusy, setReviewNoteBusy] = useState(false);
   const [manuscript, setManuscript] = useState<{ projectId: string; data: Manuscript | null; error: string }>({ projectId: '', data: null, error: '' });
@@ -1290,7 +1300,7 @@ function App() {
     const reviewing = skill?.output === 'annotations';
     const attached = reviewing ? [] : noteSelection.selected, files = reviewing ? [] : newFiles.draft.getSnapshot().files;
     const groupInstructions = groupDrafts.forNotes(attached);
-    if ((!text && !skill && !files.length && !attached.some(actionable) && !Object.keys(groupInstructions).length) || (!text && !skill && groupsWithoutInstructions(attached, groupInstructions).length > 0) || (!reviewing && newFiles.draft.getSnapshot().blocked) || creating || marking || noteEditing || reviewNoteBusy || !target) return;
+    if ((!text && !skill && !files.length && !attached.some(actionable) && !Object.keys(groupInstructions).length) || (!text && !skill && groupsWithoutInstructions(attached, groupInstructions).length > 0) || (!reviewing && newFiles.draft.getSnapshot().blocked) || creating || marking || noteEditing || reviewNoteBusy || history.busy || !target) return;
     const input = newTaskInput.current, submittedNotes = new Set(attached.map(note => note.id));
     const restoreFocus = input?.closest('form')?.contains(document.activeElement);
     setCreating(true); setCreateError('');
@@ -1323,10 +1333,13 @@ function App() {
       if (!reviewing) { noteSelection.reset(target); taskCards.forget(); }
       groupDrafts.sent(target, attached, notes);
       setActiveNote(id => submittedNotes.has(id) ? '' : id);
-      setNoteGroup(null); annotationUndo.current = annotationUndo.current.filter(entry => !submittedNotes.has(entry.note.id));
+      setNoteGroup(null);
       // A later Undo may restore a deleted annotation, but its inclusion belonged
       // to the submitted draft. It must not attach itself to the next task.
-      if (!reviewing) annotationUndo.current = annotationUndo.current.map(entry => entry.note.projectId === target ? { ...entry, selected: false } : entry);
+      for (const direction of ['undo', 'redo'] as const) history[direction] = history[direction]
+        .filter(entry => !submittedNotes.has(entry.note.id))
+        .map(entry => !reviewing && entry.note.projectId === target ? { ...entry, selected: false } : entry);
+      historyChanged();
       if (restoreFocus && input?.isConnected && (document.activeElement === document.body || input.closest('form')?.contains(document.activeElement))) input.focus({ preventScroll: true });
       // Reload pending notes from the server: a retry may have returned an
       // earlier successful task, while newer notes still belong to the draft.
@@ -1511,27 +1524,35 @@ function App() {
       try {
         const kind = options?.kind, stamp = options?.stamp;
         const note = await api<Annotation>(`/projects/${project.id}/annotations`, { key: manuscriptData.data.build.key, page, rect, ...(rects.length ? { rects, quote } : kind === 'point' ? { quote } : {}), comment, ...(group ? { group } : {}), ...(kind ? { kind } : {}), ...(stamp ? { stamp } : {}) });
+        if (annotationHistory.current !== history) return;
         withNotes(list => [...list, note]);
-        // Marks saved without a card (a color group, a deletion, a quick note) can be undone with ⌘Z.
+        // Quick marks stay on the page without opening a card.
         const quick = Boolean(group || stamp || kind === 'delete');
         if (quick) setActiveNote(''); else if (options?.reveal !== false) setActiveNote(note.id);
         if (options?.quote) noteSelection.set([note.id], true);
-        if (quick) annotationUndo.current.push({ kind: 'add', note });
+        recordAnnotation({ kind: 'add', note });
       } finally { setMarking(value => value - 1); }
     },
-    // Writes of one note go out one after another, so the server keeps the
-    // last one; the pending text stays on top until the newest write settles.
+    // Each queue retains the last successful server value, independently of
+    // optimistic text. Failed writes must never become an Undo destination.
     async edit(note, comment) {
       const version = ++noteEditVersion.current;
       setPendingComments(current => ({ ...current, [note.id]: { comment, version } }));
-      const write = (noteWrites.current.get(note.id) || Promise.resolve()).catch(() => undefined)
-        .then(() => api<Annotation>(`/projects/${note.projectId}/annotations/${note.id}`, { comment }));
-      noteWrites.current.set(note.id, write);
-      try {
-        const saved = await write;
+      const queue = noteWrites.current.get(note.id) || { saved: savedNotes?.find(item => item.id === note.id) || note, tail: Promise.resolve() };
+      const write = queue.tail.then(async () => {
+        const before = queue.saved;
+        const saved = await api<Annotation>(`/projects/${note.projectId}/annotations/${note.id}`, { comment });
+        queue.saved = saved;
+        if (annotationHistory.current !== history) return;
         withNotes(list => list.map(item => item.id === note.id ? saved : item));
-      } finally {
-        if (noteWrites.current.get(note.id) === write) noteWrites.current.delete(note.id);
+        if (before.comment !== saved.comment) recordAnnotation({ kind: 'edit', note: before, comment: saved.comment });
+      });
+      // Later writes may proceed after a failure; this caller still receives it.
+      const tail = write.catch(() => undefined);
+      queue.tail = tail; noteWrites.current.set(note.id, queue);
+      try { await write; }
+      finally {
+        if (noteWrites.current.get(note.id) === queue && queue.tail === tail) noteWrites.current.delete(note.id);
         setPendingComments(current => {
           if (current[note.id]?.version !== version) return current;
           const next = { ...current }; delete next[note.id]; return next;
@@ -1541,50 +1562,71 @@ function App() {
     async remove(note) {
       const selected = noteSelection.has(note.id);
       await api(`/projects/${note.projectId}/annotations/${note.id}/delete`, {});
+      if (annotationHistory.current !== history) return;
       noteSelection.set([note.id], false);
       withNotes(list => list.filter(item => item.id !== note.id));
       setActiveNote(id => id === note.id ? '' : id);
-      annotationUndo.current.push({ kind: 'remove', note, selected });
+      recordAnnotation({ kind: 'remove', note, selected });
     },
-    // Every Undo (⌘Z, the PDF's and the lists' buttons) comes here, so each one
-    // returns a note to the task it was in and clears its ⌘Z entry.
+    // The deletion toast shares history with the rail and keyboard shortcuts.
     async restore(note) {
       const restored = await api<{ annotations: Annotation[] }>(`/projects/${note.projectId}/annotations/${note.id}/restore`, {});
-      const deletion = annotationUndo.current.filter(entry => entry.kind === 'remove' && entry.note.id === note.id).at(-1);
-      annotationUndo.current = annotationUndo.current.filter(entry => !(entry.kind === 'remove' && entry.note.id === note.id));
+      if (annotationHistory.current !== history) return;
+      const deletion = history.undo.filter(entry => entry.kind === 'remove' && entry.note.id === note.id).at(-1);
+      history.undo = history.undo.filter(entry => !(entry.kind === 'remove' && entry.note.id === note.id));
+      if (deletion) history.redo.push(deletion);
+      historyChanged();
       withNotes(() => restored.annotations); setActiveNote(note.id);
       if (deletion?.selected) noteSelection.set([note.id], true);
     },
     onEditing: setNoteEditing,
     onReviewBusy: setReviewNoteBusy,
-    sending: creating || reviewNoteBusy,
+    sending: creating || reviewNoteBusy || history.busy,
   };
   // Keep task editors alive across tabs, skills and paper switches. Undefined
   // notes mean the paper is still loading, so its drafts must not be pruned.
   const taskCards = useNoteCards(manuscriptData.data ? notes : undefined, noteActions, undefined, project?.id || projectId);
   const noteEditing = pdfNoteEditing || taskCards.editing || taskCards.busy;
-  useNoteUndo(() => {
-    const entry = annotationUndo.current.at(-1);
+  const replayAnnotation = (direction: 'undo' | 'redo') => {
+    const entry = history[direction].at(-1);
     if (!manuscriptOpen || !entry) return false;
-    if (creating || marking || noteEditing || reviewNoteBusy || undoingAnnotation.current) return true;
-    undoingAnnotation.current = true;
+    if (creating || marking || noteEditing || reviewNoteBusy || noteWrites.current.size || history.busy) return true;
+    history.busy = true; historyChanged();
     setError('');
     const { note } = entry;
     void (async () => {
       try {
-        if (entry.kind === 'add') {
+        if (entry.kind === 'edit') {
+          const saved = await api<Annotation>(`/projects/${note.projectId}/annotations/${note.id}`, { comment: direction === 'undo' ? note.comment : entry.comment });
+          if (annotationHistory.current !== history) return;
+          withNotes(list => list.map(item => item.id === note.id ? saved : item));
+        } else if ((entry.kind === 'add') === (direction === 'undo')) {
+          const selected = noteSelection.has(note.id);
           await api(`/projects/${note.projectId}/annotations/${note.id}/delete`, {});
+          if (annotationHistory.current !== history) return;
           withNotes(list => list.filter(item => item.id !== note.id));
+          entry.selected = selected; noteSelection.set([note.id], false); setActiveNote(id => id === note.id ? '' : id);
         } else {
-          await noteActions.restore(note);
-          requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-note="${note.id}"] .note-edit-trigger`)?.focus());
+          const restored = await api<{ annotations: Annotation[] }>(`/projects/${note.projectId}/annotations/${note.id}/restore`, {});
+          if (annotationHistory.current !== history) return;
+          withNotes(() => restored.annotations);
+          if (entry.selected) noteSelection.set([note.id], true);
+          if (entry.kind === 'remove') setActiveNote(note.id);
         }
-        annotationUndo.current = annotationUndo.current.filter(item => item !== entry);
+        history[direction] = history[direction].filter(item => item !== entry);
+        history[direction === 'undo' ? 'redo' : 'undo'].push(entry);
       } catch (error) { reportError(error); }
-      finally { undoingAnnotation.current = false; }
+      finally { history.busy = false; historyChanged(); }
     })();
     return true;
-  });
+  };
+  const historyDisabled = creating || Boolean(marking) || noteEditing || reviewNoteBusy || history.busy || noteWrites.current.size > 0;
+  noteActions.history = {
+    canUndo: Boolean(history.undo.length) && !historyDisabled,
+    canRedo: Boolean(history.redo.length) && !historyDisabled,
+    undo: () => { replayAnnotation('undo'); }, redo: () => { replayAnnotation('redo'); },
+  };
+  useNoteUndo(() => replayAnnotation('undo'), undefined, () => replayAnnotation('redo'));
 
   const waiting = state?.tasks.filter(t => t.status === 'waiting_input').length || 0;
   useEffect(() => { document.title = (waiting ? `(${waiting}) ` : '') + (task ? `${task.title} · Papilot` : manuscriptOpen && project ? `${project.name} · Papilot` : 'Papilot'); }, [waiting, task?.title, manuscriptOpen, project?.name]);
@@ -1723,7 +1765,7 @@ function App() {
         <SkillPicker onAttach={newSkill?.output === 'annotations' ? undefined : attach} skills={projectSkills} selected={newSkill} disabled={creating} onPick={skill => { setNewSkill(skill); newTaskInput.current?.focus(); }}/>
         {agentOptions(creating)}
       </div>}
-      action={<button className="send-button" type="submit" aria-label={t('Start task')} title={missingGroupDirections ? t('Add instructions to the selected color groups above.') : t('Start task (Enter)')} disabled={creating || reviewNoteBusy || noteEditing || (newSkill?.output !== 'annotations' && (newFiles.blocked || marking > 0 || missingGroupDirections)) || (!newDraft.trim() && !newSkill && !newFiles.files.length && !noteSelection.selected.some(actionable) && !Object.keys(groupDirections).length)} aria-busy={creating}>{creating ? <span className="spinner light"/> : <Icon name="arrowUp" size={18}/>}</button>}/>
+      action={<button className="send-button" type="submit" aria-label={t('Start task')} title={missingGroupDirections ? t('Add instructions to the selected color groups above.') : t('Start task (Enter)')} disabled={creating || reviewNoteBusy || noteEditing || history.busy || (newSkill?.output !== 'annotations' && (newFiles.blocked || marking > 0 || missingGroupDirections)) || (!newDraft.trim() && !newSkill && !newFiles.files.length && !noteSelection.selected.some(actionable) && !Object.keys(groupDirections).length)} aria-busy={creating}>{creating ? <span className="spinner light"/> : <Icon name="arrowUp" size={18}/>}</button>}/>
     {createError && <p className="inline-error" role="alert">{createError}</p>}
     {runtimes[agentChoice]?.usage && <UsageSummary agent={AGENT_LABELS[agentChoice]} usage={runtimes[agentChoice]!.usage!}/>}
     </div>
