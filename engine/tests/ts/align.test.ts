@@ -369,20 +369,32 @@ function rows(list: [number, string][][]) {
   documents.push(result);
   return result;
 }
-it("fades the words before a change that print on its row as other pieces", () => {
+it("fades the words of an old row that the context shows, and only those", () => {
   const around = (n: number) =>
       Array.from({ length: 6 }, (_, i): [number, string][] => [
         [30, `Steady line ${n + i} about logs and replicas of the state`],
       ]),
-    row = (last: string): [number, string][] => [
+    row: [number, string][] = [
       [30, "Context words before"],
       [250, "the formula"],
-      [400, last],
+      [400, "alpha omega."],
     ],
-    old = rows([...around(0), row("alpha omega."), ...around(10)]),
-    neu = rows([...around(0), row("alpha sigma."), ...around(10)]),
-    al = alignment(build(old), build(neu))!,
-    at = (doc: PdfDocument, text: string): Position[] => {
+    old = rows([...around(0), row, ...around(10)]),
+    // The change now prints on a row of its own, as a display does, so the
+    // words before it are on the row above, which the context shows.
+    apart = rows([
+      ...around(0),
+      row.slice(0, 2),
+      [[400, "alpha sigma."]],
+      ...around(10),
+    ]),
+    // The change stays on its row, which the new crop shows whole.
+    together = rows([
+      ...around(0),
+      [...row.slice(0, 2), [400, "alpha sigma."]],
+      ...around(10),
+    ]);
+  const at = (doc: PdfDocument, text: string): Position[] => {
       const word = printed(doc).find((w) => w.text === text)!;
       return [
         {
@@ -392,25 +404,34 @@ it("fades the words before a change that print on its row as other pieces", () =
         },
       ];
     },
-    [group] = alignedCrops(al, at(old, "omega."), at(neu, "sigma."), false)!;
-  // The old crop holds the whole row; the words before the change fade.
-  const faded = (text: string) =>
-    printed(old)
-      .filter((w) => w.text === text)
-      .every((w) =>
-        (group.faded ?? []).some(
-          (f) => f.page === w.page && containsCenter(f.rect, w.rect),
-        ),
-      );
+    group = (neu: PdfDocument) =>
+      alignedCrops(
+        alignment(build(old), build(neu))!,
+        at(old, "omega."),
+        at(neu, "sigma."),
+        false,
+      )![0],
+    faded = (g: ReturnType<typeof group>, text: string) =>
+      printed(old)
+        .filter((w) => w.text === text)
+        .every((w) =>
+          (g.faded ?? []).some(
+            (f) => f.page === w.page && containsCenter(f.rect, w.rect),
+          ),
+        );
+  const one = group(apart);
   expect(
     inside(
       printed(old).find((w) => w.text === "Context")!,
-      group.left,
+      one.left,
     ),
   ).toBe(true);
   for (const word of ["Context", "words", "before", "formula"])
-    expect(faded(word)).toBe(true);
-  expect(faded("omega.")).toBe(false);
+    expect(faded(one, word)).toBe(true);
+  expect(faded(one, "omega.")).toBe(false);
+  const two = group(together);
+  for (const word of ["Context", "formula", "omega."])
+    expect(faded(two, word)).toBe(false);
 });
 it("takes a page for two columns only when most of its prose is in columns", () => {
   const prose = "Replicas apply committed commands in their order";

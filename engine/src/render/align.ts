@@ -766,17 +766,31 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
   while (oldFirst < oldLast && !kept(al, "old", oldFirst, mine)) oldFirst++;
   while (oldLast > oldFirst && !kept(al, "old", oldLast, mine)) oldLast--;
   // The old crop shows its lines whole, and with them whatever prints on
-  // the same rows, as the pieces of an inline formula; the words of it that
-  // come before or after the change in the old document are the context
-  // strips' to show, and fade.
+  // the same rows, as the pieces of an inline formula. A word of it before
+  // or after the change that equals a word the context strips show, outside
+  // the new crop, fades: the context strips show it. Any other word is
+  // read in the old crop.
   const w = al.old.words,
+    nw = al.new.words,
     left = linesCrops(al, "old", oldFirst, oldLast),
+    right = linesCrops(al, "new", first, last),
+    shownNew = (t: number) => {
+      for (let g = nw.tokens[t].start; g < nw.tokens[t].end; g++) {
+        const { page, rect } = nw.glyphs[g];
+        if (
+          right.some((at) => at.page === page && containsCenter(at.clip, rect))
+        )
+          return true;
+      }
+      return false;
+    },
     faded = new Map<number, Rect[]>();
   for (const at of left)
     for (const line of al.old.byPage.get(at.page) ?? []) {
       const [i, j] = w.lines[line];
       for (let t = i; t < j; t++) {
-        if (t > above && t < below) continue;
+        const other = al.tokens.old[t];
+        if ((t > above && t < below) || other < 0 || shownNew(other)) continue;
         for (let g = w.tokens[t].start; g < w.tokens[t].end; g++) {
           const { page, rect } = w.glyphs[g];
           if (page === at.page && containsCenter(at.clip, rect))
@@ -786,7 +800,7 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
     }
   return {
     left,
-    right: linesCrops(al, "new", first, last),
+    right,
     faded: [...faded].flatMap(([page, rects]) =>
       mergeRects(rects).map((rect) => ({ page, rect })),
     ),
