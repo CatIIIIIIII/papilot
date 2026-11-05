@@ -1,6 +1,7 @@
 // Simplified Chinese for the workspace, keyed by the English text (see i18n.ts).
 // Chinese text keeps a space around numbers and Latin words: "修改 2", "PDF 批注".
 export const zhCN: Record<string, string> = {
+  'Comment': '评论', 'Unchanged text': '未修改的文字',
   "Refresh version history": "刷新版本记录",
   "Loading versions…": "正在读取版本…",
   "Your commits will appear here.": "提交后，版本记录会显示在这里。",
@@ -14,6 +15,14 @@ export const zhCN: Record<string, string> = {
   "Go to changes": "前往改动",
   "Restoring…": "正在恢复…",
   "Version restored. Previous versions are kept in history.": "版本已恢复，之前的版本仍保留在记录中。",
+  'Before revision': '修改前', 'After revision': '修改后', 'Whole change': '整处修改',
+  'Page {page}': '第 {page} 页', 'Show quoted passage': '定位引用原文',
+  'From review round {n}': '引用自第 {n} 轮审阅', 'Comment {n}': '评论 {n}',
+  'Comment for {group} (optional)': '{group}评论（可选）',
+  '{n} review update': '{n} 项审阅意见', '{n} review updates': '{n} 项审阅意见',
+  '{n} review update included': '将附带 {n} 项审阅意见', '{n} review updates included': '将附带 {n} 项审阅意见',
+  '{n} empty comment will stay in drafts': '{n} 条空评论将保留在草稿中', '{n} empty comments will stay in drafts': '{n} 条空评论将保留在草稿中',
+  'Write a comment or message to send.': '写下评论或消息即可发送。',
 
   'AI is resolving conflicts…': 'AI 正在解决冲突…',
   'Open chat': '打开聊天',
@@ -211,7 +220,7 @@ export const zhCN: Record<string, string> = {
   'Quoted text': '引用原文', 'Your note': '批注内容',
   '{n} location': '{n} 处', '{n} locations': '{n} 处', 'Add to {group}': '加入{group}组',
   'Instructions for color groups': '各颜色组的修改要求',
-  'Send annotations': '发送标注', 'Send annotations to the agent': '发送标注给代理',
+
   'What should change in this group?': '这组内容希望怎么处理？',
   'What should change in each color group?': '各颜色组需要怎样修改？',
   'Instructions for {group} notes': '{group}批注的处理要求',
@@ -248,8 +257,8 @@ export const zhCN: Record<string, string> = {
   'Running': '运行中', 'Declined': '已拒绝', 'Failed': '失败',
   'ran {n} command': '运行了 {n} 条命令', 'ran {n} commands': '运行了 {n} 条命令', 'edited {file}': '编辑了 {file}', 'edited {n} files': '编辑了 {n} 个文件',
   'used {n} tool': '使用了 {n} 个工具', 'used {n} tools': '使用了 {n} 个工具', ', ': '，', '{n} failed': '{n} 个失败',
-  'This task is being deleted': '此任务正在删除', 'Check task status before sending': '发送前请先检查任务状态', 'Sending feedback…': '正在发送反馈…', 'Sending…': '正在发送…',
-  '{n} review update will be sent with this message': '{n} 项审阅更新将随此消息发送', '{n} review updates will be sent with this message': '{n} 项审阅更新将随此消息发送',
+  'This task is being deleted': '此任务正在删除', 'Check task status before sending': '发送前请先检查任务状态', 'Sending…': '正在发送…',
+
   '{agent} is working · new instructions run next': '{agent} 正在工作 · 新指令会在本轮结束后执行',
   'Default model': '默认模型', '{agent} conversation': '{agent} 对话', 'Chat': '对话',
   'Loading conversation…': '正在加载对话…', 'Retry conversation': '重新加载对话',
@@ -258,10 +267,6 @@ export const zhCN: Record<string, string> = {
   'Open review': '打开审阅', 'This step needs attention': '此步骤需要处理', 'Latest messages': '最新消息',
   'Instructions for {agent}': '给 {agent} 的指令', 'Queue instructions for the next turn…': '添加后续指令…', 'Ask a question or request changes…': '继续提问，或提出修改要求…',
   'Pause task': '暂停任务', 'Pause {agent}': '暂停 {agent}', 'Send instructions': '发送指令', 'Send (Enter) · New line (Shift+Enter)': '发送（Enter）· 换行（Shift+Enter）',
-
-  // Review feedback
-  '{n} review update not sent yet': '{n} 项审阅更新尚未发送', '{n} review updates not sent yet': '{n} 项审阅更新尚未发送',
-  'Send your review decisions and comments to the agent': '把你的审阅决定和评论发送给智能体', 'Send feedback': '发送反馈',
 
   // Git
   'Open task: {title}': '打开任务：{title}', 'Archived task': '已归档任务', 'No linked task': '未关联任务',
@@ -330,14 +335,14 @@ export const zhCN: Record<string, string> = {
   'Position needs confirmation': '位置待确认',
   'The position in the new PDF could not be confirmed. The original text and note are kept.': '无法确认这条批注在新 PDF 中的位置，原文和备注已保留。',
   'Some note positions need confirmation. Their original text and comments are kept.': '部分批注的位置需要确认，原文和备注均已保留。',
-  'Send {n} note to the agent': '把 {n} 条批注发送给智能体', 'Send {n} notes to the agent': '把 {n} 条批注发送给智能体',
+
   'PDF preview': 'PDF 预览', 'The manuscript did not compile.': '稿件编译失败。', 'Opening the PDF…': '正在打开 PDF…',
   'Compiling the PDF…': '正在编译 PDF…',
   'Manuscript panels': '稿件面板', 'Contents': '目录',
   'This PDF has no bookmarks.': '此 PDF 没有书签。', 'Contents will appear when the PDF is ready.': 'PDF 就绪后会显示目录。',
   'You are offline. Your draft is kept in this browser.': '你已离线。草稿保存在此浏览器中。',
   'Agent settings': '智能体设置', 'Add skill': '添加技能', 'Fast': '快速', 'Fast mode': '快速模式',
-  'No notes yet': '暂无批注', 'Region note': '区域批注', 'Send {n} note': '发送 {n} 条批注', 'Send {n} notes': '发送 {n} 条批注',
+  'Region note': '区域批注',
   'or select text to annotate': '或选中文字批注',
   'Edit note': '编辑批注', 'Edit note {n}': '编辑批注 {n}', 'Edit note {n}: {comment}': '编辑批注 {n}：{comment}',
   'Changes apply to the next turn.': '更改从下一轮对话生效。',
@@ -349,7 +354,7 @@ export const zhCN: Record<string, string> = {
   '{agent} is unavailable': '{agent} 不可用', 'Connection details': '连接详情',
   'Faster responses; may use more of your limit.': '响应更快，可能消耗更多额度。',
   '{agent} was not found on this computer. Install or set it up, then select Reconnect.': '本机未找到 {agent}。安装或配置后点“重新连接”。', 'Search models': '搜索模型', 'Models': '模型', 'Recent': '最近使用', 'Default': '默认', 'No models match “{query}”': '没有匹配“{query}”的模型', 'Wait for the PDF to compile.': '请等待 PDF 编译完成。',
-  'Fit width': '适合宽度', 'Fit page': '适合页面', 'Note for the agent': '给智能体的批注', 'What should change here?': '这里应该怎么改？', 'Add note': '添加批注',
+  'Fit width': '适合宽度', 'Fit page': '适合页面', 'What should change here?': '这里应该怎么改？', 'Add note': '添加批注',
   'PDF controls': 'PDF 控件', 'Previous page': '上一页', 'Page number': '页码', 'Next page': '下一页',
   'Zoom out': '缩小', 'Zoom out (⌘−)': '缩小（⌘−）', 'Zoom': '缩放', 'Zoom in': '放大', 'Zoom in (⌘+)': '放大（⌘+）',
   'Find in PDF': '在 PDF 中查找', 'Find (⌘F)': '查找（⌘F）', 'Mark region': '标记区域', 'Mark a figure or region': '标记图表或区域', 'Search the PDF': '搜索 PDF',
@@ -359,11 +364,10 @@ export const zhCN: Record<string, string> = {
   // Review
   '{title} PDF change review': '{title} 的 PDF 修改审阅', 'The PDF review could not be loaded.': '无法加载 PDF 审阅。',
   'The PDF review is taking longer than expected.': 'PDF 审阅加载时间比预期长。', 'Loading PDF review…': '正在加载 PDF 审阅…', 'Reload review': '重新加载审阅',
-  'Review notes': '审阅批注', 'Review note: {comment}': '审阅批注：{comment}',
-  'Review PDF notes': '审阅 PDF 批注', 'Review notes ({n})': '审阅批注（{n}）', 'Close review notes': '关闭审阅批注',
+  'Review note: {comment}': '审阅批注：{comment}',
+
   'Delete review note {n}': '删除审阅批注 {n}',
-  'Marked on earlier changes.': '标记于之前的修改。',
-  'Check the task status before sending notes.': '发送批注前请先检查任务状态。',
+
   'Full PDF': '完整 PDF', 'Open the full PDF': '打开完整 PDF', 'Generate PDF comparison': '生成 PDF 对比', 'Regenerate PDF comparison': '重新生成 PDF 对比',
   'Open review in new tab': '在新标签页中打开审阅',
 

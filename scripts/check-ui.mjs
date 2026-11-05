@@ -1294,16 +1294,15 @@ try {
   const copy = page.getByRole('button', { name: 'Copy message' });
   await copy.click();
   await page.getByRole('button', { name: 'Copied' }).waitFor();
-  await page.getByText('1 review update not sent yet', { exact: true }).waitFor();
-  await page.getByText('1 review update will be sent with this message', { exact: true }).waitFor();
+  await page.getByText('1 review update included', { exact: true }).waitFor();
   task.review.unsent = 0;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('.review-draft').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('.composer-hint').count(), 0);
   delete task.review.unsent;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor();
-  console.log('PASS: The chat divider drags, nudges, persists and resets; replies copy; only unsent review updates offer Send feedback');
+  await page.locator('.review-draft').waitFor();
+  console.log('PASS: The chat divider drags, nudges, persists and resets; replies copy; only unsent review feedback appears in the composer');
 
 
   await page.locator('.manuscript-link').click();
@@ -1512,21 +1511,20 @@ try {
   const previousReview = structuredClone(task.review);
   task.review = { state: 'done', round: 1, counts: { pending: 0, accepted: 1, rejected: 1, commented: 0 }, unsent: 2 };
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByText('2 review updates not sent yet', { exact: true }).waitFor();
+  await page.getByText('2 review updates included', { exact: true }).waitFor();
   await input.fill('Keep this unsent draft.');
   await page.screenshot({ path: 'test-results/send-review-decisions.png', fullPage: true });
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
-  await page.getByRole('button', { name: 'Send instructions', exact: true }).waitFor();
-  await page.waitForFunction(() => !document.querySelector('.send-button').disabled);
-  assert.equal(await input.inputValue(), 'Keep this unsent draft.');
-  assert.equal(messages[0].feedback, true);
-  assert.equal(messages[0].text, '');
+  await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
+  await expect(input).toHaveValue('');
+  assert.equal(messages[0].feedback, undefined);
+  assert.equal(messages[0].text, 'Keep this unsent draft.');
   task.review.unsent = 0;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('.review-draft').waitFor({ state: 'hidden' });
   task.review = previousReview;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).waitFor();
+  await page.locator('.review-draft').waitFor();
+  await input.fill('Next instruction with review feedback.');
   holdMessage = new Promise(resolve => { releaseMessage = resolve; });
   await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
   await page.getByText('Sending…', { exact: true }).waitFor();
@@ -1541,7 +1539,7 @@ try {
   await page.getByRole('button', { name: /^Clarify the introduction/ }).click();
   await input.waitFor();
   assert.equal(await input.inputValue(), 'New text typed during submission.');
-  console.log('PASS: Feedback and in-flight submission preserve drafts, including after reload');
+  console.log('PASS: Feedback shares the chat submission, and in-flight typing survives reload');
   const secondTask = { ...task, id: 'fixture-task-0002', name: 'p-second', title: 'Check the notation', review: null };
   snapshot.tasks.push(secondTask);
   await page.getByRole('button', { name: /^Check the notation/ }).waitFor();
@@ -1822,7 +1820,7 @@ try {
   console.log('PASS: 320px, 390px, and tablet layouts; draft persistence; zoom; drawer; project dialog');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: /^Review/ }).first().click();
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
+  await page.getByRole('button', { name: 'Chat (reply needed)', exact: true }).click();
   await input.waitFor({ state: 'visible' });
   assert.equal(await page.getByRole('button', { name: 'Chat (reply needed)', exact: true }).getAttribute('aria-pressed'), 'true');
   assert.equal(await input.inputValue(), 'New text typed during submission.');
@@ -1831,7 +1829,7 @@ try {
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: `Task actions for ${task.title}`, exact: true }).evaluate(el => el === document.activeElement), true);
   await page.keyboard.press('Escape');
-  console.log('PASS: Mobile review feedback opens the conversation without clearing drafts; task menu dialogs restore drawer focus');
+  console.log('PASS: Mobile Chat keeps the unified feedback draft; task menu dialogs restore drawer focus');
 
   await page.setViewportSize({ width: 1440, height: 900 });
   snapshot.requests = []; task.status = 'reviewing';

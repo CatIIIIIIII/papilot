@@ -125,3 +125,23 @@ test('a skill can run without text, and a draft without a skill cannot', async (
   assert.equal(messages[0].skill, 'proofread');
   assert.equal(messages[0].text, '');
 });
+
+test('quoted notes send without text, and an edited note gets a new retry identity', async () => {
+  const { draft, create } = setup();
+  const notes = [{ where: 'Round 1 · Before · main.tex:2', quote: 'Original', comment: 'Keep this term.', anchor: { round: 1, sources: [{ file: 'main.tex', lines: [2, 2] as [number, number] }] } }];
+  let previous: Message | undefined;
+  await assert.rejects(draft.submit('draft', async message => { previous = message; throw new Error('Offline'); }, undefined, [], notes));
+  assert.equal(previous!.text, ''); assert.deepEqual(previous!.notes, notes);
+  const reopened = create();
+  await assert.rejects(reopened.submit('draft', async message => { assert.deepEqual(message, previous); throw new Error('Offline'); }, undefined, [], notes));
+  await reopened.submit('draft', async message => { assert.notEqual(message.requestKey, previous!.requestKey); }, undefined, [], [{ ...notes[0], comment: 'Clarify this instead.' }]);
+});
+
+test('feedback-only retry identity survives reload without consuming typed instructions', async () => {
+  const { draft, create } = setup(); draft.edit('Next instruction');
+  let key: string | undefined;
+  await assert.rejects(draft.submit('feedback', async message => { key = message.requestKey; throw new Error('Offline'); }));
+  const reopened = create();
+  await reopened.submit('feedback', async message => assert.equal(message.requestKey, key));
+  assert.equal(reopened.text, 'Next instruction');
+});

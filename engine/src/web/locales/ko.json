@@ -261,5 +261,6 @@
   "{sources} could not be reached.": "{sources}에 연결할 수 없습니다.",
   "{source} has this work with other details. Compare them below.": "{source}에 이 저작물의 다른 세부 정보가 있습니다. 아래에서 비교해 보세요.",
   "{staged} of {total} staged": "{total}개 중 {staged}개 스테이징됨",
-  "↵ send · Esc cancel": "↵ 전송 · Esc 취소"
+  "↵ send · Esc cancel": "↵ 전송 · Esc 취소",
+  "Your comments are saved. Continue in Chat to request a revision.": "댓글이 저장되었습니다. 채팅에서 수정을 요청하세요."
 }

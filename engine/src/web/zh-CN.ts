@@ -1,5 +1,7 @@
 // Simplified Chinese for the review viewer, keyed by the English text.
 export const zhCN: Record<string, string> = {
+  'Your comments are saved. Continue in Chat to request a revision.': '评论已保存，可在聊天框中发送修改意见。',
+
   "Edit": "编辑",
   "Loading source…": "正在读取源码…",
   "Edit LaTeX source": "编辑 LaTeX 源码",

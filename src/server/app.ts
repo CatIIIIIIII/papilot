@@ -318,7 +318,7 @@ export async function buildApp(options: AppOptions) {
     const skill = name ? findSkill(store.project(task.projectId).path, name) : undefined;
     let reviewNotes: NoteSummary[] | undefined;
     if (b.notes !== undefined) {
-      if (!Array.isArray(b.notes) || !b.notes.length || b.notes.length > 500 || feedback || skill) throw new Error('Select valid review notes.');
+      if (!Array.isArray(b.notes) || !b.notes.length || b.notes.length > 500 || feedback) throw new Error('Select valid review notes.');
       reviewNotes = b.notes.map((note: any) => {
         if (!note || typeof note !== 'object') throw new Error('Select valid review notes.');
         if (note.group !== undefined && !isNoteGroup(note.group)) throw new Error('Invalid annotation group.');

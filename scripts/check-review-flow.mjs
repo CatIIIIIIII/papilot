@@ -303,11 +303,10 @@ try {
   assert.equal(writes.length, beforeKeys, 'selected text pauses decision shortcuts');
   await viewer().locator('body').evaluate(() => document.getSelection().removeAllRanges());
   await page.keyboard.press('c');
-  const commentBox = viewer().getByRole('textbox', { name: /^Comment on change/ });
+  const commentBox = page.getByRole('textbox', { name: 'Comment 1', exact: true });
   await commentBox.press('b');
   await expect(commentBox).toHaveValue('b');
   assert.equal(writes.length, beforeKeys, 'typing does not accept a change');
-  await commentBox.press('Escape');
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('b');
   await expect.poll(() => rounds[1].first).toBe('accepted');
@@ -316,6 +315,9 @@ try {
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => rounds[1].first).toBe('pending');
+  // Clean up after checking decision undo; deleting a note has its own undo.
+  await page.getByRole('button', { name: 'Delete review note 1' }).click();
+  await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('?');
   await shortcuts.waitFor();
   await acceptKey.click(); await acceptKey.press('Backspace');
@@ -372,23 +374,25 @@ try {
   await expect(viewer().locator('.change.current')).toHaveAttribute('data-stop', '1');
   // The accepted paragraph remains selectable for another note.
   await accepted.locator('.after .pdf-glyph').evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range); });
-  await viewer().getByRole('button', { name: 'Add note', exact: true }).click();
-  await viewer().getByRole('textbox', { name: 'Note for the agent' }).fill('A note on accepted text.');
-  await viewer().getByRole('button', { name: 'Add note', exact: true }).click();
-  await viewer().getByRole('button', { name: 'Close review notes' }).click();
+  await viewer().locator('.review-add-note').click();
+  await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('A note on accepted text.');
   await viewer().locator('.change.current').getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(viewer().locator('[data-stop="1"] .change-head')).toBeHidden();
   await expect(viewer().locator('[data-stop="1"] .side.before')).toBeVisible();
   await viewer().locator('.change.current').getByRole('button', { name: 'Comment', exact: true }).click();
-  await viewer().getByRole('textbox', { name: /^Comment on change/ }).fill('Try a clearer explanation.');
-  await viewer().getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Comment 2', exact: true }).fill('Try a clearer explanation.');
+  // Comments preserve the pending decision until the author explicitly decides.
+  const commentedChange = viewer().locator('.change[data-stop="2"]');
+  await expect(commentedChange).toHaveAttribute('data-state', 'pending');
+  await commentedChange.locator('.change-number').click();
+  await commentedChange.getByRole('button', { name: 'Reject (2)', exact: true }).click();
   await expect(viewer().locator('.change-head:visible')).toHaveCount(0);
   await expect(viewer().locator('.change-map-mark')).toHaveCount(0);
   await expect(viewer().locator('.review-complete')).toBeVisible();
   // Only History mode adds a row under the toolbar.
   await expect(viewer().locator('.review-mode')).toHaveCount(0);
   await sync();
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
+  await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
   await expect(viewer().getByText('Feedback sent · Agent is working', { exact: true })).toBeVisible();
   await viewer().getByRole('button', { name: 'History', exact: true }).click();
   await expect(viewer().locator('.change-head:visible')).toHaveCount(3);
@@ -412,7 +416,7 @@ try {
   await expect(viewer().locator('.mixed-reviewed .side:visible')).toHaveCount(0);
   await expect(viewer().getByText('Reviewed changes · View in History', { exact: true })).toBeVisible();
   // Existing direct-accept tasks retain their commit form; isolated tasks offer both save choices.
-  task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
+  task.review.unsent = 0; task.review.comments = 0; task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
   await sync();
   const card = viewer().locator('.review-complete');
   const taskStatus = page.locator(`[data-task="${task.id}"] .status`);

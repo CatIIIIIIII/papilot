@@ -520,6 +520,8 @@ export function ReviewApp({
       blocked("comment")
     )
       return;
+    const event = new CustomEvent('latex-review:comment', { cancelable: true, detail: { round: detail?.round, stop: current, changes } });
+    if (!window.dispatchEvent(event)) return;
     const key = `latex-review:${task}:draft:${detail?.round}:${changes.join(",")}`;
     setDraft(readStorage(key, ""));
     setComposer({ changes, stop: current, key });
@@ -1488,7 +1490,7 @@ export function ReviewApp({
                       : state?.workspace?.merging
                         ? "Your manuscript is unchanged until you save the merged result."
                         : state?.workspace?.comments
-                        ? "Your comments are saved. Send feedback so the agent can revise."
+                        ? "Your comments are saved. Continue in Chat to request a revision."
                         : state?.workspace?.deferred
                           ? state.workspace.accepted
                             ? "Choose how to save the accepted changes to your manuscript."

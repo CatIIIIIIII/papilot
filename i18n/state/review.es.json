@@ -1248,5 +1248,10 @@
     "revision": "6b5ec5c8ee74c17b2cdfd638dfccf0c8c4e39c4a270721f9c2e264382511e3bf",
     "textHash": "d5457f95f4b7c4d1e93985763c6c2015e72389211f9a5c047450134f83afdcc0",
     "model": "gemini-4-argon-medium"
+  },
+  "Your comments are saved. Continue in Chat to request a revision.": {
+    "revision": "f5369f68c5d3264d10326247b200d24f33cd76e4301cbbba289cdb9196252caf",
+    "textHash": "1bc1fd74e6770d73b5dd01b35997f8c44a6234809c353ee67198b5698daf7752",
+    "model": "codex-reviewed"
   }
 }
