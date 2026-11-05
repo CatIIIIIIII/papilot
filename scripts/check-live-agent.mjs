@@ -25,6 +25,21 @@ let store = new Store(database), workspace = new Workspace(store, new Codex(proc
 let client;
 const evidence = { agent, root, protocol: [], events: {}, checks: [] };
 function observe() {
+  if (agent === 'claude') {
+    const runtime = workspace.agents[agent], launch = runtime.launch.bind(runtime);
+    runtime.launch = (binary, args, options) => {
+      const child = launch(binary, args, options); let buffered = '';
+      child.stdout.on('data', bytes => {
+        buffered += bytes;
+        let end;
+        while ((end = buffered.indexOf('\n')) >= 0) {
+          const line = buffered.slice(0, end); buffered = buffered.slice(end + 1);
+          try { const event = JSON.parse(line); if (event.model || event.modelUsage) evidence.protocol.push({ method: 'claude-stream', model: event.model, models: Object.keys(event.modelUsage || {}) }); } catch {}
+        }
+      });
+      return child;
+    };
+  }
   const runtime = workspace.agents[agent], request = runtime.request.bind(runtime);
   runtime.request = async (method, params, timeout) => {
     const result = await request(method, params, timeout);
@@ -70,7 +85,7 @@ try {
   let task = await wait(created.id);
   assert.match(fs.readFileSync(path.join(task.worktree, 'main.tex'), 'utf8'), /The revised sentence/);
   assert.ok(evidence.events['item/agentMessage/delta'] > 0, 'Real streaming reply was not observed');
-  evidence.checks.push('default-model', 'streaming', 'read-edit', 'compile', 'review');
+  evidence.checks.push(selected ? 'explicit-model' : 'default-model', 'streaming', 'read-edit', 'compile', 'review');
   client = await reviewClient(paper);
   const review = await client.get(`/api/tasks/${task.name}/rounds/${task.review.round}`);
   evidence.reviewKeys = Object.keys(review);
