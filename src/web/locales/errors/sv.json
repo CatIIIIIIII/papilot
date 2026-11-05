@@ -17,6 +17,7 @@
   "An AI review comment spans multiple PDF pages. Ask the reviewer to anchor it on a single page.": "En kommentar i AI-granskningen sträcker sig över flera PDF-sidor. Be granskaren att förankra den på en enda sida.",
   "Another Papilot instance is already updating.": "En annan instans av Papilot uppdateras redan.",
   "Answer every question before submitting.": "Besvara alla frågor innan du skickar in.",
+  "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity kan inte ge åtkomst till denna bildsökväg på ett säkert sätt. Flytta Papilots datamapp till en sökväg utan parenteser eller jokertecken.",
   "Attachment not found.": "Bilagan hittades inte.",
   "Attachments must total 100 MB or less.": "Bilagor får totalt vara högst 100 MB.",
   "Check for a newer release before updating.": "Sök efter en nyare version innan du uppdaterar.",

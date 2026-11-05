@@ -17,6 +17,7 @@
   "An AI review comment spans multiple PDF pages. Ask the reviewer to anchor it on a single page.": "AI 审阅意见跨越了多个 PDF 页面，请让审阅器将其锚定在单个页面上。",
   "Another Papilot instance is already updating.": "另一个 Papilot 实例正在更新。",
   "Answer every question before submitting.": "请回答所有问题后再提交。",
+  "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity 无法安全地授予此图片路径的访问权限。请将 Papilot 数据文件夹移到不含括号或通配符的路径。",
   "Attachment not found.": "未找到附件。",
   "Attachments must total 100 MB or less.": "附件总大小不得超过 100 MB。",
   "Check for a newer release before updating.": "更新前请先检查是否有新版本。",

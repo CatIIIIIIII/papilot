@@ -17,6 +17,7 @@
   "An AI review comment spans multiple PDF pages. Ask the reviewer to anchor it on a single page.": "Un commento della revisione IA si estende su più pagine del PDF. Chiedi al revisore di ancorarlo a una singola pagina.",
   "Another Papilot instance is already updating.": "Un'altra istanza di Papilot è già in fase di aggiornamento.",
   "Answer every question before submitting.": "Rispondi a tutte le domande prima di inviare.",
+  "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity non può concedere in sicurezza l’accesso a questo percorso dell’immagine. Sposta la cartella dei dati di Papilot in un percorso senza parentesi o caratteri jolly.",
   "Attachment not found.": "Allegato non trovato.",
   "Attachments must total 100 MB or less.": "Il totale degli allegati non deve superare 100 MB.",
   "Check for a newer release before updating.": "Verifica la presenza di una versione più recente prima di aggiornare.",

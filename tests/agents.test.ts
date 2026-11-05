@@ -91,6 +91,41 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('Antigravity grants only selected images read access for the current turn', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
+  const image = path.join(dir, 'attached.png'); fs.writeFileSync(image, 'image fixture');
+  const fake = fakeAgy([[JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })], [JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })]]);
+  const agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/work' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: `See ${image}` }, { type: 'localImage', path: image }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args, resolved = fs.realpathSync(image);
+    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]), { permissions: { allow: [`read_file(${resolved})`] } });
+    assert.ok(args[1].includes(resolved));
+    assert.ok(!args.includes('--add-dir') && !args.includes('--dangerously-skip-permissions'));
+    const next = events(agent);
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Continue without an image.' }] });
+    assert.equal((await completed(next)).status, 'completed');
+    assert.ok(!fake.launches[1].args.includes('--settings'), 'Image permission must not persist into later turns');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const name of ['wild*card.png', 'paren).png', 'missing.png', 'directory']) test(`Antigravity refuses unsafe image permission paths: ${name}`, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
+  const file = path.join(dir, name);
+  if (name === 'directory') fs.mkdirSync(file);
+  else if (name !== 'missing.png') fs.writeFileSync(file, 'fixture');
+  const fake = fakeAgy([]), agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const seen = events(agent), { thread } = await agent.request('thread/start', { cwd: '/work' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'localImage', path: file }] });
+    assert.equal((await completed(seen)).status, 'failed');
+    assert.equal(fake.launches.length, 0);
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 function fakeClaude(script: (options: any) => AsyncGenerator<any>, account: Record<string, string> = { email: 'me@example.com', apiKeySource: 'ANTHROPIC_API_KEY', apiProvider: 'firstParty' }, currentModel: string | null = 'claude-opus-5-5') {
   const calls: { prompt: unknown; options: any }[] = [];
   const query = ((input: { prompt: unknown; options: any }) => {
