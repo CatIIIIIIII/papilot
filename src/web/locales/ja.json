@@ -1215,5 +1215,11 @@
   "{sources} could not be reached.": "{sources} に接続できませんでした。",
   "{time} ago": "{time}前",
   "{title} PDF change review": "{title} PDF 変更レビュー",
-  "{used}% used": "{used}% 使用済み"
+  "{used}% used": "{used}% 使用済み",
+  "Play a sound": "通知音を鳴らす",
+  "Play the system notification sound.": "システムの通知音を再生します。",
+  "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "送信しました。通知が表示されない場合は、システム設定で Papilot の通知と通知音を許可してください。",
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot は通知を表示できませんでした。システムの通知設定を確認してください。",
+  "Notification sound": "通知音",
+  "Notification sounds are managed by your system settings.": "通知音はシステム設定で管理されます。"
 }

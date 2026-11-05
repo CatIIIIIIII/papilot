@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChipSelect } from './chip-select.tsx';
 import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
-import { setNotificationEvent, setNotifications, testNotification, useNotifications, type NotificationEvent } from './notifications.ts';
+import { nativeNotifications, nativeNotificationSound, setNotificationEvent, setNotificationSound, setNotifications, testNotification, useNotifications, type NotificationEvent } from './notifications.ts';
 
 export function NotificationSettings() {
   const events: { event: NotificationEvent; label: string; detail: string }[] = [
@@ -15,6 +15,7 @@ export function NotificationSettings() {
   const notifications = useNotifications();
   const [asking, setAsking] = useState(false), [test, setTest] = useState<'' | 'sent' | 'failed'>('');
   const [error, setError] = useState('');
+  const [testing, setTesting] = useState(false);
   const on = notifications.on && notifications.permission === 'granted';
   const blocked = notifications.permission === 'unsupported' ? t('This browser cannot show notifications.')
     : notifications.permission === 'insecure' ? t('Browsers show notifications only on HTTPS or localhost. Open Papilot at a secure address to use them.')
@@ -25,6 +26,11 @@ export function NotificationSettings() {
     catch { setError(t('This browser could not enable notifications.')); }
     finally { setAsking(false); }
   }
+  async function sendTest() {
+    setTesting(true); setTest('');
+    try { setTest(await testNotification() ? 'sent' : 'failed'); }
+    finally { setTesting(false); }
+  }
   return <div className="settings-page">
     <section className="settings-card">
       <div className="settings-row settings-notifications">
@@ -34,10 +40,25 @@ export function NotificationSettings() {
         </div>
         <input id="settings-notify" type="checkbox" role="switch" className="switch" aria-describedby="settings-notify-detail" checked={on} disabled={asking || (Boolean(blocked) && !on)} onChange={event => void toggle(event.target.checked)}/>
       </div>
+      {nativeNotificationSound && <div className="settings-row">
+        <div className="settings-text">
+          <label className="settings-name" htmlFor="settings-notify-sound">{t('Play a sound')}</label>
+          <p id="settings-notify-sound-detail">{t('Play the system notification sound.')}</p>
+        </div>
+        <input id="settings-notify-sound" type="checkbox" role="switch" className="switch" aria-describedby="settings-notify-sound-detail" checked={notifications.sound} disabled={!on} onChange={event => { setNotificationSound(event.target.checked); setTest(''); }}/>
+      </div>}
+      {nativeNotifications && !nativeNotificationSound && <div className="settings-row">
+        <div className="settings-text">
+          <span className="settings-name">{t('Notification sound')}</span>
+          <p>{t('Notification sounds are managed by your system settings.')}</p>
+        </div>
+      </div>}
       {error && <p role="alert" className="settings-test">{error}</p>}
       {on && <div className="settings-test">
-        <button type="button" className="button secondary compact" onClick={() => setTest(testNotification() ? 'sent' : 'failed')}><Icon name="bell" size={14}/>{t('Send a test notification')}</button>
-        {test && <span role="status">{test === 'sent' ? t('Sent. If nothing appeared, allow notifications for this browser in your system settings.') : t('This browser could not show the notification.')}</span>}
+        <button type="button" className="button secondary compact" disabled={testing} onClick={() => void sendTest()}><Icon name="bell" size={14}/>{t('Send a test notification')}</button>
+        {test && <span role="status">{nativeNotifications
+          ? test === 'sent' ? t('Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.') : t('Papilot could not show the notification. Check your system notification settings.')
+          : test === 'sent' ? t('Sent. If nothing appeared, allow notifications for this browser in your system settings.') : t('This browser could not show the notification.')}</span>}
       </div>}
     </section>
     <section aria-labelledby="settings-notify-events">

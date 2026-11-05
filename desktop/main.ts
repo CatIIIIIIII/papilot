@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { backendEnvironment, startBackend, startServer, switchServer, type Bundle } from './runtime.js';
+import { desktopNotifications } from './notifications.js';
 
 const nix = process.env.PAPILOT_INSTALL_METHOD === 'nix';
 const releases = 'https://github.com/PapilotAI/papilot/releases';
@@ -10,7 +11,19 @@ app.setName('Papilot');
 if (process.env.PAPILOT_DESKTOP_DATA) app.setPath('userData', path.resolve(process.env.PAPILOT_DESKTOP_DATA));
 let window: BrowserWindow | null = null;
 let backend: ReturnType<typeof startBackend> | undefined;
-let quitting = false, stopped = false, switching = false, origin = '';
+let quitting = false, stopping = false, stopped = false, switching = false, origin = '';
+const notifications = desktopNotifications({
+  supported: () => Notification.isSupported(),
+  create: options => {
+    const notification = new Notification(options);
+    notification.on('failed', (_event, error) => console.warn('Could not show a desktop notification:', error));
+    return notification;
+  },
+  open: taskId => {
+    showWindow();
+    if (taskId) window?.webContents.send('papilot:open-task', taskId);
+  },
+});
 function external(url: string) {
   try { if (['https:', 'http:'].includes(new URL(url).protocol)) void shell.openExternal(url); } catch { /* invalid link */ }
 }
@@ -28,6 +41,10 @@ function showWindow() {
     if (new URL(url).origin !== origin) { event.preventDefault(); external(url); }
   });
   window.webContents.on('will-attach-webview', event => event.preventDefault());
+  // macOS keeps tasks running after Close. Keep their notification observer too.
+  window.on('close', event => {
+    if (process.platform === 'darwin' && !quitting) { event.preventDefault(); window?.hide(); }
+  });
   window.on('closed', () => { window = null; });
   window.once('ready-to-show', () => window?.show());
   void window.loadURL(origin).catch(error => { if (!quitting) dialog.showErrorBox('Could not open Papilot', String(error)); });
@@ -39,13 +56,20 @@ else {
   app.on('activate', showWindow);
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('before-quit', event => {
+    quitting = true;
+    notifications.close();
     if (stopped || !backend) return;
     event.preventDefault();
-    if (quitting) return;
-    quitting = true;
+    if (stopping) return;
+    stopping = true;
     void backend.stop().finally(() => { stopped = true; app.quit(); });
   });
   void app.whenReady().then(async () => {
+    ipcMain.handle('papilot:notify', (event, alert: unknown) => {
+      if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
+      if (!event.senderFrame || new URL(event.senderFrame.url).origin !== origin) return false;
+      return notifications.show(alert);
+    });
     const chooseDirectory = async (parent: BrowserWindow) => {
       const result = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] });
       return result.canceled ? null : result.filePaths[0] || null;

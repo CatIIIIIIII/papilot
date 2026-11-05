@@ -7,6 +7,8 @@ declare global {
       platform: string; minimize(): void; maximize(): void; close(): void;
       chooseDirectory?(): Promise<string | null>;
       onOpenFolder?(listener: (folder: string) => void): () => void;
+      notify?(alert: { taskId: string | null; title: string; body: string; sound: boolean }): Promise<boolean>;
+      onOpenTask?(listener: (taskId: string) => void): () => void;
     };
   }
 }

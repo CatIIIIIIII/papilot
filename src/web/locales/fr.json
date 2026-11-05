@@ -1215,5 +1215,11 @@
   "{sources} could not be reached.": "Impossible de joindre {sources}.",
   "{time} ago": "il y a {time}",
   "{title} PDF change review": "Révision des modifications du PDF {title}",
-  "{used}% used": "{used} % utilisé"
+  "{used}% used": "{used} % utilisé",
+  "Play a sound": "Émettre un son",
+  "Play the system notification sound.": "Émettre le son de notification du système.",
+  "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "Envoyée. Si rien ne s’affiche, autorisez les notifications et les sons de Papilot dans les paramètres du système.",
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot n’a pas pu afficher la notification. Vérifiez les paramètres de notification du système.",
+  "Notification sound": "Son de notification",
+  "Notification sounds are managed by your system settings.": "Les sons de notification se gèrent dans les paramètres du système."
 }
