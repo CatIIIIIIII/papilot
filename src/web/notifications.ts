@@ -13,6 +13,8 @@ export type NotificationEvent = typeof NOTIFICATION_EVENTS[number];
 export type NotificationEvents = Record<NotificationEvent, boolean>;
 const defaultEvents: NotificationEvents = { input: true, approval: true, review: true, finished: true, error: true };
 export const nativeNotifications = typeof window !== 'undefined' && Boolean(window.papilotDesktop?.notify);
+// Electron's Linux libnotify backend does not implement the silent option.
+export const nativeNotificationSound = nativeNotifications && ['darwin', 'win32'].includes(window.papilotDesktop!.platform);
 export type NotificationState = { on: boolean; sound: boolean; events: NotificationEvents; permission: NotificationPermission | 'unsupported' | 'insecure' };
 function read(): NotificationState {
   const on = browserStorage.getItem(key) === 'on';
@@ -91,7 +93,7 @@ function firstLine(task: Task, title: string) {
 export async function notify(alert: TaskAlert, open: (taskId: string) => void) {
   if (!notifying() || !state.events[alert.event]) return;
   try {
-    if (nativeNotifications) return await window.papilotDesktop!.notify!({ taskId: alert.taskId, title: alert.title, body: alert.body, sound: state.sound });
+    if (nativeNotifications) return await window.papilotDesktop!.notify!({ taskId: alert.taskId, title: alert.title, body: alert.body, sound: !nativeNotificationSound || state.sound });
     const notification = new Notification(alert.title, { body: alert.body, tag: 'papilot:' + alert.taskId, renotify: true, icon: '/favicon.png' } as NotificationOptions);
     notification.onclick = () => { window.focus(); open(alert.taskId); notification.close(); };
   } catch { /* Some browsers only allow notifications from a service worker. */ }
@@ -101,7 +103,7 @@ export async function testNotification() {
   if (!state.on || state.permission !== 'granted') return false;
   try {
     const title = t('Notifications are on'), body = t('Papilot will tell you here when a task needs you.');
-    if (nativeNotifications) return await window.papilotDesktop!.notify!({ taskId: null, title, body, sound: state.sound });
+    if (nativeNotifications) return await window.papilotDesktop!.notify!({ taskId: null, title, body, sound: !nativeNotificationSound || state.sound });
     new Notification(title, { body, tag: 'papilot:test', icon: '/favicon.png' }); return true;
   }
   catch { return false; }

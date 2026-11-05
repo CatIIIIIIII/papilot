@@ -4,6 +4,7 @@ import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
 // Exercise the actual sandboxed preload and main process without depending on
 // an OS notification daemon, permission prompt or sound device in CI.
 export async function checkDesktopNotifications(application, page, snapshot) {
+  const soundControl = ['darwin', 'win32'].includes(process.platform);
   await application.evaluate(({ Notification }) => {
     globalThis.notificationOriginals = { show: Notification.prototype.show, close: Notification.prototype.close, supported: Notification.isSupported };
     globalThis.notificationCalls = [];
@@ -37,17 +38,21 @@ export async function checkDesktopNotifications(application, page, snapshot) {
     const enabled = page.getByRole('switch', { name: 'Notifications', exact: true });
     const sound = page.getByRole('switch', { name: 'Play a sound', exact: true });
     await expect(enabled).not.toBeChecked();
-    await expect(sound).toBeDisabled();
+    if (soundControl) await expect(sound).toBeDisabled();
+    else {
+      await expect(sound).toHaveCount(0);
+      await expect(page.getByText('Notification sounds are managed by your system settings.', { exact: true })).toBeVisible();
+    }
     await enabled.check();
-    await expect(sound).toBeChecked();
+    if (soundControl) await expect(sound).toBeChecked();
     const send = page.getByRole('button', { name: 'Send a test notification' });
     await send.click();
     await expect(page.getByRole('status').filter({ hasText: 'Sent.' })).toBeVisible();
     assert.equal((await calls())[0].silent, false);
-    await sound.uncheck();
+    if (soundControl) await sound.uncheck();
     await send.click();
     await expect.poll(async () => (await calls()).length).toBe(2);
-    assert.equal((await calls())[1].silent, true);
+    assert.equal((await calls())[1].silent, soundControl);
     await application.evaluate(() => { globalThis.notificationFailure = true; });
     await send.click();
     await expect(page.getByRole('status').filter({ hasText: 'Papilot could not show the notification.' })).toBeVisible();
@@ -55,7 +60,8 @@ export async function checkDesktopNotifications(application, page, snapshot) {
     await page.reload();
     await openSettings();
     await expect(enabled).toBeChecked();
-    await expect(sound).not.toBeChecked();
+    if (soundControl) await expect(sound).not.toBeChecked();
+    else await expect(sound).toHaveCount(0);
     await page.screenshot({ path: 'test-results/desktop-notifications.png' });
 
     // Playwright normally forces document.hasFocus() to true, even for a hidden
@@ -70,7 +76,7 @@ export async function checkDesktopNotifications(application, page, snapshot) {
     await expect.poll(() => page.evaluate(() => document.hidden || !document.hasFocus())).toBe(true);
     task.status = 'reviewing'; task.review = { state: 'done', round: null, counts: {} };
     await expect.poll(async () => (await calls()).length, { timeout: 20000 }).toBe(4);
-    assert.deepEqual((await calls())[3], { title: 'Codex finished', body: task.title, silent: true });
+    assert.deepEqual((await calls())[3], { title: 'Codex finished', body: task.title, silent: soundControl });
     await application.evaluate(() => globalThis.notificationCalls[3].emit('click'));
     await expect.poll(() => application.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];

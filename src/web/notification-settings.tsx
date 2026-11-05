@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChipSelect } from './chip-select.tsx';
 import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
-import { nativeNotifications, setNotificationEvent, setNotificationSound, setNotifications, testNotification, useNotifications, type NotificationEvent } from './notifications.ts';
+import { nativeNotifications, nativeNotificationSound, setNotificationEvent, setNotificationSound, setNotifications, testNotification, useNotifications, type NotificationEvent } from './notifications.ts';
 
 export function NotificationSettings() {
   const events: { event: NotificationEvent; label: string; detail: string }[] = [
@@ -40,12 +40,18 @@ export function NotificationSettings() {
         </div>
         <input id="settings-notify" type="checkbox" role="switch" className="switch" aria-describedby="settings-notify-detail" checked={on} disabled={asking || (Boolean(blocked) && !on)} onChange={event => void toggle(event.target.checked)}/>
       </div>
-      {nativeNotifications && <div className="settings-row">
+      {nativeNotificationSound && <div className="settings-row">
         <div className="settings-text">
           <label className="settings-name" htmlFor="settings-notify-sound">{t('Play a sound')}</label>
           <p id="settings-notify-sound-detail">{t('Play the system notification sound.')}</p>
         </div>
         <input id="settings-notify-sound" type="checkbox" role="switch" className="switch" aria-describedby="settings-notify-sound-detail" checked={notifications.sound} disabled={!on} onChange={event => { setNotificationSound(event.target.checked); setTest(''); }}/>
+      </div>}
+      {nativeNotifications && !nativeNotificationSound && <div className="settings-row">
+        <div className="settings-text">
+          <span className="settings-name">{t('Notification sound')}</span>
+          <p>{t('Notification sounds are managed by your system settings.')}</p>
+        </div>
       </div>}
       {error && <p role="alert" className="settings-test">{error}</p>}
       {on && <div className="settings-test">

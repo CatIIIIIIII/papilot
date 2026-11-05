@@ -1219,5 +1219,7 @@
   "Play a sound": "播放提示音",
   "Play the system notification sound.": "播放系統通知提示音。",
   "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "已傳送。如果沒有看到通知，請在系統設定中允許 Papilot 傳送通知及播放提示音。",
-  "Papilot could not show the notification. Check your system notification settings.": "Papilot 無法顯示通知。請檢查系統通知設定。"
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot 無法顯示通知。請檢查系統通知設定。",
+  "Notification sound": "通知提示音",
+  "Notification sounds are managed by your system settings.": "通知提示音由系統設定管理。"
 }

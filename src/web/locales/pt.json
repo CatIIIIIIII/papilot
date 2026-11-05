@@ -1219,5 +1219,7 @@
   "Play a sound": "Reproduzir um som",
   "Play the system notification sound.": "Reproduzir o som de notificação do sistema.",
   "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "Enviada. Se nada apareceu, permita as notificações e os sons do Papilot nas configurações do sistema.",
-  "Papilot could not show the notification. Check your system notification settings.": "O Papilot não conseguiu mostrar a notificação. Verifique as configurações de notificações do sistema."
+  "Papilot could not show the notification. Check your system notification settings.": "O Papilot não conseguiu mostrar a notificação. Verifique as configurações de notificações do sistema.",
+  "Notification sound": "Som de notificação",
+  "Notification sounds are managed by your system settings.": "Os sons de notificação são gerenciados nas configurações do sistema."
 }

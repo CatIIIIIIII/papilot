@@ -1219,5 +1219,7 @@
   "Play a sound": "Spela upp ett ljud",
   "Play the system notification sound.": "Spela upp systemets aviseringsljud.",
   "Sent. If nothing appeared, allow notifications and sounds for Papilot in your system settings.": "Skickat. Om inget visades, tillåt aviseringar och ljud för Papilot i systeminställningarna.",
-  "Papilot could not show the notification. Check your system notification settings.": "Papilot kunde inte visa aviseringen. Kontrollera systemets aviseringsinställningar."
+  "Papilot could not show the notification. Check your system notification settings.": "Papilot kunde inte visa aviseringen. Kontrollera systemets aviseringsinställningar.",
+  "Notification sound": "Aviseringsljud",
+  "Notification sounds are managed by your system settings.": "Aviseringsljud hanteras i systeminställningarna."
 }
