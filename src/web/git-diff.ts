@@ -11,6 +11,7 @@ export function parseGitDiff(patch: string) {
   const lines: DiffLine[] = [], changes: number[] = [];
   let before = 0, after = 0, inHunk = false, changing = false, added = 0, deleted = 0;
   for (const line of patch.split('\n')) {
+    if (line.startsWith('diff --git ')) { inHunk = false; changing = false; continue; }
     const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(?: ?(.*))?$/.exec(line);
     if (hunk) {
       before = Number(hunk[1]); after = Number(hunk[2]); inHunk = true; changing = false;

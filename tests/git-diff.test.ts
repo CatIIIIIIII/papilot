@@ -23,3 +23,13 @@ test('new, deleted, binary and long files retain every returned change', () => {
   assert.equal(long.added, 10000);
   assert.equal(long.lines.at(-1)?.after, 10000);
 });
+
+test('file-type changes reset at each patch boundary without treating headers as code', () => {
+  const diff = parseGitDiff('diff --git a/a.tex b/a.tex\ndeleted file mode 100644\n--- a/a.tex\n+++ /dev/null\n@@ -1 +0,0 @@\n-regular file\ndiff --git a/a.tex b/a.tex\nnew file mode 120000\n--- /dev/null\n+++ b/a.tex\n@@ -0,0 +1 @@\n+b.tex\n\\ No newline at end of file\n');
+  assert.deepEqual(diff.lines.filter(line => line.kind === 'add' || line.kind === 'del'), [
+    { kind: 'del', text: 'regular file', before: 1 }, { kind: 'add', text: 'b.tex', after: 1 },
+  ]);
+  assert.deepEqual([diff.added, diff.deleted, diff.changes], [1, 1, [1, 3]]);
+  const headersInCode = parseGitDiff('@@ -1 +1 @@\n--- original source\n+++ revised source\n');
+  assert.deepEqual(headersInCode.lines.slice(1).map(line => line.text), ['-- original source', '++ revised source']);
+});

@@ -31,7 +31,9 @@ await context.route('**/api/**', async route => {
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', checkedAt: 1, error: null, canUpdate: true });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
-  if (url.pathname.endsWith('/manuscript')) return json({ git, build: { status: 'idle', key: null, pages: [], current: false }, annotations: [] });
+  if (url.pathname.endsWith('/manuscript.pdf')) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
+  if (url.pathname.endsWith('/manuscript/words')) return json(JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'))[Number(url.searchParams.get('page'))]);
+  if (url.pathname.endsWith('/manuscript')) return json({ git, build: { status: 'ready', key: 'fixture', pages: [[612, 792], [612, 792]], builtAt: 1, current: true }, annotations: [] });
   if (url.pathname.endsWith('/git')) return json(git);
   if (url.pathname.endsWith('/git/fetch')) { fetches++; if (incoming) git = { ...git, behind: incoming }; return json({ git }); }
   if (url.pathname.endsWith('/git/overview')) { overviewRequests++; return json({ commits: [], worktrees: [], truncated: false }); }
@@ -76,6 +78,8 @@ async function syncFromMenu() {
 try {
   await page.goto(origin);
   await page.locator('.manuscript-link').click();
+  const pdfPage = page.locator('.pdfViewer .page').first();
+  await pdfPage.waitFor();
   await page.getByRole('tab', { name: /^Git/ }).click();
   await panel.getByRole('group', { name: 'Changes', exact: true }).waitFor();
   assert.equal(await panel.getByRole('region', { name: 'Commit graph' }).count(), 0);
@@ -91,7 +95,28 @@ try {
   await expect(panel.getByRole('textbox', { name: 'Commit message' })).toBeFocused();
   await versions.locator('.git-version-file').click();
   await expect(page.locator('.git-diff-view')).toContainText('Historical result');
+  // The PDF stays mounted to preserve reading state, but must not intercept
+  // search, zoom, or tool shortcuts intended for the source view.
+  const pdfWidth = await pdfPage.evaluate(element => getComputedStyle(element).width);
+  const swallowed = await page.evaluate(() => {
+    document.activeElement?.blur();
+    return ['f', '=', '-', '0', 'h', ' '].map(key => {
+      const event = new KeyboardEvent('keydown', { key, ctrlKey: !['h', ' '].includes(key), bubbles: true, cancelable: true });
+      document.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+  });
+  assert.deepEqual(swallowed, [false, false, false, false, false, false]);
+  await expect(page.locator('input[aria-label="Search the PDF"]')).toHaveCount(0);
+  assert.equal(await pdfPage.evaluate(element => getComputedStyle(element).width), pdfWidth);
   await page.getByRole('button', { name: 'Back to manuscript', exact: true }).click();
+  await expect(pdfPage).toBeVisible();
+  assert.equal(await page.evaluate(() => {
+    const event = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(event); return event.defaultPrevented;
+  }), true);
+  await page.getByRole('textbox', { name: 'Search the PDF', exact: true }).waitFor();
+  await page.getByRole('textbox', { name: 'Search the PDF', exact: true }).press('Escape');
   await versions.getByRole('button', { name: /Add comparison results/ }).click();
   await expect(panel.getByRole('button', { name: 'Commit', exact: true })).toBeDisabled();
   await expect(panel.getByRole('button', { name: 'Sync', exact: true })).toHaveCount(0);

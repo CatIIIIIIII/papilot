@@ -192,6 +192,8 @@ export const PdfView = forwardRef<PdfHandle, {
   tools?: ReactNode;
   /** Remembers the page and position under this name, and opens there next time. */
   place?: string;
+  /** Keep reading state mounted while another workspace view is in front. */
+  suspended?: boolean;
 }>(function PdfView(props, ref) {
   const latest = useRef(props); latest.current = props;
   const root = useRef<HTMLDivElement>(null), container = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), findInput = useRef<HTMLInputElement>(null);
@@ -606,7 +608,7 @@ export const PdfView = forwardRef<PdfHandle, {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const viewer = tools.current?.viewer, mod = e.metaKey || e.ctrlKey;
-      if (!viewer || e.defaultPrevented) return;
+      if (!viewer || e.defaultPrevented || latest.current.suspended) return;
       if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); if (findInput.current) findInput.current.select(); else setFindOpen(true); }
       else if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); viewer.increaseScale(); }
       else if (mod && e.key === '-') { e.preventDefault(); viewer.decreaseScale(); }
@@ -621,7 +623,7 @@ export const PdfView = forwardRef<PdfHandle, {
   // still turns the page), and Escape steps back: unlock, then Select.
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.metaKey || event.ctrlKey || event.altKey || latest.current.readOnly) return;
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.metaKey || event.ctrlKey || event.altKey || latest.current.readOnly || latest.current.suspended) return;
       const focus = document.activeElement;
       if (typing(event.target) || (focus && focus !== document.body && !root.current?.contains(focus)) || document.querySelector('dialog[open]')) return;
       if (event.key === ' ') {
@@ -643,6 +645,7 @@ export const PdfView = forwardRef<PdfHandle, {
     const keyUp = (event: KeyboardEvent) => {
       if (event.key !== ' ' || !spaceRef.current.held) return;
       setSpaceHand(false);
+      if (latest.current.suspended) return;
       const box = container.current;
       if (!spaceRef.current.used && box) box.scrollBy({ top: (event.shiftKey ? -0.9 : 0.9) * box.clientHeight });
     };

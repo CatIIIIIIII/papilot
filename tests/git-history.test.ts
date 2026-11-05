@@ -205,3 +205,59 @@ test('restore still protects ignored symlinks themselves, including dangling ali
     assert.equal(fs.lstatSync(path.join(root, item.local), { bigint: true }).ino, local.ino);
   });
 });
+
+for (const fails of ['preparation', 'real checkout']) test(`restore preserves files, index and HEAD when a filter fails during ${fails}`, async t => {
+  const { root, git, write, commit } = fixture(t);
+  write('.gitignore', 'backup.tex\n'); write('.gitattributes', 'z.tex filter=restore-test\n');
+  write('a.tex', 'Old a\n'); write('z.tex', 'Old z\n'); const first = commit('Old version');
+  write('a.tex', 'Current a\n'); write('z.tex', 'Current z\n'); const head = commit('Current version');
+  fs.linkSync(path.join(root, 'z.tex'), path.join(root, 'backup.tex'));
+  const backupInode = fs.lstatSync(path.join(root, 'backup.tex')).ino;
+  git('config', 'filter.restore-test.clean', 'cat'); git('config', 'filter.restore-test.required', 'true');
+  if (fails === 'preparation') git('config', 'filter.restore-test.smudge', 'false');
+  else {
+    const script = path.join(root, '.git/smudge.cjs'), counter = path.join(root, '.git/smudge-count');
+    fs.writeFileSync(script, `const fs = require('node:fs'); const counter = ${JSON.stringify(counter)};\nif (fs.existsSync(counter)) process.exit(1);\nfs.writeFileSync(counter, '1'); process.stdin.pipe(process.stdout);\n`);
+    const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+    git('config', 'filter.restore-test.smudge', `${quote(process.execPath)} ${quote(script)}`);
+  }
+  assert.equal(git('status', '--porcelain'), '');
+  const before = fs.readFileSync(path.join(root, '.git/index'));
+  await assert.rejects(gitRestoreVersion(root, first, head), /filter/);
+  assert.equal(git('rev-parse', 'HEAD'), head);
+  assert.deepEqual(fs.readFileSync(path.join(root, '.git/index')), before);
+  assert.equal(fs.readFileSync(path.join(root, 'a.tex'), 'utf8'), 'Current a\n');
+  assert.equal(fs.readFileSync(path.join(root, 'z.tex'), 'utf8'), 'Current z\n');
+  assert.equal(fs.readFileSync(path.join(root, 'backup.tex'), 'utf8'), 'Current z\n');
+  assert.equal(fs.lstatSync(path.join(root, 'backup.tex')).ino, backupInode);
+  assert.equal(git('status', '--porcelain'), '');
+  assert.ok(!fs.readdirSync(path.join(root, '.git')).some(name => name.startsWith('papilot-restore-')));
+  assert.ok(!fs.existsSync(path.join(root, '.git/index.lock')));
+});
+
+for (const concurrentEdit of [false, true]) test(`restore handles a rejected ref update${concurrentEdit ? ' without overwriting a concurrent edit' : ' by restoring file types and contents'}`, async t => {
+  const { root, git, write, commit } = fixture(t);
+  write('.gitignore', 'cache/\n'); write('main.tex', 'Old paper\n');
+  fs.mkdirSync(path.join(root, 'view')); write('view/notes.tex', 'Old notes\n'); const first = commit('Old version');
+  fs.rmSync(path.join(root, 'view'), { recursive: true }); fs.symlinkSync('cache', path.join(root, 'view'));
+  write('main.tex', 'Current paper\n'); write('new.tex', 'Current addition\n'); const head = commit('Current version');
+  fs.mkdirSync(path.join(root, 'cache')); write('cache/notes.tex', 'Private ignored notes\n');
+  const hooks = path.join(root, '.git/failing-hooks'), script = path.join(hooks, 'reject.cjs');
+  fs.mkdirSync(hooks);
+  fs.writeFileSync(script, `if (process.argv[2] === 'prepared') {\n  ${concurrentEdit ? `require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'main.tex'))}, 'Concurrent edit\\n');` : ''}\n  process.exit(1);\n}\n`);
+  const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+  fs.writeFileSync(path.join(hooks, 'reference-transaction'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(script)} "$@"\n`, { mode: 0o755 });
+  git('config', 'core.hooksPath', hooks);
+  const index = path.join(root, '.git/index'), before = fs.readFileSync(index);
+  await assert.rejects(gitRestoreVersion(root, first, head), concurrentEdit ? /Restore failed\. Previous files are saved at/ : /ref updates aborted/);
+  assert.equal(git('rev-parse', 'HEAD'), head); assert.deepEqual(fs.readFileSync(index), before);
+  assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), concurrentEdit ? 'Concurrent edit\n' : 'Current paper\n');
+  assert.equal(fs.readFileSync(path.join(root, 'new.tex'), 'utf8'), 'Current addition\n');
+  assert.equal(fs.readlinkSync(path.join(root, 'view')), 'cache');
+  assert.equal(fs.readFileSync(path.join(root, 'cache/notes.tex'), 'utf8'), 'Private ignored notes\n');
+  const recoveries = fs.readdirSync(path.join(root, '.git')).filter(name => name.startsWith('papilot-restore-'));
+  assert.equal(recoveries.length, concurrentEdit ? 1 : 0);
+  if (concurrentEdit) assert.equal(fs.readFileSync(path.join(root, '.git', recoveries[0], 'before/main.tex'), 'utf8'), 'Current paper\n');
+  else assert.equal(git('status', '--porcelain'), '');
+  assert.ok(!fs.existsSync(index + '.lock'));
+});

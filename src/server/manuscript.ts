@@ -225,11 +225,22 @@ export async function gitCommit(root: string, message: string, paths: string[] |
 
 // Fetch, fast-forward pull and push use the host's Git credentials. Nothing
 // may prompt, so a missing credential fails instead of hanging.
+const fetching = new Map<string, Promise<unknown>>();
 export async function gitRemote(root: string, action: 'fetch' | 'pull' | 'merge' | 'push') {
   const status = await gitStatus(root);
   if (!status.remote) throw new Error('This repository has no remote.');
   if (status.merging && action !== 'fetch') throw new Error('Finish or abort the merge first.');
-  if (action === 'fetch') await gitAction(root, ['fetch', '--prune'], 120_000);
+  if (action === 'fetch') {
+    // Fetch updates objects and remote refs, not the index or working files.
+    // Share an in-flight fetch across panels/listeners without locking edits.
+    const key = fs.realpathSync(root);
+    let pending = fetching.get(key);
+    if (!pending) {
+      pending = gitAction(root, ['fetch', '--prune'], 120_000).finally(() => { if (fetching.get(key) === pending) fetching.delete(key); });
+      fetching.set(key, pending);
+    }
+    await pending;
+  }
   else if (action === 'pull' || action === 'merge') {
     if (!status.upstream) throw new Error('This branch does not track a remote branch yet.');
     // Pull only fast-forwards. Merge also joins a branch that has diverged

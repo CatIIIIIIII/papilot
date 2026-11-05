@@ -430,7 +430,10 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string; action: string } }>('/api/projects/:id/git/:action', project(), request => {
     const project = store.project(request.params.id), action = request.params.action;
     if (action !== 'fetch' && action !== 'pull' && action !== 'merge' && action !== 'push') throw Object.assign(new Error('Unknown Git action.'), { statusCode: 404 });
-    return serialGit(project.id, async () => { await gitRemote(project.path, action); return { git: await gitStatus(project.path) }; });
+    const work = async () => { await gitRemote(project.path, action); return { git: await gitStatus(project.path) }; };
+    // An automatic remote check must not queue local staging/commits behind
+    // network waits. Other remote operations can change HEAD or working files.
+    return action === 'fetch' ? work() : serialGit(project.id, work);
   });
   app.post<{ Params: { id: string } }>('/api/projects/:id/manuscript', project(), request => manuscript(request.params.id, true));
   // Notes are saved for reading; only explicitly attached IDs reach an agent task.

@@ -106,6 +106,47 @@ test('Git sync requires project access and CSRF, publishes commits and respects 
   } finally { await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
 });
 
+test('a background fetch does not queue local staging or commits and concurrent listeners share the fetch', async () => {
+  const f = await fixture(), base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-fetch-queue-'));
+  const root = path.join(base, 'paper'), remote = path.join(base, 'remote.git');
+  const started = path.join(base, 'started'), release = path.join(base, 'release'), script = path.join(base, 'upload-pack.cjs');
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  const pending: Promise<any>[] = [];
+  async function promptly<T>(work: Promise<T>) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { return await Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Local operation waited for the blocked fetch')), 10_000); })]); }
+    finally { clearTimeout(timer); }
+  }
+  try {
+    git(base, 'init', '-q', '--bare', '-b', 'main', remote); git(base, 'clone', '-q', remote, root);
+    git(root, 'config', 'user.name', 'Writer'); git(root, 'config', 'user.email', 'writer@localhost');
+    git(root, 'config', 'commit.gpgsign', 'false'); git(root, 'config', 'core.hooksPath', path.join(base, 'no-hooks'));
+    fs.writeFileSync(path.join(root, 'main.tex'), 'Initial.\n'); git(root, 'add', '.'); git(root, 'commit', '-qm', 'Initial'); git(root, 'push', '-qu', 'origin', 'main');
+    fs.writeFileSync(path.join(root, 'main.tex'), 'Revised.\n');
+    fs.writeFileSync(script, `const fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(started)}, 'fetch\\n');\nconst timer = setInterval(() => {\n  if (!fs.existsSync(${JSON.stringify(release)})) return;\n  clearInterval(timer);\n  process.exit(require('node:child_process').spawnSync('git', ['upload-pack', ...process.argv.slice(2)], { stdio: 'inherit' }).status ?? 1);\n}, 10);\n`);
+    const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+    git(root, 'config', 'remote.origin.uploadpack', `${quote(process.execPath)} ${quote(script)}`);
+    f.store.saveProject({ ...f.store.project('thesis'), path: root }); f.manuscripts.refresh = async () => {};
+    const headers = { ...LOCAL, 'x-papilot-token': 'local-csrf' }, url = '/api/projects/thesis/git/';
+    pending.push(f.local.inject({ method: 'POST', url: url + 'fetch', headers, payload: {} }).then(response => response));
+    const deadline = Date.now() + 10_000;
+    while (!fs.existsSync(started)) {
+      assert.ok(Date.now() < deadline, 'Fetch reaches the gated local remote');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    pending.push(f.remote.inject({ method: 'POST', url: url + 'fetch', headers: f.as, payload: {} }).then(response => response));
+    const staged = await promptly(f.local.inject({ method: 'POST', url: url + 'stage', headers, payload: { paths: ['main.tex'], stage: true } }).then(response => response));
+    assert.equal(staged.statusCode, 200, staged.body); assert.equal(git(root, 'show', ':main.tex'), 'Revised.');
+    const committed = await promptly(f.remote.inject({ method: 'POST', url: url + 'commit', headers: f.as, payload: { message: 'Revise locally', staged: true } }).then(response => response));
+    assert.equal(committed.statusCode, 200, committed.body); assert.equal(git(root, 'log', '-1', '--format=%s'), 'Revise locally');
+    assert.ok(!fs.existsSync(release), 'Both writes finish while the remote is still blocked');
+    fs.writeFileSync(release, '');
+    for (const response of await Promise.all(pending)) { assert.equal(response.statusCode, 200, response.body); assert.equal(response.json().git.ahead, 1); }
+    assert.equal(fs.readFileSync(started, 'utf8'), 'fetch\n', 'Concurrent requests reuse one fetch');
+    assert.equal(git(root, 'status', '--porcelain'), '');
+  } finally { fs.writeFileSync(release, ''); await Promise.allSettled(pending); await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
+});
+
 test('task model changes keep the agent fixed and require task access and valid settings', async () => {
   const f = await fixture();
   try {
