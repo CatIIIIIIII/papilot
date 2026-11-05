@@ -4,19 +4,22 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { translatedSite } from './site-i18n.mjs';
+import { siteAnalytics } from './site-analytics.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 // The build empties this folder first, so it takes no folder argument that
 // could name the source or the repository by mistake.
 const out = path.join(root, '_site');
 const site = 'https://papilot.ai/';
+const analytics = siteAnalytics();
 const copy = (from, names, to = '') => {
   fs.mkdirSync(path.join(out, to), { recursive: true });
   for (const name of names) fs.copyFileSync(path.join(root, from, name), path.join(out, to, name));
 };
 
 fs.rmSync(out, { recursive: true, force: true });
-copy('site', ['style.css']);
+copy('site', ['style.css', 'statistics-preferences.js']);
+if (analytics) copy('site', ['analytics.js']);
 const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // GitHub Pages lets browsers keep every file for ten minutes, so a fresh page
 // could meet a stylesheet or script cached from the previous release. Their
@@ -36,6 +39,7 @@ for (const locale of locales) {
   const translated = translatedSite(source, translations, locale);
   const title = translated.match(/<title>([^<]*)<\/title>/)[1];
   let html = translated
+    .replace('<!-- analytics -->', analytics)
     .replaceAll('{{version}}', release)
     .replace(/<link rel="alternate"[^>]*>/g, '')
     .replace(/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${urlFor(locale)}">\n${alternates}`)
@@ -43,7 +47,7 @@ for (const locale of locales) {
     .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${title.replaceAll('"', '&quot;')}">`)
     .replace(/(<div class="lang-list"[^>]*>)(<\/div>)/, `$1${menu}$2`)
     .replace('<body>', `<body><noscript><nav class="no-js-languages">${locales.map(code => `<a lang="${code}" href="${code === 'en' ? '/' : `/${code}/`}">${names[code]}</a>`).join('')}</nav></noscript>`)
-    .replace(/(\s(?:href|src)=")(style\.css)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
+    .replace(/(\s(?:href|src)=")(style\.css|analytics\.js|statistics-preferences\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
     .replace(/(\s(?:href|src)=")((?:assets|fonts)\/[^" ]+|favicon.png|apple-touch-icon.png)"/g, '$1/$2"');
   if (locale !== 'en') html = html.replace('https://github.com/cu1ch3n/papilot#readme', `https://github.com/cu1ch3n/papilot/blob/main/docs/readme/README.${locale}.md`);
   // Explicit URLs always win. Only the root restores a saved choice; browser
@@ -56,7 +60,12 @@ for (const locale of locales) {
     if (choice === 'zh-Hans') choice = 'zh-CN';
     if (languages.includes(choice)) {
       const target = choice === 'en' ? '/' : '/' + choice + '/';
-      if (location.pathname !== target) location.replace(target + location.hash);
+      if (location.pathname !== target) {
+        document.documentElement.dataset.languageRedirect = 'true';
+        const query = new URLSearchParams(location.search);
+        query.delete('lang');
+        location.replace(target + (query.size ? '?' + query : '') + location.hash);
+      }
     }
   })();
   </script>`);
@@ -64,8 +73,14 @@ for (const locale of locales) {
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'index.html'), html);
 }
+// The bilingual privacy notice is independent of localization and analytics.
+const privacy = fs.readFileSync(path.join(root, 'site/privacy.html'), 'utf8')
+  .replace('<!-- statistics-preferences -->', `<script defer src="/statistics-preferences.js?v=${version('statistics-preferences.js')}" data-enabled="${!!analytics}"></script>`)
+  .replace('href="style.css"', `href="/style.css?v=${version('style.css')}"`);
+fs.mkdirSync(path.join(out, 'privacy'), { recursive: true });
+fs.writeFileSync(path.join(out, 'privacy/index.html'), privacy);
 const sitemapAlternates = [...locales, 'x-default'].map(locale => `<xhtml:link rel="alternate" hreflang="${locale}" href="${urlFor(locale === 'x-default' ? 'en' : locale)}"/>`).join('');
-fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${locales.map(locale => `<url><loc>${urlFor(locale)}</loc>${sitemapAlternates}</url>`).join('')}</urlset>\n`);
+fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${locales.map(locale => `<url><loc>${urlFor(locale)}</loc>${sitemapAlternates}</url>`).join('')}<url><loc>${site}privacy/</loc></url></urlset>\n`);
 fs.writeFileSync(path.join(out, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${site}sitemap.xml\n`);
 copy('public', ['favicon.png', 'apple-touch-icon.png']);
 copy('docs/assets', ['logo.svg', 'social-preview.png'], 'assets');
@@ -75,15 +90,15 @@ copy('src/web/fonts', fs.readdirSync(path.join(root, 'src/web/fonts')).filter(na
 
 // Resolve each reference against its actual page URL, including nested pages.
 const missing = [];
-for (const locale of locales) {
-  const html = fs.readFileSync(path.join(out, locale === 'en' ? '' : locale, 'index.html'), 'utf8');
+for (const page of [...locales.map(locale => locale === 'en' ? '' : locale), 'privacy']) {
+  const html = fs.readFileSync(path.join(out, page, 'index.html'), 'utf8');
   const refs = [...html.matchAll(/\s(?:src|href|poster)="([^"]*)"/g)].map(match => match[1]);
   refs.push(...[...html.matchAll(/\scontent="([^"]*)"/g)].map(match => match[1]).filter(value => value.startsWith(site)));
   for (const ref of refs) {
-    const url = new URL(ref, urlFor(locale));
+    const url = new URL(ref, site + (page ? page + '/' : ''));
     if (url.origin !== new URL(site).origin) continue;
     const file = path.join(out, decodeURIComponent(url.pathname), url.pathname.endsWith('/') ? 'index.html' : '');
-    if (!fs.existsSync(file)) missing.push(`${locale}: ${ref}`);
+    if (!fs.existsSync(file)) missing.push(`${page || 'en'}: ${ref}`);
   }
 }
 for (const name of ['style.css']) {

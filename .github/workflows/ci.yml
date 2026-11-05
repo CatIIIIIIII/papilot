@@ -1,21 +1,31 @@
 name: CI
 
+# Pull requests, main and Release run the checks. A pull request or push to
+# main that can change the desktop app also launches it: the unpacked app on
+# Apple silicon and Linux, or every installer when a pull request changes the
+# installer itself. Desktop Dev (nightly) and Release build and test every
+# installer before publishing.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A new push to a pull request replaces its run; any other run has a group of
+  # its own, so no commit on main waits or is skipped.
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   check:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -40,3 +50,55 @@ jobs:
       - run: npm run site
       - name: Pack
         run: npm pack --ignore-scripts --dry-run
+
+  # Which desktop check a pull request or a push to main needs, from the files
+  # it changes. Release calls CI for a tag and builds every installer itself.
+  changes:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.scope.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # A pull request's merge commit and the base it merges into.
+          fetch-depth: 2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: scope
+        env:
+          BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: |
+          # A push to main compares with the previous tip (the parent after a force push).
+          base=HEAD^1
+          if [ -n "$BEFORE" ] && git fetch -q --depth=1 origin "$BEFORE"; then base=$BEFORE; fi
+          scope=$(bash scripts/desktop-scope.sh "$base")
+          # Main gets the quick check; the nightly Desktop Dev build makes its installers.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$scope" = installers ]; then scope=quick; fi
+          echo "Desktop check: $scope"
+          echo "desktop=$scope" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop != 'none'
+    uses: ./.github/workflows/desktop.yml
+    with:
+      quick: ${{ needs.changes.outputs.desktop == 'quick' }}
+
+  # The check to require: it passes when every job above passed or was not needed.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [check, changes, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require explicit success from every required job
+        env:
+          CHECK_RESULT: ${{ needs.check.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+          DESKTOP_VERIFIED: ${{ needs.desktop.outputs.verified }}
+        run: bash scripts/ci-passed.sh

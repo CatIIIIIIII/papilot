@@ -18,6 +18,9 @@ test('agy effort variants are grouped into one model with efforts, and the saved
     { model: 'gemini-4-argon', displayName: 'Gemini 4 Argon', efforts: ['low', 'medium', 'high'], ids: { medium: 'gemini-4-argon-medium', high: 'gemini-4-argon-high', low: 'gemini-4-argon-low' }, isDefault: true, defaultEffort: 'high' },
     { model: 'claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6 (Thinking)', efforts: [], ids: { '': 'claude-sonnet-4-6' }, isDefault: false, defaultEffort: null },
   ]);
+  assert.deepEqual(groupModels(listing, 'gemini-4-argon-high'), groupModels(listing, 'Gemini 4 Argon (High)'), 'saved model IDs resolve the same default as display names');
+  assert.equal(groupModels(listing, 'gemini-4-argon')[0].isDefault, true);
+  assert.equal(groupModels(listing, 'gemini-4-argon')[0].defaultEffort, 'medium');
 });
 
 function fakeAgy(lines: string[][]) {
@@ -88,7 +91,42 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-function fakeClaude(script: (options: any) => AsyncGenerator<any>, account: Record<string, string> = { email: 'me@example.com', apiKeySource: 'ANTHROPIC_API_KEY', apiProvider: 'firstParty' }) {
+test('Antigravity grants only selected images read access for the current turn', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
+  const image = path.join(dir, 'attached.png'); fs.writeFileSync(image, 'image fixture');
+  const fake = fakeAgy([[JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })], [JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })]]);
+  const agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: '/work' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: `See ${image}` }, { type: 'localImage', path: image }] });
+    assert.equal((await completed(seen)).status, 'completed');
+    const args = fake.launches[0].args, resolved = fs.realpathSync(image);
+    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]), { permissions: { allow: [`read_file(${resolved})`] } });
+    assert.ok(args[1].includes(resolved));
+    assert.ok(!args.includes('--add-dir') && !args.includes('--dangerously-skip-permissions'));
+    const next = events(agent);
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Continue without an image.' }] });
+    assert.equal((await completed(next)).status, 'completed');
+    assert.ok(!fake.launches[1].args.includes('--settings'), 'Image permission must not persist into later turns');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const name of ['wild*card.png', 'paren).png', 'missing.png', 'directory']) test(`Antigravity refuses unsafe image permission paths: ${name}`, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
+  const file = path.join(dir, name);
+  if (name === 'directory') fs.mkdirSync(file);
+  else if (name !== 'missing.png') fs.writeFileSync(file, 'fixture');
+  const fake = fakeAgy([]), agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const seen = events(agent), { thread } = await agent.request('thread/start', { cwd: '/work' });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'localImage', path: file }] });
+    assert.equal((await completed(seen)).status, 'failed');
+    assert.equal(fake.launches.length, 0);
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+function fakeClaude(script: (options: any) => AsyncGenerator<any>, account: Record<string, string> = { email: 'me@example.com', apiKeySource: 'ANTHROPIC_API_KEY', apiProvider: 'firstParty' }, currentModel: string | null = 'claude-opus-5-5') {
   const calls: { prompt: unknown; options: any }[] = [];
   const query = ((input: { prompt: unknown; options: any }) => {
     calls.push(input);
@@ -100,9 +138,29 @@ function fakeClaude(script: (options: any) => AsyncGenerator<any>, account: Reco
       { value: 'haiku', displayName: 'Haiku 5.5', description: '', resolvedModel: 'claude-haiku-5-5', supportedEffortLevels: ['low'] },
     ];
     generator.close = () => {};
+    generator.getContextUsage = async (options: any) => {
+      assert.deepEqual(options, { detail: 'summary' });
+      if (!currentModel) throw new Error('Unsupported request');
+      return { model: currentModel };
+    };
     return generator;
   });
   return { calls, load: async () => query as any };
+}
+
+for (const [current, expected] of [['claude-haiku-5-5', 'haiku'], ['custom-model', 'custom-model'], [null, null]]) {
+  test(`Claude SDK uses its current model (${current}) instead of its recommended default`, async () => {
+    const fake = fakeClaude(async function* () {}, undefined, current);
+    const agent = new ClaudeAgent(fake.load, () => null);
+    try {
+      await agent.start();
+      const models = (await agent.request('model/list')).data;
+      assert.deepEqual(models.filter((m: any) => m.isDefault).map((m: any) => m.model), expected ? [expected] : []);
+      assert.ok(models.some((m: any) => m.model === 'opus'), 'unknown defaults keep the model list');
+      assert.equal(fake.calls.length, 1);
+      assert.notEqual(typeof fake.calls[0].prompt, 'string', 'probing does not generate');
+    } finally { agent.close(); }
+  });
 }
 
 test('Claude turns use the local Claude Code login, resume their session, and report items, approvals and usage', async () => {
@@ -228,7 +286,8 @@ test('GLM runs Claude Code on Zhipu\'s endpoint with only the GLM key, and offer
     assert.equal(options.env.ANTHROPIC_AUTH_TOKEN, 'zhipu-key');
     assert.equal(options.env.ANTHROPIC_API_KEY, undefined, 'an Anthropic key never goes to Zhipu');
     assert.equal(options.env.CLAUDE_CODE_USE_BEDROCK, undefined);
-    assert.equal(options.env.PATH, '/usr/bin');
+    assert.ok(options.env.PATH.startsWith('/usr/bin' + path.delimiter));
+    assert.ok(options.env.PATH.split(path.delimiter).includes(path.join(os.homedir(), '.nix-profile/bin')));
   }
   assert.equal(fake.calls.at(-1)!.options.model, 'glm-5.3-flash');
 });
@@ -385,7 +444,7 @@ const CLI_MODELS = [
   { value: 'opus', displayName: 'Opus 5.5', resolvedModel: 'claude-opus-5-5', supportedEffortLevels: ['low', 'high'] },
   { value: 'haiku', displayName: 'Haiku 5.5', resolvedModel: 'claude-haiku-5-5', supportedEffortLevels: [] },
 ];
-function fakeClaudeCli(dir: string, login: Record<string, unknown>, turns: any[][], models: unknown[] | null = CLI_MODELS) {
+function fakeClaudeCli(dir: string, login: Record<string, unknown>, turns: any[][], models: unknown[] | null = CLI_MODELS, currentModel: string | null = 'claude-opus-5-5') {
   const bin = path.join(dir, 'claude');
   fs.writeFileSync(bin, `#!/bin/sh\necho '${JSON.stringify(login)}'\n`); fs.chmodSync(bin, 0o755);
   const launches: { command: string; args: string[]; cwd: string; stdin: string; child: any }[] = [];
@@ -399,6 +458,10 @@ function fakeClaudeCli(dir: string, login: Record<string, unknown>, turns: any[]
       child.stdin.on('data', (chunk: Buffer) => {
         const request = JSON.parse(chunk.toString().trim());
         if (models && request.request?.subtype === 'initialize') child.stdout.write(JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: request.request_id, response: { models } } }) + '\n');
+        else if (request.request?.subtype === 'get_context_usage') {
+          assert.equal(request.request.detail, 'summary');
+          child.stdout.write(JSON.stringify({ type: 'control_response', response: { request_id: request.request_id, ...(currentModel ? { subtype: 'success', response: { model: currentModel } } : { subtype: 'error', error: 'Unsupported request' }) } }) + '\n');
+        }
         else setImmediate(() => child.emit('close', 1));
       });
       return child;
@@ -409,6 +472,21 @@ function fakeClaudeCli(dir: string, login: Record<string, unknown>, turns: any[]
     return child;
   };
   return { bin, launches, launch };
+}
+
+for (const [current, expected] of [['claude-haiku-5-5', 'haiku'], ['custom-model', 'custom-model'], [null, null]]) {
+  test(`Claude CLI uses its current model (${current}) instead of its recommended default`, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-claude-default-'));
+    const fake = fakeClaudeCli(dir, { loggedIn: true }, [], CLI_MODELS, current);
+    const agent = new ClaudeAgent(async () => { throw new Error('unused'); }, () => fake.bin, fake.launch as any);
+    try {
+      await agent.start();
+      const models = (await agent.request('model/list')).data;
+      assert.deepEqual(models.filter((m: any) => m.isDefault).map((m: any) => m.model), expected ? [expected] : []);
+      assert.ok(models.some((m: any) => m.model === 'opus'));
+      assert.equal(fake.launches.length, 0, 'probing never starts a generation turn');
+    } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  });
 }
 
 test('with Claude Code installed, Claude runs claude -p on the host login, streams items and resumes its session', async () => {

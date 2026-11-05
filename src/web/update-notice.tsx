@@ -88,7 +88,7 @@ export function UpdateNotice({ api, version }: { api: UpdateApi; version: string
         : status.phase === 'restarting' ? t('Restarting Papilot. This page will reconnect automatically; your drafts are kept.')
         : status.phase === 'failed' ? t('The update did not finish. Your current version is still available. You can retry here.')
         : t('Install the new version and restart automatically when tasks are idle. Your papers, tasks and settings stay in place.')}</p>
-      {!status.canUpdate && !status.downloadUrl && <p className="inline-error">{t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</p>}
+      {!status.canUpdate && !status.downloadUrl && <p className="inline-error">{status.packageManager === 'nix' ? t('Updates are managed by Nix.') : t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</p>}
       {(error || status.error) && <p className="inline-error" role="alert">{updateError(error || status.error!)}</p>}
       <div className="update-actions"><button className="button ghost" onClick={() => setOpen(false)}>{busy ? t('Close') : t('Later')}</button>
         {status.downloadUrl ? <a className="button primary" href={status.downloadUrl} target="_blank" rel="noreferrer">{t('Download desktop updates')}</a>
@@ -125,7 +125,7 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
           <span className="update-product-mark"><img src={logo} width="34" height="34" alt=""/></span>
           <div><h3>Papilot</h3><p className="update-current-version"><span>{t('Current version')}</span><code title={status.currentVersion}>{versionLabel(status.currentVersion)}</code></p></div>
         </div>
-        <button className="button secondary update-check" disabled={sending || busy || checking} onClick={() => void send('/updates/check')}><Icon name="refresh" size={14}/>{t('Check for updates')}</button>
+        <button className="button secondary update-check" disabled={sending || busy || checking || Boolean(status.packageManager)} onClick={() => void send('/updates/check')}><Icon name="refresh" size={14}/>{t('Check for updates')}</button>
       </div>
       <div className={'update-status ' + tone}>
         <div className="update-summary-heading" role="status">
@@ -146,10 +146,10 @@ export function UpdateSettings({ api }: { api: UpdateApi }) {
             : <button className="button primary" aria-describedby="update-latest-version" disabled={sending || !status.canUpdate} onClick={() => void send('/updates/install', { version: status.latestVersion })}><Icon name="arrowUp" size={15}/>{status.phase === 'failed' ? t('Retry update') : t('Update now')}</button>)}
         </div>}
       </div>
-      {!status.canUpdate && !status.downloadUrl && <p className="update-settings-notice"><Icon name="info" size={15}/><span>{t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</span></p>}
+      {!status.canUpdate && !status.downloadUrl && <p className="update-settings-notice"><Icon name="info" size={15}/><span>{status.packageManager === 'nix' ? t('Updates are managed by Nix.') : t('Papilot cannot find npm on this computer. Updates are unavailable until npm is installed.')}</span></p>}
       {/* Desktop apps that need a new installer can still change channels; the
           development desktop app reports none. */}
-      {(status.channel || !status.downloadUrl) && <div className="update-channel">
+      {(!status.packageManager && (status.channel || !status.downloadUrl)) && <div className="update-channel">
         <div className="update-channel-copy"><h4>{t('Update channel')}</h4><p>{status.channel === 'dev' ? t('Early updates from GitHub main. May be less stable.') : t('Published releases, recommended for everyday use.')}</p></div>
         <ChipSelect label={t('Update channel')} icon={status.channel === 'dev' ? 'branch' : undefined} value={status.channel || 'stable'} disabled={sending || busy} onChange={channel => void send('/updates/channel', { channel })} options={[{ value: 'stable', label: t('Stable') }, { value: 'dev', label: t('Dev (GitHub main)') }]}/>
       </div>}

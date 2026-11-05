@@ -295,6 +295,34 @@ const copilotSession = {
 };
 const copilotCapabilities = { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { close: {} } };
 
+for (const legacy of [false, true]) {
+  test(`ACP reports each session's current model instead of the probe default (${legacy ? 'legacy' : 'config options'})`, async () => {
+    const session: any = legacy
+      ? { models: { currentModelId: 'probe-model', availableModels: [{ modelId: 'probe-model', name: 'Probe' }, { modelId: 'paper-model', name: 'Paper' }] } }
+      : { configOptions: [{ id: 'model', category: 'model', currentValue: 'probe-model', options: [{ value: 'probe-model', name: 'Probe' }, { value: 'paper-model', name: 'Paper' }] }] };
+    const f = profileFixture(ACP_PROFILES.deepseek, session, (m, rpc) => {
+      rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done.' } });
+      rpc.reply(m.id, { stopReason: 'end_turn' });
+    });
+    try {
+      await f.agent.start();
+      if (legacy) session.models.currentModelId = 'paper-model';
+      else session.configOptions[0].currentValue = 'paper-model';
+      assert.equal((await f.agent.request('model/list')).data.find((m: any) => m.isDefault).model, 'probe-model');
+      const created = await f.agent.request('thread/start', { cwd: '/paper' });
+      assert.equal(created.model, 'paper-model');
+      const resumed = await f.agent.request('thread/resume', { threadId: 'saved-session', cwd: '/paper' });
+      assert.equal(resumed.model, 'paper-model');
+      const turn = await run(f.agent, resumed.thread.id, { effort: '' });
+      assert.equal(turn.status, 'completed', turn.error?.message);
+      assert.ok(f.calls.some(call => legacy ? call.method === 'session/set_model' && call.params.modelId === 'paper-model'
+        : call.method === 'session/set_config_option' && call.params.configId === 'model' && call.params.value === 'paper-model'));
+      await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper', model: 'probe-model' });
+      assert.equal((await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper' })).model, 'probe-model', 'resuming a known session retains its last explicit selection');
+    } finally { f.agent.close(); }
+  });
+}
+
 test('Copilot pins agent mode and manual approvals on new and resumed sessions, with CLI-owned models', { timeout: 5000 }, async () => {
   const session = { ...copilotSession, configOptions: [...copilotSession.configOptions,
     { id: 'model', category: 'model', currentValue: 'model-a', options: [{ value: 'model-a', name: 'Model A' }, { value: 'model-b', name: 'Model B' }] },

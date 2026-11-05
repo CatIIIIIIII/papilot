@@ -1,3 +1,4 @@
+import { findExecutable } from './agent-paths.mjs';
 // Deliberately uses only Node built-ins: diagnostics must work before npm setup.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,13 +35,8 @@ function executable(command, env = process.env) {
     try { fs.accessSync(file, fs.constants.X_OK); return fs.statSync(file).isFile(); } catch { return false; }
   });
 }
-// Agent CLIs are also looked for where they install themselves, as the server does.
-function agentExecutable(command) {
-  if (command.includes('/') || command.includes('\\')) return executable(command);
-  const home = process.env.HOME || os.homedir();
-  const dirs = ['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)).concat('/opt/homebrew/bin', '/usr/local/bin');
-  return executable(command) || executable(command, { PATH: dirs.join(path.delimiter) });
-}
+const agentExecutable = findExecutable;
+
 function command(file, args, options = {}) {
   return new Promise(resolve => {
     // Never return raw stderr: login commands can print credentials or account data.
@@ -129,7 +125,7 @@ export async function doctor(args) {
     const candidates = configured ? [configured] : ['codex', path.join(data, 'agents/node_modules/.bin/codex')];
     let found = false;
     for (const candidate of candidates) {
-      const file = executable(candidate);
+      const file = agentExecutable(candidate);
       if (!file) continue;
       found = true;
       const result = await command(file, ['--version']);
@@ -144,7 +140,7 @@ export async function doctor(args) {
       check('agent.codex', ready, 'warn', `Codex ${version} (${file}): ${ready ? 'signed in' : login.reason || 'login could not be confirmed'}.`, 'Run papilot codex login, then rerun doctor.');
       return ready;
     }
-    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : found ? `No installed Codex meets version ${minimum}.` : 'Codex is not installed.', configured ? 'Correct PAPILOT_CODEX_BIN or unset it to use automatic installation.' : 'Run papilot codex login; it installs the supported Codex when needed.');
+    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : found ? `No installed Codex meets version ${minimum}.` : 'Codex is not installed.', process.env.PAPILOT_INSTALL_METHOD === 'nix' ? 'Install a supported Codex separately with Nix or set PAPILOT_CODEX_BIN to an existing installation.' : configured ? 'Correct PAPILOT_CODEX_BIN or unset it to use automatic installation.' : 'Run papilot codex login; it installs the supported Codex when needed.');
     return false;
   }
   async function claudeCheck() {

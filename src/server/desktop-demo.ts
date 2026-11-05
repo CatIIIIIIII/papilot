@@ -4,6 +4,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Workspace } from './workspace.ts';
 import type { Store } from './store.ts';
 import { workingTree, type Manuscripts } from './manuscript.ts';
+import { copyExamplePaper } from './example-paper.ts';
 
 // Seed once per data directory. Removing the sample is a lasting choice;
 // upgrades must never replace an author's edits with a new example.
@@ -18,7 +19,7 @@ export async function desktopDemo(root: string, data: string, store: Store, work
       fs.accessSync(path.join(source, 'preview/main.pdf'));
       fs.accessSync(path.join(source, 'preview/main.synctex.gz'));
       const fresh = !fs.existsSync(paper);
-      if (fresh) fs.cpSync(source, paper, { recursive: true, filter: file => path.basename(file) !== 'preview' });
+      if (fresh) copyExamplePaper(source, paper, { excludePreview: true });
       const project = await workspace.addProject(paper, 'Papilot · Demo paper');
       const preview = path.join(data, 'demo-preview');
       fs.mkdirSync(preview, { recursive: true });

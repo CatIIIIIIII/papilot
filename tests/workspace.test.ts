@@ -74,6 +74,77 @@ const taskModels = [
   { id: 'small', name: 'Small', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'low' },
 ];
 
+test('late agent events after shutdown never touch the closed database', async () => {
+  const f = fixture();
+  uncertainRun(f);
+  f.close();
+  assert.doesNotThrow(() => f.codex.emit('disconnected', new Error('Process exited after shutdown')));
+  assert.doesNotThrow(() => f.codex.emit('request', { id: 'late', method: 'item/commandExecution/requestApproval', params: { threadId: 'thread' } }));
+  await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'late', status: 'interrupted' } } });
+});
+
+test('Codex defaults come from configuration, including profiles and models outside the catalog', async () => {
+  const f = fixture();
+  let config: any = { model: 'small' }, configFailure = false, catalogFailure = false;
+  (f.codex as any).start = async () => { f.codex.ready = true; };
+  f.codex.handler = async method => {
+    if (method === 'account/read') return { requiresOpenaiAuth: false };
+    if (method === 'config/read') {
+      if (configFailure) throw new RpcResponseError('Unsupported method');
+      return { config };
+    }
+    if (method === 'model/list') {
+      if (catalogFailure) throw new Error('Catalog unavailable');
+      return { data: taskModels.map(m => ({ model: m.id, displayName: m.name, isDefault: m.isDefault })) };
+    }
+    return {};
+  };
+  const reconnect = () => (f.workspace as any).connectAgent('codex');
+  const defaults = () => f.workspace.runtime.models.filter(m => m.isDefault).map(m => m.id);
+  try {
+    await reconnect();
+    assert.deepEqual(defaults(), ['small'], 'configured model overrides the catalog recommendation');
+    assert.deepEqual(f.codex.calls.find(call => call.method === 'config/read')?.params, { includeLayers: false });
+    config = { model: 'deep', profile: 'paper', profiles: { paper: { model: 'small' } } };
+    await reconnect();
+    assert.deepEqual(defaults(), ['small']);
+    config = { model: 'custom-model' };
+    await reconnect();
+    assert.deepEqual(f.workspace.runtime.models.find(m => m.isDefault), { id: 'custom-model', name: 'custom-model', isDefault: true, efforts: [], defaultEffort: null });
+    catalogFailure = true;
+    await reconnect();
+    assert.deepEqual(defaults(), ['custom-model'], 'configuration still works without a catalog');
+    catalogFailure = false; config = { model: null };
+    await reconnect();
+    assert.deepEqual(defaults(), ['deep'], 'the catalog default applies when there is no configured override');
+    configFailure = true;
+    await reconnect();
+    assert.deepEqual(defaults(), [], 'a failed read must not mislabel the catalog recommendation or retain stale defaults');
+    assert.equal(f.workspace.runtime.models.length, 2);
+    assert.equal(f.workspace.runtime.connected, true);
+  } finally { f.close(); }
+});
+
+test('new tasks pin the resolved default and send it to both the thread and turn', async () => {
+  const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/unused' } : summary);
+  try {
+    f.workspace.runtime.models = taskModels.map(m => ({ ...m, isDefault: m.id === 'small' }));
+    const input = { id: 'default-model-task-01', projectId: 'paper', title: 'Revise', instructions: 'Revise.', model: '' };
+    const created = await f.workspace.createTask(input);
+    assert.equal(created.model, 'small');
+    const explicit = await f.workspace.createTask({ ...input, id: 'explicit-model-task-01', model: 'deep' });
+    assert.equal(explicit.model, 'deep');
+    f.workspace.runtime.models = taskModels;
+    f.codex.ready = true;
+    const run = f.store.runs().find(run => run.taskId === created.id)!;
+    (f.workspace as any).active.set(created.id, run);
+    await (f.workspace as any).startRun(run);
+    assert.equal(f.codex.calls.find(call => call.method === 'thread/start' && !call.params.ephemeral)?.params.model, 'small');
+    assert.equal(f.codex.calls.find(call => call.method === 'turn/start' && call.params.clientUserMessageId === run.id)?.params.model, 'small', 'a later default change cannot change the submitted model');
+    assert.equal(f.workspace.updateTaskModel(created.id, { model: '' }).model, 'deep', 'resetting an existing task pins the current default');
+  } finally { f.close(); }
+});
+
 test('task model settings persist, validate capabilities and clear incompatible options', () => {
   const f = fixture();
   try {
@@ -89,6 +160,19 @@ test('task model settings persist, validate capabilities and clear incompatible 
     assert.equal(f.workspace.updateTaskModel(f.task.id, { effort: '' }).effort, null);
     f.store.updateTask(f.task.id, { status: 'deleting' });
     assert.throws(() => f.workspace.updateTaskModel(f.task.id, { effort: 'low' }), /deleted/);
+  } finally { f.close(); }
+});
+
+test('a task cannot reset to an unknown default and silently keep its previous model', () => {
+  const f = fixture();
+  try {
+    f.workspace.runtime.models = taskModels.map(model => ({ ...model, isDefault: false }));
+    f.store.updateTask(f.task.id, { model: 'small' });
+    assert.throws(() => f.workspace.updateTaskModel(f.task.id, { model: '' }), /Choose an available model/);
+    assert.equal(f.store.task(f.task.id).model, 'small');
+    assert.equal(f.workspace.updateTaskModel(f.task.id, { effort: '' }).model, 'small', 'other settings remain editable');
+    f.workspace.runtime.models = taskModels;
+    assert.equal(f.workspace.updateTaskModel(f.task.id, { model: '' }).model, 'deep');
   } finally { f.close(); }
 });
 
@@ -130,6 +214,44 @@ test('changing settings during thread resume preserves the next turn choice', as
 
 const pendingReview: PendingReview = { route: '/api/tasks/p-task/decide', body: { id: 'decision-123', action: 'accept', round: 1, changes: ['change-1'] }, previousStatus: 'reviewing' };
 const pageState = { csrf: 'test', task: 'p-task', title: 'Task', closed: false, state: 'reviewing', latest: 1, round: 1, revision: 'revision', decisions: { 'change-1': 'accepted' }, comments: {}, undo: null, job: null };
+
+test('manual source saves track the existing build and never ask AI to repair compilation', async () => {
+  const gate = deferred<{ status: string; error: string }>();
+  const f = fixture(async (_method, route) => route.includes('/jobs/') ? gate.promise : summary);
+  try {
+    const state = { ...pageState, job: { id: 'source-job', status: 'queued' } };
+    await f.workspace.reviewWrite(f.task.id, true, async () => state, { route: '/api/tasks/p-task/source', body: { id: 'source-save' } });
+    assert.equal(f.store.task(f.task.id).status, 'building');
+    assert.equal(f.store.task(f.task.id).pendingReview, null);
+    assert.equal(f.store.task(f.task.id).pendingBuild?.job, 'source-job');
+    assert.equal(f.store.task(f.task.id).pendingBuild?.sendBack, false);
+    await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => {}));
+    gate.resolve({ status: 'failed', error: 'The revised document could not be compiled.' });
+    for (let i = 0; i < 20 && f.store.task(f.task.id).status === 'building'; i++) await tick();
+    assert.equal(f.store.task(f.task.id).status, 'failed');
+    assert.equal(f.store.runs().length, 0);
+    assert.equal(f.calls.some(call => call.route.endsWith('/publish')), false);
+  } finally { f.close(); }
+});
+
+test('recovering a lost source save resumes its build before queued agent work', async () => {
+  const gate = deferred<{ status: string }>();
+  const server = await reviewServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ...pageState, job: { id: 'source-job', status: 'running' } }));
+  });
+  const f = fixture(async (_method, route) => route.includes('/jobs/') ? gate.promise : summary, { reviewUrl: server.url });
+  try {
+    f.store.updateTask(f.task.id, { status: 'uncertain', pendingReview: { route: '/api/tasks/p-task/source', body: { id: 'saved-edit' }, previousStatus: 'reviewing' } });
+    await f.workspace.reconcile(f.task.id);
+    assert.equal(f.store.task(f.task.id).pendingReview, null);
+    assert.equal(f.store.task(f.task.id).status, 'building');
+    assert.equal(f.store.task(f.task.id).pendingBuild?.job, 'source-job');
+    gate.resolve({ status: 'done' });
+    for (let i = 0; i < 20 && f.store.task(f.task.id).status === 'building'; i++) await tick();
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+  } finally { f.close(); await server.close(); }
+});
 
 async function reviewServer(handler: (request: IncomingMessage, response: ServerResponse, body: any) => void | Promise<void>) {
   const calls: { route: string; body: any; token: string | string[] | undefined }[] = [];

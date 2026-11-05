@@ -1,3 +1,4 @@
+import { findExecutable } from '../../bin/agent-paths.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,4 +13,4 @@ export const OWNER = process.env.PAPILOT_TAILSCALE_LOGIN || '';
 // port its proxy (such as Tailscale Funnel) forwards to.
 export const ACCOUNT_ORIGIN = (process.env.PAPILOT_ACCOUNT_ORIGIN || '').replace(/\/+$/, '');
 export const ACCOUNT_PORT = Number(process.env.PAPILOT_ACCOUNT_PORT || 7275);
-export const CODEX = process.env.PAPILOT_CODEX_BIN || [path.join(ROOT, 'node_modules/.bin/codex'), path.join(DATA, 'agents/node_modules/.bin/codex')].find(file => fs.existsSync(file)) || 'codex';
+export const CODEX = process.env.PAPILOT_CODEX_BIN || findExecutable('codex') || [path.join(ROOT, 'node_modules/.bin/codex'), path.join(DATA, 'agents/node_modules/.bin/codex')].find(file => fs.existsSync(file)) || 'codex';
