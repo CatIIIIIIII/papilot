@@ -3014,11 +3014,6 @@
     "textHash": "5a78f6fb256f63113d45a1661ff715c3e3a7873b566d6ec30c834454c8198bc6",
     "model": "gemini-4-argon-medium"
   },
-  "PDF contents": {
-    "revision": "8069aa13a58dba18f199986a062d3c3e263283aa5fd9e49f2fe7f705d8615f3b",
-    "textHash": "b89cb7d231f69afffad84a3b8a88ab96dd55a44b8b36c991b86bce44b816b04b",
-    "model": "gemini-4-argon-medium"
-  },
   "PDF controls": {
     "revision": "0456a2a147382efb46d4159af43c32e100be393a8243b7dd47e7a007eed5d93a",
     "textHash": "074c09c3221d077936cd503cdb93b06a487894afe4a8248cb2efe3a4f12f85ed",

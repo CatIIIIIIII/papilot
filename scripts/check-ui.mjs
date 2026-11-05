@@ -742,22 +742,44 @@ try {
   await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page').getBoundingClientRect().width - width) < 2, originalPdfWidth);
   await page.locator('.textLayer span').filter({ hasText: /^Fixture ?$/ }).first().waitFor();
   console.log('PASS: Manuscript panel resizes with pointer and keyboard, persists, clamps on narrow screens and resets');
-  // Notes belong to New task; Contents keeps the bookmarks beside the PDF.
-  assert.deepEqual((await page.getByRole('tablist', { name: 'Manuscript panels' }).getByRole('tab').allInnerTexts()).map(text => text.replace(/\s+/g, ' ')), ['New task', 'Contents', 'Git 2']);
-  await page.getByRole('tab', { name: 'Contents', exact: true }).click();
-  const contents = page.getByRole('navigation', { name: 'PDF contents' });
-  assert.deepEqual((await contents.getByRole('button').allInnerTexts()).map(text => text.replace(/\s+/g, ' ')), ['Introduction 1', 'Method 2', 'Results 2']);
-  await contents.getByRole('button', { name: /^Results/ }).click();
+  // A wide window can still contain a narrow PDF pane. Every control stays inside it.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await manuscriptDivider.focus(); await page.keyboard.press('Home');
+  const narrowPdfToolbar = page.getByRole('toolbar', { name: 'PDF controls' });
+  for (const paneWidth of [360, 384, 408]) {
+    await expect.poll(() => narrowPdfToolbar.evaluate(el => Math.round(el.clientWidth))).toBe(paneWidth);
+    assert.equal(await narrowPdfToolbar.evaluate(el => el.scrollWidth <= el.clientWidth), true);
+    const toolbarBox = await narrowPdfToolbar.boundingBox(), notesBox = await narrowPdfToolbar.getByRole('button', { name: 'My notes', exact: true }).boundingBox();
+    assert.ok(notesBox.x >= toolbarBox.x && notesBox.x + notesBox.width <= toolbarBox.x + toolbarBox.width);
+    await page.keyboard.press('ArrowRight');
+  }
+  await manuscriptDivider.dblclick();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Contents opens beside PDF / Changes without replacing the task panel.
+  assert.deepEqual((await page.getByRole('tablist', { name: 'Manuscript panels' }).getByRole('tab').allInnerTexts()).map(text => text.replace(/\s+/g, ' ')), ['New task', 'Git 2']);
+  const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+  await contentsTrigger.click();
+  const contents = page.getByRole('menu', { name: 'Contents', exact: true });
+  assert.deepEqual((await contents.getByRole('menuitemradio').allInnerTexts()).map(text => text.replace(/\s+/g, ' ')), ['Introduction 1', 'Method 2', 'Results 2']);
+  const modesBox = await page.locator('.pdf-toolbar .pdf-modes').boundingBox(), contentsBox = await contentsTrigger.boundingBox();
+  assert.ok(contentsBox.x >= modesBox.x + modesBox.width && Math.abs(contentsBox.y - modesBox.y) < 3);
+  await contents.getByRole('menuitemradio', { name: /^Results/ }).click();
   await expect(page.getByLabel('Page number')).toHaveValue('2');
-  await expect(contents.getByRole('button', { name: /^Results/ })).toHaveAttribute('aria-current', 'location');
+  await expect(contents).toBeHidden();
+  await contentsTrigger.click();
+  await expect(contents.getByRole('menuitemradio', { name: /^Results/ })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  await expect(contentsTrigger).toBeFocused();
   const mountedPdf = await pdfPages.first().elementHandle();
   await page.locator('.manuscript-link').click();
   await page.getByRole('tab', { name: 'New task', exact: true }).click();
   await prompt.fill('Keep this draft beside the PDF.');
   assert.equal(await mountedPdf.evaluate(el => el.isConnected), true, 'Opening New task keeps the PDF mounted');
   assert.equal(await page.getByLabel('Page number').inputValue(), '2');
-  await page.getByRole('tab', { name: 'Contents', exact: true }).click();
+  await contentsTrigger.click();
   await page.getByRole('tab', { name: 'New task', exact: true }).click();
+  await expect(contents).toBeHidden();
   assert.equal(await prompt.inputValue(), 'Keep this draft beside the PDF.');
   await page.screenshot({ path: 'test-results/new-task-beside-pdf.png', fullPage: true });
   const beforeCollapseWidth = (await page.locator('.manuscript-pages').boundingBox()).width;
@@ -782,20 +804,21 @@ try {
   await page.waitForFunction(() => document.activeElement === document.querySelector('.manuscript-side-header .manuscript-panel-toggle'));
   console.log('PASS: Manuscript panel collapses and expands from the keyboard, preserving its draft, PDF and width');
   await prompt.fill('');
-  await page.getByRole('tab', { name: 'Contents', exact: true }).click();
   await page.getByLabel('Page number').fill('1');
   await page.getByLabel('Page number').press('Enter');
+  await contentsTrigger.press('ArrowDown');
   assert.equal(await contents.isVisible(), true);
-  await expect(contents.getByRole('button', { name: /^Introduction/ })).toHaveAttribute('aria-current', 'location');
+  await expect(contents.getByRole('menuitemradio', { name: /^Introduction/ })).toHaveAttribute('aria-checked', 'true');
   await page.clock.runFor(200);
   await page.screenshot({ path: 'test-results/contents-desktop.png', fullPage: true });
-  await contents.getByRole('button', { name: /^Method/ }).click();
+  await contents.getByRole('menuitemradio', { name: /^Method/ }).click();
   await page.waitForFunction(() => document.querySelector('[aria-label="Page number"]').value === '2');
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[aria-label="Page number"]').value === '1');
-  // Zoom steps away from fit width and returns to it; the choice is remembered.
+  // Zoom stays accessible at the default desktop width and remembers its choice.
   const zoom = page.getByRole('combobox', { name: 'Zoom', exact: true });
   assert.equal(await selectedValue(zoom), 'page-width');
+  await expect(zoom).toBeVisible();
   const width = (await pdfPages.first().boundingBox()).width;
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.waitForFunction(() => /^[\d.]+$/.test(document.querySelector('[role="combobox"][aria-label="Zoom"]').dataset.value));
@@ -821,6 +844,7 @@ try {
   await page.waitForFunction(height => Math.abs(document.querySelector('.pdfViewer .page').getBoundingClientRect().height - height) < 2, fitHeight);
   await selectOption(zoom, 'page-width');
   console.log('PASS: Dragging restores fit width from saved percentages; viewport resize preserves the chosen zoom mode');
+  await page.setViewportSize({ width: 1440, height: 900 });
   // Find runs across every page.
   await page.locator('.pdf-container').focus();
   await page.keyboard.press('ControlOrMeta+f');
@@ -973,7 +997,7 @@ try {
   await prompt.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   assert.ok((await prompt.inputValue()).length < 'Undo this text'.length, 'native undo edits the text');
   assert.equal(annotations.length, 0); await prompt.fill('');
-  await page.getByRole('button', { name: 'Mark region', exact: true }).focus();
+  await page.getByRole('button', { name: 'Region', exact: true }).focus();
   await page.keyboard.press('Meta+Shift+z');
   assert.equal(annotations.length, 0, 'redo is not interpreted as undo');
   failNoteRestore = true;
@@ -1025,7 +1049,7 @@ try {
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   assert.equal(annotations.length, 0);
   // A region marks a figure or equation that has no text to select.
-  await page.getByRole('button', { name: 'Mark region', exact: true }).click();
+  await page.getByRole('button', { name: 'Region', exact: true }).click();
   const firstPage = await pdfPages.first().boundingBox();
   await page.mouse.move(firstPage.x + firstPage.width * 0.2, firstPage.y + firstPage.height * 0.3);
   await page.mouse.down();
@@ -1048,7 +1072,7 @@ try {
   assert.equal(annotations.length, 1);
   await page.getByRole('button', { name: 'Note 1: Define the operator here.', exact: true }).click();
   await expect(notesPanel).toContainText('Define the operator here.');
-  assert.equal(await page.getByRole('button', { name: 'Mark region', exact: true }).getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.getByRole('button', { name: 'Region', exact: true }).getAttribute('aria-pressed'), 'false');
   assert.equal(annotations[0].rects, undefined);
   assert.ok(annotations[0].rect[0] > 0.15 && annotations[0].rect[2] < 0.75 && annotations[0].rect[1] < annotations[0].rect[3]);
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
@@ -1743,12 +1767,13 @@ try {
       const toolbar = page.getByRole('toolbar', { name: 'PDF controls' });
       assert.equal(await toolbar.evaluate(el => el.scrollWidth <= el.clientWidth), true);
       await page.getByRole('button', { name: 'Contents', exact: true }).click();
-      await page.getByRole('navigation', { name: 'PDF contents' }).waitFor();
-      assert.equal(await pdfPage.isVisible(), false);
-      assert.equal(await page.getByRole('button', { name: 'Contents', exact: true }).getAttribute('aria-pressed'), 'true');
+      await page.getByRole('menu', { name: 'Contents', exact: true }).waitFor();
+      assert.equal(await pdfPage.isVisible(), true);
+      assert.equal(await page.getByRole('button', { name: 'Contents', exact: true }).getAttribute('aria-expanded'), 'true');
       await page.clock.runFor(200);
       await page.screenshot({ path: 'test-results/contents-mobile.png', fullPage: true });
-      await page.getByRole('navigation', { name: 'PDF contents' }).getByRole('button', { name: /^Results/ }).click();
+      await page.getByRole('menu', { name: 'Contents', exact: true }).getByRole('menuitemradio', { name: /^Results/ }).click();
+      await expect(page.getByRole('menu', { name: 'Contents', exact: true })).toBeHidden();
       await pdfPage.waitFor();
       await page.waitForFunction(() => document.querySelector('[aria-label="Page number"]').value === '2');
       await page.getByRole('button', { name: 'Git, 2 changed' }).click();

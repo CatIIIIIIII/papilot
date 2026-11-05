@@ -303,7 +303,7 @@ export const zhCN: Record<string, string> = {
   'Send {n} note to the agent': '把 {n} 条批注发送给智能体', 'Send {n} notes to the agent': '把 {n} 条批注发送给智能体',
   'PDF preview': 'PDF 预览', 'The manuscript did not compile.': '稿件编译失败。', 'Opening the PDF…': '正在打开 PDF…',
   'Compiling the PDF…': '正在编译 PDF…',
-  'Manuscript panels': '稿件面板', 'Contents': '目录', 'PDF contents': 'PDF 目录',
+  'Manuscript panels': '稿件面板', 'Contents': '目录',
   'This PDF has no bookmarks.': '此 PDF 没有书签。', 'Contents will appear when the PDF is ready.': 'PDF 就绪后会显示目录。',
   'You are offline. Your draft is kept in this browser.': '你已离线。草稿保存在此浏览器中。',
   'Agent settings': '智能体设置', 'Add skill': '添加技能', 'Fast': '快速', 'Fast mode': '快速模式',
