@@ -96,6 +96,8 @@ build time. The `checks.x86_64-linux.desktop-vm` check boots a NixOS desktop,
 launches Papilot with a minimal PATH, and checks SQLite, PDF/SyncTeX compilation,
 read-only store files and writable user data. ARM Linux runtime validation is
 still required; evaluation is not a native execution test.
+Run the VM check manually with `nix build .#checks.x86_64-linux.desktop-vm -L`.
+It is not run by GitHub Actions.
 
 Real agent testing is deliberately opt-in and never runs in normal CI:
 `PAPILOT_LIVE_AGENT=codex node --import tsx scripts/check-live-agent.mjs`.

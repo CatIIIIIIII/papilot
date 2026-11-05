@@ -583,7 +583,8 @@ body.resizing iframe{pointer-events:none}
 .action-menu.pdf-contents-menu{width:320px;max-height:min(420px,calc(100dvh - 100px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .pdf-contents-menu>button{flex-shrink:0;align-items:baseline;font-size:13px;line-height:1.5}
 .pdf-contents-menu .menu-label{white-space:normal;overflow-wrap:anywhere}
-.pdf-contents-menu .menu-check{flex-shrink:0;align-self:center}
+.pdf-contents-menu .menu-check{order:1;flex-shrink:0;align-self:center}
+.pdf-contents-menu .menu-hint{order:2}
 .pdf-contents-menu>button[aria-checked=true]{background:var(--accent-soft);color:var(--accent)}
 @container (max-width:760px){.pdf-contents-trigger{width:30px;padding:0;justify-content:center}.pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:none}}
 .git-panel{flex:1;min-height:0;overflow:auto;padding:4px 0 24px}
