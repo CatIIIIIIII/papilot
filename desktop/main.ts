@@ -14,7 +14,11 @@ let backend: ReturnType<typeof startBackend> | undefined;
 let quitting = false, stopping = false, stopped = false, switching = false, origin = '';
 const notifications = desktopNotifications({
   supported: () => Notification.isSupported(),
-  create: options => new Notification(options),
+  create: options => {
+    const notification = new Notification(options);
+    notification.on('failed', (_event, error) => console.warn('Could not show a desktop notification:', error));
+    return notification;
+  },
   open: taskId => {
     showWindow();
     if (taskId) window?.webContents.send('papilot:open-task', taskId);
