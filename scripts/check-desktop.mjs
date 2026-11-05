@@ -238,7 +238,14 @@ try {
       if (await selectedValue(channel) === 'dev') await view.getByRole('button', { name: /^(Check for updates|检查更新)$/ }).click();
       else await selectOption(channel, 'dev');
       await view.getByRole('button', { name: /^(Update now|立即更新)$/ }).click();
-      await expect.poll(() => running(address).catch(() => null), { timeout: 120000, message: 'The app restarts on the downloaded layer' }).toBe(built.version);
+      try {
+        await expect.poll(() => running(address).catch(() => null), { timeout: 120000, message: 'The app restarts on the downloaded layer' }).toBe(built.version);
+      } catch (error) {
+        console.error('Desktop update status:', await (await fetch(`${address}/api/updates`)).json().catch(() => null));
+        const log = path.join(data, 'updates/desktop/install.log');
+        if (fs.existsSync(log)) console.error(fs.readFileSync(log, 'utf8').slice(-8000));
+        throw error;
+      }
       // The page reloads itself on the new version.
       await expect(view.locator('.brand-version').first()).toHaveText(`v${built.version.slice(0, -33)}`, { timeout: 30000 });
       const record = JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/active.json'), 'utf8'));
