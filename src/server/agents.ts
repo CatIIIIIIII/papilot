@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { AccountInfo, ModelInfo, Options, PermissionResult, SDKMessage, SDKRateLimitInfo, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { AGENT_NAMES } from '../shared.ts';
+import { AGENT_NAMES, type TaskPermissions, type TaskPermissionOption } from '../shared.ts';
 import { DATA, ROOT } from './paths.ts';
 import { imageType } from './attachments.ts';
 import { ClaudeText } from './claude-text.ts';
@@ -22,6 +22,8 @@ import { ClaudeText } from './claude-text.ts';
 // (queueing, approvals, pausing, review rounds) stays in one place.
 export interface AgentRuntime extends EventEmitter {
   ready: boolean;
+  permissionOptions?(): TaskPermissionOption[];
+  taskPermissionConfig?(value: TaskPermissions, cwd: string): Promise<{ thread: Record<string, unknown>; turn: Record<string, unknown> }>;
   // Whether the agent is present on this host (its CLI, SDK credentials or
   // key), checked without starting it. Agents that are not found are hidden.
   detect?(): boolean;
@@ -40,7 +42,7 @@ import { agentDirs, execCommand, findExecutable, agentPath, spawnCommand } from 
 import { npmCli } from '../../bin/npm-cli.mjs';
 export { agentDirs, findExecutable };
 
-export interface Thread { readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
+export interface Thread { permissions?: TaskPermissions; readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
 export interface Item { id: string; type: string; [key: string]: unknown }
 
@@ -54,6 +56,11 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
   protected account(): unknown { return { account: null, requiresOpenaiAuth: false }; }
   protected models(): unknown { return { data: [] }; }
   protected limits(): unknown { throw new Error('This agent does not report usage.'); }
+  permissionOptions(): TaskPermissionOption[] { return []; }
+  async taskPermissionConfig(value: TaskPermissions) {
+    if (!this.permissionOptions().some(option => option.value === value)) throw new Error('This agent does not support the selected permissions.');
+    return { thread: { taskPermissions: value }, turn: { taskPermissions: value } };
+  }
   async request(method: string, params: any = {}): Promise<any> {
     if (method === 'account/read') return this.account();
     if (method === 'model/list') return this.models();
@@ -62,12 +69,13 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
       const model = params.model || known?.model || null;
-      this.threads.set(id, { readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      this.threads.set(id, { permissions: params.taskPermissions, readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
       return { thread: { id }, model };
     }
     if (method === 'turn/start') {
       const thread = this.threads.get(String(params.threadId));
       if (!thread) throw new Error('Start or resume the thread before starting a turn.');
+      if (params.taskPermissions !== undefined) thread.permissions = params.taskPermissions;
       if (params.model !== undefined) thread.model = params.model || null;
       const text = (params.input || []).filter((part: { text?: unknown }) => typeof part.text === 'string').map((part: { text: string }) => part.text).join('\n');
       const images = (params.input || []).filter((part: { type?: string; path?: string }) => part.type === 'localImage' && typeof part.path === 'string').map((part: { path: string }) => part.path);
@@ -178,6 +186,24 @@ interface ClaudeLogin { loggedIn?: boolean; authMethod?: string; apiProvider?: s
 type Launch = (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess;
 
 export class ClaudeAgent extends Adapter {
+  permissionOptions(): TaskPermissionOption[] {
+    return [
+      { value: 'workspace', label: 'Sandboxed edits', detail: this.cli
+        ? 'Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.'
+        : 'Automatically approve edits and sandboxed commands. Ask before other actions.' },
+      { value: 'full', label: 'Bypass permissions', detail: 'Disable the command sandbox and bypass tool approvals, subject to managed settings.' },
+    ];
+  }
+  async taskPermissionConfig(value: TaskPermissions) {
+    return { thread: { taskPermissions: value }, turn: { taskPermissions: value } };
+  }
+  private nativePermissions(thread: Thread) {
+    const full = !thread.readOnly && thread.permissions === 'full';
+    return { permissionMode: full ? 'bypassPermissions' as const : 'acceptEdits' as const,
+      ...(full ? { allowDangerouslySkipPermissions: true } : {}),
+      sandbox: full ? { enabled: false } : { enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
+        ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } };
+  }
   protected name = 'Claude';
   protected info: { account: AccountInfo | null; models: ModelInfo[]; model: string | null } = { account: null, models: [], model: null };
   private rateLimits = new Map<string, SDKRateLimitInfo>();
@@ -320,11 +346,12 @@ export class ClaudeAgent extends Adapter {
         promptFile = path.join(promptDirectory, 'instructions.txt');
         fs.writeFileSync(promptFile, thread.instructions, { mode: 0o600 });
       }
+      const permissions = this.nativePermissions(thread);
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
         ...(thread.readOnly ? ['--tools', ''] : []),
         ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : []),
-        '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
-        '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } }),
+        '--permission-mode', permissions.permissionMode, ...(permissions.allowDangerouslySkipPermissions ? ['--dangerously-skip-permissions'] : []), '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
+        '--settings', JSON.stringify({ sandbox: permissions.sandbox }),
         // A question cannot be answered in -p; Claude asks in its reply instead.
         '--disallowedTools', 'AskUserQuestion', ...(promptFile ? ['--append-system-prompt-file', promptFile] : []),
         ...(thread.model ? ['--model', thread.model] : []), ...(effort ? ['--effort', effort] : []),
@@ -343,7 +370,7 @@ export class ClaudeAgent extends Adapter {
         this.translate(turn, thread, message as SDKMessage, tools, texts, value => { error = value; });
       });
       const code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Claude could not use ${[...new Set(denied)].join(', ')}: with claude -p, Papilot cannot ask for approval, so anything outside the worktree and Claude Code's sandbox is declined.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Claude could not use ${[...new Set(denied)].join(', ')}: with claude -p, Papilot cannot ask for approval, so tools requiring approval are declined; managed restrictions also still apply.` });
       if (stopped) this.finish(turn, 'interrupted');
       else if (error) this.finish(turn, 'failed', error);
       else if (code !== 0) this.finish(turn, 'failed', stderr.trim().split('\n').slice(-3).join(' ') || `claude exited with code ${code}.`);
@@ -367,14 +394,12 @@ export class ClaudeAgent extends Adapter {
         // The thread ID is the Claude session ID, so a later turn resumes it.
         ...(thread.started ? { resume: turn.threadId } : { sessionId: turn.threadId }),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: thread.instructions },
-        settingSources: thread.readOnly ? [] : ['project'], permissionMode: 'acceptEdits', ...(thread.readOnly ? { tools: [] } : {}),
+        settingSources: thread.readOnly ? [] : ['project'], ...this.nativePermissions(thread), ...(thread.readOnly ? { tools: [] } : {}),
         ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}),
-        sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) },
         canUseTool: (name, input, { signal, title, decisionReason }) => new Promise<PermissionResult>(resolve => {
-          if (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)) {
-            resolve({ behavior: 'allow', updatedInput: input });
-            return;
-          }
+          // Native permissionMode/allowedTools handle automatic approvals.
+          // Calls still reaching this callback require a decision, including
+          // explicit ask rules and managed approvals in bypassPermissions mode.
           const id = randomUUID(), question = name === 'AskUserQuestion' && Array.isArray(input.questions);
           const questions = question ? (input.questions as { question: string; header?: string; options?: { label: string; description?: string }[] }[]) : [];
           this.approvals.set(id, { resolve, input, kind: question ? 'question' : 'tool', questions: questions.map(q => q.question) });
@@ -485,6 +510,13 @@ export class GlmAgent extends ClaudeAgent {
 // anything else that needs approval (shell commands, edits elsewhere) is
 // declined by agy itself and reported in the conversation.
 export class AntigravityAgent extends Adapter {
+  permissionOptions(): TaskPermissionOption[] {
+    return [
+      { value: 'workspace', label: 'Accept edits', detail: 'Other requests denied' },
+      { value: 'plan', label: 'Plan', detail: 'Plan first' },
+      { value: 'full', label: 'Always proceed', detail: 'Approve all tools' },
+    ];
+  }
   private catalog: { model: string; displayName: string; efforts: string[]; ids: Record<string, string>; isDefault: boolean; defaultEffort: string | null }[] = [];
   private conversations: Record<string, string> = {};
   constructor(private binary = process.env.PAPILOT_AGY_BIN || 'agy', private file = path.join(DATA, 'antigravity-conversations.json'),
@@ -515,7 +547,9 @@ export class AntigravityAgent extends Adapter {
     // Attachments live outside the worktree. Grant read access to only the
     // selected files for this invocation; adding their directory as a workspace
     // would also expose other tasks' attachments and permit writes there.
-    let imageSettings: string[] = [];
+    const permissions = thread.readOnly ? 'plan' : thread.permissions || 'workspace';
+    const full = permissions === 'full';
+    const settings: Record<string, unknown> = { toolPermission: full ? 'always-proceed' : 'request-review', allowNonWorkspaceAccess: full, enableTerminalSandbox: false };
     try {
       const files = images.map(file => {
         const resolved = fs.realpathSync(file);
@@ -525,14 +559,14 @@ export class AntigravityAgent extends Adapter {
       if (files.length) {
         for (const [index, file] of files.entries()) text = text.replaceAll(images[index], file);
         text += '\n\nOpen the attached images with your file/image tools: ' + files.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
-        imageSettings = ['--settings', JSON.stringify({ permissions: { allow: files.map(file => `read_file(${file})`) } })];
+        settings.permissions = { allow: files.map(file => `read_file(${file})`) };
       }
     } catch (error) { this.finish(turn, 'failed', error instanceof Error ? error.message : String(error)); return; }
     const conversation = this.conversations[turn.threadId], entry = this.catalog.find(model => model.model === thread.model);
     const model = entry ? entry.ids[effort || entry.defaultEffort || ''] || Object.values(entry.ids)[0] : thread.model;
     // agy has no separate system prompt: the first turn carries Papilot's instructions.
     const prompt = conversation ? text : `${thread.instructions}\n\n---\n\n${text}`;
-    const child = this.launch(findExecutable(this.binary) || this.binary, ['--input-format', 'stream-json', '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
+    const child = this.launch(findExecutable(this.binary) || this.binary, ['--input-format', 'stream-json', '--output-format', 'stream-json', '--mode', permissions === 'plan' ? 'plan' : 'accept-edits', '--settings', JSON.stringify(settings), ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
@@ -558,7 +592,7 @@ export class AntigravityAgent extends Adapter {
     child.on('close', () => {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval.` });
       if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });

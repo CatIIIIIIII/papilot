@@ -61,7 +61,7 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
     assert.equal((await completed(seen)).status, 'completed');
     const args = fake.launches[0].args;
     assert.equal(fake.launches[0].cwd, '/work');
-    assert.deepEqual(args.slice(2), ['--output-format', 'stream-json', '--mode', 'accept-edits', '--model', 'gemini-4-argon-high']);
+    assert.deepEqual(args.slice(2), ['--output-format', 'stream-json', '--mode', 'accept-edits', '--settings', JSON.stringify({ toolPermission: 'request-review', allowNonWorkspaceAccess: false, enableTerminalSandbox: false }), '--model', 'gemini-4-argon-high']);
     assert.deepEqual(args.slice(0, 2), ['--input-format', 'stream-json']);
     assert.match(JSON.parse(fake.launches[0].stdin).message.content, /^Only edit the worktree\.\n\n---\n\nShorten the abstract\.$/);
     assert.deepEqual(seen.filter(e => e.method === 'item/agentMessage/delta').map(e => e.params.delta), ['Editing ', 'now.']);
@@ -105,13 +105,14 @@ test('Antigravity grants only selected images read access for the current turn',
     await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: `See ${image}` }, { type: 'localImage', path: image }] });
     assert.equal((await completed(seen)).status, 'completed');
     const args = fake.launches[0].args, resolved = fs.realpathSync(image);
-    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]), { permissions: { allow: [`read_file(${resolved})`] } });
+    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]).permissions, { allow: [`read_file(${resolved})`] });
     assert.ok(JSON.parse(fake.launches[0].stdin).message.content.includes(resolved));
     assert.ok(!args.includes('--add-dir') && !args.includes('--dangerously-skip-permissions'));
     const next = events(agent);
     await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Continue without an image.' }] });
     assert.equal((await completed(next)).status, 'completed');
-    assert.ok(!fake.launches[1].args.includes('--settings'), 'Image permission must not persist into later turns');
+    const nextArgs = fake.launches[1].args;
+    assert.equal(JSON.parse(nextArgs[nextArgs.indexOf('--settings') + 1]).permissions, undefined, 'Image permission must not persist into later turns');
   } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -206,7 +207,7 @@ test('Claude turns use the local Claude Code login, resume their session, and re
   const options = fake.calls[1].options;
   assert.equal(fake.calls[1].prompt, 'Fix the build.');
   assert.deepEqual([options.cwd, options.model, options.effort, options.sessionId, options.resume, options.permissionMode], ['/work', 'opus', 'high', thread.id, undefined, 'acceptEdits']);
-  assert.deepEqual(options.sandbox, { enabled: true, autoAllowBashIfSandboxed: true });
+  assert.deepEqual(options.sandbox, { enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false });
   assert.deepEqual(options.systemPrompt, { type: 'preset', preset: 'claude_code', append: 'Only edit the worktree.' });
   assert.deepEqual(options.settingSources, ['project']);
   assert.deepEqual(requests.map(r => [r.method, r.params.command || r.params.questions?.[0].question]), [['item/commandExecution/requestApproval', 'rm -rf build'], ['item/tool/requestUserInput', 'Which section?']]);
@@ -349,6 +350,48 @@ function fakeCursor(script: (send: { message: any; options: any }) => any[], res
   };
   return { sdk, created, resumed, sends, cancelled };
 }
+
+test('Cursor reopens the same conversation when changing its sandbox and keeps other tasks isolated', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-cursor-permissions-'));
+  const fake = fakeCursor(() => [{ delta: { type: 'text-delta', text: 'OK' } }]);
+  const agent = new CursorAgent(async () => fake.sdk, path.join(dir, 'agents.json'), () => true);
+  try {
+    await agent.start();
+    const first = (await agent.request('thread/start', { cwd: '/first', taskPermissions: 'full' })).thread.id;
+    const second = (await agent.request('thread/start', { cwd: '/second' })).thread.id;
+    for (const [threadId, taskPermissions] of [[first, 'full'], [second, 'workspace'], [first, 'workspace'], [first, 'full'], [second, 'workspace'], [first, 'workspace']]) {
+      const seen = events(agent);
+      await agent.request('turn/start', { threadId, ...(await agent.taskPermissionConfig(taskPermissions)).turn, input: [{ type: 'text', text: 'Continue.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+    }
+    assert.deepEqual(fake.created.map(options => [options.local.cwd, options.local.sandboxOptions.enabled]), [['/first', false], ['/second', true]]);
+    assert.deepEqual(fake.resumed.map(call => [call.id, call.options.local.sandboxOptions.enabled]), [['agent-1', true], ['agent-1', false], ['agent-1', true]]);
+    assert.equal(fake.sends[2].message, 'Continue.', 'changing permissions must retain the conversation');
+    const helper = (await agent.request('thread/start', { cwd: '/helper', sandbox: 'read-only', taskPermissions: 'full' })).thread.id;
+    const seen = events(agent); await agent.request('turn/start', { threadId: helper }); await completed(seen);
+    assert.equal(fake.created.at(-1).local.sandboxOptions.enabled, true, 'helper settings must not enable unrestricted tools');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Antigravity resets native permission settings on every turn while retaining its conversation', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-permissions-'));
+  const response = [JSON.stringify({ event: 'init', conversation_id: 'same-conversation' }), JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })];
+  const fake = fakeAgy(Array.from({ length: 4 }, () => response));
+  const agent = new AntigravityAgent('fake-agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const id = (await agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+    for (const value of ['full', 'workspace', 'plan', 'full']) {
+      const seen = events(agent);
+      await agent.request('turn/start', { threadId: id, ...(await agent.taskPermissionConfig(value)).turn, input: [{ type: 'text', text: 'Continue.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+    }
+    assert.deepEqual(fake.launches.map(({ args }) => JSON.parse(args[args.indexOf('--settings') + 1])), [true, false, false, true].map(full => ({
+      toolPermission: full ? 'always-proceed' : 'request-review', allowNonWorkspaceAccess: full, enableTerminalSandbox: false,
+    })));
+    assert.deepEqual(fake.launches.map(({ args }) => args[args.indexOf('--mode') + 1]), ['accept-edits', 'accept-edits', 'plan', 'accept-edits']);
+    for (const { args } of fake.launches.slice(1)) assert.equal(args[args.indexOf('--conversation') + 1], 'same-conversation');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('Cursor runs a sandboxed local SDK agent, streams items and resumes its agent after a restart', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-cursor-'));
@@ -548,7 +591,7 @@ test('with Claude Code installed, Claude runs claude -p on the host login, strea
     assert.equal(flag('--permission-mode'), 'acceptEdits'); assert.equal(flag('--permission-prompts'), 'none');
     assert.equal(flag('--session-id'), thread.id); assert.equal(flag('--model'), 'opus'); assert.equal(flag('--effort'), 'high');
     assert.equal(run.instructions, 'Only edit the worktree.'); assert.equal(fs.existsSync(flag('--append-system-prompt-file')), false); assert.equal(flag('--disallowedTools'), 'AskUserQuestion');
-    assert.deepEqual(JSON.parse(flag('--settings')).sandbox, { enabled: true, autoAllowBashIfSandboxed: true });
+    assert.deepEqual(JSON.parse(flag('--settings')).sandbox, { enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false });
     const sent = JSON.parse(run.stdin.trim());
     assert.equal(sent.message.content[0].text, 'Fix it.'); assert.equal(sent.message.content[1].source.media_type, 'image/png');
     const items = seen.filter(e => e.method === 'item/completed').map(e => e.params.item);
@@ -626,7 +669,7 @@ test('read-only Claude CLI reviews disable tool access and project settings', as
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('editing network SDK permissions allow web tools while retaining sandbox and other approvals', async () => {
+test('editing network SDK permissions allow web tools natively but preserve explicit approval requests', async () => {
   const fake = fakeClaude(async function* (options) {
     assert.equal(options.tools, undefined, 'editing tools remain available');
     assert.deepEqual(options.allowedTools, ['WebSearch', 'WebFetch']);
@@ -634,7 +677,9 @@ test('editing network SDK permissions allow web tools while retaining sandbox an
     assert.equal(options.sandbox.enabled, true);
     assert.deepEqual(options.sandbox.network.allowedDomains, ['*']);
     const context = { signal: new AbortController().signal };
-    for (const name of ['WebSearch', 'WebFetch']) assert.equal((await options.canUseTool(name, { query: 'paper' }, context)).behavior, 'allow');
+    // The SDK normally pre-approves these tools via allowedTools. If it still
+    // calls canUseTool (for example for an ask rule), the user's decision wins.
+    for (const name of ['WebSearch', 'WebFetch']) assert.equal((await options.canUseTool(name, { query: 'paper' }, context)).behavior, 'deny');
     assert.equal((await options.canUseTool('Bash', { command: 'outside-sandbox-command' }, context)).behavior, 'deny');
     yield { type: 'result', subtype: 'success', result: 'Done.', session_id: options.sessionId };
   });
@@ -646,7 +691,7 @@ test('editing network SDK permissions allow web tools while retaining sandbox an
     const { thread } = await agent.request('thread/start', { cwd: '/tmp', sandbox: 'workspace-write', config: { web_search: 'live' } });
     await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Find and update a reference.' }] });
     assert.equal((await completed(seen)).status, 'completed');
-    assert.equal(requests.length, 1, 'only the non-web action requires approval');
+    assert.equal(requests.length, 3, 'every explicit SDK approval request reaches the user');
   } finally { agent.close(); }
 });
 
@@ -731,6 +776,88 @@ for (const provider of ['claude', 'antigravity']) test(`${provider} reports sync
     assert.equal(result.status, 'failed'); assert.equal(result.error.message, 'spawn E2BIG');
     if (promptFile) assert.equal(fs.existsSync(promptFile), false);
   } finally { agent.close(); }
+});
+
+for (const provider of ['claude-sdk', 'glm'] as const) {
+  test(`${provider} applies native permissions to each turn, including Full → Workspace`, async () => {
+    const fake = fakeClaude(async function* () {});
+    const agent = provider === 'glm' ? new GlmAgent(fake.load, { ZAI_API_KEY: 'fixture' }) : new ClaudeAgent(fake.load, () => null);
+    const { thread } = await agent.request('thread/start', { cwd: '/work' });
+    for (const value of ['full', 'workspace', 'full'] as const) {
+      const seen = events(agent);
+      const config = await agent.taskPermissionConfig(value);
+      await agent.request('turn/start', { threadId: thread.id, ...config.turn, input: [{ type: 'text', text: 'Edit.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+      const options = fake.calls.at(-1)!.options;
+      assert.equal(options.permissionMode, value === 'full' ? 'bypassPermissions' : 'acceptEdits');
+      assert.equal(options.allowDangerouslySkipPermissions, value === 'full' ? true : undefined);
+      assert.equal(options.sandbox.enabled, value !== 'full');
+      if (value === 'workspace') {
+        assert.equal(options.sandbox.allowUnsandboxedCommands, false);
+        assert.equal(options.sandbox.failIfUnavailable, true);
+      }
+    }
+    assert.match(agent.permissionOptions()[0].detail, /Ask before/);
+    agent.close();
+  });
+
+  test(`${provider} preserves managed approvals and questions in full access`, async () => {
+    const reason = 'Your organization requires approval for this tool';
+    const fake = fakeClaude(async function* (options) {
+      assert.equal(options.permissionMode, 'bypassPermissions');
+      for (const name of ['mcp__fixture__read', 'WebSearch', 'WebFetch', 'Bash']) {
+        const decision = await options.canUseTool(name, { command: 'echo fixture' }, { signal: new AbortController().signal, decisionReason: reason });
+        assert.equal(decision.behavior, 'deny', `${name} must respect the user's refusal`);
+      }
+      const approved = await options.canUseTool('Edit', { file_path: '/work/main.tex' }, { signal: new AbortController().signal, decisionReason: 'Explicit ask rule' });
+      assert.equal(approved.behavior, 'allow');
+      const answer = await options.canUseTool('AskUserQuestion', { questions: [{ question: 'Which section?' }] }, { signal: new AbortController().signal });
+      assert.equal(answer.updatedInput.answers['Which section?'], 'Introduction');
+    });
+    const agent = provider === 'glm' ? new GlmAgent(fake.load, { ZAI_API_KEY: 'fixture' }) : new ClaudeAgent(fake.load, () => null);
+    const requests: any[] = [];
+    agent.on('request', request => {
+      requests.push(request);
+      setImmediate(() => agent.respond(request.id, request.method === 'item/tool/requestUserInput'
+        ? { answers: { 0: { answers: ['Introduction'] } } }
+        : { decision: request.method === 'item/fileChange/requestApproval' ? 'accept' : 'decline' }));
+    });
+    try {
+      const seen = events(agent);
+      const { thread } = await agent.request('thread/start', { cwd: '/work', config: { web_search: 'live' }, ...(await agent.taskPermissionConfig('full')).thread });
+      await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Edit.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+      assert.equal(requests.length, 6);
+      assert.ok(requests.slice(0, 4).every(request => request.params.reason === reason));
+    } finally { agent.close(); }
+  });
+}
+
+test('Claude print path applies native permissions when resuming, including Full → Workspace', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-cli-permissions-'));
+  const fake = fakeClaudeCli(dir, { loggedIn: true, authMethod: 'console' }, Array.from({ length: 3 }, () => [{ type: 'result', subtype: 'success', is_error: false, result: 'Done' }]));
+  const agent = new ClaudeAgent(async () => { throw new Error('SDK must not be used'); }, () => fake.bin, fake.launch as any);
+  try {
+    await agent.start();
+    assert.match(agent.permissionOptions()[0].detail, /denied in print mode/);
+    const { thread } = await agent.request('thread/start', { cwd: '/work' });
+    for (const value of ['full', 'workspace', 'full'] as const) {
+      const seen = events(agent);
+      await agent.request('thread/resume', { threadId: thread.id, cwd: '/work', ...(await agent.taskPermissionConfig(value)).thread });
+      await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Edit.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+      const args = fake.launches.at(-1)!.args, flag = (key: string) => args[args.indexOf(key) + 1];
+      assert.equal(args[0], '-p');
+      assert.equal(flag('--resume'), thread.id);
+      assert.equal(flag('--permission-mode'), value === 'full' ? 'bypassPermissions' : 'acceptEdits');
+      assert.equal(args.includes('--dangerously-skip-permissions'), value === 'full');
+      assert.equal(JSON.parse(flag('--settings')).sandbox.enabled, value !== 'full');
+      if (value === 'workspace') {
+        assert.equal(JSON.parse(flag('--settings')).sandbox.allowUnsandboxedCommands, false);
+        assert.equal(JSON.parse(flag('--settings')).sandbox.failIfUnavailable, true);
+      }
+    }
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 for (const transport of ['sdk', 'cli'] as const) test(`Claude ${transport} matches streamed text blocks after thinking to their final messages`, async () => {

@@ -251,5 +251,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "选择目标位置前，请先等待任务和审阅操作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "请等待此论文的 PDF 构建完成后，再更改其路径或将其移除。",
   "ZIP links and special files are not supported.": "不支持 ZIP 链接和特殊文件。",
-  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。",
+  "Invalid task permissions.": "无效的任务权限。",
+  "Pause the task and wait for it to finish before changing permissions.": "请先暂停任务，等待停止后再修改权限。",
+  "Codex could not apply workspace permissions.": "Codex 无法应用工作区权限。",
+  "Permissions are only available for editing tasks.": "权限仅适用于论文修改任务。",
+  "Invalid task permissions for this agent.": "此 agent 不支持所选权限。",
+  "This agent does not support the selected permissions.": "此 agent 不支持所选权限。",
+  "Grok does not support the selected permissions.": "Grok 不支持所选权限。",
+  "Grok disconnected. Reconnect to resume.": "Grok 已断开，请重新连接后继续。",
+  "Pause the task before restoring its session.": "恢复会话前请先暂停任务。",
+  "This task already has a running turn.": "此任务已有正在运行的回合。"
 }

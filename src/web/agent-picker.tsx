@@ -1,10 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { AgentId, RuntimeStatus } from '../shared.ts';
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { AgentId, RuntimeStatus, TaskPermissions } from '../shared.ts';
 import { Icon } from './icons.tsx';
 import { BrandIcon } from './brand-icon.tsx';
 import { t } from './i18n.ts';
 import { browserStorage } from './storage.ts';
 import { EffortSlider, effortName } from './effort-slider.tsx';
+import { permissionText } from './task-permissions.tsx';
 
 // The picker and an existing conversation use the same compact model label.
 export function ModelLabel({ model, effort, fast }: { model: string; effort?: string | null; fast?: boolean }) {
@@ -47,13 +48,14 @@ function agentState(runtime?: RuntimeStatus) {
 
 // One compact trigger opens a searchable list of every agent's models,
 // grouped by agent with recent choices first, so one choice sets both. The
-// selected model's reasoning effort and fast mode sit below the list. Native
+// selected model's reasoning effort, fast mode and permissions sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, allowUnknownDefault = true }: {
+export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true }: {
   agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
   onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string; allowUnknownDefault?: boolean;
+  permissions?: ReactNode; permissionMode?: TaskPermissions;
 }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(''), [recent, setRecent] = useState(readRecent);
@@ -64,8 +66,9 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   const modelName = selected?.name || model || t('Default model');
   const currentEffort = effort || selected?.defaultEffort;
   const fastMode = agent === 'codex' ? selected?.fastMode : undefined;
+  const permission = runtime?.permissionOptions?.find(option => option.value === permissionMode);
   const disconnected = runtime && (!runtime.connected || !runtime.authenticated);
-  const summary = [agentName, modelName, currentEffort ? effortName(currentEffort) : '', fastMode && fast ? t('Fast') : ''].filter((part, index, all) => part && all.indexOf(part) === index).join(' · ');
+  const summary = [agentName, modelName, currentEffort ? effortName(currentEffort) : '', fastMode && fast ? t('Fast') : '', permission ? permissionText(permission.label) : ''].filter((part, index, all) => part && all.indexOf(part) === index).join(' · ');
   // Every model of every agent; an agent without a model list offers its default.
   const choices = (option: AgentOption): Choice[] => {
     const list = option.runtime?.models || [];
@@ -134,12 +137,17 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   };
   const activeChoice = visible.find(choice => choice.key === active);
   return <span className="agent-picker">
-    <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={t('Agent settings')} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled}
+    <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={t('Agent settings')} aria-description={summary} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled}
       onClick={() => panel.current?.matches(':popover-open') ? panel.current.hidePopover() : show()}
       onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); show(); } }}>
-      <BrandIcon name={agent} size={15}/>{modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}<ModelLabel model={modelName} effort={currentEffort} fast={Boolean(fastMode && fast)}/><Icon name="chevronDown" size={13}/>{disconnected && <span className="agent-status-mark"><Icon name="alert" size={13}/></span>}
+      <BrandIcon name={agent} size={15}/>{!permission && modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}
+      <span className="agent-picker-selection">
+        <ModelLabel model={modelName} effort={permission ? undefined : currentEffort} fast={Boolean(fastMode && fast)}/>
+        {permission && <small className="agent-permission-label" data-mode={permission.value}>{permissionText(permission.label)}</small>}
+      </span>
+      <Icon name="chevronDown" size={13}/>{disconnected && <span className="agent-status-mark"><Icon name="alert" size={13}/></span>}
     </button>
-    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Agent settings')} className="agent-picker-panel" onToggle={event => {
+    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Agent settings')} className={'agent-picker-panel' + (permission ? ' has-permissions' : '')} onToggle={event => {
       const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown);
       if (!shown && (!document.activeElement || document.activeElement === document.body || panel.current?.contains(document.activeElement))) trigger.current?.focus();
     }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); panel.current?.hidePopover(); trigger.current?.focus(); } }}>
@@ -163,7 +171,8 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
       <AgentConnectionNotice key={agent} name={agentName} runtime={runtime} reconnecting={reconnecting} onReconnect={onReconnect}/>
       {description && <p className="effort-description">{description}</p>}
       {selected?.efforts.length ? <EffortSlider efforts={selected.efforts} value={effort} fallback={selected.defaultEffort} onChange={value => onChange({ effort: value })}/> : null}
-      {fastMode && <label className="agent-fast"><span><strong><Icon name="bolt" size={14}/>{t('Fast mode')}</strong><small>{fastMode.description || t('Faster responses; may use more of your limit.')}</small></span><input type="checkbox" role="switch" aria-label={t('Fast mode')} checked={fast} onChange={event => onChange({ fast: event.target.checked })}/></label>}
+      {fastMode && <label className="agent-fast"><span><strong><Icon name="bolt" size={14}/>{t('Fast mode')}</strong><small>{t('Faster, higher usage')}</small></span><input type="checkbox" role="switch" aria-label={t('Fast mode')} checked={fast} onChange={event => onChange({ fast: event.target.checked })}/></label>}
+      {permissions}
     </div>
   </span>;
 }

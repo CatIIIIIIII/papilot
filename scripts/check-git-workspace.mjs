@@ -15,6 +15,10 @@ const page = await browser.newPage({ locale: 'en-US', colorScheme: 'light', view
 await page.clock.install();
 await page.addInitScript(() => localStorage.setItem('papilot:advanced-git', 'on'));
 const errors = []; page.on('pageerror', error => errors.push(error.message));
+const diffFailures = [];
+page.on('requestfailed', request => {
+  if (new URL(request.url()).pathname.endsWith('/git/diff')) diffFailures.push(request.failure()?.errorText);
+});
 const project = { id: 'git-paper', name: 'Example paper', path: '/tmp/git-paper', createdAt: 1 };
 const task = { id: 'git-task', projectId: project.id, title: 'Clarify the introduction', name: 'git-task', instructions: '', status: 'idle', createdAt: 1, updatedAt: 1, review: null };
 const runtime = { connected: true, authenticated: true, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: [] }] };
@@ -119,17 +123,38 @@ try {
   let releaseDiff;
   diffGate = new Promise(resolve => { releaseDiff = resolve; });
   diffText = 'Slow update';
-  const beforeSlow = diffRequests;
+  const beforeSlow = diffRequests, failuresBeforeSlow = diffFailures.length;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => diffRequests).toBe(beforeSlow + 1);
-  await page.clock.fastForward(16000);
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('focus'));
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  assert.equal(diffRequests, beforeSlow + 1, 'Only one live diff request may be in flight');
+  // Cross multiple polling intervals while staying below the API's 15s deadline.
+  // Passing that deadline legitimately aborts the request and permits a retry.
+  for (let interval = 0; interval < 2; interval++) {
+    await page.clock.runFor(5100);
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    assert.equal(diffRequests, beforeSlow + 1, 'Only one live diff request may be in flight');
+    assert.equal(diffFailures.length, failuresBeforeSlow, 'Polling and focus must not abort an in-flight diff');
+  }
   diffGate = null; releaseDiff();
   await expect(details.locator('.git-diff-view')).toContainText('Slow update main.tex');
+  // A genuine timeout ends the pending request; Retry must then load fresh text.
+  let releaseTimeout;
+  diffGate = new Promise(resolve => { releaseTimeout = resolve; });
+  diffText = 'Recovered after timeout';
+  const beforeTimeout = diffRequests, failuresBeforeTimeout = diffFailures.length;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => diffRequests).toBe(beforeTimeout + 1);
+  await page.clock.runFor(15100);
+  await expect(details.getByRole('alert')).toHaveText('The request timed out. Please try again.');
+  await expect.poll(() => diffFailures.length).toBe(failuresBeforeTimeout + 1);
+  assert.equal(diffRequests, beforeTimeout + 1, 'A timed-out diff must wait for the next poll or an explicit retry');
+  diffGate = null; releaseTimeout();
+  await details.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(details.locator('.git-diff-view')).toContainText('Recovered after timeout main.tex');
+  await expect(details.getByRole('alert')).toHaveCount(0);
+  assert.equal(diffRequests, beforeTimeout + 2, 'Retry must issue one replacement diff request');
   diffText = 'New';
   await panel.getByRole('button', { name: 'references.bib', exact: true }).click();
   await expect(details.getByRole('region', { name: 'Changes in references.bib', exact: true })).toContainText('New references.bib');
@@ -229,7 +254,7 @@ try {
   await openGit();
   await expect(workspace).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Git workspace passed: left-side controls, separate diff/history, navigation and draft restoration, live and slow diff refresh, pinned commit controls, staging/commit/push, responsive and short-window layouts.');
+  console.log('Git workspace passed: left-side controls, separate diff/history, navigation and draft restoration, live and slow diff refresh, timeout recovery, pinned commit controls, staging/commit/push, responsive and short-window layouts, missing-Git gate and installation recovery.');
 } catch (error) {
   if (errors.length) console.error('Page errors:', errors);
   await page.screenshot({ path: 'test-results/git-workspace-failure.png' });

@@ -10,7 +10,7 @@ import { Store } from '../src/server/store.ts';
 import { Workspace, accountUsage, acceptedFiles, agentModel, lightModel } from '../src/server/workspace.ts';
 import { findSkill } from '../src/server/skills.ts';
 import { reviewInstructions } from '../src/conversation.ts';
-import { RpcResponseError, type Codex } from '../src/server/codex.ts';
+import { RpcResponseError, Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
 import { AGENT_IDS, type PendingReview, type Run, type Task } from '../src/shared.ts';
 import { visibleTimeline } from '../src/web/refresh.ts';
@@ -25,6 +25,11 @@ const feedback = { cursor: 7, feedback: [{ body: 'Preserve the boundary conditio
 const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 
 class FakeCodex extends EventEmitter {
+  permissionOptions = Codex.prototype.permissionOptions;
+  async taskPermissionConfig(value: string, _cwd: string) {
+    return { thread: { sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write', approvalPolicy: value === 'full' ? 'never' : 'on-request' },
+      turn: { sandboxPolicy: { type: value === 'full' ? 'dangerFullAccess' : 'workspaceWrite' }, approvalPolicy: value === 'full' ? 'never' : 'on-request' } };
+  }
   ready = false;
   calls: { method: string; params: any }[] = [];
   replies: { id: string | number; result: unknown }[] = [];
@@ -1446,14 +1451,14 @@ test('a task runs on its own agent: turns, approvals and pausing go to that agen
   } finally { f.close(); }
 });
 
-test('Antigravity is told to edit with its file tools, since it cannot run commands', () => {
+test('Antigravity instructions defer to its current native permission policy', () => {
   const f = fixture();
   try {
     const codex = (f.workspace as any).instructions(f.task) as string;
     const antigravity = (f.workspace as any).instructions({ ...f.task, agent: 'antigravity' }) as string;
     assert.match(codex, /You may run tools in the task worktree/);
     assert.match(antigravity, /^You are Antigravity running inside Papilot/);
-    assert.match(antigravity, /Shell commands are not available to you here.*file tools only/);
+    assert.match(antigravity, /Shell commands follow the current native permission policy/);
     assert.doesNotMatch(antigravity, /You may run tools/);
   } finally { f.close(); }
 });
@@ -2244,8 +2249,8 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
       }
       const turn = f.codex.calls.find(c => c.method === 'turn/start');
       assert.ok(turn);
-      assert.equal(Object.hasOwn(turn.params, 'sandboxPolicy'), false,
-        'inherit the resolved thread sandbox, including configured writable roots and temporary-directory exclusions');
+      assert.equal(turn.params.sandboxPolicy.type, 'workspaceWrite', 'apply the runtime policy even to a loaded conversation');
+      assert.equal(turn.params.approvalPolicy, 'on-request');
     } finally { f.close(); }
   });
 }
@@ -2268,9 +2273,11 @@ test('review threads use normal network access and inherit the resolved sandbox'
 });
 
 for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
-  test(`Codex ${lifecycle} inherits the task's configured approval reviewer`, async () => {
+  for (const permissions of ['workspace', 'full'] as const)
+  test(`Codex ${lifecycle} inherits the task's configured approval reviewer with ${permissions} access`, async () => {
     for (const config of [
       { approvals_reviewer: 'auto_review' },
+      { approvals_reviewer: 'user' },
       { approvals_reviewer: 'auto_review', profile: 'paper', profiles: { paper: { approvals_reviewer: 'user' } } },
       { approvals_reviewer: 'guardian_subagent' },
       { approvals_reviewer: null },
@@ -2281,28 +2288,46 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
       try {
         if (lifecycle !== 'loaded') (f.workspace as any).loaded.clear();
         if (lifecycle === 'start' || lifecycle === 'fallback') f.store.updateTask(f.task.id, { threadId: null });
+        f.store.updateTask(f.task.id, { permissions });
         f.codex.ready = true;
+        f.codex.taskPermissionConfig = Codex.prototype.taskPermissionConfig.bind(f.codex);
+        const sandbox = { type: 'workspaceWrite', writableRoots: ['/configured-root'], networkAccess: true, excludeTmpdirEnvVar: true, excludeSlashTmp: true };
         f.codex.handler = async (method, params) => {
           if (method === 'config/read') {
             assert.deepEqual(params, { cwd: f.task.worktree, includeLayers: false });
             if (!config) throw new RpcResponseError('Unsupported method');
             return { config };
           }
+          if (method === 'thread/start' && params.ephemeral) {
+            assert.equal(params.cwd, f.task.worktree);
+            assert.equal(params.sandbox, 'workspace-write');
+            assert.equal(params.approvalPolicy, 'on-request');
+            return { thread: { id: 'permission-probe' }, sandbox, approvalPolicy: 'on-request', approvalsReviewer: 'user' };
+          }
+          if (method === 'thread/unsubscribe') {
+            assert.deepEqual(params, { threadId: 'permission-probe' });
+            return {};
+          }
           if (lifecycle === 'fallback' && method === 'thread/start' && params.dynamicTools) throw new RpcResponseError('unknown field dynamicTools');
           return method === 'turn/start' ? { turn: { id: 'turn-new' } } : { thread: { id: 'thread' } };
         };
         await f.workspace.enqueue(f.task.id, 'Revise this sentence.', `reviewer-${lifecycle}`, false);
         await tick(); await tick();
-        const expected = config?.profiles?.paper.approvals_reviewer ?? (['auto_review', 'guardian_subagent'].includes(config?.approvals_reviewer || '') ? config?.approvals_reviewer : undefined);
-        const calls = f.codex.calls.filter(c => ['thread/start', 'thread/resume', 'turn/start'].includes(c.method));
+        const expected = config?.profiles?.paper.approvals_reviewer ?? (['user', 'auto_review', 'guardian_subagent'].includes(config?.approvals_reviewer || '') ? config?.approvals_reviewer : undefined);
+        const calls = f.codex.calls.filter(c => ['thread/start', 'thread/resume', 'turn/start'].includes(c.method) && !c.params.ephemeral);
         assert.equal(calls.length, lifecycle === 'loaded' ? 1 : lifecycle === 'fallback' ? 3 : 2);
+        assert.equal(f.codex.calls.filter(c => c.method === 'thread/unsubscribe').length, permissions === 'workspace' ? 1 : 0);
         for (const call of calls) {
           assert.equal(call.params.approvalsReviewer, expected);
           if (expected === undefined) assert.equal(Object.hasOwn(call.params, 'approvalsReviewer'), false);
-          if (call.method === 'turn/start') assert.equal(Object.hasOwn(call.params, 'sandboxPolicy'), false);
+          if (call.method === 'turn/start') {
+            assert.deepEqual(call.params.sandboxPolicy, permissions === 'full' ? { type: 'dangerFullAccess' } : sandbox);
+            assert.equal(call.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+            assert.match(call.params.additionalContext['papilot-task-access'].value, /replace earlier Papilot instructions about access outside the task worktree/);
+          }
           else {
-            assert.equal(call.params.sandbox, 'workspace-write');
-            assert.equal(call.params.approvalPolicy, 'on-request');
+            assert.equal(call.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
+            assert.equal(call.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
           }
         }
       } finally { f.close(); }
@@ -2310,19 +2335,137 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
   });
 }
 
-test('loaded Codex turns re-read reviewer changes without requiring a reconnect', async () => {
+test('loaded Codex turns re-read reviewer changes while switching permissions without a reconnect', async () => {
   const f = fixture();
-  let reviewer = 'auto_review';
+  let reviewer = 'auto_review', root = '/configured-first';
   try {
     f.codex.ready = true;
-    f.codex.handler = async method => method === 'config/read' ? { config: { approvals_reviewer: reviewer } } : { turn: { id: 'turn-new' } };
-    await f.workspace.enqueue(f.task.id, 'First revision.', 'reviewer-first', false);
-    await tick(); await tick();
-    await f.workspace.interrupt(f.task.id);
-    await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'turn-new', status: 'interrupted' } } });
-    reviewer = 'user';
-    await f.workspace.enqueue(f.task.id, 'Second revision.', 'reviewer-second', false);
-    await tick(); await tick();
-    assert.deepEqual(f.codex.calls.filter(c => c.method === 'turn/start').map(c => c.params.approvalsReviewer), ['auto_review', 'user']);
+    f.codex.taskPermissionConfig = Codex.prototype.taskPermissionConfig.bind(f.codex);
+    f.codex.handler = async (method, params) => {
+      if (method === 'config/read') return { config: { approvals_reviewer: reviewer } };
+      if (method === 'thread/start' && params.ephemeral) return {
+        thread: { id: 'permission-probe' }, approvalPolicy: 'on-request',
+        sandbox: { type: 'workspaceWrite', writableRoots: [root], networkAccess: true, excludeTmpdirEnvVar: true, excludeSlashTmp: true },
+      };
+      return { turn: { id: 'turn-new' } };
+    };
+    for (const [permissions, configuredReviewer, configuredRoot] of [
+      ['workspace', 'auto_review', '/configured-first'],
+      ['full', 'guardian_subagent', '/configured-first'],
+      ['workspace', 'user', '/configured-later'],
+    ] as const) {
+      reviewer = configuredReviewer; root = configuredRoot;
+      f.workspace.updateTaskPermissions(f.task.id, permissions);
+      await f.workspace.enqueue(f.task.id, 'Revise this sentence.', `reviewer-${reviewer}`, false);
+      await tick(); await tick();
+      const turn = f.codex.calls.findLast(c => c.method === 'turn/start')!.params;
+      assert.equal(turn.approvalsReviewer, reviewer);
+      assert.equal(turn.threadId, 'thread');
+      assert.equal(turn.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+      assert.deepEqual(turn.sandboxPolicy, permissions === 'full' ? { type: 'dangerFullAccess' }
+        : { type: 'workspaceWrite', writableRoots: [root], networkAccess: true, excludeTmpdirEnvVar: true, excludeSlashTmp: true });
+      await f.workspace.interrupt(f.task.id);
+      await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'turn-new', status: 'interrupted' } } });
+    }
+    assert.equal(f.codex.calls.some(c => c.method === 'thread/resume' || c.method === 'thread/start' && !c.params.ephemeral), false);
+    assert.equal(f.codex.calls.filter(c => c.method === 'thread/unsubscribe').length, 2);
   } finally { f.close(); }
 });
+
+for (const permissions of ['full', 'workspace'] as const) {
+  test(`task permission selector keeps the loaded conversation with ${permissions} access`, async () => {
+    const f = fixture();
+    try {
+      f.store.updateTask(f.task.id, { permissions: permissions === 'full' ? 'workspace' : 'full' });
+      const changed = f.workspace.updateTaskPermissions(f.task.id, permissions);
+      assert.equal(changed.permissions, permissions);
+      assert.equal(changed.threadId, 'thread');
+      assert.equal((f.workspace as any).loaded.has('thread'), true);
+      f.codex.ready = true;
+      await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `permissions-${permissions}`, false);
+      await tick(); await tick();
+      const resume = f.codex.calls.find(call => call.method === 'thread/resume');
+      assert.equal(resume, undefined, 'changing permissions does not reload a conversation with unchanged instructions');
+      const turn = f.codex.calls.find(call => call.method === 'turn/start');
+      assert.equal(turn?.params.sandboxPolicy.type, permissions === 'full' ? 'dangerFullAccess' : 'workspaceWrite');
+      assert.equal(turn?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+    } finally { f.close(); }
+  });
+}
+
+
+for (const permissions of ['full', 'workspace'] as const) test(`loaded native conversations receive updated access context for ${permissions}`, async () => {
+  const f = fixture();
+  try {
+    (f.workspace as any).agents.antigravity = f.codex;
+    f.store.updateTask(f.task.id, { agent: 'antigravity', permissions });
+    f.workspace.runtimes.antigravity.authenticated = true;
+    f.codex.ready = true;
+    const run = await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `native-context-${permissions}`, false);
+    await tick(); await tick();
+    assert.equal(f.codex.calls.some(call => call.method === 'thread/resume'), false);
+    const text = f.codex.calls.find(call => call.method === 'turn/start')?.params.input[0].text;
+    assert.match(text, /supersedes earlier Papilot messages fixing the access mode/);
+    assert.match(text, /Keep manuscript edits in this isolated task worktree/);
+    assert.match(text, permissions === 'full' ? /current permissions are Full access/ : /current permissions are Workspace access/);
+    assert.ok(text.endsWith(run.prompt));
+    assert.doesNotMatch(run.prompt, /Papilot settings update/, 'internal context must not alter the author’s stored message');
+  } finally { f.close(); }
+});
+
+test('editing instructions keep manuscript boundaries without pinning mutable access permissions', () => {
+  const f = fixture();
+  try {
+    for (const agent of ['codex', 'claude', 'glm', 'cursor', 'grok', 'antigravity'] as const) {
+      const instructions = (permissions: 'workspace' | 'full') => (f.workspace as any).instructions({ ...f.task, agent, permissions });
+      assert.equal(instructions('workspace'), instructions('full'));
+      assert.match(instructions('workspace'), /Keep manuscript edits in this isolated task worktree/);
+      assert.match(instructions('workspace'), /runtime's current sandbox and approval requirements/);
+      assert.doesNotMatch(instructions('workspace'), /Only edit this isolated task worktree|The user selected full access/);
+      assert.match(instructions('full'), /Never edit the manuscript checkout, other task worktrees, or Papilot's own source\/state/);
+    }
+  } finally { f.close(); }
+});
+
+test('task permission selector refuses active turns, unsupported providers, reviews and invalid values', () => {
+  const f = fixture();
+  try {
+    for (const status of ['running', 'waiting_input', 'queued', 'uncertain', 'building', 'deleting'] as const) {
+      f.store.updateTask(f.task.id, { status });
+      assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Pause the task/);
+    }
+    f.store.updateTask(f.task.id, { status: 'reviewing', agent: 'kimi' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Invalid task permissions/);
+    f.store.updateTask(f.task.id, { agent: 'codex', mode: 'review' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /only available/);
+    f.store.updateTask(f.task.id, { mode: 'edit' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'unrestricted'), /Invalid task permissions/);
+    assert.equal(f.store.task(f.task.id).permissions, undefined);
+  } finally { f.close(); }
+});
+
+test('task permission selector persists the choice across reopening the task store', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-permissions-'));
+  const file = path.join(dir, 'state.sqlite'), f = fixture(undefined, { file });
+  try {
+    f.workspace.updateTaskPermissions(f.task.id, 'full');
+    const reopened = new Store(file);
+    try { assert.equal(reopened.task(f.task.id).permissions, 'full'); } finally { reopened.close(); }
+  } finally { f.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const permissions of ['workspace', 'full'] as const) {
+  test(`new task permission selector starts with the chosen ${permissions} policy`, async () => {
+    const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/unused' } : summary);
+    try {
+      const created = await f.workspace.createTask({ id: `permission-task-${permissions}`, projectId: 'paper', title: 'Revise', instructions: 'Inspect results.', permissions });
+      assert.equal(created.permissions, permissions);
+      const run = f.store.runs().find(run => run.taskId === created.id)!;
+      f.codex.ready = true;
+      (f.workspace as any).active.set(created.id, run);
+      await (f.workspace as any).startRun(run);
+      const start = f.codex.calls.find(call => call.method === 'thread/start' && !call.params.ephemeral);
+      assert.equal(start?.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
+    } finally { f.close(); }
+  });
+}

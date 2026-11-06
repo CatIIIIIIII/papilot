@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentId } from '../shared.ts';
+import type { AgentId, TaskPermissionOption, TaskPermissions } from '../shared.ts';
 import { Adapter, findExecutable, type Item, type Thread, type Turn } from './agents.ts';
 import { imageType } from './attachments.ts';
 import { VERSION } from './paths.ts';
@@ -28,18 +28,23 @@ function toolKind(tool: any): string {
 const choices = (option?: ConfigOption): Choice[] => (option?.options || []).flatMap(value => 'options' in value ? value.options : [value]);
 const sessionModel = (session: Session) => session.configOptions?.find(option => option.category === 'model' || option.id === 'model')?.currentValue || session.models?.currentModelId || null;
 
-// How one ACP agent is launched and kept on manual approvals. modes lists the
-// session modes Papilot accepts, best first: a mode that edits the task
-// worktree but asks before anything else. Papilot never inherits an
-// auto-approve mode from the user's own configuration, so an agent that
-// offers none of these modes is refused.
+// The default mode is pinned instead of inheriting the user's global choice.
+// Additional permissions are offered only when advertised by the ACP session.
 export interface AcpProfile {
   id: AgentId; name: string; bin: string; binEnv: string; args: string[]; modes: string[]; setup: string;
   env?: () => NodeJS.ProcessEnv;
   config?: Record<string, string>;
   authMethods?: string[];
   sessionMeta?: Record<string, unknown>;
+  permissionModes?: Record<string, { value?: string; label: string; detail: string }>;
 }
+const permissionModes = {
+  default: { label: 'Default', detail: 'Ask before tools' },
+  'auto-edit': { label: 'Auto edit', detail: 'Approve edits' },
+  plan: { label: 'Plan', detail: 'Read-only planning' },
+  auto: { label: 'Auto', detail: 'Approve safe operations' },
+  yolo: { label: 'YOLO', detail: 'Approve all tools' },
+};
 export const ACP_PROFILES = {
   // Grok owns authentication and tools. A dedicated process and explicit
   // session metadata keep new and restored sessions out of yolo/auto mode.
@@ -52,9 +57,9 @@ export const ACP_PROFILES = {
     modes: ['https://agentclientprotocol.com/protocol/session-modes#agent'], config: { allow_all: 'off' },
     setup: 'Install GitHub Copilot CLI (npm install -g @github/copilot) and run copilot login on this host, then select Reconnect. Set PAPILOT_COPILOT_BIN if copilot is not on PATH.',
     env: () => ({ ...process.env, COPILOT_ALLOW_ALL: 'false', COPILOT_ASSISTED_APPROVAL: 'false' }) },
-  kimi: { id: 'kimi', name: 'Kimi', bin: 'kimi', binEnv: 'PAPILOT_KIMI_BIN', args: ['acp'], modes: ['default'],
+  kimi: { id: 'kimi', name: 'Kimi', bin: 'kimi', binEnv: 'PAPILOT_KIMI_BIN', args: ['acp'], modes: ['default'], permissionModes,
     setup: 'Install Kimi Code CLI and run kimi login on this host, then select Reconnect. Set PAPILOT_KIMI_BIN if kimi is not on PATH.' },
-  qwen: { id: 'qwen', name: 'Qwen', bin: 'qwen', binEnv: 'PAPILOT_QWEN_BIN', args: ['--acp'], modes: ['auto-edit', 'default'],
+  qwen: { id: 'qwen', name: 'Qwen', bin: 'qwen', binEnv: 'PAPILOT_QWEN_BIN', args: ['--acp'], modes: ['auto-edit', 'default'], permissionModes,
     setup: 'Install Qwen Code and sign in by running qwen once on this host, then select Reconnect. Set PAPILOT_QWEN_BIN if qwen is not on PATH.' },
   // DeepSeek Harness has no session modes: its ACP profile sandboxes writes and
   // commands to the session folder and asks before leaving it. Papilot pins
@@ -65,7 +70,11 @@ export const ACP_PROFILES = {
   // OpenCode runs tools without asking by default. Its highest-precedence
   // config layer makes it ask before shell commands and anything outside the
   // task worktree, while edits in the worktree go ahead for review.
-  opencode: { id: 'opencode', name: 'OpenCode', bin: 'opencode', binEnv: 'PAPILOT_OPENCODE_BIN', args: ['acp'], modes: ['build'],
+  opencode: { id: 'opencode', name: 'OpenCode', bin: 'opencode', binEnv: 'PAPILOT_OPENCODE_BIN', args: ['acp'], modes: ['papilot-default'],
+    permissionModes: {
+      'papilot-default': { label: 'Default', detail: 'Ask before commands' },
+      'papilot-full': { value: 'full', label: 'Allow all', detail: 'Approve all tools' },
+    },
     setup: 'Install OpenCode and connect a provider with opencode auth login, then select Reconnect. Set PAPILOT_OPENCODE_BIN if opencode is not on PATH.',
     env: () => ({ ...process.env, OPENCODE_CONFIG_CONTENT: opencodeConfig(process.env.OPENCODE_CONFIG_CONTENT) }) },
 } satisfies Record<string, AcpProfile>;
@@ -73,7 +82,17 @@ export function opencodeConfig(own?: string) {
   let config: Record<string, unknown> = {};
   try { const parsed = own ? JSON.parse(own) : {}; if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed; } catch { /* Replaced below. */ }
   const permission = config.permission && typeof config.permission === 'object' ? config.permission : {};
-  return JSON.stringify({ ...config, permission: { ...permission, bash: 'ask', shell: 'ask', edit: 'allow', external_directory: 'ask' } });
+  const agent = config.agent && typeof config.agent === 'object' ? config.agent : {};
+  // v2 accepts these legacy fields, but a same-named native agent takes priority.
+  // Own just our two entries; preserve all other provider and agent settings.
+  if (config.agents && typeof config.agents === 'object' && !Array.isArray(config.agents)) {
+    config.agents = Object.fromEntries(Object.entries(config.agents).filter(([id]) => !['papilot-default', 'papilot-full'].includes(id)));
+  }
+  const restricted = { bash: 'ask', shell: 'ask', edit: 'allow', external_directory: 'ask' };
+  return JSON.stringify({ ...config, permission: { ...permission, ...restricted }, agent: { ...agent,
+    'papilot-default': { mode: 'primary', disable: false, permission: restricted },
+    'papilot-full': { mode: 'primary', disable: false, permission: 'allow' },
+  } });
 }
 
 // ACP sessions are the thread IDs persisted by Papilot. The agent owns
@@ -90,6 +109,8 @@ export class AcpAgent extends Adapter {
   private capabilities: any = {};
   private catalog: any[] = [];
   private defaultModel: string | null = null;
+  private availablePermissions: TaskPermissionOption[] = [];
+  permissionOptions() { return this.availablePermissions; }
   private readonly name: string;
   private readonly binary: string;
   constructor(private profile: AcpProfile, binary?: string, private launch: typeof spawnCommand = spawnCommand) {
@@ -136,6 +157,7 @@ export class AcpAgent extends Adapter {
       this.catalog = [];
       if (this.profile.modes.length) this.mode(probe);
       this.config(probe);
+      this.availablePermissions = this.permissions(probe).map(({ native: _, ...option }) => option);
       this.readModels(probe, true);
       const sessionCapabilities = this.capabilities.sessionCapabilities || {};
       if (sessionCapabilities.delete) await this.rpc('session/delete', { sessionId: probe.sessionId });
@@ -152,35 +174,23 @@ export class AcpAgent extends Adapter {
   async request(method: string, params: any = {}): Promise<any> {
     if (method === 'thread/start' || method === 'thread/resume') {
       const resumed = method === 'thread/resume';
-      const session = await this.session(resumed ? String(params.threadId) : null, params.cwd, params.model);
+      const readOnly = params.sandbox === 'read-only';
+      const permissions = readOnly ? 'workspace' : params.taskPermissions || 'workspace';
+      const session = await this.session(resumed ? String(params.threadId) : null, params.cwd, params.model, permissions);
       const known = this.threads.get(session.sessionId);
       const model = params.model || sessionModel(session) || known?.model || null;
-      this.threads.set(session.sessionId, { cwd: params.cwd, instructions: params.developerInstructions || '', model, started: resumed });
+      this.threads.set(session.sessionId, { cwd: params.cwd, instructions: params.developerInstructions || '', model, started: resumed, permissions, readOnly });
       return { thread: { id: session.sessionId }, model };
     }
     return super.request(method, params);
   }
-  private async session(id: string | null, cwd: string, model?: string | null): Promise<Session> {
+  private async session(id: string | null, cwd: string, model?: string | null, permissions: TaskPermissions = 'workspace'): Promise<Session> {
     let session = id ? this.sessions.get(id) : undefined;
     if (!session) {
       if (id && !this.capabilities.loadSession && !this.capabilities.sessionCapabilities?.resume) throw new Error(`This ${this.name} version cannot resume sessions. Update it.`);
       const result = await this.rpc(id ? this.capabilities.sessionCapabilities?.resume ? 'session/resume' : 'session/load' : 'session/new', { ...(id ? { sessionId: id } : {}), cwd, mcpServers: [], ...(this.profile.sessionMeta ? { _meta: this.profile.sessionMeta } : {}) });
       session = { ...result, sessionId: id || result.sessionId };
       if (!session!.sessionId) throw new Error(`${this.name} did not return a session ID.`);
-      // Do not inherit an auto-approve mode from the user's global configuration.
-      // Agents list modes as session modes or as a mode configuration option.
-      if (this.profile.modes.length) {
-        const { mode, option } = this.mode(session!);
-        if (session!.modes) await this.rpc('session/set_mode', { sessionId: session!.sessionId, modeId: mode });
-        else if (option!.currentValue !== mode) {
-          const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId: option!.id, value: mode });
-          if (result?.configOptions) session!.configOptions = result.configOptions;
-        }
-      }
-      for (const [configId, value] of this.config(session!)) {
-        const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId, value });
-        if (result?.configOptions) session!.configOptions = result.configOptions;
-      }
       this.sessions.set(session!.sessionId, session!);
     }
     if (model) {
@@ -193,8 +203,47 @@ export class AcpAgent extends Adapter {
         if (session!.models) session!.models.currentModelId = model;
       }
     }
+    await this.applyPermissions(session!, permissions);
     this.readModels(session!);
     return session!;
+  }
+  private permissions(session: Session): (TaskPermissionOption & { native: string })[] {
+    if (this.profile.permissionModes) {
+      const { mode, option } = this.mode(session);
+      const offered = session.modes ? session.modes.availableModes.map(mode => mode.id) : choices(option).map(choice => choice.value);
+      return offered.flatMap(id => {
+        const entry = this.profile.permissionModes![id];
+        return entry ? [{ ...entry, native: id, value: id === mode ? 'workspace' : entry.value || (id === 'yolo' ? 'full' : id) }] : [];
+      });
+    }
+    if (this.profile.id === 'copilot') {
+      const offered = choices(session.configOptions?.find(option => option.id === 'allow_all'));
+      return [
+        { value: 'workspace', native: 'off', label: 'Default', detail: 'Ask before tools' },
+        { value: 'full', native: 'on', label: 'Allow all', detail: 'Approve all tools' },
+      ].filter(option => offered.some(choice => choice.value === option.native));
+    }
+    return [{ value: 'workspace', native: '', label: this.profile.id === 'deepseek' ? 'Workspace access' : 'Default', detail: this.profile.id === 'deepseek' ? 'Fixed ACP preset' : 'Native approvals' }];
+  }
+  private async applyPermissions(session: Session, value: TaskPermissions) {
+    const selected = this.permissions(session).find(option => option.value === value);
+    if (!selected) throw new Error(`${this.name} does not support the selected permissions. Reconnect to refresh its modes.`);
+    if (this.profile.modes.length) {
+      const fallback = this.mode(session), mode = this.profile.permissionModes ? selected.native : fallback.mode;
+      // Apply on every turn: a cached or restored session may retain a broader mode.
+      if (session.modes) await this.rpc('session/set_mode', { sessionId: session.sessionId, modeId: mode });
+      else await this.setConfig(session, fallback.option!.id, mode);
+    }
+    for (const [configId, defaultValue] of this.config(session)) {
+      await this.setConfig(session, configId, this.profile.id === 'copilot' && configId === 'allow_all' ? selected.native : defaultValue);
+    }
+  }
+  private async setConfig(session: Session, configId: string, value: string) {
+    const result = await this.rpc('session/set_config_option', { sessionId: session.sessionId, configId, value });
+    if (result?.configOptions) {
+      session.configOptions = result.configOptions;
+      if (session.configOptions?.find(option => option.id === configId)?.currentValue !== value) throw new Error(`${this.name} could not apply ${configId}=${value}.`);
+    }
   }
   // The accepted mode a session offers, as a session mode or a mode option.
   private mode(session: Session) {
@@ -246,7 +295,7 @@ export class AcpAgent extends Adapter {
       }
     };
     try {
-      const session = await this.session(turn.threadId, thread.cwd, thread.model);
+      const session = await this.session(turn.threadId, thread.cwd, thread.model, thread.readOnly ? 'workspace' : thread.permissions);
       const option = session.configOptions?.find(option => option.category === 'thought_level' || option.id === 'thinking');
       const defaultEffort = choices(option).some(choice => choice.value === 'default') ? 'default' : this.catalog.find(model => model.model === thread.model)?.defaultReasoningEffort;
       const chosenEffort = effort || defaultEffort;
