@@ -419,7 +419,9 @@ export function addInterval(
     [top, bottom] as Span,
   ].sort((a, b) => a[0] - b[0])) {
     const last = merged.at(-1);
-    if (last && a <= last[1] + 20) last[1] = Math.max(last[1], b);
+    // Gaps can belong to another lane, such as a band across both columns.
+    // Union only overlapping intervals; presentation joins nearby changes.
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
     else merged.push([a, b]);
   }
   intervals.set(page, merged);

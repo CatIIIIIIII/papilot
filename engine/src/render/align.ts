@@ -824,10 +824,13 @@ export function alignedCrops(
     oldLines = changedLines(al, "old", left, mine.old),
     newLines = changedLines(al, "new", right, mine.new),
     text = edited("old", left) || edited("new", right),
+    // Moved words also locate a text change. Only a purely visual change
+    // needs the full SyncTeX extent, which may include unrelated paragraphs.
+    narrow = !wide && (oldLines.length > 0 || newLines.length > 0),
     found = regions(
       al,
-      text && !wide ? oldLines : [...oldLines, ...touched(al, "old", left)],
-      text && !wide ? newLines : [...newLines, ...touched(al, "new", right)],
+      narrow ? oldLines : [...oldLines, ...touched(al, "old", left)],
+      narrow ? newLines : [...newLines, ...touched(al, "new", right)],
     );
   if (!found.length) return null;
   const crops = (gap: Gap) => ({

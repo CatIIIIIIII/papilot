@@ -1,8 +1,12 @@
 import { afterEach, expect, it } from "vitest";
 import { mupdf, PdfDocument, containsCenter } from "../../src/render/pdf.ts";
 import { alignedCrops, alignment, marksIn } from "../../src/render/align.ts";
-import type { Build } from "../../src/render/locate.ts";
-import type { Position, Rect } from "../../src/types.ts";
+import {
+  sectionIntervals,
+  laneX,
+  type Build,
+} from "../../src/render/locate.ts";
+import type { Heading, Position, Rect } from "../../src/types.ts";
 const documents: PdfDocument[] = [];
 afterEach(() => documents.splice(0).forEach((d) => d.close()));
 const LINES = 26;
@@ -338,6 +342,84 @@ it("leaves text that no edit printed out of an edit's crops when it only moved",
   // Without knowing who printed what, every moved line counts.
   expect(shown()(moved[1])).toBe(true);
 });
+it("bounds a move's source by its words when SyncTeX reaches another edit", () => {
+  const opening = Array.from(
+      { length: 4 },
+      (_, i) => `Opening ${i} keeps the starting context stable`,
+    ),
+    moved =
+      "A relocated sentence explains how replicas commit durable commands",
+    middle = Array.from(
+      { length: 10 },
+      (_, i) => `Middle ${i} remains unchanged between the independent edits`,
+    ),
+    destination = "Destination discusses a different part of the protocol",
+    closing = Array.from(
+      { length: 4 },
+      (_, i) => `Closing ${i} keeps the ending context stable`,
+    ),
+    old = pdf([...opening, moved, ...middle, destination, ...closing]),
+    neu = pdf([
+      ...opening,
+      ...middle,
+      moved,
+      destination + " with new evidence",
+      ...closing,
+    ]),
+    al = alignment(build(old), build(neu))!,
+    lineOf = (name: "old" | "new", text: string) =>
+      al[name].words.lines.findIndex(
+        ([a, b]) =>
+          al[name].words.tokens
+            .slice(a, b)
+            .map((t) => t.text)
+            .join(" ") === text,
+      ),
+    source = lineOf("old", moved),
+    target = lineOf("new", moved),
+    neighbor = lineOf("new", middle[0]),
+    crop = (name: "old" | "new", first: number, last: number): Position[] => [
+      {
+        page: 0,
+        clip: [
+          0,
+          al[name].lines[first].rect[1] - 2,
+          600,
+          al[name].lines[last].rect[3] + 2,
+        ],
+        label: "",
+      },
+    ],
+    groups = alignedCrops(
+      al,
+      crop("old", source - 1, source + 2),
+      crop("new", neighbor - 1, target + 2),
+      false,
+      {
+        old: (line) =>
+          line === source
+            ? true
+            : line === lineOf("old", destination)
+              ? false
+              : undefined,
+        new: (line) =>
+          line === neighbor ? true : line >= target ? false : undefined,
+      },
+    )!,
+    left = groups.flatMap((g) => g.left),
+    shown = printed(old)
+      .filter((w) => inside(w, left))
+      .map((w) => w.text)
+      .join(" ");
+  expect(shown).toContain(moved);
+  expect(shown).not.toContain("Middle 5");
+  expect(shown).not.toContain("Destination");
+  expect(
+    groups
+      .flatMap((g) => g.right)
+      .every((at) => at.clip[3] < al.new.lines[neighbor + 3].rect[1]),
+  ).toBe(true);
+});
 // A PDF of rows, each printed as pieces at the x positions given, as an
 // inline formula prints apart from the words around it.
 function rows(list: [number, string][][]) {
@@ -454,4 +536,53 @@ it("takes a page for two columns only when most of its prose is in columns", () 
   );
   expect(one.page(0).twoColumns).toBe(false);
   expect(two.page(0).twoColumns).toBe(true);
+});
+it("partitions a section without duplicating a narrow band across both columns", () => {
+  const prose = "Replicas apply all commands in their order",
+    document = rows(
+      Array.from({ length: 20 }, (_, i): [number, string][] =>
+        i === 8
+          ? [
+              [
+                30,
+                "This wide row crosses the gutter and belongs to both columns",
+              ],
+            ]
+          : [
+              [30, prose],
+              [330, prose],
+            ],
+      ),
+    ),
+    node = {
+      id: "section",
+      file: "main.tex",
+      line: 1,
+      title: "Section",
+      files: [],
+    } as unknown as Heading,
+    page = document.page(0),
+    at = {
+      document,
+      outline: [node],
+      path: (name: string) => name,
+      locator: { lookup: () => [[0, 40, 60, 30, 280]] },
+      margins: { body: () => [40, 500] },
+    } as unknown as Build,
+    [intervals] = sectionIntervals(at, node, () => false),
+    rects = [...intervals].flatMap(([lane, spans]) => {
+      const [x0, x1] = laneX(document, lane);
+      return spans.map(([y0, y1]): Rect => [x0, y0, x1, y1]);
+    });
+  expect(page.twoColumns).toBe(true);
+  expect(page.spanning).toHaveLength(1);
+  expect(intervals.has(0)).toBe(true);
+  for (let i = 0; i < rects.length; i++)
+    for (let j = i + 1; j < rects.length; j++) {
+      const a = rects[i],
+        b = rects[j];
+      const width = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+      const height = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+      expect(width * height).toBe(0);
+    }
 });
