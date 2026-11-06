@@ -25,6 +25,8 @@ npm start              # http://127.0.0.1:7274
 
 `npm run demo` adds the example paper. Use another `PAPILOT_PORT` and `PAPILOT_DATA` to run beside an instance you already use.
 
+On Windows, install [Git for Windows](https://git-scm.com/download/win) and a TeX distribution (MiKTeX or TeX Live) and run the same commands in PowerShell or CMD. Tests that need POSIX signals or a POSIX shell skip themselves; the rest run natively.
+
 `npm run dev` restarts the server when its code changes. After changing the interface, run `npm run build` and reload the page; the server serves the new build without a restart.
 
 To run this checkout alongside your usual instance with separate state:

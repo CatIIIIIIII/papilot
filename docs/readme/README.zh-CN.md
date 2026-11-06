@@ -6,7 +6,7 @@
 
 用 AI 负责任地写作与排版的**新范式**。
 
-**[下载 Papilot](https://github.com/PapilotAI/papilot/releases/latest)**，支持 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS（Apple&nbsp;Silicon&nbsp;/&nbsp;Intel）<br>和 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux（AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS），<br>也可以运行 `npm install -g papilot`。
+**[下载 Papilot](https://github.com/PapilotAI/papilot/releases/latest)**，支持 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS（Apple&nbsp;Silicon&nbsp;/&nbsp;Intel）<br>和 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux（AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS）或 Windows (x64)，<br>也可以运行 `npm install -g papilot`。
 
 <a href="https://papilot.ai">
 <picture>
@@ -64,7 +64,7 @@
 
 <img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**通过 Git 与合作者同步。** 拉取、推送，冲突交给智能体解决。
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**免费开源。** MIT 许可，支持 macOS 和 Linux。
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**免费开源。** MIT 许可，支持 macOS、Linux 和 Windows。
 
 <a id="agents"></a>
 
@@ -91,7 +91,7 @@
 
 ## 🚀 快速开始
 
-1. **安装。** [下载应用](https://github.com/PapilotAI/papilot/releases/latest)（macOS 或 Linux），或运行 `npm install -g papilot`（需要 Node.js 22.22+）。另外还需要 Git 和 TeX Live 或 MacTeX。
+1. **安装。** [下载应用](https://github.com/PapilotAI/papilot/releases/latest)（macOS、Linux 或 Windows），或运行 `npm install -g papilot`（需要 Node.js 22.22+）。另外还需要 Git 和 TeX Live 或 MacTeX。
 2. **打开你的项目。** 选择存放 `.tex` 文件的文件夹，Papilot 会编译出 PDF。
 3. **选择智能体。** 直接用你已有的 CLI 登录或 API 密钥，然后就可以在页面上批注了。
 

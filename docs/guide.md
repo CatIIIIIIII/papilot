@@ -18,6 +18,8 @@ papilot demo   # add the example paper, then start
 papilot        # start
 ```
 
+On Windows, install [Node.js](https://nodejs.org) 22.22 or newer, [Git for Windows](https://git-scm.com/download/win), and a TeX distribution such as [MiKTeX](https://miktex.org) or [TeX Live](https://tug.org/texlive). The same `npm install -g papilot` command then works in PowerShell or CMD. If `papilot doctor` cannot find `latexmk`, add your TeX distribution's `bin` folder to `PATH`. The background service command `papilot service install` is macOS-only; on Windows, run `papilot` from a terminal or add it to the Task Scheduler.
+
 The `papilot` command keeps its state in `~/.papilot`; `--data <folder>` (or `PAPILOT_DATA`) chooses another folder and `--port <number>` (or `PAPILOT_PORT`) another port. `papilot --help` lists every option.
 
 To run from a source checkout instead:
