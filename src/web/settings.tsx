@@ -17,19 +17,20 @@ import { QuickNoteSettings } from './quick-note-settings.tsx';
 import { AboutSettings, LicenseSettings } from './about-settings.tsx';
 import info from 'virtual:papilot-info';
 import { DiagnosticsSettings, type DiagnosticsSettingsProps } from './diagnostics-settings.tsx';
+import { RequirementsPanel, type RequirementsState } from './system-requirements.tsx';
 import { LatexSettings } from './latex-settings.tsx';
 import { UpdateSettings, versionLabel, type UpdateApi } from './update-notice.tsx';
 import { SkillLibraryPanel, type SkillLibraryControls, type SkillLibraryOptions } from './skill-library.tsx';
 import { ModelDefaultSettings, type ModelDefaultSettingsProps } from './model-default-settings.tsx';
 import { PeopleSettings, type PeopleSettingsProps, type PeopleSettingsControls } from './people-settings.tsx';
 
-type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'latex' | 'skills' | 'people' | 'updates';
+type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'requirements' | 'latex' | 'skills' | 'people' | 'updates';
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'latex-review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, skills, updates, modelDefaults, owner = true, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; owner?: boolean; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, requirements, skills, updates, modelDefaults, owner = true, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; owner: boolean; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; owner?: boolean; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const peopleControls = useRef<PeopleSettingsControls>(null);
   const [peopleVisited, setPeopleVisited] = useState(false);
@@ -82,10 +83,13 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       ...(skills ? [{ page: 'skills' as const, label: t('Skills'), icon: 'spark' }] : []),
       ...(people ? [{ page: 'people' as const, label: t('Sharing'), icon: 'people' }] : []),
     ] },
-    { label: t('Runtime'), entries: diagnostics ? [
-      { page: 'agents', label: t('Agents'), icon: 'terminal', keywords: `${t('Agent configuration')} ${t('Available models')} ${t('Usage & limits')}` },
-      { page: 'latex', label: 'LaTeX', icon: 'paper', keywords: 'TeX Live MacTeX BasicTeX MiKTeX' },
-    ] : [] },
+    { label: t('Runtime'), entries: [
+      ...(requirements ? [{ page: 'requirements' as const, label: t('Required tools'), icon: 'check', keywords: 'Git LaTeX TeX Live MacTeX' }] : []),
+      ...(diagnostics ? [
+        { page: 'agents', label: t('Agents'), icon: 'terminal', keywords: `${t('Agent configuration')} ${t('Available models')} ${t('Usage & limits')}` },
+        { page: 'latex', label: 'LaTeX', icon: 'paper', keywords: 'TeX Live MacTeX BasicTeX MiKTeX' },
+      ] as SettingsEntry[] : []),
+    ] },
     { label: t('Application'), entries: [
       ...(updates ? [{ page: 'updates' as const, label: t('Updates'), icon: 'refresh' }] : []),
       { page: 'about', label: t('About Papilot'), icon: 'info', keywords: t('Third-party licenses') },
@@ -167,6 +171,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'about' && <AboutSettings onLicenses={() => goTo('licenses')}/>}
         {page === 'licenses' && <LicenseSettings/>}
         {page === 'agents' && diagnostics && <DiagnosticsSettings {...diagnostics}/>}
+        {page === 'requirements' && requirements && <div className="settings-page"><RequirementsPanel {...requirements}/></div>}
         {page === 'latex' && diagnostics && <LatexSettings online={diagnostics.online} load={diagnostics.latex}/>}
         {page === 'updates' && updates && <UpdateSettings api={updates}/>}
         {peopleVisited && people && <div hidden={page !== 'people'}><PeopleSettings {...people} controls={peopleControls}/></div>}

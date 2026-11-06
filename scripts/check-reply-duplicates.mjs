@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,6 +23,7 @@ const final = { ...stream, id: 'reply-task:turn:msg_reply:0', status: 'completed
 let items = [{ id: 'user', taskId: task.id, type: 'user', text: 'Please check whether the revised table still fits the column.', createdAt: 1793935580000 }, stream, final];
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
+  if (url.pathname === '/api/runtime/requirements') return json(readyRequirements);
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', phase: 'idle', canUpdate: false });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });

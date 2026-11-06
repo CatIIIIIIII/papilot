@@ -1,0 +1,35 @@
+.requirements-banner{display:flex;align-items:center;gap:8px;flex-shrink:0;padding:8px 16px;border-bottom:1px solid var(--line);color:var(--text-2);font-size:12px}
+.requirements-banner>svg{flex:none;color:var(--text-3)}
+.requirements-banner>span{flex:1;min-width:0}
+.requirements-banner>button{flex:none;color:var(--text);padding:4px 6px;border-radius:var(--r-sm)}
+.requirements-banner>button:hover{background:var(--bg-hover)}
+/* Keep desktop window controls aligned with their toolbar. */
+[data-desktop] .requirements-banner{order:1;border-top:1px solid var(--line);border-bottom:0}
+.modal.requirements-dialog{display:flex;flex-direction:column;width:480px;padding:0;overflow:hidden}
+.modal.requirements-dialog h2{flex:none;margin:0;padding:26px 56px 8px 26px}
+.modal.requirements-dialog h2:focus{outline:none}
+.requirements-dialog>.requirements-panel{overflow:auto;min-height:0;padding:0 26px}
+.requirements-intro{color:var(--text-2);font-size:13px;line-height:1.65;margin:0 0 18px}
+.requirement-row{display:flex;align-items:center;gap:12px;padding:18px 0;border-top:1px solid var(--line)}
+.requirement-row>.brand-icon{--brand-color:var(--text-2)}
+.requirement-copy{flex:1;min-width:0}
+.requirement-heading{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px}
+.requirement-copy h3{margin:0;font:500 14px/1.5 var(--sans)}
+.requirement-copy p{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--text-3)}
+.requirement-install{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px;max-width:52%;color:var(--text-2);font-size:12px;text-decoration:none;text-align:right;line-height:1.5}
+.requirement-install>svg{flex:none}
+.requirement-install:hover{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.requirement-status{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;font-size:11px;line-height:1.5;color:var(--text-2);background:var(--bg-subtle)}
+.requirement-status>svg{flex:none}
+.requirement-status .spinner{width:11px;height:11px}
+.requirement-status.missing{color:var(--amber-text);background:var(--amber-soft)}
+.requirement-status.ready{color:var(--green);background:var(--green-soft)}
+.requirements-result{color:var(--text-2);font-size:12px;line-height:1.65;margin-top:14px}
+.requirements-result:empty{display:none}
+.requirements-recheck{margin-top:18px}
+.requirements-dialog footer{display:flex;flex:none;justify-content:space-between;gap:12px;padding:22px 26px;background:var(--bg)}
+.requirements-dialog footer .button{min-width:0;height:auto;min-height:34px;padding-top:7px;padding-bottom:7px;white-space:normal}
+.requirements-dialog footer .requirements-recheck{margin:0}
+.requirements-dialog footer>.ghost{color:var(--text-3)}
+.requirements-dialog footer>.ghost:hover{color:var(--text)}
+@media(max-width:680px){.modal.requirements-dialog{max-height:calc(100dvh - 32px)}.modal.requirements-dialog h2{padding:22px 56px 8px 18px}.requirements-dialog>.requirements-panel{padding:0 18px}.requirements-dialog footer{padding:18px}.requirements-banner{padding:8px 12px;gap:7px;flex-wrap:wrap}.requirements-banner>span{flex-basis:65%}.requirements-banner>button{margin-left:auto}.requirement-install{min-height:44px}.requirements-recheck,.requirements-dialog footer .button{min-height:44px}}

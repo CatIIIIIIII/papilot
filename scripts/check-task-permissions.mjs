@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,6 +38,7 @@ await context.addInitScript(() => {
 });
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
+  if (url.pathname === '/api/runtime/requirements') return json(readyRequirements);
   if (url.pathname.endsWith('/indirect-changes')) return json({ indirectChanges: false });
   if (url.pathname === '/api/state') {
     stateReads++;

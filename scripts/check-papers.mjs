@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,6 +26,7 @@ try {
       else Object.assign(paper, body);
       return route.fulfill({ json: paper || { ok: true } });
     }
+    if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
     if (url.pathname === '/api/state') return route.fulfill({ json: state });
     if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: state.version, latestVersion: state.version, phase: 'idle' } });
     if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });

@@ -30,6 +30,7 @@ import { PaperImports, openFolder } from './imports.ts';
 import { DATA } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
+import { systemRequirements } from './system-requirements.ts';
 import { findExecutable } from '../../bin/agent-paths.mjs';
 
 const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
@@ -80,6 +81,7 @@ export interface AppOptions {
   prepareDemo?: () => Promise<void>;
   diagnostics?: Diagnostics;
   latexInstallation?: typeof detectLatex;
+  systemRequirements?: typeof systemRequirements;
 }
 
 // One Fastify instance per listener: the local one for this host and Tailscale,
@@ -188,6 +190,7 @@ export async function buildApp(options: AppOptions) {
   }
 
   app.get('/api/health', { config: { access: 'public' } }, () => listener.kind === 'local' ? { ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) } : { ok: true });
+  app.get('/api/runtime/requirements', any, () => (options.systemRequirements || systemRequirements)());
   // Environment reports include host paths, so they are available only to the owner.
   app.get('/api/runtime/latex', owner, () => (options.latexInstallation || detectLatex)());
   app.post('/api/diagnostics', owner, request => {

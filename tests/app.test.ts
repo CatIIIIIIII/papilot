@@ -16,6 +16,7 @@ import { accountHsts, accountProblem } from '../src/server/security.ts';
 import { Limiter, clientAddress } from '../src/server/access.ts';
 import { Updates } from '../src/server/updates.ts';
 import { Diagnostics } from '../src/server/diagnostics.ts';
+import type { SystemRequirements } from '../src/shared.ts';
 import { PassThrough } from 'node:stream';
 import type { Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
@@ -48,7 +49,8 @@ async function fixture() {
   const updates = new Updates({ root: process.cwd(), data: dist, version: '9.9.9', port: 7274, supported: true, busy: () => true, shutdown() {}, latest: async () => '10.0.0', install: async () => '/fixture-update' });
   const diagnosticRequests: { repo?: string; port?: number }[] = [];
   const diagnostics = new Diagnostics(async (repo, port) => { diagnosticRequests.push({ repo, port }); return { version: '9.9.9', ok: false, checks: [{ id: 'latexmk', ok: false, severity: 'error', detail: 'Not installed.', fix: 'Install TeX Live.' }] }; });
-  const shared = { store, workspace, accounts, updates, diagnostics, latexInstallation: async () => ({ distribution: 'MacTeX' as const, version: '2025', path: '/usr/local/texlive/2025' }), manuscripts: new Manuscripts(), csrf: 'local-csrf', serialGit: gitQueue(), dist, version: '9.9.9', connectReview: async () => review };
+  const systemRequirements = async (): Promise<SystemRequirements> => ({ platform: 'linux', checks: [{ id: 'git', ok: true }, { id: 'latexmk', ok: false }, { id: 'synctex', ok: false }, { id: 'tex-engine', ok: false }] });
+  const shared = { store, workspace, accounts, updates, diagnostics, systemRequirements, latexInstallation: async () => ({ distribution: 'MacTeX' as const, version: '2025', path: '/usr/local/texlive/2025' }), manuscripts: new Manuscripts(), csrf: 'local-csrf', serialGit: gitQueue(), dist, version: '9.9.9', connectReview: async () => review };
   const local = await buildApp({ ...shared, listener: { kind: 'local', port: 7274, publicOrigin: PUBLIC, owner: 'owner@example' } });
   const remote = await buildApp({ ...shared, listener: { kind: 'account', origin: ORIGIN, hsts: true } });
   // Ada is invited to the thesis only and signs in at the public URL.
@@ -60,6 +62,21 @@ async function fixture() {
   const as = { ...REMOTE, origin: ORIGIN, cookie: session, 'x-papilot-token': state.csrf };
   return { updates, diagnosticRequests, manuscripts: shared.manuscripts, store, workspace, review, accounts, local, remote, ada, joined, session, state, as, async close() { updates.close(); await local.close(); await remote.close(); workspace.close(); store.close(); fs.rmSync(dist, { recursive: true }); } };
 }
+
+test('required tools are visible to signed-in collaborators without exposing host details', async () => {
+  const f = await fixture();
+  try {
+    const local = await f.local.inject({ url: '/api/runtime/requirements', headers: LOCAL });
+    const member = await f.remote.inject({ url: '/api/runtime/requirements', headers: f.as });
+    const anonymous = await f.remote.inject({ url: '/api/runtime/requirements', headers: REMOTE });
+    assert.equal(local.statusCode, 200);
+    assert.equal(member.statusCode, 200);
+    assert.deepEqual(member.json(), local.json());
+    assert.deepEqual(Object.keys(member.json()).sort(), ['checks', 'platform']);
+    assert.equal(member.json().checks[1].ok, false);
+    assert.equal(anonymous.statusCode, 401);
+  } finally { await f.close(); }
+});
 
 test('Git sync requires project access and CSRF, publishes commits and respects the review write lock', async () => {
   const f = await fixture(), base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-api-sync-'));

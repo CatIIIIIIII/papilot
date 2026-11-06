@@ -95,6 +95,10 @@ Kimi mode changes were checked against CLI 2.4.1 without model generation, inclu
 
 ## Diagnostics
 
+Papilot checks Git, `latexmk`, SyncTeX and the available LaTeX engines when the workspace opens and after reconnecting. On a first visit, missing tools open a setup guide; returning users see a **Review setup** notice. **Settings → Runtime → Required tools** is always available. The guide explains what each tool does, links to official installation instructions for the computer running Papilot, and offers **Check again** after installation. A partial TeX installation is marked as incomplete. If installed tools are still not detected, restart Papilot; a server may need to be restarted from a new terminal with the correct `PATH`.
+
+**Set up later** leaves the notice available while you explore. Healthy installations do not show a setup prompt. Collaborators see the host's tool status and are directed to the workspace owner; they do not need to install Git or LaTeX on their own computer or phone. These checks share only availability and the host operating system, without host paths or diagnostic logs. They do not install software. AI agent setup remains in **Settings → Runtime → Agents**.
+
 ```sh
 papilot doctor
 papilot doctor --repo /path/to/paper

@@ -101,6 +101,11 @@ export interface Usage { plan: string | null; windows: UsageWindow[]; credits: {
 // credentials or key); such agents are not offered. Older servers omit it.
 export interface RuntimeStatus { permissionOptions?: TaskPermissionOption[]; connected: boolean; authenticated: boolean; account: string | null; error: string | null; models: AgentModel[]; usage?: Usage | null; installed?: boolean }
 export interface DiagnosticCheck { id: string; ok: boolean; severity: 'error' | 'warn' | 'info'; detail: string; fix: string | null }
+// Safe to share with collaborators: no host paths, command output or accounts.
+export interface SystemRequirements {
+  platform: string;
+  checks: { id: 'git' | 'latexmk' | 'synctex' | 'tex-engine'; ok: boolean }[];
+}
 export interface LatexInstallation {
   distribution: 'MacTeX' | 'BasicTeX' | 'TeX Live' | 'MiKTeX' | null;
   version: string | null;

@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,6 +26,7 @@ const files = new Map(), items = new Map(), creates = [], messages = [];
 let failUpload = false, failCreate = false, failMessage = false;
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url()), json = data => route.fulfill({ json: data });
+  if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });

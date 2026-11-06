@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +21,7 @@ try {
   const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } });
   await context.route('**/api/**', route => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
     if (pathname === '/api/state') return route.fulfill({ json: state });
     if (pathname === '/api/updates') return offline ? route.abort() : route.fulfill({ json: update });
     if (pathname === '/api/updates/install') { installs.push(route.request().postDataJSON()); update.phase = 'installing'; return route.fulfill({ json: update }); }

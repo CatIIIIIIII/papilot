@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -96,6 +97,7 @@ await page.route('**/api/**', async route => {
   const json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/updates') return json({ currentVersion: snapshot.version, latestVersion: snapshot.version, phase: 'idle', checkedAt: 1, error: null, canUpdate: true });
+  if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
   if (url.pathname === '/api/state') {
     if (stateFailure) return route.fulfill({ status: 503, json: { error: 'Host unavailable.' } });
     const captured = structuredClone(snapshot);
@@ -269,7 +271,7 @@ try {
   await settingsDialog.getByRole('searchbox', { name: 'Search settings' }).fill('');
   await page.screenshot({ path: 'test-results/settings-review-desktop.png' });
   const runtimeGroup = settingsDialog.locator('.settings-category-group').filter({ has: page.getByRole('heading', { name: 'Runtime', exact: true }) });
-  assert.deepEqual(await runtimeGroup.getByRole('button').allTextContents(), ['Agents', 'LaTeX']);
+  assert.deepEqual(await runtimeGroup.getByRole('button').allTextContents(), ['Required tools', 'Agents', 'LaTeX']);
   await runtimeGroup.getByRole('button', { name: 'Agents', exact: true }).click();
   const diagnostics = settingsDialog;
   assert.equal(await diagnostics.locator('.runtime-advanced').count(), 0);
@@ -2004,7 +2006,7 @@ try {
   const papers = await browser.newContext({ locale: 'en-US', colorScheme: 'light', viewport: { width: 1440, height: 900 } });
   const papersPage = await papers.newPage();
   const paperState = { ...snapshot, projects: [...snapshot.projects, otherPaper], tasks: [otherTask], requests: [] };
-  await papersPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/state') ? paperState : { items: [], build: { status: 'building' }, git: { files: [] } } }));
+  await papersPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/runtime/requirements') ? readyRequirements : route.request().url().endsWith('/api/state') ? paperState : { items: [], build: { status: 'building' }, git: { files: [] } } }));
   await papersPage.goto(origin);
   await papersPage.getByRole('heading', { name: otherTask.title }).waitFor();
   assert.equal(await papersPage.getByRole('button', { name: /^Paper:/ }).getAttribute('aria-label'), 'Paper: Second paper');
@@ -2047,7 +2049,7 @@ try {
   const restrictedPage = await restricted.newPage();
   const restrictedErrors = [];
   restrictedPage.on('pageerror', error => restrictedErrors.push(error.message));
-  await restrictedPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/state') ? { ...snapshot, tasks: [secondTask], requests: [] } : { items: [] } }));
+  await restrictedPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/runtime/requirements') ? readyRequirements : route.request().url().endsWith('/api/state') ? { ...snapshot, tasks: [secondTask], requests: [] } : { items: [] } }));
   await restrictedPage.goto(origin);
   const restrictedInput = restrictedPage.getByRole('textbox', { name: 'Instructions for Codex' });
   await restrictedInput.fill('A usable draft with storage disabled.');

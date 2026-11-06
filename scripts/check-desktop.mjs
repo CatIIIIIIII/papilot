@@ -41,6 +41,15 @@ if (packaged) {
 // disposable Docker container whose kernel disallows nested user namespaces.
 const launch = () => electron.launch({ executablePath: packaged || require('electron'), args: packaged ? [] : ['.desktop/app'], env,
   chromiumSandbox: process.env.PAPILOT_DESKTOP_TEST_CONTAINER !== '1', timeout: 90000 });
+async function dismissInitialSetup(page) {
+  const requirements = await (await fetch(`${new URL(page.url()).origin}/api/runtime/requirements`)).json();
+  if (requirements.checks.some(check => !check.ok)) {
+    const setup = page.getByRole('dialog', { name: /^(Get ready to write|准备开始写作)$/ });
+    await expect(setup).toBeVisible();
+    await setup.getByRole('button', { name: /^(Set up later|稍后设置)$/ }).click();
+    await expect(setup).toHaveCount(0);
+  }
+}
 let application, origin;
 try {
   application = await launch();
@@ -55,6 +64,7 @@ try {
   const state = await (await fetch(`${origin}/api/state`)).json();
   assert.ok(state.csrf); assert.equal(state.viewer.role, 'owner');
   assert.equal(state.projects.length, 1, 'First launch includes the demo paper');
+  await dismissInitialSetup(page);
   const demo = state.projects[0];
   const manuscript = await (await fetch(`${origin}/api/projects/${demo.id}/manuscript`)).json();
   assert.equal(manuscript.build.status, 'ready', 'The first PDF is ready without a local TeX build');
@@ -221,6 +231,9 @@ try {
     const moved = await application.firstWindow({ timeout: 90000 });
     await moved.waitForURL('http://127.0.0.1:*/');
     assert.notEqual(new URL(moved.url()).origin, origin, 'An occupied saved port falls back to a free port');
+    // A new origin has fresh browser storage, so its first-visit guide appears
+    // again and must be dismissed before clicking the HTML window controls.
+    await dismissInitialSetup(moved);
     if (process.platform !== 'darwin') {
       const closed = application.waitForEvent('close');
       await moved.getByRole('button', { name: /^(Close window|关闭窗口)$/ }).click();

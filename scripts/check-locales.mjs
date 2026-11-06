@@ -1,3 +1,4 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,6 +31,7 @@ try {
   page.on('pageerror', error => failures.push(error.message));
   await page.route('**/api/**', route => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
     if (pathname === '/api/state') return route.fulfill({ json: snapshot });
     if (pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
     if (pathname === '/api/updates') return route.fulfill({ json: { currentVersion: 'test', phase: 'idle', error: null } });
