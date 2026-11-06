@@ -225,3 +225,95 @@ for (const updating of [false, true]) test(`WSL shutdown prevents a new backend 
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+for (const { updating, active, health } of [
+  { updating: false, active: false, health: false },
+  { updating: false, active: true, health: false },
+  { updating: false, active: true, health: true },
+  { updating: true, active: false, health: false },
+  { updating: true, active: false, health: true },
+]) test(`WSL shutdown ${updating ? 'rolls back candidate database' : active ? 'preserves the active version' : 'cancels initial startup'} ${health ? 'during health checking' : 'before readiness'}`, { skip: process.platform === 'win32', timeout: 20000 }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-wsl-candidate-shutdown-')), root = process.cwd();
+  const id = 'b'.repeat(64), fingerprint = 'c'.repeat(64), base = path.join(home, '.local/share/papilot-desktop');
+  const runtime = path.join(base, 'runtime', id), data = path.join(base, 'data'), bundle = path.join(runtime, 'server');
+  const layer = path.join(data, 'updates/desktop/layers/candidate/papilot');
+  const write = (file: string, value: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value)); };
+  const module = JSON.stringify(pathToFileURL(path.join(root, 'desktop/runtime.ts')).href);
+  write(path.join(runtime, 'bridge/package.json'), { type: 'module' });
+  write(path.join(runtime, 'bridge/runtime.js'), `export * from ${module}; import {startBackend as start} from ${module};import fs from 'node:fs';import path from 'node:path';
+    export function startBackend(options) { const backend=start(options);
+      fs.appendFileSync(path.join(options.data,'launches.jsonl'),String(backend.child.pid)+'\\n');return backend; }`);
+  write(path.join(runtime, 'ready.json'), {});
+  write(path.join(bundle, 'package.json'), { name: 'papilot', version: '0.9.0', type: 'module' });
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(bundle, 'node_modules'), 'dir');
+  const candidateSource = `import fs from 'node:fs';import path from 'node:path';import http from 'node:http';const data=process.env.PAPILOT_DATA;
+    ${updating ? "fs.writeFileSync(path.join(data,'papilot.sqlite'),'candidate changed database');" : ''}
+    fs.writeFileSync(path.join(data,'candidate.pid'),String(process.pid));setInterval(()=>{},1000);
+    ${health ? `const server=http.createServer(()=>fs.writeFileSync(path.join(data,'health.waiting'),'yes'));
+      server.listen(0,'127.0.0.1',()=>process.send({type:'papilot:ready',url:'http://127.0.0.1:'+server.address().port}));` : ''}
+    process.on('message',m=>{if(m.type==='papilot:shutdown')process.exit(0);});`;
+  write(path.join(bundle, 'src/server/start.ts'), updating || active ? `import fs from 'node:fs';import path from 'node:path';import http from 'node:http';const data=process.env.PAPILOT_DATA;
+    const server=http.createServer((req,res)=>{if(req.url==='/activate'){process.send({type:'papilot:activate',...JSON.parse(fs.readFileSync(path.join(data,'activation.json'),'utf8'))});res.end('ok');}
+      else res.end(JSON.stringify({name:'Papilot',desktopInstance:process.env.PAPILOT_DESKTOP_INSTANCE}));});
+    server.listen(0,'127.0.0.1',()=>process.send({type:'papilot:ready',url:'http://127.0.0.1:'+server.address().port}));
+    process.on('message',m=>{if(m.type==='papilot:shutdown')process.exit(0);});` : candidateSource);
+  write(path.join(data, 'papilot.sqlite'), 'original database');
+  const makeLayer = () => {
+    write(path.join(layer, 'package.json'), { name: 'papilot', version: '0.9.1', type: 'module' });
+    write(path.join(layer, 'desktop-layer.json'), { format: 1, version: '0.9.1', fingerprint });
+    write(path.join(layer, 'src/server/start.ts'), candidateSource);
+  };
+  const activeRecord = { root: layer, version: '0.9.1', installer: '0.9.0', phase: 'active' };
+  if (active) { makeLayer(); write(path.join(data, 'updates/desktop/active.json'), activeRecord); }
+  const config = Buffer.from(JSON.stringify({ id, fingerprint, nodeMajor: process.versions.node.split('.')[0] })).toString('base64');
+  let out = '', err = '';
+  const start = () => {
+    out = ''; err = '';
+    const child = spawn(process.execPath, ['--import', 'tsx', 'desktop/wsl-runtime.mjs', 'serve', config], {
+      cwd: root, env: { ...process.env, HOME: home, PAPILOT_TEST_WSL_RUNTIME: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdout.on('data', chunk => { out += chunk; }); child.stderr.on('data', chunk => { err += chunk; });
+    return child;
+  };
+  let child = start();
+  const waitFor = async (condition: () => boolean) => {
+    const deadline = performance.now() + 10000;
+    while (!condition() && child.exitCode === null && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(condition(), err || out || 'The candidate did not reach the expected state');
+  };
+  const ready = () => JSON.parse(out.split('\n').find(line => line.startsWith('PAPILOT_CONTROL:'))!.slice(16));
+  const launches = (): number[] => fs.existsSync(path.join(data, 'launches.jsonl')) ? fs.readFileSync(path.join(data, 'launches.jsonl'), 'utf8').trim().split('\n').map(Number) : [];
+  const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  const shutdown = async () => { const ended = new Promise(resolve => child.once('exit', resolve)); child.stdin.end('{"type":"papilot:shutdown"}\n'); await ended; assert.equal(child.exitCode, 0, err); };
+  try {
+    if (updating) {
+      await waitFor(() => out.includes('PAPILOT_CONTROL:'));
+      makeLayer();
+      write(path.join(data, 'activation.json'), { root: layer, version: '0.9.1' });
+      await fetch(ready().url + '/activate');
+    }
+    await waitFor(() => fs.existsSync(path.join(data, 'candidate.pid')) && (!health || fs.existsSync(path.join(data, 'health.waiting'))));
+    if (updating) assert.equal(fs.readFileSync(path.join(data, 'papilot.sqlite'), 'utf8'), 'candidate changed database');
+    await shutdown();
+    assert.equal(launches().length, updating ? 2 : 1, 'Shutdown must not launch a fallback backend');
+    assert.ok(launches().every(pid => !alive(pid)), 'Every backend must stop before the bridge exits');
+    assert.equal(fs.readFileSync(path.join(data, 'papilot.sqlite'), 'utf8'), 'original database', 'Rollback must complete before bridge exit');
+    if (active) {
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/active.json'), 'utf8')), activeRecord, 'Cancellation must keep the previously active version');
+      assert.equal(fs.existsSync(path.join(data, 'updates/desktop/status.json')), false, 'Cancellation is not a startup failure');
+      assert.equal(out.includes('PAPILOT_CONTROL:'), false, 'A canceled launch is not ready');
+    }
+    if (updating) {
+      assert.equal(fs.existsSync(path.join(data, 'updates/desktop/active.json')), false);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'updates/desktop/status.json'), 'utf8')).phase, 'failed');
+      child = start();
+      await waitFor(() => out.includes('PAPILOT_CONTROL:'));
+      assert.equal((await (await fetch(ready().url + '/api/health')).json()).desktopInstance, ready().instance);
+      assert.equal(fs.readFileSync(path.join(data, 'papilot.sqlite'), 'utf8'), 'original database', 'The previous version restarts with its original database');
+      await shutdown();
+    }
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) { const ended = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGKILL'); await ended; }
+    for (const pid of launches()) if (alive(pid)) process.kill(pid, 'SIGKILL');
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

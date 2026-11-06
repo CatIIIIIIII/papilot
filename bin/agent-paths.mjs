@@ -95,12 +95,35 @@ const escapeArgument = (arg, doubleEscape = false) => {
 // An npm-installed CLI is a .cmd shim that runs a Node script and re-expands
 // its arguments with %*. A shim cannot carry a multi-line prompt or one with
 // shell metacharacters through that second parse, so run the script directly.
+function onlyNodeShim(lines, calls) {
+  // Recognize the complete wrapper, not a Node line hidden among setup commands
+  // or branches. Unknown batch programs must execute their own environment and
+  // control flow. These are npm's current/legacy templates and simple shims.
+  // Trailing spaces are part of an unquoted SET value, not formatting.
+  if (lines.some(line => /^\s*@?set\s+[^"\s]/i.test(line) && /[\t ]$/.test(line))) return false;
+  const body = lines.map(line => line.trim().replace(/^@/, '').replace(/[\t ]+/g, ' ').toLowerCase());
+  if (body.filter(line => line === 'node').length !== calls) return false;
+  const setup = new Set(['echo off', 'setlocal', 'set dp0=%~dp0', 'set "dp0=%~dp0"']);
+  while (setup.has(body[0])) body.shift();
+  const preamble = ['goto start', ':find_dp0', 'set dp0=%~dp0', 'exit /b', ':start', 'setlocal', 'call :find_dp0'];
+  if (preamble.every((line, index) => body[index] === line)) body.splice(0, preamble.length);
+  const pathext = 'set pathext=%pathext:;.js;=;%';
+  return body.join('\n') === 'node'
+    || [[], [pathext]].some(extra => body.join('\n') === [
+      'if exist "%dp0%\\node.exe" (', 'set "_prog=%dp0%\\node.exe"', ') else (', 'set "_prog=node"', ...extra, ')', 'node',
+    ].join('\n'))
+    || body.join('\n') === [
+      'if exist "%~dp0\\node.exe" (', 'node', ') else (', 'setlocal', pathext, 'node', ')',
+    ].join('\n');
+}
 function shimScript(file, content) {
   // Only bypass a wrapper when its command really invokes Node. Quoted
   // paths elsewhere may name a native executable, a data file or another
   // interpreter's script. npm uses _prog for its bundled/system Node choice.
   const programs = [...content.matchAll(/\bset\s+"?_prog=([^"\r\n]+)/gi)].map(match => match[1].trim());
-  for (const line of content.split(/\r?\n/)) {
+  const lines = content.split(/\r?\n/).filter(line => line.trim());
+  const calls = [];
+  for (const [index, line] of lines.entries()) {
     const command = line.replace(/^\s*endlocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&\s*/i, '').trim();
     const match = /^@?(?:"([^"]+)"|(node(?:\.exe)?))\s+((?:(?:"[^"\r\n]*"|[^\s"]+)\s+)*)"([^"\r\n]+)"\s+%\*\s*$/i.exec(command);
     if (!match) continue;
@@ -112,10 +135,12 @@ function shimScript(file, content) {
     if (/[%!^&|<>\r\n]/.test(match[3])) continue;
     const args = (match[3].match(/"[^"]*"|[^\s"]+/g) || []).map(arg => arg.startsWith('"') ? arg.slice(1, -1) : arg);
     const entry = match[4].replace(/%(?:dp0%|~dp0)/gi, path.dirname(file) + path.sep);
-    if (entry.includes('%')) continue;
+    if (entry.includes('%') || !path.isAbsolute(entry)) continue;
     const script = path.resolve(path.dirname(file), entry);
-    try { if (script !== file && fs.statSync(script).isFile()) return { script, args }; } catch { /* shell reports missing entries */ }
+    try { if (script !== file && fs.statSync(script).isFile()) { calls.push({ script, args }); lines[index] = 'node'; } } catch { /* shell reports missing entries */ }
   }
+  const first = calls[0];
+  if (first && calls.every(call => call.script === first.script && JSON.stringify(call.args) === JSON.stringify(first.args)) && onlyNodeShim(lines, calls.length)) return first;
   return null;
 }
 // Windows cannot start .bat and .cmd files without a shell, and cmd.exe parses
@@ -131,11 +156,13 @@ function shellOut(command, args, env) {
   try { content = fs.readFileSync(file, 'utf8'); } catch { /* the shell reports unreadable wrappers */ }
   const shim = shimScript(file, content);
   if (shim) return { file: process.execPath, args: [...shim.args, shim.script, ...args], options: {} };
-  // Match both local npm bins and globally installed cmd-shim wrappers. Keep
-  // flags and wrapper setup intact when they need to execute through cmd.exe.
-  const npmShim = /node_modules[\\/]\.bin[\\/][^\\/]+\.cmd$/i.test(file)
-    || /endlocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&/i.test(content);
-  const line = [escapeCommand(file), ...args.map(arg => escapeArgument(arg, npmShim))].join(' ');
+  if (args.some(arg => /[\r\n]/.test(arg))) throw new Error('This Windows batch launcher cannot accept multiline arguments. Use its executable or a standard npm launcher.');
+  // npm and custom wrappers that forward %* parse their arguments again. Keep
+  // wrapper setup intact and protect JSON/paths through that second parse.
+  const forwardsArguments = /node_modules[\\/]\.bin[\\/][^\\/]+\.cmd$/i.test(file)
+    || /endlocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&/i.test(content)
+    || content.split(/\r?\n/).some(line => !/^\s*@?rem\b/i.test(line) && /%\*/.test(line));
+  const line = [escapeCommand(file), ...args.map(arg => escapeArgument(arg, forwardsArguments))].join(' ');
   const shell = process.env.comspec || process.env.ComSpec || systemExecutable('cmd.exe');
   return { file: shell, args: ['/d', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true } };
 }

@@ -76,6 +76,48 @@ test('native Windows wrappers keep their interpreter even when they quote a Java
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('custom Windows Node wrappers preserve environment setup and JSON arguments', { skip: !windows }, async () => {
+  const dir = temporary();
+  try {
+    const script = path.join(dir, 'agent.cjs'), wrapper = path.join(dir, 'agent.cmd');
+    fs.writeFileSync(script, 'console.log(JSON.stringify({env:process.env.PAPILOT_WRAPPER_CUSTOM,args:process.argv.slice(2)}))');
+    fs.writeFileSync(wrapper, `@echo off\r\nset "PAPILOT_WRAPPER_CUSTOM=prepared"\r\n"${process.execPath}" "${script}" %*\r\n`);
+    const args = ['--settings', JSON.stringify({ permissions: { allow: ['read_file(C:\\论文 with space\\image & 1.png)'] } }), '%PAPILOT_WRAPPER_CUSTOM%', '"quoted"'];
+    const env = { ...process.env, PAPILOT_WRAPPER_CUSTOM: 'inherited' }, expected = { env: 'prepared', args };
+    const result = spawnSyncCommand(wrapper, args, { encoding: 'utf8', env });
+    assert.equal(result.status, 0, String(result.stderr)); assert.deepEqual(JSON.parse(String(result.stdout)), expected);
+    assert.deepEqual(JSON.parse(await execCommand(wrapper, args, { env })), expected);
+    // cmd cannot carry literal newlines through %*. Report that limitation
+    // instead of bypassing the setup or silently truncating the argument.
+    assert.throws(() => spawnSyncCommand(wrapper, ['first\nsecond']), /cannot accept multiline arguments/);
+    await assert.rejects(execCommand(wrapper, ['first\nsecond']), /cannot accept multiline arguments/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
+});
+
+test('custom Windows wrappers keep control flow instead of running an unreachable Node line', { skip: !windows }, () => {
+  const dir = temporary();
+  try {
+    const wrong = path.join(dir, 'wrong.cjs'), right = path.join(dir, 'right.cjs'), wrapper = path.join(dir, 'agent.cmd');
+    fs.writeFileSync(wrong, 'console.log("unreachable")');
+    fs.writeFileSync(right, 'console.log("correct branch")');
+    fs.writeFileSync(wrapper, `@echo off\r\ngoto :actual\r\n"${process.execPath}" "${wrong}" %*\r\n:actual\r\n"${process.execPath}" "${right}" %*\r\n`);
+    const result = spawnSyncCommand(wrapper, [], { encoding: 'utf8' });
+    assert.equal(result.status, 0, String(result.stderr)); assert.equal(String(result.stdout).trim(), 'correct branch');
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
+});
+
+test('legacy npm Node wrappers retain multiline arguments', { skip: !windows }, () => {
+  const dir = temporary();
+  try {
+    const script = path.join(dir, 'agent.cjs'), wrapper = path.join(dir, 'agent.cmd');
+    fs.writeFileSync(script, 'console.log(JSON.stringify(process.argv.slice(2)))');
+    fs.writeFileSync(wrapper, '@IF EXIST "%~dp0\\node.exe" (\r\n "%~dp0\\node.exe" "%~dp0\\agent.cjs" %*\r\n) ELSE (\r\n @SETLOCAL\r\n @SET PATHEXT=%PATHEXT:;.JS;=;%\r\n node "%~dp0\\agent.cjs" %*\r\n)\r\n');
+    const args = ['中文路径', 'first\nsecond', 'a & b', '%PATH%'];
+    const result = spawnSyncCommand(wrapper, args, { encoding: 'utf8' });
+    assert.equal(result.status, 0, String(result.stderr)); assert.deepEqual(JSON.parse(String(result.stdout)), args);
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
+});
+
 test('npm shims with Node flags preserve attachment JSON in local and global bins', { skip: !windows }, async () => {
   const dir = temporary();
   try {

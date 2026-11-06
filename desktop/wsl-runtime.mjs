@@ -61,8 +61,16 @@ if (action === 'install') {
   const reportLog = () => { try { console.error(fs.readFileSync(backendLog, 'utf8').slice(-8000)); } catch {} };
   const bundle = { root, version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
     fingerprint: options.nodeMajor === String(major) ? options.fingerprint : `${options.fingerprint}-wsl-node-${major}` };
-  let backend, running = root, stopping = false, switching = false, instance;
-  const stop = async () => { if (stopping) return; stopping = true; await backend?.stop(); process.exit(0); };
+  let backend, running = root, stopping = false, switching = false, instance, transition;
+  const stop = async () => {
+    // Transition failures may also request shutdown. Do not let that request
+    // wait on the transition currently unwinding its database rollback.
+    if (stopping) return;
+    stopping = true;
+    await backend?.stop();
+    await transition?.catch(() => undefined);
+    process.exit(0);
+  };
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => void stop());
   const input = readline.createInterface({ input: process.stdin });
   input.on('close', () => void stop());
@@ -72,7 +80,7 @@ if (action === 'install') {
     // Keep that request until the switch completes instead of dropping it.
     if (switching) { setTimeout(() => rebind(expected), 50); return; }
     switching = true;
-    void (async () => {
+    transition = (async () => {
       if (!await backend.idle()) throw new Error('The WSL backend is busy; its port cannot change.');
       await backend.stop(); options.port = 0;
       await launch(running);
@@ -110,11 +118,18 @@ if (action === 'install') {
       if (message?.type === 'papilot:can-switch') { send(message); return; }
       if (message?.type !== 'papilot:activate' || switching || stopping) return;
       switching = true;
-      void switchServer(data, bundle, message, running, () => next.stop(), launch).then(root => { running = root; })
+      transition = switchServer(data, bundle, message, running, () => next.stop(), launch).then(root => { running = root; })
         .catch(error => { console.error(error); void stop(); }).finally(() => { switching = false; });
     });
     send({ type: 'papilot:ready', url, instance });
   };
-  try { running = await startServer(data, bundle, launch); }
-  catch (error) { console.error(error); await backend?.stop(); process.exit(1); }
+  // Closing during initial startup is cancellation, not evidence that an
+  // already active update is broken. Update transactions still use launch
+  // directly so stopping their candidate rejects and restores the database.
+  const launchInitial = async folder => {
+    try { await launch(folder); }
+    catch (error) { if (!stopping) throw error; }
+  };
+  try { transition = startServer(data, bundle, launchInitial); running = await transition; }
+  catch (error) { if (!stopping) { console.error(error); await backend?.stop(); process.exit(1); } }
 } else throw new Error('Unknown WSL action.');
