@@ -534,21 +534,10 @@ export class Strips {
       return null;
     // Red and green say that words were removed or added; a light blue,
     // that words moved here or away unchanged (see `drawn`).
-    // Words of an old crop that the context strips also show are veiled in
-    // every version of the strip, so that none reads twice.
-    const veil = marks
-      .map((mark) =>
-        mark.kind === "context" ? intersect(mark.rect, clip) : null,
-      )
-      .filter((r): r is Rect => r !== null && r[2] > r[0] && r[3] > r[1])
-      .map(
-        (r) =>
-          `<rect x="${r[0] - left - 0.5}" y="${r[1] - top - 0.5}" width="${r[2] - r[0] + 1}" height="${r[3] - r[1] + 1}" fill="#fff" fill-opacity=".7"/>`,
-      )
-      .join("");
+    // Keep unchanged context readable in the PDF's original colours, even
+    // when reflow makes it appear both in a crop and the surrounding text.
     marks = marks.filter((mark) => mark.kind !== "context");
-    const raw = page.svg(top, bottom, left, right),
-      svg = veil ? raw.replace("</svg>", veil + "</svg>") : raw,
+    const svg = page.svg(top, bottom, left, right),
       digest = createHash("sha256")
         .update(svg)
         .update(JSON.stringify(marks))
