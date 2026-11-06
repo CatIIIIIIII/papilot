@@ -43,6 +43,16 @@ try {
   items = [...items, { ...final, id: 'reply-task:another-turn:msg_distinct:0', createdAt: final.createdAt + 1000 }];
   await page.reload();
   await expect(page.getByText(text, { exact: true })).toHaveCount(baseline ? 3 : 2);
+  // A new block in the same message may repeat an earlier block's text.
+  // It must stay visible even if the process exits before its final event.
+  const live = { ...stream, id: 'reply-task:turn:msg_reply:2', createdAt: final.createdAt + 2000 };
+  task.status = 'running';
+  items = [...items, live];
+  await expect(page.getByText(text, { exact: true })).toHaveCount(baseline ? 4 : 3);
+  task.status = 'interrupted';
+  task.turnId = null;
+  await page.reload();
+  await expect(page.getByText(text, { exact: true })).toHaveCount(baseline ? 4 : 3);
   assert.deepEqual(errors, []);
-  console.log('PASS: legacy duplicate shown once, reload persistence, and identical replies from other messages retained.');
+  console.log('PASS: legacy duplicates hidden; distinct replies, live repeated blocks, and interrupted blocks retained after reload.');
 } finally { await browser.close(); await server.close(); }

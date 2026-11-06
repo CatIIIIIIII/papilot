@@ -120,4 +120,34 @@ test('old Claude streamed duplicates disappear without hiding legitimate repeate
   assert.deepEqual(visibleTimeline([stream]), [stream], 'live streaming remains visible');
   assert.deepEqual(visibleTimeline(mergeTimeline([stream], [final])), [final]);
   assert.deepEqual(visibleTimeline([{ ...stream, status: 'completed' }, final]).length, 2, 'real repeated completed blocks are retained');
+  const live = { ...stream, id: 'task:turn:msg_reply:2', createdAt: 4 };
+  assert.deepEqual(visibleTimeline([...full, live]), [final, again, otherTurn, tool, different, live], 'a later block is not a legacy duplicate');
+});
+
+for (const createdAt of [1, 2]) test(`a repeated Claude block stays visible while streaming, including timestamp ${createdAt}`, () => {
+  const store = new Store(':memory:');
+  try {
+    const first = { id: 'task:turn:msg_reply:1', taskId: 'task', type: 'assistant', text: 'Checking the table.', status: 'completed', createdAt: 1 };
+    const second = { id: 'task:turn:msg_reply:2', taskId: 'task', type: 'assistant', text: 'Checking', createdAt };
+    store.saveItem(first);
+    const initial = store.itemsSince('task');
+    store.saveItem(second);
+    let revision = initial.revision, items = initial.items;
+    const refresh = () => {
+      const next = store.itemsSince('task', revision);
+      revision = next.revision;
+      items = mergeTimeline(items, next.items);
+      assert.deepEqual(visibleTimeline(items), items, 'both distinct blocks remain visible after a partial read');
+    };
+    refresh();
+    second.text = first.text;
+    store.saveItem(second);
+    refresh();
+    assert.deepEqual(visibleTimeline(store.items('task')), items, 'reloading without a final event retains the unfinished block');
+    second.text += ' It is too wide.';
+    store.saveItem(second);
+    refresh();
+    store.saveItem({ ...second, status: 'completed' });
+    refresh();
+  } finally { store.db.close(); }
 });
