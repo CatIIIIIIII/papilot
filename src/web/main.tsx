@@ -57,6 +57,8 @@ import { Markdown } from './markdown.tsx';
 import logo from './logo.svg';
 import { AgentConnectionNotice, AgentPicker } from './agent-picker.tsx';
 import { taskEffort } from './task-effort.ts';
+import { PermissionPicker, TaskPermissionPicker } from './task-permissions.tsx';
+import { supportsFullTaskAccess, type TaskPermissions } from '../shared.ts';
 import { TaskModelPicker } from './task-model-picker.tsx';
 import { TaskFlight, type TaskFlightData } from './task-flight.tsx';
 import { returnNotes } from './note-flight.ts';
@@ -305,6 +307,7 @@ function timelineEntries(items: TimelineItem[]) {
 function Activity({ questions, task, runtime, reconnecting, onReconnect, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, reportError, pause, pausing, openReview, feedback, connection, tools, lead }: { questions?: React.ReactNode; tools?: React.ReactNode; lead?: React.ReactNode; task: Task; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
   const input = useRef<HTMLTextAreaElement>(null);
   const [savingModel, setSavingModel] = useState(false);
+  const [savingPermissions, setSavingPermissions] = useState(false);
   const { text: draft, sending, sendingSource } = useSyncExternalStore(composer.subscribe, composer.getSnapshot);
   const viewer = useContext(ViewerContext);
   const files = useAttachmentDraft(`papilot:files:${viewer?.id || 'owner'}:task:${task.id}`);
@@ -336,7 +339,7 @@ function Activity({ questions, task, runtime, reconnecting, onReconnect, skills,
     observer.observe(scroller.current); return () => observer.disconnect();
   }, []);
   async function submit(source: 'draft' | 'feedback') {
-    if (savingModel || composer.sending || ['uncertain', 'deleting'].includes(task.status) || (source === 'draft' && files.draft.getSnapshot().blocked)) return;
+    if (savingPermissions || savingModel || composer.sending || ['uncertain', 'deleting'].includes(task.status) || (source === 'draft' && files.draft.getSnapshot().blocked)) return;
     const chosen = source === 'draft' ? skill : null;
     const attached = source === 'draft' ? files.draft.getSnapshot().files : [];
     const pending = composer.submit(source, message => api('/tasks/' + task.id + '/messages', message), chosen?.id, attached.map(file => file.id));
@@ -367,10 +370,10 @@ function Activity({ questions, task, runtime, reconnecting, onReconnect, skills,
     <div className="composer-wrap">
       {connection}
       <Composer attachments={task.mode === 'review' ? undefined : files.draft} upload={(file, signal) => uploadAttachment(task.projectId, file, signal)} filesDisabled={sending || blocked} imageHint={task.agent === 'antigravity' && files.files.some(file => file.mime.startsWith('image/'))} inputRef={input} label={t('Instructions for {agent}', { agent: agentName(task) })} value={draft} onChange={value => composer.edit(value)} onSubmit={() => void submit('draft')} placeholder={task.mode === 'review' ? t('Ask for another review of this PDF version…') : active ? t('Queue instructions for the next turn…') : t('Ask a question or request changes…')} skills={task.mode === 'review' ? [] : skills.filter(skill => skill.output !== 'annotations')} skill={skill} onSkill={setSkill}
-        footer={attach => <div className="composer-options">{task.mode !== 'review' && <SkillPicker onAttach={attach} skills={skills.filter(skill => skill.output !== 'annotations')} selected={skill} disabled={sending || blocked} onPick={value => { setSkill(value); input.current?.focus(); }}/>}<TaskModelPicker task={task} runtime={runtime} disabled={sending || blocked} reconnecting={reconnecting} onReconnect={onReconnect} save={settings => api<Task>(`/tasks/${task.id}/model`, settings)} onSaving={setSavingModel} refresh={refresh} reportError={reportError}/></div>}
+        footer={attach => <div className="composer-options">{task.mode !== 'review' && <SkillPicker onAttach={attach} skills={skills.filter(skill => skill.output !== 'annotations')} selected={skill} disabled={sending || blocked} onPick={value => { setSkill(value); input.current?.focus(); }}/>}<TaskPermissionPicker task={task} disabled={sending || blocked || savingModel} save={permissions => api<Task>(`/tasks/${task.id}/permissions`, { permissions })} onSaving={setSavingPermissions} refresh={refresh} reportError={reportError}/><TaskModelPicker task={task} runtime={runtime} disabled={sending || blocked || savingPermissions} reconnecting={reconnecting} onReconnect={onReconnect} save={settings => api<Task>(`/tasks/${task.id}/model`, settings)} onSaving={setSavingModel} refresh={refresh} reportError={reportError}/></div>}
         action={<div className="composer-actions">
           {active && <button type="button" className="send-button stop" aria-label={t('Pause task')} title={t('Pause {agent}', { agent: agentName(task) })} disabled={pausing} aria-busy={pausing} onClick={pause}><Icon name="stop" size={18}/></button>}
-          {(!active || draft.trim() || skill || files.entries.length || sending) && <button aria-label={t('Send instructions')} title={t('Send (Enter) · New line (Shift+Enter)')} disabled={(!draft.trim() && !skill && !files.files.length) || files.blocked || sending || savingModel || blocked} className="send-button" type="submit"><Icon name="arrowUp" size={18}/></button>}
+          {(!active || draft.trim() || skill || files.entries.length || sending) && <button aria-label={t('Send instructions')} title={t('Send (Enter) · New line (Shift+Enter)')} disabled={(!draft.trim() && !skill && !files.files.length) || files.blocked || sending || savingModel || savingPermissions || blocked} className="send-button" type="submit"><Icon name="arrowUp" size={18}/></button>}
         </div>}/>
       {hint && <p className="composer-hint" role="status">{hint}</p>}
     </div>
@@ -969,6 +972,7 @@ function App() {
   const [skillsRevision, setSkillsRevision] = useState(0);
   // The agent, and each agent's model and reasoning effort, are remembered for
   // every new task, whether it starts from the composer or from PDF notes.
+  const [newPermissions, setNewPermissions] = useState<TaskPermissions>('workspace');
   const [savedAgent, setAgentChoice] = useState<AgentId>(() => { const saved = browserStorage.getItem('papilot:agent'); return isAgentId(saved) ? saved : 'codex'; });
   const [agentPrefs, setAgentPrefs] = useState(() => Object.fromEntries(AGENT_IDS.map(id => [id, {
     model: browserStorage.getItem(`papilot:model:${id}`) ?? (id === 'codex' ? browserStorage.getItem('papilot:model') : null) ?? '',
@@ -1233,7 +1237,7 @@ function App() {
     try {
       // The ID is kept until creation succeeds, so a retried request cannot create a second task.
       const title = skill ? (text ? `${skillName(skill)}: ${taskTitle(text)}` : skillName(skill)).slice(0, 120) : text ? taskTitle(text) : attached.length === 1 ? taskTitle(attached[0].comment || (attached[0].group && groupInstructions[canonicalGroup(attached[0].group)]) || '') : attached.length ? t('Address {n} PDF notes', { n: attached.length }) : files[0].name.slice(0, 120);
-      const body = { projectId: target, title, instructions: text, ...(skill ? { skill: skill.id } : {}), ...(attached.length ? { annotations: [...submittedNotes] } : {}), ...(Object.keys(groupInstructions).length ? { groupInstructions } : {}), ...(files.length ? { attachments: files.map(file => file.id) } : {}), agent: agent.agent, model: agent.model, effort: agent.effort, serviceTier: agent.serviceTier };
+      const body = { projectId: target, title, instructions: text, ...(skill ? { skill: skill.id } : {}), ...(attached.length ? { annotations: [...submittedNotes] } : {}), ...(Object.keys(groupInstructions).length ? { groupInstructions } : {}), ...(files.length ? { attachments: files.map(file => file.id) } : {}), agent: agent.agent, model: agent.model, effort: agent.effort, serviceTier: agent.serviceTier, permissions: !reviewing && supportsFullTaskAccess(agent.agent) ? newPermissions : 'workspace' };
       const signature = JSON.stringify([target, text, skill?.id || '', [...submittedNotes], groupInstructions, files.map(file => file.id)]);
       let previous: { signature?: string; id?: string } = {};
       try { previous = JSON.parse(browserStorage.getItem('papilot:new-task-request') || '{}'); } catch { /* Invalid saved request. */ }
@@ -1660,6 +1664,7 @@ function App() {
       footer={attach => <div className="composer-options">
         <SkillPicker onAttach={newSkill?.output === 'annotations' ? undefined : attach} skills={projectSkills} selected={newSkill} disabled={creating} onPick={skill => { setNewSkill(skill); newTaskInput.current?.focus(); }}/>
         {agentOptions(creating)}
+        {newSkill?.output !== 'annotations' && <PermissionPicker agent={agentChoice} value={newPermissions} disabled={creating} onChange={setNewPermissions}/>}
       </div>}
       action={<button className="send-button" type="submit" aria-label={t('Start task')} title={missingGroupDirections ? t('Add instructions to the selected color groups above.') : t('Start task (Enter)')} disabled={creating || reviewNoteBusy || noteEditing || (newSkill?.output !== 'annotations' && (newFiles.blocked || marking > 0 || missingGroupDirections)) || (!newDraft.trim() && !newSkill && !newFiles.files.length && !noteSelection.selected.some(actionable) && !Object.keys(groupDirections).length)} aria-busy={creating}>{creating ? <span className="spinner light"/> : <Icon name="arrowUp" size={18}/>}</button>}/>
     {createError && <p className="inline-error" role="alert">{createError}</p>}

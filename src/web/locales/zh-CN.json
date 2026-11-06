@@ -20,5 +20,10 @@
   "Delete conversation: {title}": "删除会话：{title}",
   "Delete conversation?": "删除会话？",
   "Delete conversation": "删除会话",
-  "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "这将永久删除此会话及其问题、回答和草稿。已经对论文做出的修改会保留。"
+  "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "这将永久删除此会话及其问题、回答和草稿。已经对论文做出的修改会保留。",
+  "Task permissions": "任务权限",
+  "Workspace access": "工作区权限",
+  "Edit the task workspace with network access; other actions may need approval.": "可编辑任务工作区并联网；其他操作可能需要批准。",
+  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "不使用沙箱或命令审批，可使用 SSH 并访问论文目录外的文件。",
+  "Pause the task before changing permissions.": "请先暂停任务，再修改权限。"
 }

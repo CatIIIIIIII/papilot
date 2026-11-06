@@ -18,11 +18,18 @@ try {
  const get=async route=>{const r=await fetch(origin+'/api'+route);assert.equal(r.status,200);return r.json();};
  const state=await get('/state'), project=state.projects[0];
  assert.ok(project,'Bundled demo is available');
- assert.equal((await get('/health')).version,'0.8.9-preview.10');
+ assert.equal((await get('/health')).version,JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url),'utf8')).version);
  assert.equal((await get('/updates')).canUpdate,false);
  assert.equal(await app.evaluate(({app})=>app.getName()),'Papilot Preview');
  const post=async(route,body)=>{const r=await fetch(origin+'/api'+route,{method:'POST',headers:{'content-type':'application/json','x-papilot-token':state.csrf},body:JSON.stringify(body)});assert.equal(r.status,200,await r.clone().text());return r.json();};
  await page.evaluate(()=>localStorage.setItem('papilot:language','en')); await page.reload();
+ const permissions = page.locator('.new-task-panel').getByRole('combobox', {name:'Task permissions',exact:true});
+ await expect(permissions).toBeVisible();
+ await permissions.click();
+ await page.getByRole('option', {name:/^Full access/}).click();
+ await expect(permissions).toHaveAttribute('data-value','full');
+ await permissions.click();
+ await page.getByRole('option', {name:/^Workspace access/}).click();
  const pane=page.getByRole('region',{name:'Paper Q&A',exact:true});
  await expect(pane).toBeVisible();
  const historyButton=pane.getByRole('button',{name:'Q&A sessions',exact:true});
@@ -116,6 +123,6 @@ try {
  await page.evaluate(()=>localStorage.setItem('papilot:language','zh-CN'));await page.reload();
  await expect(page.getByRole('region',{name:'论文问答',exact:true})).toBeVisible();
  await expect(page.locator('.pdf-container canvas').first()).toBeVisible({timeout:30000});
- await page.screenshot({path:path.join(os.tmpdir(),'papilot-preview-10-smoke.png')});
+ await page.screenshot({path:path.join(os.tmpdir(),'papilot-preview-11-smoke.png')});
  console.log('PASS: real annotation deletion, PDF marker removal, undo and reload persistence; packaged app launch, bundled demo PDF, real note edit API, real session database, independent drafts, persistence after desktop restart, preview identity, session deletion through the real database, replacement session and disabled automatic updates.');
 } finally {await app?.close();fs.rmSync(data,{recursive:true,force:true});}

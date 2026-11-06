@@ -1235,5 +1235,10 @@
   "Send question": "Enviar pergunta",
   "Thinking…": "Pensando…",
   "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "Isso exclui permanentemente esta conversa e suas perguntas, respostas e rascunho salvos. As alterações já feitas no manuscrito serão mantidas.",
-  "What would you like to discuss?": "O que você gostaria de discutir?"
+  "What would you like to discuss?": "O que você gostaria de discutir?",
+  "Task permissions": "Permissões da tarefa",
+  "Workspace access": "Acesso ao espaço de trabalho",
+  "Edit the task workspace with network access; other actions may need approval.": "Edita o espaço de trabalho com acesso à rede; outras ações podem exigir aprovação.",
+  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "Sem sandbox nem aprovação de comandos. Permite SSH e acesso a arquivos fora do artigo.",
+  "Pause the task before changing permissions.": "Pause a tarefa antes de alterar as permissões."
 }

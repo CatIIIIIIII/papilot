@@ -1235,5 +1235,10 @@
   "Send question": "Frage senden",
   "Thinking…": "Denkt nach…",
   "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "Diese Unterhaltung und ihre gespeicherten Fragen, Antworten und Entwürfe werden dauerhaft gelöscht. Bereits am Manuskript vorgenommene Änderungen bleiben erhalten.",
-  "What would you like to discuss?": "Was möchtest du besprechen?"
+  "What would you like to discuss?": "Was möchtest du besprechen?",
+  "Task permissions": "Aufgabenberechtigungen",
+  "Workspace access": "Arbeitsbereichszugriff",
+  "Edit the task workspace with network access; other actions may need approval.": "Bearbeitet den Aufgabenarbeitsbereich mit Netzwerkzugriff; andere Aktionen benötigen eventuell eine Genehmigung.",
+  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "Keine Sandbox oder Befehlsfreigaben. SSH und Dateien außerhalb des Papers sind zugänglich.",
+  "Pause the task before changing permissions.": "Pausiere die Aufgabe, bevor du die Berechtigungen änderst."
 }

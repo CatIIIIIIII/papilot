@@ -1,6 +1,6 @@
 # Ning’s Papilot Preview
 
-Personal distribution: **0.8.9-preview.10**, branch `custom/ning-preview`.
+Personal distribution: **0.8.9-preview.11**, branch `custom/ning-preview`.
 
 Based on official Papilot 0.8.9 and upstream main as of 2026-11-05, including the merged editing-network feature (#54). Integrates paper Q&A with saved conversations (#38), aligned PDF comparison (#40), and the compact reasoning slider (#37). The official note editing/deletion feature (#36) is retained.
 
@@ -23,3 +23,7 @@ The packaging script preserves official Electron/Node/native dependencies, copie
 ## Updating
 
 Merge upstream main into this branch, resolve conflicts while preserving the custom features, run the relevant tests, then rebuild against the matching official runtime. Quit the running preview before replacing the app. Keep the Preview application name and data path to preserve existing local history.
+
+## Editing permissions (Preview.11)
+
+The revision composer now has a **Task permissions** selector for Codex, Claude and GLM. New tasks default to workspace access with networking. Full access disables the task sandbox and command approvals, allowing authorized SSH and access outside the paper. SSH still requires working credentials and remote authorization. Permission choices are stored with each task. Pause an active task before changing its permissions; the next turn resumes the same conversation with the new policy. AI review remains read-only, and providers without this support do not show the selector.

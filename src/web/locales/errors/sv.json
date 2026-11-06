@@ -255,5 +255,8 @@
   "The agent returned no answer. Retry the question.": "Agenten gav inget svar. Försök med frågan igen.",
   "The server restarted before the answer finished. Retry the question.": "Servern startades om innan svaret var klart. Försök med frågan igen.",
   "Choose an available model for the Q&A agent.": "Välj en tillgänglig modell för frågeagenten.",
-  "Choose a reasoning effort supported by this model.": "Välj en resonemangsnivå som stöds av denna modell."
+  "Choose a reasoning effort supported by this model.": "Välj en resonemangsnivå som stöds av denna modell.",
+  "Invalid task permissions.": "Ogiltiga uppgiftsbehörigheter.",
+  "Full access is only available for Codex, Claude and GLM editing tasks.": "Full åtkomst är endast tillgänglig för redigeringsuppgifter med Codex, Claude och GLM.",
+  "Pause the task and wait for it to finish before changing permissions.": "Pausa uppgiften och vänta tills den har stannat innan du ändrar behörigheterna."
 }

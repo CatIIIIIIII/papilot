@@ -255,5 +255,8 @@
   "The agent returned no answer. Retry the question.": "智能体未返回回答，请重试此问题。",
   "The server restarted before the answer finished. Retry the question.": "回答完成前服务器已重启，请重试此问题。",
   "Choose an available model for the Q&A agent.": "请为问答智能体选择可用的模型。",
-  "Choose a reasoning effort supported by this model.": "请选择此模型支持的推理强度。"
+  "Choose a reasoning effort supported by this model.": "请选择此模型支持的推理强度。",
+  "Invalid task permissions.": "无效的任务权限。",
+  "Full access is only available for Codex, Claude and GLM editing tasks.": "完整权限仅适用于 Codex、Claude 和 GLM 的论文修改任务。",
+  "Pause the task and wait for it to finish before changing permissions.": "请先暂停任务，等待停止后再修改权限。"
 }

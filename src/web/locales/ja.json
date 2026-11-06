@@ -1235,5 +1235,10 @@
   "Send question": "質問を送信",
   "Thinking…": "思考中…",
   "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "この会話と保存された質問、回答、下書きを完全に削除します。原稿に適用済みの変更は保持されます。",
-  "What would you like to discuss?": "何について話し合いますか？"
+  "What would you like to discuss?": "何について話し合いますか？",
+  "Task permissions": "タスクの権限",
+  "Workspace access": "ワークスペースへのアクセス",
+  "Edit the task workspace with network access; other actions may need approval.": "ネットワークを使用してタスクのワークスペースを編集できます。その他の操作には承認が必要な場合があります。",
+  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "サンドボックスとコマンド承認を使用しません。SSH と論文フォルダー外のファイルにアクセスできます。",
+  "Pause the task before changing permissions.": "権限を変更する前にタスクを一時停止してください。"
 }

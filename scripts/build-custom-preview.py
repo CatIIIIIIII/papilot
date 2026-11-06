@@ -50,7 +50,7 @@ p = app / 'Contents/Info.plist'
 info = plistlib.loads(p.read_bytes())
 info.update(CFBundleDisplayName='Papilot Preview', CFBundleName='Papilot',
             CFBundleIdentifier='ai.papilot.desktop.preview',
-            CFBundleShortVersionString='0.8.9', CFBundleVersion='0.8.9.10')
+            CFBundleShortVersionString='0.8.9', CFBundleVersion='0.8.9.' + version.rsplit('.', 1)[-1])
 info.pop('ElectronAsarIntegrity', None)
 p.write_bytes(plistlib.dumps(info))
 (resources / 'app-update.yml').unlink(missing_ok=True)
@@ -59,6 +59,7 @@ subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(app)], check
 (args.output / '说明.txt').write_text(
     f'Papilot Preview {version}（Apple Silicon）\n\n'
     '基于官方 0.8.9 及 2026-11-05 主分支，包含个人问答、PDF 左右对照和紧凑滑块。\n'
+    '修改对话可选择工作区权限或完整权限（Codex、Claude、GLM）；运行中的任务请先暂停。\n'
     '将 Papilot Preview.app 拖入 Applications；退出旧预览版后替换。\n'
     '沿用 ~/Library/Application Support/Papilot Preview 数据目录。\n'
     '本地临时签名，关闭官方自动更新；源代码见 CatIIIIIIII/papilot 的 custom/ning-preview 分支。\n')

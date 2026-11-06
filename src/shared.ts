@@ -41,7 +41,10 @@ export interface TaskReconciliation {
   sourceBase: string; sourceAccepted: string; base: string; ready: boolean;
   intent?: { mode: 'workspace' | 'commit'; message: string };
 }
+export type TaskPermissions = 'workspace' | 'full';
+export const supportsFullTaskAccess = (agent: AgentId) => ['codex', 'claude', 'glm'].includes(agent);
 export interface Task {
+  permissions?: TaskPermissions;
   mode?: 'edit' | 'review';
   aiReview?: { key: string; notes?: number; revision?: number };
   // Accepted changes remain isolated until the author applies them.

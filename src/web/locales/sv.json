@@ -1235,5 +1235,10 @@
   "Send question": "Skicka fråga",
   "Thinking…": "Tänker…",
   "This permanently deletes this conversation and its saved questions, answers and draft. Changes already made to the manuscript stay in place.": "Detta tar permanent bort konversationen och dess sparade frågor, svar och utkast. Ändringar som redan gjorts i manuskriptet behålls.",
-  "What would you like to discuss?": "Vad vill du diskutera?"
+  "What would you like to discuss?": "Vad vill du diskutera?",
+  "Task permissions": "Uppgiftsbehörigheter",
+  "Workspace access": "Åtkomst till arbetsytan",
+  "Edit the task workspace with network access; other actions may need approval.": "Redigera uppgiftens arbetsyta med nätverksåtkomst; andra åtgärder kan kräva godkännande.",
+  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "Ingen sandlåda eller kommandogodkännanden. Kan använda SSH och nå filer utanför artikeln.",
+  "Pause the task before changing permissions.": "Pausa uppgiften innan du ändrar behörigheterna."
 }

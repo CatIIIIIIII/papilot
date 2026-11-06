@@ -255,5 +255,8 @@
   "The agent returned no answer. Retry the question.": "Der Agent hat keine Antwort geliefert. Versuche die Frage erneut.",
   "The server restarted before the answer finished. Retry the question.": "Der Server wurde vor Abschluss der Antwort neu gestartet. Versuche die Frage erneut.",
   "Choose an available model for the Q&A agent.": "Wähle ein verfügbares Modell für den Q&A-Agenten.",
-  "Choose a reasoning effort supported by this model.": "Wähle eine von diesem Modell unterstützte Denkintensität."
+  "Choose a reasoning effort supported by this model.": "Wähle eine von diesem Modell unterstützte Denkintensität.",
+  "Invalid task permissions.": "Ungültige Aufgabenberechtigungen.",
+  "Full access is only available for Codex, Claude and GLM editing tasks.": "Vollzugriff ist nur für Bearbeitungsaufgaben mit Codex, Claude und GLM verfügbar.",
+  "Pause the task and wait for it to finish before changing permissions.": "Pausiere die Aufgabe und warte, bis sie angehalten wurde, bevor du die Berechtigungen änderst."
 }

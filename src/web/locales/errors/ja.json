@@ -255,5 +255,8 @@
   "The agent returned no answer. Retry the question.": "エージェントから回答がありませんでした。質問を再試行してください。",
   "The server restarted before the answer finished. Retry the question.": "回答が完了する前にサーバーが再起動しました。質問を再試行してください。",
   "Choose an available model for the Q&A agent.": "Q&Aエージェントで利用可能なモデルを選択してください。",
-  "Choose a reasoning effort supported by this model.": "このモデルが対応している推論の強度を選択してください。"
+  "Choose a reasoning effort supported by this model.": "このモデルが対応している推論の強度を選択してください。",
+  "Invalid task permissions.": "タスクの権限が無効です。",
+  "Full access is only available for Codex, Claude and GLM editing tasks.": "フルアクセスは Codex、Claude、GLM の編集タスクでのみ利用できます。",
+  "Pause the task and wait for it to finish before changing permissions.": "タスクを一時停止し、停止してから権限を変更してください。"
 }
