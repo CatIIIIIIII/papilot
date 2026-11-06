@@ -725,6 +725,37 @@ function visibleTokens(side: Side, crops: Position[]): Set<number> {
     }
   return shown;
 }
+// Preserve an already complete physical footprint. In particular, a large
+// operator's font box can extend beyond its painted ink into another row.
+function completeCrops(
+  al: Alignment,
+  name: SideName,
+  first: number,
+  last: number,
+  required?: number[],
+) {
+  const side = al[name],
+    w = side.words;
+  for (;;) {
+    const crops = linesCrops(al, name, first, last),
+      shown = visibleTokens(side, crops);
+    let lo = first,
+      hi = last;
+    for (const t of required ?? shown)
+      for (let g = w.tokens[t].start; g < w.tokens[t].end; g++) {
+        const { page, rect } = w.glyphs[g];
+        if (
+          !crops.some((p) => p.page === page && containsCenter(p.clip, rect))
+        ) {
+          lo = Math.min(lo, side.tokenLine[t]);
+          hi = Math.max(hi, side.tokenLine[t]);
+          break;
+        }
+      }
+    if (lo === first && hi === last) return { crops, shown, first, last };
+    [first, last] = [lo, hi];
+  }
+}
 // A region is cut at its words. Its new crop holds the lines from its first
 // changed word to its last, and where only one side changed, the words on
 // either side of the change, so that both crops show where it is; a region
@@ -780,22 +811,17 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
   }
   // Close the footprint over whole words before selecting its counterpart.
   // A continuation row may share another word that continues in turn.
-  let right: Position[], shownNew: Set<number>;
-  for (;;) {
-    right = linesCrops(al, "new", first, last);
-    shownNew = visibleTokens(al.new, right);
-    if (!shownNew.size) return null;
-    const lo = Math.min(first, al.new.tokenLine[Math.min(...shownNew)]),
-      hi = Math.max(last, al.new.tokenLine[Math.max(...shownNew)]);
-    if (lo === first && hi === last) break;
-    [first, last] = [lo, hi];
-  }
-  const above = equal("new", Math.min(...shownNew), -1),
+  const next = completeCrops(al, "new", first, last),
+    right = next.crops,
+    shownNew = next.shown;
+  if (!shownNew.size) return null;
+  const lines = al.new.words.lines,
+    above = equal("new", Math.min(...shownNew), -1),
     below = equal("new", Math.max(...shownNew), 1);
 
   if (below - above < 2) return null;
-  let oldFirst = al.old.tokenLine[above + 1],
-    oldLast = al.old.tokenLine[below - 1];
+  let oldFirst = al.old.tokenLine[equal("new", lines[next.first][0], -1) + 1],
+    oldLast = al.old.tokenLine[equal("new", lines[next.last][1] - 1, 1) - 1];
   while (oldFirst < oldLast && !kept(al, "old", oldFirst, mine)) oldFirst++;
   while (oldLast > oldFirst && !kept(al, "old", oldLast, mine)) oldLast--;
   // The old crop shows its lines whole, and with them whatever prints on
@@ -804,7 +830,11 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
   // the new crop, fades: the context strips show it. Any other word is
   // read in the old crop.
   const w = al.old.words,
-    left = linesCrops(al, "old", oldFirst, oldLast),
+    needed = Array.from(
+      { length: below - above - 1 },
+      (_, i) => above + 1 + i,
+    ).filter((t) => kept(al, "old", al.old.tokenLine[t], mine)),
+    left = completeCrops(al, "old", oldFirst, oldLast, needed).crops,
     faded = new Map<number, Rect[]>();
   for (const at of left)
     for (const line of al.old.byPage.get(at.page) ?? []) {
