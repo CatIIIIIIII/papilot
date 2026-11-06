@@ -85,6 +85,7 @@ try {
   await page.reload(); await picker.click();
   await expect(page.getByRole('option', { name: /Sandboxed edits/ })).toBeVisible();
   await expect(page.getByText(/Other permission requests are denied in print mode/)).toBeVisible();
+  assert.equal(await page.locator('.task-permission-picker .select-detail').first().evaluate(el => el.scrollWidth <= el.clientWidth), true, 'permission descriptions must not be truncated');
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-claude.png' });
   await picker.press('Escape');
   task.agent = 'glm'; snapshot.runtimes.glm = { ...runtime, permissionOptions: new ClaudeAgent().permissionOptions() };

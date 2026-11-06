@@ -754,6 +754,7 @@ body.resizing iframe{pointer-events:none}
 .select-option[aria-selected=true] .menu-label{font-weight:500}
 .select-option[aria-disabled]{opacity:.45;cursor:default}
 .select-option .menu-label{white-space:nowrap}
+.task-permission-picker .select-detail{white-space:normal;text-overflow:clip;line-height:1.45}
 .select-detail{overflow:hidden;font-size:12px;font-weight:400;color:var(--text-3);text-overflow:ellipsis;white-space:nowrap}
 /* The ring follows the text color, so a dark swatch stays visible in dark mode. */
 .select-swatch{flex:none;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 18%,transparent)}

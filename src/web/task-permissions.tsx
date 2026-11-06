@@ -22,7 +22,7 @@ function permissionText(text: string) {
 export function PermissionPicker({ runtime, value, disabled, onChange }: { runtime?: RuntimeStatus; value: TaskPermissions; disabled?: boolean; onChange: (value: TaskPermissions) => void }) {
   const options = runtime?.permissionOptions || [];
   if (!options.length) return null;
-  return <span title={t('Applies to the next message.')}><ChipSelect label={t('Task permissions')} value={value} disabled={disabled} onChange={value => onChange(value as TaskPermissions)} options={options.map(option => ({ ...option, label: permissionText(option.label), detail: permissionText(option.detail) }))}/></span>;
+  return <span className="task-permission-picker" title={t('Applies to the next message.')}><ChipSelect label={t('Task permissions')} value={value} disabled={disabled} onChange={value => onChange(value as TaskPermissions)} options={options.map(option => ({ ...option, label: permissionText(option.label), detail: `${permissionText(option.detail)} ${t('Applies to the next message.')}` }))}/></span>;
 }
 
 export function TaskPermissionPicker({ task, runtime, disabled, save, onSaving, refresh, reportError }: {
