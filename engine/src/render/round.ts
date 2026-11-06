@@ -92,9 +92,8 @@ export function classify(
           : [],
     },
     al = own0.left.length || own0.right.length ? alignment(old, next) : null,
-    // With the whole comparison, the crops are the stretches between anchors
-    // that hold the edit's changed lines, or its SyncTeX crops when it
-    // changed no words; without it, the SyncTeX crops compared alone.
+    // Located edits use the whole comparison to crop between anchors around
+    // changed lines, or keep their SyncTeX crops when no words changed.
     groups = al && alignedCrops(al, own0.left, own0.right, whole, mine),
     pairs: Pair[] = [];
   let textChanged = false;
@@ -179,7 +178,6 @@ export function classify(
 // changedLines in align.ts).
 function owners(old: Build, next: Build, units: Unit[], body: Set<string>) {
   const al = alignment(old, next);
-  if (!al) return null;
   const records = (build: Build, unit: Unit, start: number, end: number) => {
       const file = build.path(unit.file);
       if (

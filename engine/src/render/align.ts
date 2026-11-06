@@ -1,4 +1,4 @@
-import { comparison, words, type Words } from "./effects.ts";
+import { comparison, words, type Comparison, type Words } from "./effects.ts";
 import { textBounds, type Build } from "./locate.ts";
 import { containsCenter, union } from "./pdf.ts";
 import { mergeRects, pixelDifference } from "./pdfdiff.ts";
@@ -61,15 +61,14 @@ export interface Gap {
   old: [number, number];
   new: [number, number];
 }
-const known = new WeakMap<Build, WeakMap<Build, Alignment | null>>();
-// The alignment of two builds, or null when the comparison gave up.
-export function alignment(old: Build, next: Build): Alignment | null {
+const known = new WeakMap<Build, WeakMap<Build, Alignment>>();
+// The alignment of two builds.
+export function alignment(old: Build, next: Build): Alignment {
   const cached = known.get(old)?.get(next);
   if (cached !== undefined) return cached;
   const a = words(old),
     b = words(next),
-    result = comparison(a, b),
-    value = result && build(old, next, a, b, result);
+    value = build(old, next, a, b, comparison(a, b));
   if (!known.has(old)) known.set(old, new WeakMap());
   known.get(old)!.set(next, value);
   return value;
@@ -127,7 +126,7 @@ function build(
   next: Build,
   a: Words,
   b: Words,
-  result: NonNullable<ReturnType<typeof comparison>>,
+  result: Comparison,
 ): Alignment {
   const sides = { old: sideOf(old, a), new: sideOf(next, b) },
     back = new Int32Array(b.tokens.length).fill(-1);

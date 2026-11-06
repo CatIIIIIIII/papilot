@@ -1,4 +1,4 @@
-import { opcodesWithin } from "../core/diff.ts";
+import { opcodes } from "../core/diff.ts";
 import { JOIN_GAP, snap, type Strips } from "./inline.ts";
 import { headingAt, laneAt, laneX, textBounds, type Build } from "./locate.ts";
 import { containsCenter, union, type PdfDocument } from "./pdf.ts";
@@ -100,9 +100,6 @@ export function words(build: Build): Words {
   read.set(build, result);
   return result;
 }
-// The comparison gives up past this long, on documents changed throughout,
-// and the round then lists no effects.
-const PATIENCE = 5000;
 export interface Comparison {
   /** For each line of the old document, the equal line of the new one, or -1. */
   match: Int32Array;
@@ -111,13 +108,13 @@ export interface Comparison {
   /** Changed words, without runs that only moved. */
   changes: Effect[];
 }
-const compared = new WeakMap<Words, WeakMap<Words, Comparison | null>>();
-export function differences(a: Words, b: Words): Effect[] | null {
-  return comparison(a, b)?.changes ?? null;
+const compared = new WeakMap<Words, WeakMap<Words, Comparison>>();
+export function differences(a: Words, b: Words): Effect[] {
+  return comparison(a, b).changes;
 }
 // The whole comparison of two documents, computed once per pair: the edits'
 // crops, their marks and the effects elsewhere all come from it.
-export function comparison(a: Words, b: Words): Comparison | null {
+export function comparison(a: Words, b: Words): Comparison {
   const known = compared.get(a)?.get(b);
   if (known !== undefined) return known;
   const result = compare(a, b);
@@ -145,15 +142,7 @@ function increasing(pairs: [number, number][]) {
   for (let k = tails.at(-1) ?? -1; k >= 0; k = links[k]) chain.push(pairs[k]);
   return chain.reverse();
 }
-function compare(a: Words, b: Words): Comparison | null {
-  const text = (w: Words, i: number, j: number) =>
-      w.tokens
-        .slice(i, j)
-        .map((t) => t.text)
-        .join(" "),
-    deadline = Date.now() + PATIENCE,
-    within = <T>(x: T[], y: T[]) =>
-      opcodesWithin(x, y, Math.max(1, deadline - Date.now()));
+function compare(a: Words, b: Words): Comparison {
   // Runs of words that occur once in each document pin the two together,
   // in the longest chain that keeps their order (patience diff on words),
   // and each grows over the equal words around it. Words, not lines: a
@@ -217,8 +206,7 @@ function compare(a: Words, b: Words): Comparison | null {
     [ta.length, tb.length, 0] as [number, number, number],
   ]) {
     if (i > previousA || j > previousB) {
-      const ops = within(ta.slice(previousA, i), tb.slice(previousB, j));
-      if (!ops) return null;
+      const ops = opcodes(ta.slice(previousA, i), tb.slice(previousB, j));
       for (const [kind, p, q, r, t] of ops)
         if (kind !== "equal")
           changed.push([
@@ -290,8 +278,7 @@ function compare(a: Words, b: Words): Comparison | null {
     if (n < Math.min(2, keys.length) || n < keys.length / 4) continue;
     taken.add(best);
     const [, , , x, y] = addedRuns[best],
-      ops = within(ta.slice(i, j), tb.slice(x, y));
-    if (!ops) return null;
+      ops = opcodes(ta.slice(i, j), tb.slice(x, y));
     for (const [kind, p, q, r] of ops)
       if (kind === "equal") {
         movedOld.fill(1, i + p, i + q);
@@ -343,7 +330,7 @@ export function changesOf(old: Build, next: Build, cards: Card[]) {
           );
         }),
       );
-  return (differences(a, b) ?? []).map((effect) => ({
+  return differences(a, b).map((effect) => ({
     effect,
     within: cards
       .filter(
@@ -358,15 +345,11 @@ export function changesOf(old: Build, next: Build, cards: Card[]) {
 // old document.
 const meets = ([i, j]: [number, number], [a, b]: [number, number]) =>
   i < j && a < b ? a < j && b > i : a <= j && b >= i;
-// Which changes a variant build also makes to the old build, or null when
-// the comparison gave up.
+// Which changes a variant build also makes to the old build.
 export function shownBy(old: Build, variant: Build, effects: Effect[]) {
   const changes = differences(words(old), words(variant));
-  return (
-    changes &&
-    effects.map((effect) =>
-      changes.some((change) => meets(effect.old, change.old)),
-    )
+  return effects.map((effect) =>
+    changes.some((change) => meets(effect.old, change.old)),
   );
 }
 // The lines a run of words occupies, one position per column of each page.

@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { buildDate } from "../../src/core/build.ts";
 import { attribute } from "../../src/core/publish.ts";
 import {
@@ -15,6 +15,38 @@ const words = (text: string) => {
     .map((t, i) => ({ text: t, start: i, end: i + 1 }));
   return { glyphs: [], tokens, lines: [[0, tokens.length]] } as Words;
 };
+
+it.each([
+  {
+    name: "a complete rewrite",
+    before: "alpha beta gamma delta",
+    after: "one two three four",
+    expected: [{ old: [0, 4], new: [0, 4] }],
+  },
+  {
+    name: "edits on both sides of an equal passage",
+    before: "old a b c d e f g h i j tail",
+    after: "new a b c d e f g h i j end",
+    expected: [
+      { old: [0, 1], new: [0, 1] },
+      { old: [11, 12], new: [11, 12] },
+    ],
+  },
+])(
+  "retains every change in $name despite elapsed wall time",
+  ({ before, after, expected }) => {
+    // A busy machine or clock adjustment must not turn edits into no result.
+    let time = 0;
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockImplementation(() => (time += 10000));
+    try {
+      expect(differences(words(before), words(after))).toEqual(expected);
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);
 
 it("treats a run that moves elsewhere as moved, both where it left and where it arrived", () => {
   // Either run can be the one that moves; both are long enough to tell.
