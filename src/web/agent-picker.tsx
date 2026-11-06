@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { AgentId, RuntimeStatus } from '../shared.ts';
 import { Icon } from './icons.tsx';
 import { BrandIcon } from './brand-icon.tsx';
@@ -47,13 +47,14 @@ function agentState(runtime?: RuntimeStatus) {
 
 // One compact trigger opens a searchable list of every agent's models,
 // grouped by agent with recent choices first, so one choice sets both. The
-// selected model's reasoning effort and fast mode sit below the list. Native
+// selected model's reasoning effort, fast mode and permissions sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, allowUnknownDefault = true }: {
+export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, allowUnknownDefault = true }: {
   agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
   onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string; allowUnknownDefault?: boolean;
+  permissions?: ReactNode;
 }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(''), [recent, setRecent] = useState(readRecent);
@@ -164,6 +165,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
       {description && <p className="effort-description">{description}</p>}
       {selected?.efforts.length ? <EffortSlider efforts={selected.efforts} value={effort} fallback={selected.defaultEffort} onChange={value => onChange({ effort: value })}/> : null}
       {fastMode && <label className="agent-fast"><span><strong><Icon name="bolt" size={14}/>{t('Fast mode')}</strong><small>{fastMode.description || t('Faster responses; may use more of your limit.')}</small></span><input type="checkbox" role="switch" aria-label={t('Fast mode')} checked={fast} onChange={event => onChange({ fast: event.target.checked })}/></label>}
+      {permissions}
     </div>
   </span>;
 }
