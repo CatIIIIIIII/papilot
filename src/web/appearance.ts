@@ -47,7 +47,7 @@ export function appearanceColors(appearance: Appearance, mode: ColorMode) {
 
 export function appearanceVariables(appearance: Appearance, mode: ColorMode): Record<string, string> {
   const { background: bg, foreground: fg, accent } = appearanceColors(appearance, mode);
-  const dark = mode === 'dark';
+  const dark = mode === 'dark', darkPaper = dark && appearance.pdf === 'theme';
   const custom = appearance.preset !== 'papilot' || appearance.colors[mode].background || appearance.colors[mode].foreground;
   const customAccent = appearance.preset !== 'papilot' || appearance.accent !== 'default';
   const defaults = dark
@@ -66,14 +66,17 @@ export function appearanceVariables(appearance: Appearance, mode: ColorMode): Re
     '--accent-line': !custom && !customAccent ? (dark ? '#445c85' : '#bfdbfe') : mix(bg, activeAccent, .3),
     '--primary': accent, '--primary-hover': customAccent ? mix(accent, '#000000', .18) : '#1d4ed8',
     '--ring': `0 0 0 3px ${activeAccent}33`,
-    '--pdf-filter': dark && appearance.pdf === 'theme' ? 'invert(.84) hue-rotate(180deg)' : 'none',
-    '--pdf-page': dark && appearance.pdf === 'theme' ? '#292929' : '#ffffff',
+    '--pdf-filter': darkPaper ? 'invert(.84) hue-rotate(180deg)' : 'none',
+    '--pdf-page': darkPaper ? '#292929' : '#ffffff',
+    '--pdf-before': darkPaper ? '#432c30' : '#fbeeee',
+    '--pdf-after': darkPaper ? '#28392d' : '#eef8f1',
   };
 }
 
 const properties = Object.keys(appearanceVariables(DEFAULT_APPEARANCE, 'light'));
 export function syncAppearance(source: HTMLElement, target: HTMLElement) {
   target.dataset.theme = source.dataset.theme;
+  target.dataset.pdfTheme = source.style.getPropertyValue('--pdf-filter') === 'none' ? 'light' : source.dataset.theme || 'light';
   for (const property of properties) {
     const value = source.style.getPropertyValue(property);
     if (value) target.style.setProperty(property, value); else target.style.removeProperty(property);
