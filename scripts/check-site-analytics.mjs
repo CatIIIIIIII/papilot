@@ -56,7 +56,7 @@ try {
     const html = fs.readFileSync(output(locale), 'utf8');
     assert.match(html, /src="\/analytics\.js\?v=[a-f0-9]+"/);
     assert.equal((html.match(/data-website-id=/g) || []).length, 1);
-    assert.equal((html.match(/data-download-format=/g) || []).length, 8);
+    assert.equal((html.match(/data-download-format=/g) || []).length, 12);
     assert.doesNotMatch(html, /papilot-analytics-referrer|sessionStorage/);
   }
   browser = process.env.PAPILOT_BROWSER_ENGINE === 'webkit'
@@ -129,7 +129,7 @@ try {
   await page.evaluate(() => window.umami.track('arbitrary', { email: 'private@example.org' }));
   assert.equal((await visits()).length, unknownBefore);
   for (const [list, button, placement] of [['download-list', 'download-button', 'hero'], ['get-list', 'get-button', 'download']]) {
-    for (const [platform, arch, format] of [['mac', 'arm64', 'dmg'], ['mac', 'x64', 'dmg'], ['linux', 'x64', 'AppImage'], ['linux', 'x64', 'deb']]) {
+    for (const [platform, arch, format] of [['mac', 'arm64', 'dmg'], ['mac', 'x64', 'dmg'], ['linux', 'x64', 'AppImage'], ['linux', 'x64', 'deb'], ['windows', 'x64', 'exe'], ['windows', 'x64', 'portable-exe']]) {
       await page.locator(`#${button}`).click();
       const download = page.waitForEvent('download');
       await page.locator(`#${list} [data-download-platform="${platform}"][data-download-arch="${arch}"][data-download-format="${format}"] strong`).click();

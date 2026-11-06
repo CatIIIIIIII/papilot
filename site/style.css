@@ -401,9 +401,10 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .download-button{min-width:212px}
 .download-button .chevron{margin-left:2px;opacity:.85;transition:transform .15s}
 .download-button[aria-expanded=true] .chevron{transform:rotate(180deg)}
-.download.linux .os-mac,.download.linux .for-mac,.download:not(.linux) .os-linux,.download:not(.linux) .for-linux{display:none}
+.download:is(.linux,.windows) .os-mac,.download:is(.linux,.windows) .for-mac,.download:not(.linux) .os-linux,.download:not(.linux) .for-linux,.download:not(.windows) .os-windows,.download:not(.windows) .for-windows{display:none}
 .download-list{position:absolute;z-index:20;top:calc(100% + 8px);left:0;min-width:100%;width:280px;padding:6px;border:1px solid var(--line);border-radius:16px;background:var(--bg);box-shadow:0 1px 2px rgb(15 23 42/.04),0 16px 40px -12px rgb(15 23 42/.22);text-align:left}
 .download-group+.download-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+.download-list{overflow-y:auto}
 /* Without room below, the menu opens upward. */
 .download.up .download-list{top:auto;bottom:calc(100% + 8px)}
 .download-label{padding:8px 12px 4px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--text-3)}

@@ -1,1 +1,22 @@
-{}
+{
+  "Download for Windows": {
+    "revision": "941ba606f0f47df1cfe0a8a65a0609f6e4c86523a61236e0dc9330f2b499d8c5",
+    "textHash": "fdf8d22d152cb52dafd0ff60b4b85e1494d7f706c4b9c405092a84058c101c70",
+    "model": "manual"
+  },
+  "Installer": {
+    "revision": "856185713d71196c5587f52465c8732247ab5927d2fd930c664a7b09ad27bbab",
+    "textHash": "197d648a8b9ad519d1668229a62c3d4bf4e9c364519181a0f30d34c0d99c61d6",
+    "model": "manual"
+  },
+  "Portable app": {
+    "revision": "59c80c0e0e0209fb56daebf3cd6161f08bd4fc1bdf93efa786e9defaa8d615bf",
+    "textHash": "bd44514fa3e9446b412274cdfc677c22109052ddfaac2ddf03215b618bcf05ed",
+    "model": "manual"
+  },
+  "The desktop app runs on macOS, Linux and Windows, and the command-line version installs from npm (Node.js 22.22+). Both use Git and your own TeX distribution (<a href=\"https://www.tug.org/mactex/\">MacTeX</a> or <a href=\"https://www.tug.org/texlive/\">TeX Live</a>). Papilot is free and open source under the <a href=\"https://github.com/PapilotAI/papilot/blob/main/LICENSE\">MIT License</a>.": {
+    "revision": "505f70543225c569b5b8910357157cf01057d28c519b28daa56d9019439a339c",
+    "textHash": "0be681b2a5832cf4f0ff5777104150685449e0612f8d4ac364d9315f95da71ff",
+    "model": "manual"
+  }
+}

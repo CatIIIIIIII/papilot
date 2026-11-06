@@ -207,6 +207,33 @@ try {
     }
   }
 
+  // Windows visitors get both native downloads first, in either menu and
+  // every language, with a usable button and menu on small screens too.
+  const windowsContext = await browser.newContext({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36', reducedMotion: 'reduce' });
+  const windowsPage = await windowsContext.newPage();
+  watch(windowsPage);
+  const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  for (const width of [1440, 320]) {
+    await windowsPage.setViewportSize({ width, height: 900 });
+    for (const locale of Object.keys(languages)) {
+      await windowsPage.goto(origin + route(locale));
+      await windowsPage.evaluate(() => document.fonts.ready);
+      assert.equal(await windowsPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `Windows ${locale}/${width}: no sideways scroll`);
+      for (const [button, list] of [['#download-button', '#download-list'], ['#get-button', '#get-list']]) {
+        assert.match(await windowsPage.locator(button).innerText(), /Windows/);
+        await windowsPage.locator(button).click();
+        assert.equal(await windowsPage.locator(`${list} .download-group`).first().getAttribute('data-os'), 'windows');
+        const downloads = await windowsPage.locator(`${list} [data-download-platform=windows]`).evaluateAll(links => links.map(link => link.href));
+        assert.deepEqual(downloads, ['', '-portable'].map(suffix => `https://github.com/PapilotAI/papilot/releases/download/v${version}/Papilot-${version}-win-x64${suffix}.exe`));
+        const box = await windowsPage.locator(list).boundingBox();
+        assert.ok(box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height <= 900, `Windows ${locale}/${width}: ${list} fits`);
+        if (button === '#download-button' && ['en', 'zh-CN'].includes(locale)) await windowsPage.screenshot({ path: `test-results/site/windows-${locale}-${width}.png` });
+        await windowsPage.keyboard.press('Escape');
+      }
+    }
+  }
+  await windowsContext.close();
+
   // Every language fits at every width: no sideways scroll, the first screen
   // still holds the hero, and buttons, menus, cards and windows fit.
   for (const width of [1440, 961, 768, 390, 320]) {

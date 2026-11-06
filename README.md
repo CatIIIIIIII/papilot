@@ -58,7 +58,7 @@ Mark a sentence, an equation or a figure, and write a note.<br>
 
 <img src="docs/assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Sync with coauthors through Git.** Pull, push, and let an agent resolve conflicts.
 
-<img src="docs/assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Free and open source.** MIT licensed, for macOS and Linux.
+<img src="docs/assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Free and open source.** MIT licensed, for macOS, Linux and Windows.
 
 <a id="agents"></a>
 
@@ -81,7 +81,7 @@ Mark a sentence, an equation or a figure, and write a note.<br>
 
 ## 🚀 Get started
 
-1. **Install.** [Download the app](https://github.com/PapilotAI/papilot/releases/latest) for macOS or Linux, or run `npm install -g papilot` (Node.js 22.22+). You also need Git and TeX Live or MacTeX.
+1. **Install.** [Download the app](https://github.com/PapilotAI/papilot/releases/latest) for macOS, Linux or Windows, or run `npm install -g papilot` (Node.js 22.22+). You also need Git and TeX Live or MacTeX.
 2. **Open your project.** Choose the folder with your `.tex` files. Papilot builds the PDF.
 3. **Pick an agent.** Use the CLI login or API key you already have, then mark up the page.
 

@@ -164,6 +164,11 @@
     "textHash": "05cbc2e6f0fba0e1ef63025c43b1f138d5e4d9963fa840ad56b580fabd24908d",
     "model": "gemini-4-argon-high"
   },
+  "Download for Windows": {
+    "revision": "bf3935d5c59075a5e5ff9660847713a67871636fde0442abdb614fe6cc431ae5",
+    "textHash": "0016d82d72b1e4ac866f11e81f91b0ff5c00b4a05b2a90fbd97701e5f788dcd3",
+    "model": "manual"
+  },
   "Downloads": {
     "revision": "de154b5ff60b68b973c8dfed5fa121f352a3135ee19024beb6aba627e6c0c955",
     "textHash": "7b31e2574ff46ac64a200f22dda0fb1b1e0df97d5c7021b175775746541d2391",
@@ -198,6 +203,11 @@
     "revision": "3b1568bdd39baac5ffbb02f888964fdbbbf0ae64387653131f5f138ce3b4090a",
     "textHash": "c25a816dd59a2741a5e03693f0acd1e403b29a9dfa1ffd18b72c6f2c9c0eef33",
     "model": "gemini-4-argon-high"
+  },
+  "Installer": {
+    "revision": "d2feb47e518be522bde2a12332cbeb96c190133db88fd64eaaa74e4dce50f24f",
+    "textHash": "b1b65e792a3c9e0b89a0bc95f1ba77b24291c007ed465b25964abec5ad97f300",
+    "model": "manual"
   },
   "Intel": {
     "revision": "5c59af000ce3b14e62f636b91363038303d859b0c9eaeb75ae1295ccb861d09d",
@@ -263,6 +273,11 @@
     "revision": "e8bd021c03f0fb57a0787f4e31219848a6d63540b2035240be331efa496a0c34",
     "textHash": "130e0af2eacf0de0c30408139eea242a1aa18dd597061ea297ff357ea1fb91c9",
     "model": "gemini-4-argon-high"
+  },
+  "Portable app": {
+    "revision": "240447e19d22ddcc9a200831265d714f6b508e2b04d8d00de497160deb19d9ec",
+    "textHash": "7061f811688f9e0410549ca7c4a1ebdb7467ee29aab28da01b22c371324a3c8a",
+    "model": "manual"
   },
   "Push": {
     "revision": "b8adc9b22bd26b8a2c14ede11c8b1f97e42d1e608926e4b099ab113ce3cb44af",
@@ -364,10 +379,10 @@
     "textHash": "2c77d63f93a162d00b683a2daa2f44f7eadf71d440ff49cc18667fd57b2ee30c",
     "model": "gemini-4-argon-high"
   },
-  "The desktop app runs on macOS and Linux, and the command-line version installs from npm (Node.js 22.22+). Both use Git and your own TeX distribution (<a href=\"https://www.tug.org/mactex/\">MacTeX</a> or <a href=\"https://www.tug.org/texlive/\">TeX Live</a>). Papilot is free and open source under the <a href=\"https://github.com/PapilotAI/papilot/blob/main/LICENSE\">MIT License</a>.": {
-    "revision": "25e55a12c4f9581bf134c727b1d2b518fa8adb31a6ba1fc664b420e7daf8277c",
-    "textHash": "87ccbb5575325966b81d73e3786754aa23c00a62e72d572a219d92288c0da442",
-    "model": "gemini-4-argon-high"
+  "The desktop app runs on macOS, Linux and Windows, and the command-line version installs from npm (Node.js 22.22+). Both use Git and your own TeX distribution (<a href=\"https://www.tug.org/mactex/\">MacTeX</a> or <a href=\"https://www.tug.org/texlive/\">TeX Live</a>). Papilot is free and open source under the <a href=\"https://github.com/PapilotAI/papilot/blob/main/LICENSE\">MIT License</a>.": {
+    "revision": "42da14857843e7b5f495a8d233c2b3a63bc653ccccce916f2dfd001affcdff2c",
+    "textHash": "2db7a84e6001c36f2fa30101ce6b7db3e755d33f4a65c7709b19a7829b8a4dc3",
+    "model": "manual"
   },
   "The type system markedly increases the expressiveness of the language while keeping type checking decidable.": {
     "revision": "a010ee56678e19f35f72c3c5283092405d745fd1bbc38e72a05cfa6e039884a8",

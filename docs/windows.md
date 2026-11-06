@@ -1,6 +1,6 @@
 # Windows setup
 
-Native Windows support is built from this checkout. The desktop workflow builds and tests Windows x64 alongside macOS and Linux; do not assume an older published installer or npm package contains these changes.
+Windows support is available from Papilot 0.9.1. Download the Windows x64 installer (`Papilot-VERSION-win-x64.exe`) or portable app (`Papilot-VERSION-win-x64-portable.exe`) from [GitHub Releases](https://github.com/PapilotAI/papilot/releases/latest). The installer lets you choose an installation folder and adds Start menu and desktop shortcuts; the portable app runs without installation. Both include Node.js, npm and Codex. Windows installers are unsigned. The desktop workflow builds and tests Windows x64 alongside macOS and Linux.
 
 ## Choose an environment
 

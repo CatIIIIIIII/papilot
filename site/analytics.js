@@ -8,7 +8,7 @@
   const languages = ['en', 'zh-CN', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es', 'pt', 'it', 'sv'];
   const sections = ['hero', 'agents', 'why', 'features', 'download', 'feature_notes', 'feature_revise', 'feature_record'];
   const schema = {
-    download_click: { placement: ['hero', 'download'], platform: ['mac', 'linux'], arch: ['arm64', 'x64'], format: ['dmg', 'AppImage', 'deb'] },
+    download_click: { placement: ['hero', 'download'], platform: ['mac', 'linux', 'windows'], arch: ['arm64', 'x64'], format: ['dmg', 'AppImage', 'deb', 'exe', 'portable-exe'] },
     copy_install: { placement: ['hero', 'download'] },
     copy_install_failed: { placement: ['hero', 'download'] },
     navigation: { target: ['hero', 'agents', 'why', 'features', 'download'], placement: ['header', 'hero', 'footer'] },

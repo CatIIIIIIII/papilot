@@ -4,9 +4,33 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-07 — Windows Desktop
+
+Papilot now runs on Windows, with x64 installers, a portable app and guided Windows or WSL setup. This release also brings the PDF marking tools into Review and improves PDF comparisons, compilation progress and agent permissions.
+
 ### Added
 
-- **Permissions in the model menu.** Editing tasks show each agent’s native access modes, including Kimi, Qwen, Copilot, Grok, Cursor, Antigravity and OpenCode. Modes apply to the next turn and can be reduced without losing the conversation. DeepSeek displays its fixed ACP preset.
+- **Windows desktop and WSL.** Install the Windows x64 app or use the portable executable. The first-launch setup recommends WSL and lets you choose native Windows or a Linux distribution, checks its tools, and guides installation. The Windows app bundles Node.js, npm and Codex; Git, TeX and agent sign-in belong to the selected environment. Switch environments from Settings while keeping their papers, tasks and credentials separate. ([#72](https://github.com/PapilotAI/papilot/pull/72))
+- **PDF marking tools in Review.** The collapsible Tools rail now offers Magic pen, colored notes, region and sticky notes, deletion marks, selection, Hand, Undo and Redo beside proposed changes. Marks enter the feedback draft with their review round and location, and deletion marks can be sent without a typed comment. Mouse, keyboard and touch controls are supported. ([#76](https://github.com/PapilotAI/papilot/pull/76))
+- **Guided Git and LaTeX setup.** Missing tools get installation guidance and a way to check again. The bundled example PDF remains readable before setup is complete, and installing Git enables version management while preserving the example's edits and notes. ([#77](https://github.com/PapilotAI/papilot/pull/77), [#72](https://github.com/PapilotAI/papilot/pull/72))
+- **Permissions in the model menu.** Editing tasks show each agent’s native access modes, including Kimi, Qwen, Copilot, Grok, Cursor, Antigravity and OpenCode. Modes apply to the next turn and can be reduced without losing the conversation. DeepSeek displays its fixed ACP preset. ([#69](https://github.com/PapilotAI/papilot/pull/69))
+
+### Changed
+
+- **Chapter reviews reuse more of the existing build.** Compatible baseline auxiliary files are reused across days, speculative full-paper compilation waits during pending reviews, and every waiting task sees live comparison progress. An incompatible auxiliary cache triggers one baseline rebuild and retry. ([#68](https://github.com/PapilotAI/papilot/pull/68))
+- **Review appearance can follow the PDF or be chosen separately.** Keep original PDF colors, or choose light or dark review colors independently of the interface. ([#70](https://github.com/PapilotAI/papilot/pull/70))
+
+### Fixed
+
+- **PDF comparisons preserve reading order and visible content.** Before-and-after crops now follow one whole-document comparison, retain text across physical lines and columns, preserve faint colored ink and moved content, and keep unchanged context readable. Long comparisons no longer stop at a wall-clock deadline; indirect effects require sufficient edit combinations before attribution. ([#58](https://github.com/PapilotAI/papilot/pull/58))
+- **Review controls stay usable while selecting and scrolling.** The floating selection menu remains visible outside cropped strips, Find keeps precise selections, and review controls fit narrow localized panes. ([#75](https://github.com/PapilotAI/papilot/pull/75))
+- **Claude replies no longer repeat after thinking blocks.** ([#71](https://github.com/PapilotAI/papilot/pull/71))
+- **Windows paths, processes and updates work across native Windows and WSL.** Fixes cover paths containing spaces and Chinese characters, command wrappers, SyncTeX lookup, temporary file-sharing failures, process cleanup and update rollback. ([#72](https://github.com/PapilotAI/papilot/pull/72), [#58](https://github.com/PapilotAI/papilot/pull/58))
+
+### Thanks
+
+- [@kilbertert](https://github.com/kilbertert) for the native Windows contribution ([#72](https://github.com/PapilotAI/papilot/pull/72)).
+- [@CatIIIIIIII](https://github.com/CatIIIIIIII) for task permissions, review appearance and the Claude reply fix ([#69](https://github.com/PapilotAI/papilot/pull/69), [#70](https://github.com/PapilotAI/papilot/pull/70), [#71](https://github.com/PapilotAI/papilot/pull/71)).
 
 ## [0.9.0] - 2026-11-05 — A desktop workspace for your papers
 

@@ -179,7 +179,9 @@ it("reports the full baseline and both parallel compilations while a review is b
   const status = async () => (await server.inject({ url: `/api/jobs/${job.id}`, headers: headers() })).json();
   const progress: Progress = { step: "tex", pass: 1, pages: 23, total: 180 };
   const built: Build = { key: "seed", tree: "tree", targets: ["full"], root: f.root, cwd: f.root, pdf: "unused.pdf", seconds: 1, warnings: [] };
-  await vi.waitFor(() => expect(builds).toHaveLength(1));
+  // Publishing snapshots the worktree through real Git processes before it
+  // reaches this mock; Windows runners can exceed waitFor's one-second default.
+  await vi.waitFor(() => expect(builds).toHaveLength(1), { timeout: 10000 });
   expect(seed).toHaveBeenCalledWith(task.base, expect.objectContaining({ progress: expect.any(Function) }));
   builds[0].progress(progress);
   expect(await status()).toMatchObject({ status: "running", phase: "build", createdAt: job.created * 1000, progress: { baseline: progress } });
@@ -218,7 +220,7 @@ it("waits for both failed chapter builds before rebuilding the seed once, with l
     throw stale();
   });
   const job = app.publisher.submit(task.name);
-  await vi.waitFor(() => expect(builds).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(builds).toHaveBeenCalledTimes(2), { timeout: 10000 });
   expect(seed).toHaveBeenCalledTimes(1);
   finishRevised();
   await vi.waitFor(() => expect(seed).toHaveBeenCalledTimes(2));
