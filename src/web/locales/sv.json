@@ -355,6 +355,7 @@
   "Editing light mode colors. Changes are saved automatically.": "Redigerar färger för ljust läge. Ändringar sparas automatiskt.",
   "Enable shortcut: {action}": "Aktivera genväg: {action}",
   "Enter a folder path": "Ange en mappsökväg",
+  "Environment": "Miljö",
   "Environment variable": "Miljövariabel",
   "Errors": "Fel",
   "Expand": "Utveckla",
@@ -1285,5 +1286,9 @@
   "{n} review update": "{n} granskningssynpunkt",
   "{n} review update included": "{n} granskningssynpunkt bifogas",
   "{n} review updates": "{n} granskningssynpunkter",
-  "{n} review updates included": "{n} granskningssynpunkter bifogas"
+  "{n} review updates included": "{n} granskningssynpunkter bifogas",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "Förbereder båda versionerna för jämförelse. Långa dokument kan ta flera minuter.",
+  "Comparing the typeset pages…": "Jämför de satta sidorna…",
+  "Elapsed: {time}": "Förfluten tid: {time}",
+  "Install Git in this environment to use version management.": "Installera Git i den här miljön för att använda versionshantering."
 }

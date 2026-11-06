@@ -460,6 +460,19 @@ Preserve meaning and mathematical correctness. Read relevant project instruction
 Never invent a bibliography entry or any of its details. Add a .bib entry only for a work you can identify, take its authors, title, year and venue from the published record, and include its doi or arXiv eprint when it has one. Papilot looks up every added or changed entry in Crossref, DBLP and arXiv and shows the author any it cannot confirm. Name the entries you added or changed in your summary.
 ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to you here and any attempt is refused, which ends your turn: read, search and edit files in the task worktree with your file tools only.' : 'You may run tools in the task worktree to inspect and validate your changes.'} ${viewPdf ? `When the look of the pages matters, such as line breaks, spacing, figures, tables or displayed formulas, use the ${VIEW_PDF} tool and open the pages it draws with your image viewer to see them as the author does. It compiles the paper, so do not call it for wording alone. ` : ''}If a decision requires the user, ask through the available user-input tool or explain it in your final response. Use English for your progress updates, questions, and final summaries unless the user explicitly requests another language. Preserve the manuscript language unless asked to translate it.`;
   }
+  private async approvalReviewer(task: Task): Promise<{ approvalsReviewer?: 'user' | 'auto_review' | 'guardian_subagent' }> {
+    if (this.agentOf(task) !== 'codex') return {};
+    try {
+      // Resolve per worktree and per turn: project/profile settings and changes
+      // since the thread was loaded must also apply to resumed conversations.
+      const { config } = await this.agents.codex.request('config/read', { includeLayers: false, cwd: task.worktree }, 20000);
+      const reviewer = config?.profiles?.[config.profile]?.approvals_reviewer ?? config?.approvals_reviewer;
+      return reviewer === 'user' || reviewer === 'auto_review' || reviewer === 'guardian_subagent' ? { approvalsReviewer: reviewer } : {};
+    } catch {
+      // Older servers may not expose this setting. Preserve their thread defaults.
+      return {};
+    }
+  }
   private async startRun(run: Run) {
     let task = this.store.task(run.taskId);
     if (task.titleSource === 'prompt' && !task.titleGeneration) {
@@ -469,11 +482,13 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     this.earlyCompletions.delete(task.id); this.earlyRequests.delete(task.id);
     this.store.saveRun({ ...run, status: 'running' });
     this.store.updateTask(task.id, { status: 'running', turnId: null, error: null });
+    const reviewer = await this.approvalReviewer(task);
+    if (this.active.get(task.id)?.id !== run.id) return;
     if (!task.threadId || !this.loaded.has(task.threadId)) {
       // Codex threads get the view_pdf tool when they start, and keep it when resumed.
       const scope = task.mode === 'review' ? [] : await this.reviewScope(task), codex = this.agentOf(task) === 'codex';
       let viewPdf = task.mode !== 'review' && codex && (task.threadId ? Boolean(task.viewPdf) : !this.noViewPdf);
-      const options = (tool: boolean) => ({ cwd: task.worktree, approvalPolicy: 'on-request', sandbox: 'workspace-write', config: { web_search: 'live', 'sandbox_workspace_write.network_access': true }, developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
+      const options = (tool: boolean) => ({ cwd: task.worktree, ...reviewer, approvalPolicy: 'on-request', sandbox: 'workspace-write', config: { web_search: 'live', 'sandbox_workspace_write.network_access': true }, developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
       let result;
       if (task.threadId) result = await agent.request('thread/resume', { ...options(viewPdf), threadId: task.threadId, excludeTurns: true });
       else {
@@ -501,7 +516,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     // Explicit defaults replace a previous turn's reasoning override.
     const effort = task.effort || (this.agentOf(task) === 'codex' ? model?.defaultEffort : undefined);
     // Inherit the thread sandbox to preserve configured writable roots and temporary-directory exclusions.
-    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
+    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, ...reviewer, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
     catch (error) {
       if (this.active.get(task.id)?.id !== run.id) return;
       if (error instanceof RpcResponseError) throw error;

@@ -1,4 +1,31 @@
 import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { gunzipSync, gzipSync } from "node:zlib";
+
+let ansiEncoding: string | undefined;
+function windowsEncoding() {
+  if (ansiEncoding) return ansiEncoding;
+  const output = execFileSync(path.join(process.env.SystemRoot || "C:\\Windows", "System32/reg.exe"),
+    ["query", "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage", "/v", "ACP"],
+    { encoding: "utf8", windowsHide: true, timeout: 5000 });
+  const code = /\bACP\s+REG_SZ\s+(\d+)/i.exec(output)?.[1];
+  const names: Record<string, string> = { "65001": "utf-8", "932": "shift_jis", "936": "gbk", "949": "euc-kr", "950": "big5", "874": "windows-874" };
+  return ansiEncoding = names[code || ""] || `windows-${code}`;
+}
+
+// TeX Live on Windows can write Input paths in the system ANSI code page.
+// The WASI parser receives UTF-8 queries; normalize its in-memory input only,
+// preserving the compiler's files and accepting newer UTF-8 TeX output too.
+export function utf8Synctex(data: Uint8Array, encoding = windowsEncoding): Uint8Array {
+  const compressed = data[0] === 0x1f && data[1] === 0x8b;
+  const plain = compressed ? gunzipSync(data) : data;
+  try { new TextDecoder("utf-8", { fatal: true }).decode(plain); return data; }
+  catch { /* Legacy Windows TeX paths. */ }
+  const text = new TextDecoder(encoding(), { fatal: true }).decode(plain);
+  const utf8 = Buffer.from(text, "utf8");
+  return compressed ? gzipSync(utf8) : utf8;
+}
 
 // SyncTeX's own parser (synctex_parser.c with zlib), compiled to WebAssembly
 // by native/synctex/build.sh. `synctex view` parses the whole .synctex.gz
@@ -31,7 +58,7 @@ export type ViewResult = [number, number, number, number, number, number, number
 // frame is on the stack, which crashes V8.)
 const ERRNO = { SUCCESS: 0, ACCES: 2, BADF: 8, INVAL: 28, NOENT: 44, NOTSUP: 58 };
 const ROOT = 3;
-function system(memory: () => WebAssembly.Memory) {
+function system(memory: () => WebAssembly.Memory, directory: string) {
   const files = new Map<number, { data: Uint8Array; position: number }>();
   let next = ROOT + 1;
   const view = () => new DataView(memory().buffer),
@@ -73,11 +100,13 @@ function system(memory: () => WebAssembly.Memory) {
     ) {
       if (dir !== ROOT) return ERRNO.BADF;
       if (openFlags !== 0) return ERRNO.ACCES; // read only: no create or truncate
-      const name = "/" + new TextDecoder().decode(bytes().subarray(path, path + length));
+      const virtual = new TextDecoder().decode(bytes().subarray(path, path + length));
+      const name = directory + "/" + virtual.replace(/^papilot\//, "");
       let data: Uint8Array;
       try {
         if (!fs.statSync(name).isFile()) return ERRNO.NOENT;
         data = fs.readFileSync(name);
+        if (process.platform === "win32") data = utf8Synctex(data);
       } catch {
         return ERRNO.NOENT;
       }
@@ -146,12 +175,14 @@ export class SynctexIndex {
   constructor(pdf: string) {
     let memory: WebAssembly.Memory | undefined;
     const instance = new WebAssembly.Instance(wasm(), {
-      wasi_snapshot_preview1: system(() => memory!),
+      wasi_snapshot_preview1: system(() => memory!, path.dirname(pdf)),
     });
     this.exports = instance.exports as unknown as Exports;
     memory = this.exports.memory;
     this.exports._initialize?.();
-    const name = this.string(pdf);
+    // Give the POSIX WASI parser a virtual absolute path, even on a drive
+    // letter or UNC share. Only its adjacent SyncTeX file reaches the host FS.
+    const name = this.string("/papilot/" + path.basename(pdf));
     // Without SyncTeX data the CLI answers every query with no results.
     this.open = this.exports.st_open(name) !== 0;
     this.exports.st_free(name);
@@ -165,7 +196,7 @@ export class SynctexIndex {
   // What `synctex view -i line:0:input -o pdf` reports, in its order.
   view(input: string, line: number): ViewResult[] {
     if (!this.exports || !this.open) return [];
-    const name = this.string(input),
+    const name = this.string(process.platform === "win32" ? input.replaceAll("\\", "/") : input),
       count = this.exports.st_view(name, line);
     this.exports.st_free(name);
     const rows: ViewResult[] = [];

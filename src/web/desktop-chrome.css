@@ -1,5 +1,5 @@
-/* Window controls live in the sidebar; the existing content toolbar stays at
-   the very top. No second brand row or duplicated document title. */
+/* Window controls share the existing toolbar: macOS/Linux on the left,
+   Windows on the right, with no second title row. */
 .desktop-window-drag{position:fixed;top:0;left:0;width:272px;height:46px;z-index:20;-webkit-app-region:drag;user-select:none}
 [data-desktop] .sidebar{position:relative;padding-top:46px}
 [data-desktop] .sidebar-header>.icon-button{position:absolute;top:7px;right:12px;z-index:21;-webkit-app-region:no-drag}
@@ -17,5 +17,25 @@
 .desktop-window-buttons svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.25}
 [data-desktop="linux"] .sidebar-collapsed .desktop-window-drag{width:112px}
 [data-desktop="linux"] .sidebar-collapsed .sidebar-toggle{margin-left:112px}
-[data-desktop="win32"] .sidebar-collapsed .desktop-window-drag{width:112px}
-[data-desktop="win32"] .sidebar-collapsed .sidebar-toggle{margin-left:112px}
+/* Only the panel touching the right edge reserves room for Windows controls.
+   The review host measures its tools, including this space, for its iframe. */
+[data-desktop="win32"] .desktop-window-drag{left:auto;right:0;width:138px}
+[data-desktop="win32"] .desktop-window-buttons{gap:0;padding:0;background:var(--bg)}
+[data-desktop="win32"] .desktop-window-buttons button{width:46px;height:46px;border-radius:0}
+[data-desktop="win32"] .desktop-window-close:hover{background:#c42b1c;color:#fff}
+[data-desktop="win32"] .sidebar{padding-top:0}
+[data-desktop="win32"] .sidebar-header{-webkit-app-region:drag}
+[data-desktop="win32"] .sidebar-header>.icon-button{position:static}
+[data-desktop="win32"] .sidebar-collapsed .sidebar-toggle{margin-left:0}
+[data-desktop="win32"] .main{--desktop-window-space:138px}
+[data-desktop="win32"] .manuscript:not(.panel-collapsed)>.manuscript-pages,
+[data-desktop="win32"] .task-grid.layout-split>.review-panel{--desktop-window-space:0px}
+[data-desktop="win32"] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar,.panel-heading,.manuscript-side-header,.git-diff-toolbar,.review-tools){padding-right:calc(8px + var(--desktop-window-space,0px))}
+[data-desktop="win32"] .git-workspace-header{padding-right:152px;-webkit-app-region:drag}
+[data-desktop="win32"] .git-workspace-body{--desktop-window-space:0px}
+@container (max-width:180px){[data-desktop="win32"] .side-tabs>button .tab-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}}
+@media(max-width:900px){
+  [data-desktop="win32"] .sidebar{position:fixed}
+  [data-desktop="win32"] .manuscript:not(.panel-collapsed)>.manuscript-pages{--desktop-window-space:138px}
+  [data-desktop="win32"] .manuscript-side{--desktop-window-space:0px}
+}

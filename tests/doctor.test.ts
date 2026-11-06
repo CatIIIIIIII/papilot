@@ -21,7 +21,7 @@ function fixture() {
   fs.writeFileSync(path.join(app, 'dist/index.html'), '<html></html>');
   fs.writeFileSync(path.join(app, 'engine/dist/web/index.html'), '<html></html>');
   const log = path.join(dir, 'commands');
-  const env: NodeJS.ProcessEnv = { PATH: tools, HOME: home, TMPDIR: os.tmpdir(), PAPILOT_DATA: data, PAPILOT_PORT: '65534' };
+  const env: NodeJS.ProcessEnv = { PATH: tools, HOME: home, USERPROFILE: home, TMPDIR: os.tmpdir(), PAPILOT_DATA: data, PAPILOT_PORT: '65534' };
   function tool(name: string, script = 'console.log("test tool 1.0");') {
     const file = path.join(tools, name);
     fs.writeFileSync(file, `#!${process.execPath}\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify([${JSON.stringify(name)}, ...process.argv.slice(2)]) + '\\n');\n${script}\n`, { mode: 0o755 });
@@ -267,7 +267,7 @@ test('doctor detects Grok in its installer folder and checks only the isolated s
     const installed = path.join(dir, process.platform === 'win32' ? 'grok.cmd' : 'grok');
     fs.renameSync(bin, installed);
     const result = await f.run(['--json']);
-    assert.equal(item(result.report, 'agent.grok').ok, true);
+    assert.equal(item(result.report, 'agent.grok').ok, true, JSON.stringify(result.report));
     assert.match(item(result.report, 'agent.grok').detail, /login and generation were not tested/);
     assert.equal(fs.existsSync(f.data), false);
     const missing = await f.run(['--json'], { PAPILOT_GROK_BIN: path.join(f.dir, 'absent') });

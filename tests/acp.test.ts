@@ -494,8 +494,8 @@ test('ACP agents are detected by their executable', () => {
     if (process.platform === 'win32') fs.writeFileSync(runnable, `@echo off\r\n"${process.execPath}" "${file}" %*\r\n`);
     assert.equal(new AcpAgent(ACP_PROFILES.qwen, runnable).detect(), true);
     assert.equal(new AcpAgent(ACP_PROFILES.qwen, path.join(dir, 'missing')).detect(), false);
-    const previous = { PATH: process.env.PATH, HOME: process.env.HOME };
-    Object.assign(process.env, { PATH: dir, HOME: dir });
+    const previous = { PATH: process.env.PATH, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+    Object.assign(process.env, { PATH: dir, HOME: dir, USERPROFILE: dir });
     try {
       assert.equal(new AcpAgent(ACP_PROFILES.qwen).detect(), true); assert.equal(new AcpAgent(ACP_PROFILES.opencode).detect(), false);
       // A service's PATH may lack the folder a CLI installs itself in.
@@ -505,7 +505,11 @@ test('ACP agents are detected by their executable', () => {
       else { fs.copyFileSync(file, opencode); fs.chmodSync(opencode, 0o755); }
       process.env.PATH = '/usr/bin';
       assert.equal(new AcpAgent(ACP_PROFILES.opencode).detect(), true);
-    } finally { Object.assign(process.env, previous); }
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

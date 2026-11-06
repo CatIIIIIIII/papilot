@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Repo } from '../engine/src/core/git.ts';
 import { Builder } from '../engine/src/core/build.ts';
 import { loadProject } from '../engine/src/core/config.ts';
+import { findCommand } from '../engine/src/core/platform.mjs';
 
 const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
 const tex = (() => {
@@ -267,15 +268,20 @@ test('a delivery preview is exactly what applying the task writes, with pending 
 
 // A pdflatex that takes a moment per pass, so a build can be watched while it runs.
 function slowTeX(base: string) {
-  const bin = path.join(base, 'bin'), real = execFileSync('which', ['pdflatex'], { encoding: 'utf8' }).trim(), runs = path.join(base, 'runs');
-  const latexmk = execFileSync('which', ['latexmk'], { encoding: 'utf8' }).trim();
+  const bin = path.join(base, 'bin'), real = findCommand('pdflatex')!, latexmk = findCommand('latexmk')!, runs = path.join(base, 'runs');
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(path.join(bin, 'pdflatex'), `#!/bin/sh\ncase "$1" in --version) exec "${real}" --version;; esac\necho run >> "${runs}"\nsleep 0.6\nexec "${real}" "$@"\n`, { mode: 0o755 });
-  // Nix's latexmk wrapper prepends its own TeX binaries to PATH. Select the
-  // slow compiler explicitly so the test observes its passes on every system.
-  fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\nexec "${latexmk}" '-pdflatex="${path.join(bin, 'pdflatex')}" %O %S' "$@"\n`, { mode: 0o755 });
+  const wrapper = (name: string, source: string) => {
+    const script = path.join(bin, name + '.cjs'); fs.writeFileSync(script, source);
+    if (process.platform === 'win32') fs.writeFileSync(path.join(bin, name + '.cmd'), `@echo off\r\n"${process.execPath}" "%~dp0\\${name}.cjs" %*\r\n`);
+    else fs.writeFileSync(path.join(bin, name), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`, { mode: 0o755 });
+    return script.split(path.sep).join('/');
+  };
+  const slow = wrapper('pdflatex', `const args=process.argv.slice(2);if(args[0]!=='--version'){require('fs').appendFileSync(${JSON.stringify(runs)},'run\\n');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,600);}const r=require('child_process').spawnSync(${JSON.stringify(real)},args,{stdio:'inherit'});process.exit(r.status??1);`);
+  // Nix may prepend its own TeX to PATH; select the delayed compiler explicitly.
+  const command = `-pdflatex="${process.execPath.split(path.sep).join('/')}" "${slow}" %O %S`;
+  wrapper('latexmk', `const r=require('child_process').spawnSync(${JSON.stringify(latexmk)},[${JSON.stringify(command)},...process.argv.slice(2)],{stdio:'inherit'});process.exit(r.status??1);`);
   const previous = process.env.PATH;
-  process.env.PATH = `${bin}:${previous}`;
+  process.env.PATH = `${bin}${path.delimiter}${previous}`;
   return { runs: () => fs.existsSync(runs) ? fs.readFileSync(runs, 'utf8').trim().split('\n').length : 0, restore: () => { process.env.PATH = previous; } };
 }
 

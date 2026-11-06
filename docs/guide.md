@@ -31,13 +31,15 @@ npm run build
 npm start
 ```
 
+For native Windows builds, PowerShell commands and first-machine setup, see [Windows setup](windows.md).
+
 A source checkout keeps its state in `.papilot` inside the checkout, and `npm run demo` adds the example paper.
 
 With Nix, run `nix run . -- demo` from the checkout to build and launch the CLI/browser app with Node.js, Git and TeX Live. `nix develop` supplies the development environment, and `nix build` creates `result/bin/papilot`. See [Nix setup](nix.md) for supported systems, installation and updates.
 
 Open [Papilot](http://127.0.0.1:7274) and select **Add paper**. Choose a folder, drop a LaTeX ZIP, or expand **Use a folder on this computer** to enter a host path. Uploaded folders and ZIPs are copied into the Papilot data folder (`papers/`); a host path uses the original files. Uploads support up to 64 MB and 5,000 files. Later papers are added and switched from the paper menu at the top of the sidebar.
 
-The desktop app opens papers the way an editor opens folders. **Open a folder** in the paper menu, or **File › Open Folder…** (⌘O, or Ctrl+O on Linux), goes straight to the system folder picker, and the chosen folder opens as a paper in place, without an import window: Papilot detects the main file and engine, saves them in `.latex-review.json`, creates Git history when needed, and compiles the PDF in the paper's own view, where build problems appear as for any paper. Only a folder with several possible main files asks which one to compile. Opening a folder that is already a paper switches to it. ZIP archives and typed host paths are browser features.
+The desktop app opens papers the way an editor opens folders. **Open a folder** in the paper menu, or **File › Open Folder…** (⌘O, or Ctrl+O on Linux/Windows), goes straight to the system folder picker, and the chosen folder opens as a paper in place, without an import window: Papilot detects the main file and engine, saves them in `.latex-review.json`, creates Git history when needed, and compiles the PDF in the paper's own view, where build problems appear as for any paper. Only a folder with several possible main files asks which one to compile. Opening a folder that is already a paper switches to it. ZIP archives and typed host paths are browser features.
 
 Papilot identifies the main TeX file and compiler, creates Git history when needed, and attempts compilation automatically. If the main document is ambiguous, choose it before compiling. Existing repositories keep their commits and staged changes; new repositories receive a local initial commit without requiring Git identity setup. The main-file and engine selections are saved in `.latex-review.json`.
 

@@ -415,6 +415,9 @@ try {
     await expect(taskEditor).toHaveValue(draft);
     await expect(page.getByRole('tab', { name: 'New task', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect(send()).toBeDisabled();
+    // Clicking outside the editor starts another save. Let that failed
+    // request settle before retrying: Enter is ignored while it is busy.
+    await expect(taskEditor).toBeEditable();
     failEdit = false;
     await taskEditor.press('Enter');
     await expect(taskText()).toHaveText(draft);

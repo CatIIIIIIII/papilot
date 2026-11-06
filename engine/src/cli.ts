@@ -28,11 +28,11 @@ class Failure extends Error {
 }
 export const emit = (value: unknown) => console.log(JSON.stringify(value));
 function openBrowser(url: string) {
-  // Windows has no open/xdg-open; start hands the URL to the default browser.
-  const command =
-    process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", `"${url}"`] : [url];
-  const child = spawn(command, args, { detached: true, stdio: "ignore" });
+  const child = spawn(
+    process.platform === "darwin" ? "open" : process.platform === "win32" ? "rundll32.exe" : "xdg-open",
+    process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url],
+    { detached: true, windowsHide: true, stdio: "ignore" },
+  );
   child.on("error", () => {});
   child.unref();
 }
@@ -40,9 +40,7 @@ export async function doctor() {
   const texHint =
     process.platform === "darwin"
       ? "Install MacTeX, or BasicTeX with latexmk."
-      : process.platform === "win32"
-        ? "Install MiKTeX or TeX Live, and add its binaries to PATH."
-        : "Install TeX Live, e.g. apt install latexmk texlive-latex-recommended.";
+      : process.platform === "win32" ? "Install TeX Live for Windows (including latexmk)." : "Install TeX Live, e.g. apt install latexmk texlive-latex-recommended.";
   const checks: { name: string; ok: boolean; detail: string; hint?: string }[] =
     [];
   const check = (name: string, ok: boolean, detail: string, hint: string) =>

@@ -22,7 +22,7 @@ export function tarCommand() {
 
 // Keep wrapper paths intact: resolving symlinks can bypass Nix's environment.
 export function agentDirs(env = process.env) {
-  const home = env.HOME || os.homedir();
+  const home = (WINDOWS ? env.USERPROFILE || env.HOME : env.HOME) || os.homedir();
   // Windows per-user and system install locations for the tools Papilot drives.
   // They are only used there; the POSIX directories above are harmless elsewhere.
   const appData = env.APPDATA || path.join(home, 'AppData', 'Roaming');
@@ -30,6 +30,11 @@ export function agentDirs(env = process.env) {
   const programFiles = env.ProgramFiles || 'C:\\Program Files';
   const programFilesX86 = env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   const programData = env.ProgramData || 'C:\\ProgramData';
+  let texLive = [];
+  if (WINDOWS) {
+    const root = path.join(env.SystemDrive || 'C:', 'texlive');
+    try { texLive = fs.readdirSync(root).filter(year => /^\d{4}$/.test(year)).sort().reverse().map(year => path.join(root, year, 'bin/windows')); } catch { /* optional */ }
+  }
   return [path.join(home, '.nix-profile/bin'), path.join(env.XDG_STATE_HOME || path.join(home, '.local/state'), 'nix/profile/bin'),
     '/etc/profiles/per-user/' + path.basename(home) + '/bin', '/run/current-system/sw/bin', '/nix/var/nix/profiles/default/bin',
     ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin'].map(dir => path.join(home, dir)),
@@ -37,11 +42,14 @@ export function agentDirs(env = process.env) {
     ...(WINDOWS ? [path.join(appData, 'npm'), path.join(localAppData, 'Programs'), path.join(home, '.volta/bin'),
       path.join(home, 'scoop/shims'), path.join(programData, 'chocolatey/bin'), path.join(programFiles, 'nodejs'),
       path.join(programFiles, 'Git/cmd'), path.join(programFiles, 'Git/bin'),
+      path.join(localAppData, 'Programs/Git/cmd'),
       path.join(programFiles, 'MiKTeX/bin/x64'), path.join(programFilesX86, 'MiKTeX/bin'),
-      path.join(localAppData, 'Programs/MiKTeX/bin/x64')] : [])];
+      path.join(localAppData, 'Programs/MiKTeX/bin/x64'),
+      path.join(programFiles, 'MiKTeX/miktex/bin/x64'), path.join(localAppData, 'Programs/MiKTeX/miktex/bin/x64'), ...texLive] : [])];
 }
 export function agentPath(env = process.env) {
-  return [...new Set([...(env.PATH || '').split(path.delimiter).filter(Boolean), ...agentDirs(env)])].join(path.delimiter);
+  const inherited = WINDOWS ? Object.keys(env).filter(key => key.toLowerCase() === 'path').map(key => env[key] || '').join(path.delimiter) : env.PATH || '';
+  return [...new Set([...inherited.split(path.delimiter).filter(Boolean), ...agentDirs(env)])].join(path.delimiter);
 }
 export function findExecutable(command, env = process.env) {
   // Windows executables carry an extension from PATHEXT; an extensionless file
@@ -49,10 +57,10 @@ export function findExecutable(command, env = process.env) {
   const extensions = WINDOWS ? (env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';') : [''];
   const explicit = command.includes('/') || (WINDOWS && command.includes('\\'));
   const candidates = explicit ? [path.resolve(command)]
-    : agentPath(env).split(path.delimiter).map(dir => path.join(dir, command));
+    : agentPath(env).split(path.delimiter).map(dir => path.join(dir.replace(/^"|"$/g, ''), command));
   // A path that already names an executable is used as it is; a bare name
   // found on PATH gets PATHEXT appended.
-  const suffixes = explicit && /\.(exe|com|bat|cmd)$/i.test(command) ? [''] : extensions;
+  const suffixes = WINDOWS && extensions.some(extension => command.toLowerCase().endsWith(extension.toLowerCase())) ? [''] : extensions;
   for (const candidate of candidates) for (const extension of suffixes) {
     const file = candidate + extension;
     try { if (!fs.statSync(file).isFile()) continue; fs.accessSync(file, WINDOWS ? fs.constants.F_OK : fs.constants.X_OK); return file; } catch { /* try next */ }
@@ -77,37 +85,57 @@ const CMD_META = /([()\][%!^"`<>&|;, *?])/g;
 const escapeCommand = arg => arg.replace(CMD_META, '^$1');
 // Quotes one argument for cmd.exe and the program it starts. The backslash
 // rules follow https://qntm.org/cmd, as cross-spawn does.
-const escapeArgument = arg => {
+const escapeArgument = (arg, doubleEscape = false) => {
   arg = String(arg);
   arg = arg.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"');
   arg = arg.replace(/(?=(\\+?)?)\1$/, '$1$1');
-  return `"${arg}"`.replace(CMD_META, '^$1');
+  const escaped = `"${arg}"`.replace(CMD_META, '^$1');
+  return doubleEscape ? escaped.replace(CMD_META, '^$1') : escaped;
 };
 // An npm-installed CLI is a .cmd shim that runs a Node script and re-expands
 // its arguments with %*. A shim cannot carry a multi-line prompt or one with
 // shell metacharacters through that second parse, so run the script directly.
-function shimScript(file) {
-  let content;
-  try { content = fs.readFileSync(file, 'utf8'); } catch { return null; }
-  const quoted = [...content.matchAll(/"([^"]+)"/g)].map(match => match[1]);
-  const candidates = quoted.map(value => value.replaceAll('%dp0%', path.dirname(file) + path.sep))
-    .map(value => path.resolve(path.dirname(file), value))
-    .filter(candidate => candidate !== file && fs.existsSync(candidate) && fs.statSync(candidate).isFile());
-  return candidates.find(candidate => candidate.endsWith('.js'))
-    || candidates.find(candidate => !/node(\.exe)?$/i.test(candidate)) || null;
+function shimScript(file, content) {
+  // Only bypass a wrapper when its command really invokes Node. Quoted
+  // paths elsewhere may name a native executable, a data file or another
+  // interpreter's script. npm uses _prog for its bundled/system Node choice.
+  const programs = [...content.matchAll(/\bset\s+"?_prog=([^"\r\n]+)/gi)].map(match => match[1].trim());
+  for (const line of content.split(/\r?\n/)) {
+    const command = line.replace(/^\s*endlocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&\s*/i, '').trim();
+    const match = /^@?(?:"([^"]+)"|(node(?:\.exe)?))\s+((?:(?:"[^"\r\n]*"|[^\s"]+)\s+)*)"([^"\r\n]+)"\s+%\*\s*$/i.exec(command);
+    if (!match) continue;
+    const isNode = value => /^(?:%(?:dp0%|~dp0)[\\/]*|[^%]*[\\/])?node(?:\.exe)?$/i.test(value);
+    const executable = match[1] || match[2];
+    if (executable.toLowerCase() === '%_prog%' ? !programs.length || !programs.every(isNode) : !isNode(executable)) continue;
+    // Preserve literal Node options (including quoted values). Expansion or
+    // shell syntax in the option list must still be evaluated by the wrapper.
+    if (/[%!^&|<>\r\n]/.test(match[3])) continue;
+    const args = (match[3].match(/"[^"]*"|[^\s"]+/g) || []).map(arg => arg.startsWith('"') ? arg.slice(1, -1) : arg);
+    const entry = match[4].replace(/%(?:dp0%|~dp0)/gi, path.dirname(file) + path.sep);
+    if (entry.includes('%')) continue;
+    const script = path.resolve(path.dirname(file), entry);
+    try { if (script !== file && fs.statSync(script).isFile()) return { script, args }; } catch { /* shell reports missing entries */ }
+  }
+  return null;
 }
 // Windows cannot start .bat and .cmd files without a shell, and cmd.exe parses
 // the command line before the script does. Every argument is quoted for the
-// shell, then the whole line is handed over verbatim so a second parse cannot
-// change it. Other platforms and executables run directly.
+// shell. npm shims expand %* through another parse, requiring a second layer
+// of escaping when the wrapper cannot be bypassed. Other executables run directly.
 function shellOut(command, args, env) {
   const resolved = findExecutable(command, env)
     ?? ((command.includes('/') || command.includes('\\')) ? path.resolve(command) : null);
   const file = resolved || command;
   if (!WINDOWS || !/\.(bat|cmd)$/i.test(file)) return { file, args, options: {} };
-  const script = shimScript(file);
-  if (script) return { file: process.execPath, args: [script, ...args], options: {} };
-  const line = [escapeCommand(file), ...args.map(escapeArgument)].join(' ');
+  let content = '';
+  try { content = fs.readFileSync(file, 'utf8'); } catch { /* the shell reports unreadable wrappers */ }
+  const shim = shimScript(file, content);
+  if (shim) return { file: process.execPath, args: [...shim.args, shim.script, ...args], options: {} };
+  // Match both local npm bins and globally installed cmd-shim wrappers. Keep
+  // flags and wrapper setup intact when they need to execute through cmd.exe.
+  const npmShim = /node_modules[\\/]\.bin[\\/][^\\/]+\.cmd$/i.test(file)
+    || /endlocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&/i.test(content);
+  const line = [escapeCommand(file), ...args.map(arg => escapeArgument(arg, npmShim))].join(' ');
   const shell = process.env.comspec || process.env.ComSpec || systemExecutable('cmd.exe');
   return { file: shell, args: ['/d', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true } };
 }

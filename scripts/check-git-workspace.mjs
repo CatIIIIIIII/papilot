@@ -18,16 +18,17 @@ const errors = []; page.on('pageerror', error => errors.push(error.message));
 const project = { id: 'git-paper', name: 'Example paper', path: '/tmp/git-paper', createdAt: 1 };
 const task = { id: 'git-task', projectId: project.id, title: 'Clarify the introduction', name: 'git-task', instructions: '', status: 'idle', createdAt: 1, updatedAt: 1, review: null };
 const runtime = { connected: true, authenticated: true, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: [] }] };
-const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [task], requests: [], runtime, runtimes: { codex: runtime } };
+const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [task], requests: [], runtime, runtimes: { codex: runtime }, gitAvailable: true };
 const initialFiles = [{ path: 'main.tex', status: 'M', staged: false, unstaged: true, lines: [2, 4] }, { path: 'references.bib', status: '?', staged: false, unstaged: true }];
 const git = { branch: 'main', remote: true, upstream: 'origin/main', ahead: 1, behind: 0, head: { hash: 'abc1234', subject: 'Clarify the introduction', date: 1 }, files: structuredClone(initialFiles) };
 const actions = [];
 const note = { id: 'note-1', projectId: project.id, key: 'fixture', page: 0, rect: [72, 72, 200, 90], rects: [[72, 72, 200, 90]], source: null, quote: 'Fixture', comment: 'Original note', createdAt: 1 };
-let failNoteSave = false;
+let failNoteSave = false, gitRequests = 0;
 let diffText = 'New', diffRequests = 0, diffGate = null;
 const words = JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'));
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
+  if (/\/git(?:\/|$)/.test(url.pathname)) gitRequests++;
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', canUpdate: false });
@@ -207,6 +208,26 @@ try {
   await page.locator('.manuscript-link').click();
   await expect(page.locator('.manuscript-side')).toBeHidden();
   await expect(page.locator('.git-workspace')).toHaveCount(0);
+  // A persisted Git page must not bypass the missing-Git gate. Background Git
+  // requests also stop; installation is picked up by the normal state refresh.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  snapshot.gitAvailable = false;
+  await page.evaluate(() => { localStorage.setItem('papilot:page', 'git'); localStorage.setItem('papilot:task', ''); });
+  const beforeMissing = gitRequests;
+  await page.reload();
+  await expect(page.locator('.git-link')).toBeDisabled();
+  await expect(workspace).toHaveCount(0);
+  await expect(page.locator('.manuscript-link')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: 'Install Git in this environment to use version management.', exact: true })).toHaveAttribute('href', 'https://git-scm.com/install/');
+  await page.clock.runFor(21000);
+  assert.equal(gitRequests, beforeMissing, 'No Git reads or writes while Git is unavailable');
+  await page.screenshot({ path: 'test-results/git-workspace-missing-git.png' });
+  snapshot.gitAvailable = true;
+  await page.clock.runFor(11000);
+  await expect(page.locator('.git-link')).toBeEnabled();
+  await expect(page.locator('.git-install-hint')).toHaveCount(0);
+  await openGit();
+  await expect(workspace).toBeVisible();
   assert.deepEqual(errors, []);
   console.log('Git workspace passed: left-side controls, separate diff/history, navigation and draft restoration, live and slow diff refresh, pinned commit controls, staging/commit/push, responsive and short-window layouts.');
 } catch (error) {

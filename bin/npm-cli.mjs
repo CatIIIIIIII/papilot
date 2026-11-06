@@ -8,7 +8,7 @@ export function npmCli(env = process.env, executable = process.execPath) {
   const candidates = [env.npm_execpath,
     path.join(directory, 'node_modules/npm/bin/npm-cli.js'),
     path.join(directory, '../lib/node_modules/npm/bin/npm-cli.js'),
-    ...(env.PATH || '').split(path.delimiter).flatMap(dir => [path.join(dir, 'node_modules/npm/bin/npm-cli.js'), path.join(dir, 'npm-cli.js')])];
+    ...(env.PATH || env.Path || '').split(path.delimiter).flatMap(dir => [path.join(dir, 'node_modules/npm/bin/npm-cli.js'), path.join(dir, '../lib/node_modules/npm/bin/npm-cli.js'), path.join(dir, 'npm-cli.js'), path.join(dir, 'npm')])];
   for (const candidate of candidates) {
     if (!candidate) continue;
     try { const real = fs.realpathSync(candidate); if (real.endsWith('npm-cli.js')) return real; } catch { /* next installation */ }

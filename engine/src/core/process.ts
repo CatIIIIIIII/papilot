@@ -1,15 +1,15 @@
+import { spawn, spawnSync } from './commands.mjs';
+import { findCommand, terminateTree } from './platform.mjs';
 import fs from "node:fs";
-import { type ChildProcess, type SpawnSyncOptionsWithBufferEncoding } from "node:child_process";
-import { findExecutable, killTree, spawnCommand, spawnSyncCommand } from "../../../bin/agent-paths.mjs";
-
-export function which(command: string): string | null {
-  return findExecutable(command);
-}
+import {
+  type ChildProcess,
+  type SpawnSyncOptionsWithBufferEncoding,
+} from "node:child_process";
 export class ProcessError extends Error {
   constructor(
     message: string,
-    public stdout: Buffer = Buffer.alloc(0),
-    public stderr: Buffer = Buffer.alloc(0),
+    public stdout = Buffer.alloc(0),
+    public stderr = Buffer.alloc(0),
     public code = 1,
   ) {
     super(message);
@@ -21,7 +21,7 @@ export function run(
   options: SpawnSyncOptionsWithBufferEncoding & { check?: boolean } = {},
 ) {
   const { check = true, ...rest } = options;
-  const result = spawnSyncCommand(command, args, {
+  const result = spawnSync(command, args, {
     timeout: 300000,
     maxBuffer: 128 * 1024 * 1024,
     ...rest,
@@ -57,17 +57,7 @@ export function startTracked<T extends ChildProcess>(start: () => T): T {
 }
 export function stopAll() {
   stopped = true;
-  for (const child of running) {
-    try {
-      if (child.pid) {
-        killTree(child.pid, "SIGTERM");
-        // A paused background build receives the signal once it continues.
-        if (process.platform !== "win32") { try { process.kill(-child.pid, "SIGCONT"); } catch { /* gone */ } }
-      }
-    } catch {
-      child.kill();
-    }
-  }
+  for (const child of running) terminateTree(child);
 }
 /** `run` without blocking the event loop: the same result and errors,
  *  delivered when the command exits. Servers call this so that a Git command
@@ -89,7 +79,7 @@ export function capture(
     let child: ChildProcess;
     try {
       child = startTracked(() =>
-        spawnCommand(command, args, { cwd: options.cwd, env: options.env, stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"] }),
+        spawn(command, args, { cwd: options.cwd, env: options.env, detached: process.platform !== "win32", stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"] }),
       );
     } catch (error) {
       reject(error);
@@ -99,7 +89,7 @@ export function capture(
     let size = 0, failure: Error | null = null;
     const stop = (error: Error) => {
       failure ??= error;
-      if (child.pid) killTree(child.pid, "SIGKILL"); else child.kill("SIGKILL");
+      terminateTree(child, "SIGKILL");
     };
     const timer = setTimeout(() => stop(new ProcessError(`${command} timed out`)), timeout);
     const collect = (into: Buffer[]) => (data: Buffer) => {
@@ -141,10 +131,10 @@ export function runAsync(
 ) {
   return new Promise<Buffer>((resolve, reject) => {
     const child = startTracked(() =>
-      spawnCommand(command, args, {
+      spawn(command, args, {
         cwd: options.cwd,
         env: options.env,
-        detached: true,
+        detached: process.platform !== "win32",
         stdio: ["ignore", "pipe", "pipe"],
       }),
     );
@@ -153,14 +143,14 @@ export function runAsync(
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      if (child.pid) killTree(child.pid, "SIGKILL"); else child.kill("SIGKILL");
+      terminateTree(child, "SIGKILL");
     }, options.timeout ?? 300000);
     const receive = (data: Buffer) => {
       chunks.push(data);
       options.output?.(data);
     };
-    child.stdout!.on("data", receive);
-    child.stderr!.on("data", receive);
+    child.stdout.on("data", receive);
+    child.stderr.on("data", receive);
     child.on("error", (error) => {
       clearTimeout(timer);
       reject(error);
@@ -181,12 +171,15 @@ export function runAsync(
     });
   });
 }
+export function which(command: string): string | null {
+  return findCommand(command);
+}
 // A command's first output line (such as `xelatex --version`), read once per
 // executable file: TeX is not replaced while a server runs, and when it is,
 // the file's identity changes.
 const versions = new Map<string, Promise<string>>();
 export async function commandVersion(command: string, env: NodeJS.ProcessEnv = process.env) {
-  const found = findExecutable(command, env);
+  const found = await resolveCommand(command, env);
   let identity = command;
   if (found) try {
     const stat = await fs.promises.stat(found);
@@ -199,4 +192,8 @@ export async function commandVersion(command: string, env: NodeJS.ProcessEnv = p
     version.catch(() => versions.delete(identity));
   }
   return version;
+}
+// The executable file PATH resolves a command to, as a shell would find it.
+async function resolveCommand(command: string, env: NodeJS.ProcessEnv) {
+  return findCommand(command, env);
 }

@@ -1,11 +1,31 @@
-import { agentDirs, importLoader, linkDirectory } from './agent-paths.mjs';
+import { envPath, terminateTree } from './platform.mjs';
+import { pathToFileURL } from 'node:url';
+import { agentDirs } from './agent-paths.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
+
+// Installers update the registry, but a running Electron process retains its
+// old PATH even across app.relaunch(). Use the same refresh for checks and launch.
+export async function refreshWindowsPath(inherited = process.env): Promise<NodeJS.ProcessEnv> {
+  if (process.platform !== 'win32') return inherited;
+  try {
+    const { stdout } = await promisify(execFile)(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+      ['-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Environment]::GetEnvironmentVariable("Path","Machine")+";"+[Environment]::GetEnvironmentVariable("Path","User")'], { windowsHide: true, timeout: 8000, maxBuffer: 65536 });
+    const paths = Object.keys(inherited).filter(key => key.toLowerCase() === 'path').map(key => inherited[key]);
+    return { ...inherited, PATH: [...paths, stdout.trim()].filter(Boolean).join(';') };
+  } catch { return inherited; }
+}
 
 export function backendEnvironment(node: string, root: string, data: string, inherited = process.env) {
+  // Windows may supply both Path and PATH. Keep every inherited directory
+  // before emitting a single canonical key for the backend.
+  const inheritedPath = process.platform === 'win32'
+    ? Object.keys(inherited).filter(key => key.toLowerCase() === 'path').map(key => inherited[key] || '').join(path.delimiter)
+    : envPath(inherited);
   const home = os.homedir();
   const nvm = path.join(inherited.NVM_DIR || path.join(home, '.nvm'), 'versions/node');
   let nodeBins: string[] = [];
@@ -13,7 +33,7 @@ export function backendEnvironment(node: string, root: string, data: string, inh
   // An installed release has its dependencies beside it in node_modules.
   const hoisted = path.basename(path.dirname(root)) === 'node_modules' ? [path.join(path.dirname(root), '.bin')] : [];
   const directories = [path.dirname(node), path.join(root, 'node_modules/.bin'), ...hoisted,
-    ...(inherited.PATH || '').split(path.delimiter), ...agentDirs(inherited),
+    ...inheritedPath.split(path.delimiter), ...agentDirs(inherited),
     ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin', '.volta/bin', '.asdf/shims'].map(dir => path.join(home, dir)), ...nodeBins,
     '/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
   const env = { ...inherited, PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),
@@ -22,6 +42,7 @@ export function backendEnvironment(node: string, root: string, data: string, inh
   // The backend is ordinary Node, even when Electron itself was started by a tool.
   for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'PAPILOT_REVIEW_ENGINE', 'PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX',
     'PAPILOT_DESKTOP_BUNDLE', 'PAPILOT_DESKTOP_FINGERPRINT']) delete (env as NodeJS.ProcessEnv)[key];
+  if (process.platform === 'win32') for (const key of Object.keys(env)) if (key !== 'PATH' && key.toLowerCase() === 'path') delete (env as NodeJS.ProcessEnv)[key];
   return env;
 }
 
@@ -34,8 +55,8 @@ export function startBackend(options: { node: string; root: string; data: string
   const loaders = [path.join(options.root, 'node_modules/tsx/dist/loader.mjs'), path.join(path.dirname(options.root), 'tsx/dist/loader.mjs')];
   let child: ChildProcess;
   try {
-    child = spawn(options.node, ['--import', importLoader(loaders.find(file => fs.existsSync(file)) || loaders[0]), path.join(options.root, 'src/server/start.ts')], {
-      cwd: options.root, env: options.env, stdio: ['ignore', fd, fd, 'ipc'], detached: process.platform !== 'win32',
+    child = spawn(options.node, ['--import', pathToFileURL(loaders.find(file => fs.existsSync(file)) || loaders[0]).href, path.join(options.root, 'src/server/start.ts')], {
+      cwd: options.root, env: options.env, windowsHide: true, stdio: ['ignore', fd, fd, 'ipc'], detached: process.platform !== 'win32',
     });
   } finally { fs.closeSync(fd); }
   const ready = new Promise<string>((resolve, reject) => {
@@ -55,14 +76,29 @@ export function startBackend(options: { node: string; root: string; data: string
     if (child.exitCode !== null || child.signalCode !== null) return;
     await new Promise<void>(resolve => {
       const timer = setTimeout(() => {
-        try { if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already stopped */ }
+        try { terminateTree(child, 'SIGKILL'); } catch { /* already stopped */ }
         resolve();
       }, 4000);
       child.once('exit', () => { clearTimeout(timer); resolve(); });
-      child.kill('SIGTERM');
+      if (child.connected) child.send({ type: 'papilot:shutdown' });
+      else terminateTree(child);
     });
   }
-  return { child, ready, stop };
+  return { child, ready, stop, idle: () => idleCheck(child, message => child.send(message)) };
+}
+
+export function idleCheck(child: ChildProcess, send: (message: { type: string; id: string }) => void) {
+  return new Promise<boolean>((resolve, reject) => {
+    const id = randomUUID();
+    const timer = setTimeout(() => { child.off('message', receive); reject(new Error('Could not check running tasks. Try again after Papilot responds.')); }, 5000);
+    const receive = (message: any) => {
+      if (message?.type !== 'papilot:can-switch' || message.id !== id) return;
+      clearTimeout(timer); child.off('message', receive); resolve(message.busy === false);
+    };
+    child.on('message', receive);
+    try { send({ type: 'papilot:can-switch', id }); }
+    catch (error) { clearTimeout(timer); child.off('message', receive); reject(error); }
+  });
 }
 
 // Updates download only Papilot's own code (a layer, see scripts/desktop-layer.mjs)
@@ -89,7 +125,8 @@ export function linkBundle(root: string, bundle: string) {
     const target = path.join(bundle, folder), link = path.join(root, folder);
     if (!fs.existsSync(target) || !fs.existsSync(path.dirname(link))) continue;
     try { if (fs.readlinkSync(link) === target) continue; } catch { /* absent or not a link */ }
-    linkDirectory(target, link);
+    fs.rmSync(link, { recursive: true, force: true });
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
   }
 }
 // A layer this installer can run, downloaded by the updater.

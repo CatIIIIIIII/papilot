@@ -65,6 +65,31 @@ function uncertainRun(f: ReturnType<typeof fixture>, active = true) {
   return run;
 }
 
+test('comparison progress reaches workspace snapshots and clears when the build finishes', async () => {
+  const progress = { baseline: { step: 'tex', pass: 2, pages: 23, total: 180 } };
+  let finished = false;
+  const f = fixture(async (_method, route) => {
+    if (route.endsWith('/publish')) return { job: 'job' };
+    if (route.includes('/jobs/')) return finished ? { status: 'done', phase: 'render', round: 1 } : { status: 'running', phase: 'build', createdAt: 1234, progress };
+    if (route.includes('/feedback')) return feedback;
+    return summary;
+  });
+  try {
+    const updated = new Promise<void>(resolve => f.workspace.on('change', () => {
+      if (f.store.task(f.task.id).review?.job?.progress) resolve();
+    }));
+    const published = f.workspace.publish(f.task.id);
+    await updated;
+    assert.equal(f.workspace.snapshot().tasks[0].status, 'building');
+    assert.deepEqual(f.workspace.snapshot().tasks[0].review?.job, { id: 'job', status: 'running', phase: 'build', createdAt: 1234, progress });
+    finished = true;
+    await published;
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.store.task(f.task.id).pendingBuild, null);
+    assert.equal(f.store.task(f.task.id).review?.job?.progress, undefined);
+  } finally { f.close(); }
+});
+
 function identifiedTurn(run: Run, status = 'inProgress') {
   return { id: 'turn-confirmed', status, items: [{ type: 'userMessage', clientId: run.id }] };
 }
@@ -2207,5 +2232,65 @@ test('review threads use normal network access and inherit the resolved sandbox'
     assert.equal(start?.params.approvalPolicy, 'on-request');
     assert.deepEqual(start?.params.config, { web_search: 'live', 'sandbox_workspace_write.network_access': true });
     assert.equal(f.codex.calls.find(c => c.method === 'turn/start')?.params.sandboxPolicy, undefined);
+  } finally { f.close(); }
+});
+
+for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
+  test(`Codex ${lifecycle} inherits the task's configured approval reviewer`, async () => {
+    for (const config of [
+      { approvals_reviewer: 'auto_review' },
+      { approvals_reviewer: 'auto_review', profile: 'paper', profiles: { paper: { approvals_reviewer: 'user' } } },
+      { approvals_reviewer: 'guardian_subagent' },
+      { approvals_reviewer: null },
+      { approvals_reviewer: 'unknown' },
+      null,
+    ]) {
+      const f = fixture();
+      try {
+        if (lifecycle !== 'loaded') (f.workspace as any).loaded.clear();
+        if (lifecycle === 'start' || lifecycle === 'fallback') f.store.updateTask(f.task.id, { threadId: null });
+        f.codex.ready = true;
+        f.codex.handler = async (method, params) => {
+          if (method === 'config/read') {
+            assert.deepEqual(params, { cwd: f.task.worktree, includeLayers: false });
+            if (!config) throw new RpcResponseError('Unsupported method');
+            return { config };
+          }
+          if (lifecycle === 'fallback' && method === 'thread/start' && params.dynamicTools) throw new RpcResponseError('unknown field dynamicTools');
+          return method === 'turn/start' ? { turn: { id: 'turn-new' } } : { thread: { id: 'thread' } };
+        };
+        await f.workspace.enqueue(f.task.id, 'Revise this sentence.', `reviewer-${lifecycle}`, false);
+        await tick(); await tick();
+        const expected = config?.profiles?.paper.approvals_reviewer ?? (['auto_review', 'guardian_subagent'].includes(config?.approvals_reviewer || '') ? config?.approvals_reviewer : undefined);
+        const calls = f.codex.calls.filter(c => ['thread/start', 'thread/resume', 'turn/start'].includes(c.method));
+        assert.equal(calls.length, lifecycle === 'loaded' ? 1 : lifecycle === 'fallback' ? 3 : 2);
+        for (const call of calls) {
+          assert.equal(call.params.approvalsReviewer, expected);
+          if (expected === undefined) assert.equal(Object.hasOwn(call.params, 'approvalsReviewer'), false);
+          if (call.method === 'turn/start') assert.equal(Object.hasOwn(call.params, 'sandboxPolicy'), false);
+          else {
+            assert.equal(call.params.sandbox, 'workspace-write');
+            assert.equal(call.params.approvalPolicy, 'on-request');
+          }
+        }
+      } finally { f.close(); }
+    }
+  });
+}
+
+test('loaded Codex turns re-read reviewer changes without requiring a reconnect', async () => {
+  const f = fixture();
+  let reviewer = 'auto_review';
+  try {
+    f.codex.ready = true;
+    f.codex.handler = async method => method === 'config/read' ? { config: { approvals_reviewer: reviewer } } : { turn: { id: 'turn-new' } };
+    await f.workspace.enqueue(f.task.id, 'First revision.', 'reviewer-first', false);
+    await tick(); await tick();
+    await f.workspace.interrupt(f.task.id);
+    await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'turn-new', status: 'interrupted' } } });
+    reviewer = 'user';
+    await f.workspace.enqueue(f.task.id, 'Second revision.', 'reviewer-second', false);
+    await tick(); await tick();
+    assert.deepEqual(f.codex.calls.filter(c => c.method === 'turn/start').map(c => c.params.approvalsReviewer), ['auto_review', 'user']);
   } finally { f.close(); }
 });

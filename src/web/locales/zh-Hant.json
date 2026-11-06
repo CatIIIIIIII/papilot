@@ -355,6 +355,7 @@
   "Editing light mode colors. Changes are saved automatically.": "正在編輯淺色模式色彩。變更會自動儲存。",
   "Enable shortcut: {action}": "啟用捷徑：{action}",
   "Enter a folder path": "輸入資料夾路徑",
+  "Environment": "執行環境",
   "Environment variable": "環境變數",
   "Errors": "錯誤",
   "Expand": "擴寫",
@@ -1285,5 +1286,9 @@
   "{n} review update": "{n} 項審閱意見",
   "{n} review update included": "將附帶 {n} 項審閱意見",
   "{n} review updates": "{n} 項審閱意見",
-  "{n} review updates included": "將附帶 {n} 項審閱意見"
+  "{n} review updates included": "將附帶 {n} 項審閱意見",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "正在編譯修改前後的版本。長篇論文可能需要幾分鐘。",
+  "Comparing the typeset pages…": "正在比對排版後的頁面…",
+  "Elapsed: {time}": "已用時間：{time}",
+  "Install Git in this environment to use version management.": "請在目前環境中安裝 Git 後使用版本管理。"
 }

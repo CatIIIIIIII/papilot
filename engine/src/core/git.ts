@@ -18,7 +18,7 @@ export function gitBinary() {
   try {
     const candidate = path.join(
       run(binary, ["--exec-path"]).stdout.toString().trim(),
-      "git",
+      process.platform === "win32" ? "git.exe" : "git",
     );
     fs.accessSync(candidate, fs.constants.X_OK);
     binary = candidate;
@@ -50,7 +50,7 @@ export const within = (file: string, scopes: readonly string[]) =>
 export function cleanPath(value: string) {
   const normalized = value.replaceAll("\\", "/");
   const parts = normalized.split("/").filter((p) => p && p !== ".");
-  if (normalized.startsWith("/") || parts.includes("..") || parts[0] === ".git")
+  if (normalized.startsWith("/") || /^[a-z]:/i.test(normalized) || parts.includes("..") || parts[0]?.toLowerCase() === ".git")
     throw new Error(`Use a repository-relative path: ${value}`);
   return parts.join("/");
 }
@@ -503,7 +503,7 @@ export class Repo {
     // snapshot with blobs() both duplicates memory and hits spawnSync's buffer
     // limit for ordinary repositories containing PDFs and figures.
     const child = startTracked(() => spawn(gitBinary(), ["cat-file", "--batch"], {
-      cwd: this.root, detached: true, stdio: ["pipe", "pipe", "pipe"],
+      cwd: this.root, detached: process.platform !== "win32", windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
     }));
     let stderr = "", timedOut = false;
     child.stderr.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-65536); });

@@ -118,6 +118,7 @@ jobs:
       - name: Require explicit success from every required job
         env:
           CHECK_RESULT: ${{ needs.check.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
           DESKTOP_RESULT: ${{ needs.desktop.result }}

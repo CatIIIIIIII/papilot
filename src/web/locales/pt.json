@@ -355,6 +355,7 @@
   "Editing light mode colors. Changes are saved automatically.": "Editando cores do modo claro. As alterações são salvas automaticamente.",
   "Enable shortcut: {action}": "Ativar atalho: {action}",
   "Enter a folder path": "Insira o caminho de uma pasta",
+  "Environment": "Ambiente",
   "Environment variable": "Variável de ambiente",
   "Errors": "Erros",
   "Expand": "Expandir",
@@ -1285,5 +1286,9 @@
   "{n} review update": "{n} observação de revisão",
   "{n} review update included": "{n} observação de revisão incluída",
   "{n} review updates": "{n} observações de revisão",
-  "{n} review updates included": "{n} observações de revisão incluídas"
+  "{n} review updates included": "{n} observações de revisão incluídas",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "Preparando as duas versões para comparação. Documentos longos podem levar alguns minutos.",
+  "Comparing the typeset pages…": "Comparando as páginas diagramadas…",
+  "Elapsed: {time}": "Tempo decorrido: {time}",
+  "Install Git in this environment to use version management.": "Instale o Git neste ambiente para usar o gerenciamento de versões."
 }

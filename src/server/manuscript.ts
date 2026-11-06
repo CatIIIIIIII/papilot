@@ -473,7 +473,7 @@ export async function pdfWords(pdf: string, page: number) {
 // named `problemsKey`; a failed build has no PDF of its own to place them on.
 interface Build {
   tree: string; status: ManuscriptBuild['status']; key?: string; pdf?: string; root?: string; sourceDir?: string; pages?: [number, number][]; builtAt?: number; error?: string; progress?: BuildProgress;
-  problems?: StoredProblem[]; problemsKey?: string; log?: string; logFolder?: string;
+  problems?: StoredProblem[]; problemsKey?: string; log?: string; logFolder?: string; previewOnly?: () => boolean;
 }
 
 
@@ -519,11 +519,28 @@ export class Manuscripts extends EventEmitter {
 
   // The caller verifies the example's source tree. An edit or explicit rebuild
   // uses Builder; the original PDF can be read before TeX is installed.
-  async seedPreview(projectId: string, root: string, tree: string, pdf: string) {
-    const { mupdf } = await engine(), bytes = await fs.promises.readFile(pdf), pages = await pageSizes(mupdf, pdf);
-    const key = createHash('sha256').update(tree).update(bytes).digest('hex').slice(0, 16);
-    this.builds.set(projectId, { tree, status: 'ready', key, pdf, root, sourceDir: '', pages,
+  async seedPreview(projectId: string, root: string, tree: string, pdf: string, previewOnly?: () => boolean) {
+    const { mupdf } = await engine(), key = await this.rememberPreview(root, tree, pdf), pages = await pageSizes(mupdf, pdf);
+    this.builds.set(projectId, { tree, status: 'ready', key, pdf, root, sourceDir: '', pages, previewOnly,
       builtAt: (await fs.promises.stat(pdf)).mtimeMs, problems: [], problemsKey: key });
+  }
+
+  // Demo previews live outside the compiler cache. Register their persisted
+  // identities on every startup so notes from before Git installation can
+  // still be placed, even after the app has restarted or the paper was edited.
+  async rememberPreview(root: string, tree: string, pdf: string) {
+    const key = createHash('sha256').update(tree).update(await fs.promises.readFile(pdf)).digest('hex').slice(0, 16);
+    this.oldPdfs.set(`${root}:${key}`, pdf);
+    return key;
+  }
+
+  // Keep the original PDF addressable while notes move from the read-only
+  // demo to its first Git-backed preview.
+  releasePreview(projectId: string) {
+    const build = this.builds.get(projectId);
+    if (!build?.previewOnly) return;
+    if (build.root && build.key && build.pdf) this.oldPdfs.set(`${build.root}:${build.key}`, build.pdf);
+    this.builds.delete(projectId);
   }
 
   // The working tree as a Git tree. Requests made while a snapshot runs share
@@ -563,6 +580,12 @@ export class Manuscripts extends EventEmitter {
 
   async state(projectId: string, root: string, rebuild = false): Promise<{ git: GitStatus; build: ManuscriptBuild }> {
     const current = this.builds.get(projectId), building = current?.status === 'building';
+    if (current?.previewOnly) {
+      const matches = current.previewOnly();
+      const error = rebuild || !matches ? 'Install Git to compile changes to the example paper.' : undefined;
+      return { git: { branch: null, upstream: null, ahead: 0, behind: 0, files: [], head: null },
+        build: { status: error ? 'failed' : 'ready', key: current.key, pages: current.pages, builtAt: current.builtAt, current: matches, error } };
+    }
     // Polling an in-flight build needs its status, not another source snapshot.
     // Once it finishes, the next read checks for edits made during compilation.
     // The snapshot comes first so an unchanged tree can reuse the last status.
