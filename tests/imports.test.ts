@@ -11,7 +11,7 @@ const source = '\\documentclass{article}\n\\begin{document}\nHello paper.\n\\end
 const data = (text: string) => Buffer.from(text).toString('base64');
 const git = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 function fixture() {
-  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-import-'))), root = path.join(directory, 'original'); fs.mkdirSync(root);
+  const directory = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-import-'))), root = path.join(directory, 'original'); fs.mkdirSync(root);
   const manuscripts = new Manuscripts(); let result: 'ready' | 'failed' = 'failed', calls = 0;
   manuscripts.state = async () => { calls++; return { git: {} as any, build: { status: result, current: result === 'ready', error: result === 'failed' ? 'Missing package.sty' : undefined } }; };
   const imports = new PaperImports(manuscripts, path.join(directory, 'data'));
@@ -202,6 +202,23 @@ test('parent repositories are refused before changing source and empty Git repos
     const value = await f.imports.create({ path: nested }); await f.imports.build(value.id, {});
     assert.match((await settled(f.imports, value.id)).error!, /parent Git/); assert.equal(fs.existsSync(path.join(nested, '.latex-review.json')), false);
     fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root); assert.ok(git(f.root, 'rev-parse', 'HEAD'));
+  } finally { t.after(f.close); }
+});
+
+test('Windows imports accept alternate root casing while still refusing nested repositories', { skip: process.platform !== 'win32' }, async t => {
+  const f = fixture();
+  try {
+    fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root);
+    const head = git(f.root, 'rev-parse', 'HEAD'), alias = f.root[0].toLowerCase() + f.root.slice(1);
+    await prepareRepository(alias); await prepareRepository(f.root.toUpperCase());
+    assert.equal(git(f.root, 'rev-parse', 'HEAD'), head);
+    f.ready(); const value = await f.imports.create({ path: alias });
+    assert.equal(value.path, fs.realpathSync.native(f.root));
+    await f.imports.build(value.id, {}); const ready = await settled(f.imports, value.id);
+    assert.equal(ready.phase, 'ready', ready.error);
+    const nested = path.join(alias, 'nested'); fs.mkdirSync(nested);
+    await assert.rejects(prepareRepository(nested), /parent Git/);
+    assert.deepEqual(fs.readdirSync(nested), []);
   } finally { t.after(f.close); }
 });
 

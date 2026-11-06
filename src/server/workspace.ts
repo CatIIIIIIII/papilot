@@ -15,6 +15,7 @@ import { CursorAgent } from './cursor.ts';
 import { reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
+import { pathIdentity, realPath } from './real-path.ts';
 import { findSkill, type SkillFile } from './skills.ts';
 import { buildFixPrompt, reviewInstructions, skillPrompt, summarizeFeedback } from '../conversation.ts';
 import { reconciliationPrompt } from './reconcile.ts';
@@ -216,19 +217,24 @@ export class Workspace extends EventEmitter {
   }
   private async projectRoot(input: string) {
     const expanded = input.startsWith('~/') ? path.join(process.env.HOME!, input.slice(2)) : input;
-    const root = fs.realpathSync(expanded);
+    const root = realPath(expanded);
     const git = await execute('git', ['-C', root, 'rev-parse', '--show-toplevel']);
-    if (fs.realpathSync(git.stdout.trim()) !== root) throw new Error('Select the root directory of the Git repository.');
+    if (realPath(git.stdout.trim()) !== root) throw new Error('Select the root directory of the Git repository.');
     await execute('git', ['-C', root, 'rev-parse', '--verify', 'HEAD']);
     return root;
   }
   async addProject(input: string, name?: string) {
     const expanded = input.startsWith('~/') ? path.join(process.env.HOME!, input.slice(2)) : input;
-    await prepareRepository(fs.realpathSync(expanded));
+    await prepareRepository(realPath(expanded));
     const root = await this.projectRoot(input);
-    const existing = this.store.projectByPath(root); if (existing) return existing;
+    const existing = this.projectByPath(root); if (existing) return existing;
     const project = { id: randomUUID(), name: name?.trim() || path.basename(root), path: root, createdAt: Date.now() };
     this.store.saveProject(project); return project;
+  }
+  projectByPath(root: string) {
+    const existing = this.store.projectByPath(root); if (existing) return existing;
+    const identity = pathIdentity(root);
+    return this.store.projects().find(project => pathIdentity(project.path) === identity);
   }
   renameProject(projectId: string, name: string) {
     const project = { ...this.store.project(projectId), name };
@@ -256,25 +262,25 @@ export class Workspace extends EventEmitter {
     try {
       check();
       const root = await this.projectRoot(input), previous = this.store.project(id);
-      if (root === previous.path) return name === undefined ? previous : this.renameProject(id, name);
-      if (this.store.projectByPath(root)) throw new Error('This repository is already added as another paper.');
+      if (root === pathIdentity(previous.path)) return name === undefined ? previous : this.renameProject(id, name);
+      if (this.projectByPath(root)) throw new Error('This repository is already added as another paper.');
       const client = await this.connectReview(root);
       await client.get('/api/tasks');
       const tasks = this.store.tasks().filter(task => task.projectId === id), worktrees = new Map<string, string>();
       // A new path must still contain this paper's existing review tasks.
       // Taking paths from the engine also handles a relocated repository.
-      const common = async (folder: string) => fs.realpathSync(path.resolve(folder, (await execute('git', ['-C', folder, 'rev-parse', '--git-common-dir'])).stdout.trim()));
+      const common = async (folder: string) => realPath(path.resolve(folder, (await execute('git', ['-C', folder, 'rev-parse', '--git-common-dir'])).stdout.trim()));
       const repository = await common(root);
       for (const task of tasks) {
         const info = await client.get(taskRoute(task.name));
         if (info?.task !== task.name || typeof info.worktree !== 'string' || await common(info.worktree) !== repository) throw new Error('The selected repository does not contain this paper’s task worktrees. Select the repository with its existing tasks, or add it as a separate paper.');
-        worktrees.set(task.id, fs.realpathSync(info.worktree));
+        worktrees.set(task.id, realPath(info.worktree));
       }
       const project = { ...this.store.project(id), path: root, ...(name === undefined ? {} : { name }) };
       this.store.transaction(() => {
         for (const task of tasks) {
           const worktree = worktrees.get(task.id)!;
-          if (worktree !== task.worktree) {
+          if (worktree !== pathIdentity(task.worktree)) {
             if (task.threadId) this.loaded.delete(task.threadId);
             this.store.updateTask(task.id, { worktree, threadId: null, turnId: null });
           }

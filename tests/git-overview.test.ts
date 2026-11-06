@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { gitOverview, parseWorktrees } from '../src/server/git-overview.ts';
 import { graphRows } from '../src/web/git-graph.ts';
+import { pathIdentity } from '../src/server/real-path.ts';
 import type { GitGraphCommit } from '../src/shared.ts';
 
 test('worktree porcelain preserves unusual paths, empty locks and detached/unborn HEADs', () => {
@@ -59,7 +60,7 @@ test('repository overview reads each worktree, detached tips, refs and merge par
     assert.equal(result.worktrees[0].current, true);
     assert.equal(result.worktrees[0].status?.ahead, 2);
     // Git lists worktrees with forward slashes on Windows.
-    const canonical = (value: string) => { try { return fs.realpathSync(value); } catch { return value.split(path.sep).join('/'); } };
+    const canonical = pathIdentity;
     const proposal = result.worktrees.find(tree => tree.branch === 'revision')!;
     assert.equal(proposal.taskId, 'proposal-task', 'Task paths resolve through symlink aliases');
     assert.equal(result.worktrees.find(tree => canonical(tree.path) === canonical(detached))?.taskId, 'detached-task');
@@ -81,6 +82,13 @@ test('repository overview reads each worktree, detached tips, refs and merge par
     assert.equal(canonical(linked.worktrees[0].path), canonical(other));
     assert.equal(linked.worktrees[0].current, true);
     assert.equal(linked.worktrees.filter(tree => tree.current).length, 1);
+    if (process.platform === 'win32') {
+      const alias = root[0].toLowerCase() + root.slice(1);
+      const alternate = await gitOverview(alias, [{ id: 'missing-task', worktree: gone[0].toLowerCase() + gone.slice(1) }]);
+      assert.equal(alternate.worktrees[0].current, true);
+      assert.equal(alternate.worktrees.filter(tree => tree.current).length, 1);
+      assert.equal(alternate.worktrees.find(tree => canonical(tree.path) === canonical(gone))?.taskId, 'missing-task');
+    }
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
