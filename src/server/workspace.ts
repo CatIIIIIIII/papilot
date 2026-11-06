@@ -505,7 +505,15 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       this.loaded.add(result.thread.id);
     }
     this.store.updateTask(task.id, { pendingRunId: run.id });
-    const input = [{ type: 'text', text: run.prompt }, ...(run.attachments || []).filter(file => file.mime.startsWith('image/')).map(file => ({ type: 'localImage', path: this.attachments.path(file) }))];
+    // ACP, Cursor and Antigravity retain their first prompt on resume. Refresh
+    // old Papilot access instructions as well as the native policy, so an old
+    // "file tools only" conversation can use newly selected permissions.
+    const permissionMode = task.mode !== 'review' && !['codex', 'claude', 'glm'].includes(this.agentOf(task))
+      ? agent.permissionOptions?.().find(option => option.value === (task.permissions || 'workspace')) : undefined;
+    const prompt = permissionMode
+      ? `Papilot settings update: current permissions are ${permissionMode.label}. This supersedes earlier Papilot messages fixing the access mode, including claims that shell commands are unavailable. ${taskAccessInstructions}\n\n${run.prompt}`
+      : run.prompt;
+    const input = [{ type: 'text', text: prompt }, ...(run.attachments || []).filter(file => file.mime.startsWith('image/')).map(file => ({ type: 'localImage', path: this.attachments.path(file) }))];
     let result: any;
     const models = this.runtimes[this.agentOf(task)].models;
     const model = task.model ? models.find(model => model.id === task.model) : models.find(model => model.isDefault);

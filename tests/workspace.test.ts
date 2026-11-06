@@ -2293,6 +2293,26 @@ for (const permissions of ['full', 'workspace'] as const) {
   });
 }
 
+
+for (const permissions of ['full', 'workspace'] as const) test(`loaded native conversations receive updated access context for ${permissions}`, async () => {
+  const f = fixture();
+  try {
+    (f.workspace as any).agents.antigravity = f.codex;
+    f.store.updateTask(f.task.id, { agent: 'antigravity', permissions });
+    f.workspace.runtimes.antigravity.authenticated = true;
+    f.codex.ready = true;
+    const run = await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `native-context-${permissions}`, false);
+    await tick(); await tick();
+    assert.equal(f.codex.calls.some(call => call.method === 'thread/resume'), false);
+    const text = f.codex.calls.find(call => call.method === 'turn/start')?.params.input[0].text;
+    assert.match(text, /supersedes earlier Papilot messages fixing the access mode/);
+    assert.match(text, /Keep manuscript edits in this isolated task worktree/);
+    assert.match(text, permissions === 'full' ? /current permissions are Full access/ : /current permissions are Workspace access/);
+    assert.ok(text.endsWith(run.prompt));
+    assert.doesNotMatch(run.prompt, /Papilot settings update/, 'internal context must not alter the author’s stored message');
+  } finally { f.close(); }
+});
+
 test('editing instructions keep manuscript boundaries without pinning mutable access permissions', () => {
   const f = fixture();
   try {
