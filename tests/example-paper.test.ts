@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { copyExamplePaper } from '../src/server/example-paper.ts';
 
-test('a bundled read-only example becomes an editable copy without changing the source', () => {
+test('a bundled read-only example becomes an editable copy without changing the source', { skip: process.platform === 'win32' && 'Windows has no executable bit to preserve' }, () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-example-'));
   const source = path.join(temporary, 'source'), destination = path.join(temporary, 'paper');
   const sections = path.join(source, 'sections'), main = path.join(sections, 'main.tex');

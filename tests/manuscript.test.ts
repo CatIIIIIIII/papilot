@@ -51,7 +51,7 @@ test('the working tree snapshot includes uncommitted edits without touching the 
 
 test('SyncTeX output resolves to a normalized source path and line', () => {
   const output = 'SyncTeX result begin\nOutput:/b/src/build/main.pdf\nInput:/b/src/./chapters/intro.tex\nLine:21\nColumn:-1\nSyncTeX result end\n';
-  assert.deepEqual(parseSynctex(output), { input: '/b/src/chapters/intro.tex', line: 21 });
+  assert.deepEqual(parseSynctex(output), { input: path.normalize('/b/src/chapters/intro.tex'), line: 21 });
   assert.equal(parseSynctex('SyncTeX result begin\nSyncTeX result end\n'), null);
 });
 

@@ -30,17 +30,20 @@ test('incoming status decorates only files changed upstream, including renames a
     f.write(f.mine, 'main.tex', 'Pending local revision.\n');
     f.write(f.mine, 'notes.md', 'Local notes.\n'); f.git(f.mine, 'add', 'notes.md');
     f.write(f.mine, 'local.tex', 'Local worktree edit.\n');
-    f.write(f.mine, 'new file\twith space.tex', 'Local new file.\n');
+    // A space and a non-ASCII letter make an unusual path Windows accepts; a
+    // tab does not survive the Windows file API.
+    const unusual = 'new file 图 with space.tex';
+    f.write(f.mine, unusual, 'Local new file.\n');
     f.edit(f.other, 'main.tex', 'Incoming revision.\n');
     f.git(f.other, 'mv', 'notes.md', 'renamed notes.md');
     f.git(f.other, 'commit', '-qm', 'Rename notes');
-    f.edit(f.other, 'new file\twith space.tex', 'Incoming new file.\n');
+    f.edit(f.other, unusual, 'Incoming new file.\n');
     f.git(f.other, 'push', '-q');
     assert.ok((await gitStatus(f.mine)).files.every(file => !file.incoming), 'No guessed decorations before fetching');
     f.git(f.mine, 'fetch', '-q');
     const status = await gitStatus(f.mine);
     const incoming = Object.fromEntries(status.files.map(file => [file.path, file.incoming]));
-    assert.deepEqual(incoming, { 'local.tex': undefined, 'main.tex': 'M', 'notes.md': 'R', 'new file\twith space.tex': 'A' });
+    assert.deepEqual(incoming, { 'local.tex': undefined, 'main.tex': 'M', 'notes.md': 'R', [unusual]: 'A' });
     assert.equal(status.files.find(file => file.path === 'notes.md')?.staged, true);
     f.git(f.mine, 'remote', 'remove', 'origin');
     assert.ok((await gitStatus(f.mine)).files.every(file => !file.incoming), 'Removing the remote clears decorations');

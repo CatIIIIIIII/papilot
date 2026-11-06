@@ -17,3 +17,5 @@
 .desktop-window-buttons svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.25}
 [data-desktop="linux"] .sidebar-collapsed .desktop-window-drag{width:112px}
 [data-desktop="linux"] .sidebar-collapsed .sidebar-toggle{margin-left:112px}
+[data-desktop="win32"] .sidebar-collapsed .desktop-window-drag{width:112px}
+[data-desktop="win32"] .sidebar-collapsed .sidebar-toggle{margin-left:112px}

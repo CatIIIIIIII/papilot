@@ -89,7 +89,7 @@ test('skill writes validate identifiers, content and scope, and built-ins stay r
   } finally { f.close(); }
 });
 
-test('paper skills cannot write through symlinked directories, files or hard links', () => {
+test('paper skills cannot write through symlinked directories, files or hard links', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, () => {
   const f = fixture();
   try {
     const outside = path.join(f.root, 'outside'); fs.mkdirSync(outside);

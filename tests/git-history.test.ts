@@ -41,7 +41,7 @@ test('version history paginates without losing messages and follows the manuscri
   await assert.rejects(gitVersionDiff(root, merge, '../main.tex'), /did not change/);
 });
 
-test('restoring a snapshot creates a new version and preserves later history, renames, binary files and symlinks', async t => {
+test('restoring a snapshot creates a new version and preserves later history, renames, binary files and symlinks', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async t => {
   const { root, git, write, commit } = fixture(t);
   write('main.tex', 'Original\n'); write('image.bin', Buffer.from([0, 1, 2, 255]));
   fs.symlinkSync('main.tex', path.join(root, 'link.tex'));
@@ -155,7 +155,7 @@ test('restore preserves ignored hardlink backups while replacing the tracked ent
   assert.equal(fs.lstatSync(path.join(root, 'backup.tex'), { bigint: true }).ino, backup.ino);
 });
 
-test('restore replaces a tracked symlink ancestor without traversing into ignored files', async t => {
+test('restore replaces a tracked symlink ancestor without traversing into ignored files', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async t => {
   const { root, git, write, commit } = fixture(t);
   write('.gitignore', 'cache/\n'); fs.mkdirSync(path.join(root, 'view')); write('view/paper.tex', 'Old version\n');
   const first = commit('Old version');
@@ -172,7 +172,7 @@ test('restore replaces a tracked symlink ancestor without traversing into ignore
   assert.equal(fs.lstatSync(path.join(root, 'cache/paper.tex'), { bigint: true }).ino, ignored.ino);
 });
 
-test('restore still protects ignored symlinks themselves, including dangling aliases', async t => {
+test('restore still protects ignored symlinks themselves, including dangling aliases', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async t => {
   const cases = [
     { target: 'output.pdf', local: 'output.pdf', probe: 'output.pdf' },
     { target: 'output.pdf', local: 'OUTPUT.PDF', probe: 'output.pdf' },
@@ -235,7 +235,7 @@ for (const fails of ['preparation', 'real checkout']) test(`restore preserves fi
   assert.ok(!fs.existsSync(path.join(root, '.git/index.lock')));
 });
 
-for (const concurrentEdit of [false, true]) test(`restore handles a rejected ref update${concurrentEdit ? ' without overwriting a concurrent edit' : ' by restoring file types and contents'}`, async t => {
+for (const concurrentEdit of [false, true]) test(`restore handles a rejected ref update${concurrentEdit ? ' without overwriting a concurrent edit' : ' by restoring file types and contents'}`, { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async t => {
   const { root, git, write, commit } = fixture(t);
   write('.gitignore', 'cache/\n'); write('main.tex', 'Old paper\n');
   fs.mkdirSync(path.join(root, 'view')); write('view/notes.tex', 'Old notes\n'); const first = commit('Old version');

@@ -51,7 +51,7 @@ async function client(root: string, clients: ChildProcess[], code: string, optio
 }
 const printServer = `console.log((await client.get('/api/info')).pid);`;
 
-test('the desktop app owns the review server it starts, so even a crash stops it', { timeout: 90000 }, () => withPaper(async (root, clients) => {
+test('the desktop app owns the review server it starts, so even a crash stops it', { timeout: 90000, skip: process.platform === 'win32' && 'inspects processes with POSIX ps' }, () => withPaper(async (root, clients) => {
   const { child, pid: server } = await client(root, clients, `${desktop}\n${printServer}`, { desktop: true });
   assert.match(ps('command', server), /^Papilot review server /);
   assert.notEqual(ps('pgid', server), ps('pgid', child.pid!), 'Killing the app\'s process group leaves the server to clean up');
@@ -59,14 +59,14 @@ test('the desktop app owns the review server it starts, so even a crash stops it
   assert.ok(await exited(server), 'The review server stops when its app is killed');
 }));
 
-test('an owned review server that stops on its own exits while its app keeps running', { timeout: 90000 }, () => withPaper(async (root, clients) => {
+test('an owned review server that stops on its own exits while its app keeps running', { timeout: 90000, skip: process.platform === 'win32' && 'inspects processes with POSIX ps' }, () => withPaper(async (root, clients) => {
   const { child, pid: server } = await client(root, clients, `${desktop}\n${printServer}`, { desktop: true });
   await stop(root);
   assert.ok(await exited(server), 'The stopped server exits');
   assert.equal(child.exitCode, null, 'The app is still running');
 }));
 
-test('a review server whose app quits while it starts does not keep running', { timeout: 90000 }, () => withPaper(async (root, clients) => {
+test('a review server whose app quits while it starts does not keep running', { timeout: 90000, skip: process.platform === 'win32' && 'process lifetime follows Windows rules' }, () => withPaper(async (root, clients) => {
   // The app quits as soon as the server process exists, before it listens.
   const { child, pid: server } = await client(root, clients, `const { connect } = await import(${module('engine/src/client.ts')});
 const { execFileSync } = await import('node:child_process');
@@ -87,7 +87,7 @@ for (;;) {
   assert.ok(await exited(server, 15), 'The orphaned server exits instead of serving for 12 hours');
 }));
 
-test('a review server started by the CLI outlives the desktop app that reused it', { timeout: 90000 }, () => withPaper(async (root, clients) => {
+test('a review server started by the CLI outlives the desktop app that reused it', { timeout: 90000, skip: process.platform === 'win32' && 'process lifetime follows Windows rules' }, () => withPaper(async (root, clients) => {
   const started = await client(root, clients, `${cli}\n${printServer}`, { exit: true });
   if (started.child.exitCode === null) await once(started.child, 'exit');
   assert.ok(running(started.pid), 'A CLI command leaves its review server running');

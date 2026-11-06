@@ -6,6 +6,7 @@ import os from 'node:os';
 import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 import { activeInstallation, devRevision, newerVersion, readJson, releaseVersion, stableVersion, writeJson } from '../bin/installation.mjs';
+import { importLoader, killTree, tarCommand } from '../bin/agent-paths.mjs';
 import { DESKTOP_DEV_TAG, DESKTOP_RELEASES, latestDesktopRelease, latestRelease, Updates } from '../src/server/updates.ts';
 import { DEV_REPOSITORY, download, health, installLayer, installRelease, loaderFor, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
 import { createHash } from 'node:crypto';
@@ -175,7 +176,7 @@ test('installing a layer verifies the download, links the installer dependencies
   };
   for (const [name, content] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); fs.writeFileSync(path.join(root, name), content); }
   const archive = path.join(source, 'layer.tgz');
-  execFileSync('tar', ['-czf', archive, '-C', source, 'package'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
+  execFileSync(tarCommand(), ['-czf', archive, '-C', source, 'package'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
   const bytes = fs.readFileSync(archive), layer = { url: 'https://github.com/x/layer.tgz', size: bytes.length, sha256: sha256(bytes) };
   const fetcher = (body: Buffer): typeof fetch => async () => new Response(new Uint8Array(body));
   const bundle = { root: process.cwd(), fingerprint };
@@ -402,7 +403,7 @@ async function freePort() {
 function fakeRelease(root: string, version: string, broken = false) {
   fs.mkdirSync(path.join(root, 'src/server'), { recursive: true });
   writeJson(path.join(root, 'package.json'), { name: 'papilot', version, type: 'module' });
-  fs.symlinkSync(path.join(process.cwd(), 'node_modules'), path.join(root, 'node_modules'), 'dir');
+  fs.symlinkSync(path.join(process.cwd(), 'node_modules'), path.join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   fs.writeFileSync(path.join(root, 'src/server/main.ts'), `
     import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
     const data = process.env.PAPILOT_DATA;
@@ -433,7 +434,9 @@ for (const version of ['0.7.0', devVersion]) for (const broken of [false, true])
     assert.equal(readJson(path.join(data, 'updates/active.json'))?.version, broken ? undefined : version);
   } finally {
     const pid = Number(fs.existsSync(path.join(data, 'child.pid')) && fs.readFileSync(path.join(data, 'child.pid'), 'utf8'));
-    if (pid) try { process.kill(pid, 'SIGTERM'); } catch { /* already exited */ }
+    // Windows will not remove a directory a process still runs in, so end the
+    // whole tree before cleaning up.
+    if (pid) killTree(pid, 'SIGKILL');
     fs.rmSync(data, { recursive: true, force: true });
   }
 });
@@ -458,19 +461,18 @@ for (const version of ['0.7.0', devVersion]) test(`a browser install of ${versio
     fs.cpSync(path.join(process.cwd(), 'src'), path.join(root, 'src'), { recursive: true });
     fs.cpSync(path.join(process.cwd(), 'bin'), path.join(root, 'bin'), { recursive: true });
     writeJson(path.join(root, 'package.json'), { ...readJson(path.join(process.cwd(), 'package.json')), version });
-    fs.symlinkSync(path.join(process.cwd(), 'node_modules'), path.join(root, 'node_modules'), 'dir');
-    fs.symlinkSync(path.join(process.cwd(), 'engine'), path.join(root, 'engine'), 'dir');
+    fs.symlinkSync(path.join(process.cwd(), 'node_modules'), path.join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+    fs.symlinkSync(path.join(process.cwd(), 'engine'), path.join(root, 'engine'), process.platform === 'win32' ? 'junction' : 'dir');
     const start = path.join(root, 'src/server/start.ts');
     fs.appendFileSync(start, "\nfs.writeFileSync(path.join(DATA, 'test-server.pid'), String(process.pid));\n");
   };
   const stop = async () => {
     const file = path.join(data, 'test-server.pid');
     const pid = fs.existsSync(file) ? Number(fs.readFileSync(file, 'utf8')) : started?.pid;
-    if (pid) {
-      try { process.kill(pid, 'SIGTERM'); } catch { return; }
-      for (let i = 0; i < 50; i++) { try { process.kill(pid, 0); } catch { return; } await sleep(100); }
-      try { process.kill(pid, 'SIGKILL'); } catch { /* stopped */ }
-    }
+    // A server started by the update worker is a different process; Windows
+    // keeps the folder locked until the whole tree is gone.
+    if (pid) killTree(pid, 'SIGKILL');
+    await sleep(200);
   };
   try {
     copy(original, '0.6.0'); copy(candidate, version);
@@ -486,7 +488,7 @@ for (const version of ['0.7.0', devVersion]) test(`a browser install of ${versio
     `);
     const env: NodeJS.ProcessEnv = { ...process.env, PAPILOT_PORT: String(port), PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_SERVICE_MANAGER: '', XPC_SERVICE_NAME: '', PAPILOT_UPDATE_PROBE: '1' };
     delete env.PAPILOT_DATA;
-    const launch = (file: string) => spawn(process.execPath, ['--import', loaderFor(original), path.join(original, file)], { cwd: original, env, stdio: ['ignore', log, log] });
+    const launch = (file: string) => spawn(process.execPath, ['--import', importLoader(loaderFor(original)), path.join(original, file)], { cwd: original, env, stdio: ['ignore', log, log] });
     started = launch('boot.ts');
     for (let i = 0; i < 60 && !(await health(port, '0.6.0')); i++) await sleep(100);
     assert.ok(await health(port, '0.6.0'));

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { detectLatex } from '../src/server/latex-installation.ts';
 
-test('LaTeX detection identifies the active distribution and associates macOS receipts with its binary', async () => {
+test('LaTeX detection identifies the active distribution and associates macOS receipts with its binary', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-tex-'));
   try {
     const binary = path.join(directory, 'pdftex'), executable = path.join(directory, 'pdflatex');

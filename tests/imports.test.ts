@@ -99,7 +99,7 @@ test('local folders can exceed upload limits and inspection leaves their files u
   } finally { f.close(); }
 });
 
-test('main files deeper than twenty folders are discoverable without following symlinks', async () => {
+test('main files deeper than twenty folders are discoverable without following symlinks', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async () => {
   const f = fixture();
   try {
     const main = [...Array(22).fill('chapter'), 'main.tex'].join('/');
@@ -144,7 +144,7 @@ test('an alternative main file can be chosen without scanning or following links
     const value = await f.imports.create({ path: f.root });
     assert.deepEqual(value.candidates, ['main.tex']);
     const outside = path.join(f.directory, 'outside'); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'main.tex'), source);
-    fs.symlinkSync(outside, path.join(f.root, 'linked'), 'dir');
+    fs.symlinkSync(outside, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
     for (const main of ['../outside/main.tex', 'linked/main.tex', path.join(outside, 'main.tex')]) await assert.rejects(f.imports.build(value.id, { main }), /existing TeX/);
     f.ready(); await f.imports.build(value.id, { main: 'supplement/appendix.tex' });
     const result = await settled(f.imports, value.id);

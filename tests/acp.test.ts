@@ -475,7 +475,8 @@ test('DeepSeek keeps its sandbox preset and its "other" tools show as commands a
     f.rpc().reply(f.calls.find(call => call.method === 'session/prompt').id, { stopReason: 'end_turn' });
     assert.equal((await done).status, 'completed');
     const items = f.notifications.filter(n => n.method === 'item/completed').map(n => n.params.item);
-    assert.deepEqual(items.map(item => [item.type, item.command || item.changes?.[0].path]), [['commandExecution', 'ls'], ['fileChange', '/paper/main.tex']]);
+    // The change path is the thread's cwd joined with the edited file.
+    assert.deepEqual(items.map(item => [item.type, item.command || item.changes?.[0].path]), [['commandExecution', 'ls'], ['fileChange', path.resolve('/paper', 'main.tex')]]);
     assert.equal(items[0].aggregatedOutput, 'main.tex\n');
   } finally {
     f.agent.close();
@@ -488,7 +489,10 @@ test('ACP agents are detected by their executable', () => {
   try {
     const file = path.join(dir, 'qwen');
     fs.writeFileSync(file, '#!/bin/sh\n'); fs.chmodSync(file, 0o755);
-    assert.equal(new AcpAgent(ACP_PROFILES.qwen, file).detect(), true);
+    // Windows detects the .cmd shim beside the script.
+    const runnable = process.platform === 'win32' ? `${file}.cmd` : file;
+    if (process.platform === 'win32') fs.writeFileSync(runnable, `@echo off\r\n"${process.execPath}" "${file}" %*\r\n`);
+    assert.equal(new AcpAgent(ACP_PROFILES.qwen, runnable).detect(), true);
     assert.equal(new AcpAgent(ACP_PROFILES.qwen, path.join(dir, 'missing')).detect(), false);
     const previous = { PATH: process.env.PATH, HOME: process.env.HOME };
     Object.assign(process.env, { PATH: dir, HOME: dir });
@@ -496,7 +500,9 @@ test('ACP agents are detected by their executable', () => {
       assert.equal(new AcpAgent(ACP_PROFILES.qwen).detect(), true); assert.equal(new AcpAgent(ACP_PROFILES.opencode).detect(), false);
       // A service's PATH may lack the folder a CLI installs itself in.
       fs.mkdirSync(path.join(dir, '.opencode/bin'), { recursive: true });
-      fs.copyFileSync(file, path.join(dir, '.opencode/bin/opencode')); fs.chmodSync(path.join(dir, '.opencode/bin/opencode'), 0o755);
+      const opencode = path.join(dir, '.opencode/bin/opencode');
+      if (process.platform === 'win32') fs.copyFileSync(runnable, `${opencode}.cmd`);
+      else { fs.copyFileSync(file, opencode); fs.chmodSync(opencode, 0o755); }
       process.env.PATH = '/usr/bin';
       assert.equal(new AcpAgent(ACP_PROFILES.opencode).detect(), true);
     } finally { Object.assign(process.env, previous); }

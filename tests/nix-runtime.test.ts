@@ -7,7 +7,7 @@ import { agentDirs, findExecutable, agentPath } from '../bin/agent-paths.mjs';
 import { activeInstallation } from '../bin/installation.mjs';
 import { Updates } from '../src/server/updates.ts';
 
-test('agent discovery uses PATH before Nix profiles and preserves wrappers', () => {
+test('agent discovery uses PATH before Nix profiles and preserves wrappers', { skip: process.platform === 'win32' && 'Nix profiles are POSIX-only' }, () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-nix-path-'));
   try {
     const env = { HOME: home, PATH: path.join(home, 'path'), XDG_STATE_HOME: path.join(home, 'state') };
@@ -22,7 +22,7 @@ test('agent discovery uses PATH before Nix profiles and preserves wrappers', () 
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
 
-test('Nix ignores saved update layers and refuses installation or channel changes', async () => {
+test('Nix ignores saved update layers and refuses installation or channel changes', { skip: process.platform === 'win32' && 'Nix profiles are POSIX-only' }, async () => {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-nix-update-'));
   const previous = process.env.PAPILOT_INSTALL_METHOD;
   process.env.PAPILOT_INSTALL_METHOD = 'nix';

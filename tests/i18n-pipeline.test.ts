@@ -78,6 +78,9 @@ if(process.env.I18N_TEST_FAIL) { process.stdout.write(JSON.stringify({status:'ER
 const translations = messages.map((m, i) => ({id: m.id, text: first && i === 0 ? 'bad {unexpected}' : '譯：' + m.text}));
 process.stdout.write(JSON.stringify({status:'SUCCESS', response: JSON.stringify({translations})}));
 `, { mode: 0o755 });
+    // Windows cannot start an extensionless script, so a .cmd shim runs Node on
+    // the same program.
+    if (process.platform === 'win32') fs.writeFileSync(`${binary}.cmd`, `@echo off\r\n"${process.execPath}" "${binary}" %*\r\n`);
     const run = (...args: string[]) => spawnSync(process.execPath, ['--import', 'tsx', 'scripts/i18n.ts', ...args, '--locale', 'zh-Hant', '--out-dir', output], { cwd: root, env: { ...process.env, PAPILOT_AGY_BIN: binary, I18N_TEST_LOG: log }, encoding: 'utf8', timeout: 30_000 });
     let result = run('translate', '--limit', '3', '--dry-run');
     assert.equal(result.status, 0, result.stderr);
