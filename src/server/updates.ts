@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { devRevision, newerVersion, readJson, stableVersion, writeJson } from '../../bin/installation.mjs';
+import { importLoader } from '../../bin/agent-paths.mjs';
 import { download, installLayer, installRelease, loaderFor, npmCli, type DesktopLayer } from './update-install.ts';
 import type { UpdateChannel, UpdateStatus } from '../shared.ts';
 
@@ -232,7 +233,7 @@ export class Updates {
     writeJson(job, { id: randomUUID(), root, version, channel: this.channel, previousRoot: this.options.root, previousVersion: this.options.version, data: this.options.data, port: this.options.port, parent: process.pid,
       service: process.env.PAPILOT_SERVICE_MANAGER === 'launchd' || process.env.XPC_SERVICE_NAME === 'local.papilot' });
     const log = fs.openSync(path.join(folder, 'restart.log'), 'a', 0o600);
-    const child = spawn(process.execPath, ['--import', loaderFor(this.options.root), path.join(this.options.root, 'src/server/update-worker.ts'), job], { cwd: this.options.root, env: process.env, detached: true, stdio: ['ignore', log, log, 'ipc'] });
+    const child = spawn(process.execPath, ['--import', importLoader(loaderFor(this.options.root)), path.join(this.options.root, 'src/server/update-worker.ts'), job], { cwd: this.options.root, env: process.env, detached: true, stdio: ['ignore', log, log, 'ipc'] });
     fs.closeSync(log);
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => { child.kill(); reject(new Error('The update restart helper did not start.')); }, 10000);

@@ -188,7 +188,7 @@ export async function gitDiscard(root: string, paths: string[]) {
   const files = status.files.filter(item => paths.includes(item.path) && item.unstaged);
   if (!files.length) throw new Error('Select at least one changed file.');
   const tracked = files.filter(item => item.status !== '?').map(item => item.path);
-  if (tracked.length) await gitAction(root, ['checkout', '--', ...tracked]);
+  if (tracked.length) await gitAction(root, ['-c', 'core.autocrlf=false', 'checkout', '--', ...tracked]);
   for (const item of files.filter(item => item.status === '?')) {
     const file = path.resolve(root, item.path);
     if (!file.startsWith(root + path.sep)) throw new Error('Invalid file path.');
@@ -242,8 +242,8 @@ export async function gitRemote(root: string, action: 'fetch' | 'pull' | 'merge'
     // Pull only fast-forwards. Merge also joins a branch that has diverged
     // from its upstream; conflicts leave the merge in progress to resolve.
     // A host's merge.autoStash setting must not hide the author's pending edits.
-    if (action === 'pull') await gitAction(root, ['pull', '--ff-only', '--no-autostash'], 120_000);
-    else await gitAction(root, ['pull', '--no-rebase', '--ff', '--no-edit', '--no-autostash'], 120_000).catch(error => { if (!mergeInProgress(root)) throw error; });
+    if (action === 'pull') await gitAction(root, ['-c', 'core.autocrlf=false', 'pull', '--ff-only', '--no-autostash'], 120_000);
+    else await gitAction(root, ['-c', 'core.autocrlf=false', 'pull', '--no-rebase', '--ff', '--no-edit', '--no-autostash'], 120_000).catch(error => { if (!mergeInProgress(root)) throw error; });
   } else if (status.upstream) await gitAction(root, ['push'], 120_000);
   else {
     if (!status.branch) throw new Error('Check out a branch before pushing.');
@@ -285,7 +285,7 @@ export async function gitFinishMerge(root: string) {
 }
 export async function gitAbortMerge(root: string) {
   if (!mergeInProgress(root)) throw new Error('No merge is in progress.');
-  await gitAction(root, ['merge', '--abort']);
+  await gitAction(root, ['-c', 'core.autocrlf=false', 'merge', '--abort']);
 }
 // What an agent needs to resolve a merge's conflicts: the files with markers
 // and the commits on each side.

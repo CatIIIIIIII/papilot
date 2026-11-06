@@ -6,6 +6,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { devRevision, readJson, releaseVersion, writeJson } from '../../bin/installation.mjs';
+import { importLoader } from '../../bin/agent-paths.mjs';
 import { health, loaderFor, sleep } from './update-install.ts';
 
 export async function restartRelease(job: { id: string; root: string; version: string; channel?: 'stable' | 'dev'; previousRoot: string; previousVersion: string; data: string; port: number; parent: number; service: boolean }, ready = () => process.send?.('ready'), attempts = 100) {
@@ -20,7 +21,7 @@ export async function restartRelease(job: { id: string; root: string; version: s
   const launch = (root: string) => {
     if (job.service) { if (launchctl('bootstrap', domain, plist).status !== 0) throw new Error('Could not restart the background service.'); return; }
     const log = fs.openSync(path.join(folder, 'server.log'), 'a', 0o600);
-    child = spawn(process.execPath, ['--import', loaderFor(root), path.join(root, 'src/server/main.ts')], { cwd: root, detached: true, env: { ...process.env, PAPILOT_DATA: job.data, PAPILOT_PORT: String(job.port) }, stdio: ['ignore', log, log] });
+    child = spawn(process.execPath, ['--import', importLoader(loaderFor(root)), path.join(root, 'src/server/main.ts')], { cwd: root, detached: true, env: { ...process.env, PAPILOT_DATA: job.data, PAPILOT_PORT: String(job.port) }, stdio: ['ignore', log, log] });
     child.on('error', () => {}); child.unref(); fs.closeSync(log);
   };
   const stopCandidate = async () => {

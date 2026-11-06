@@ -8,7 +8,9 @@ const exec = promisify(execFile);
 async function git(root: string, args: string[]) {
   return (await exec('git', args, { cwd: root, timeout: 15_000, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } })).stdout;
 }
-const realPath = (value: string) => { try { return fs.realpathSync(value); } catch { return value; } };
+// Git lists worktrees with forward slashes while task paths come from Node, so
+// both sides are compared in one form. A missing checkout keeps its given path.
+const realPath = (value: string) => { try { return fs.realpathSync(value).replaceAll('\\', '/'); } catch { return value.replaceAll('\\', '/'); } };
 
 // -z preserves spaces, newlines and backslashes in paths and lock reasons.
 export function parseWorktrees(output: string, root: string): GitWorktree[] {

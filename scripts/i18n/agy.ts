@@ -1,5 +1,4 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execCommand } from '../../bin/agent-paths.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,10 +20,10 @@ export async function translateWithAgy(prompt: string, count: number, model: str
   const proxy = process.env.PAPILOT_AGY_PROXY;
   const env = proxy ? { ...process.env, HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy, NO_PROXY: '127.0.0.1,localhost' } : process.env;
   try {
-    const { stdout } = await promisify(execFile)(process.env.PAPILOT_AGY_BIN || 'agy', [
+    const stdout = await execCommand(process.env.PAPILOT_AGY_BIN || 'agy', [
       '-p', prompt, '--model', model, '--mode', 'plan', '--output-format', 'json',
       '--json-schema', JSON.stringify(responseSchema(count)), '--print-timeout', '300s',
-    ], { cwd, env, timeout: 315_000, maxBuffer: 4 * 1024 * 1024 });
+    ], { cwd, env, timeout: 315_000 });
     return decodeAgyResponse(stdout);
   } catch (error) {
     if (error instanceof SyntaxError) throw new Error(`Invalid translation JSON: ${error.message}`);

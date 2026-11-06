@@ -1,5 +1,5 @@
-import { agentPath } from '../../bin/agent-paths.mjs';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { agentPath, spawnCommand } from '../../bin/agent-paths.mjs';
+import { type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import fs from 'node:fs';
@@ -92,7 +92,7 @@ export class AcpAgent extends Adapter {
   private defaultModel: string | null = null;
   private readonly name: string;
   private readonly binary: string;
-  constructor(private profile: AcpProfile, binary?: string, private launch: typeof spawn = spawn) {
+  constructor(private profile: AcpProfile, binary?: string, private launch: typeof spawnCommand = spawnCommand) {
     super();
     this.name = profile.name;
     this.binary = binary || process.env[profile.binEnv] || profile.bin;
@@ -394,5 +394,5 @@ export class AcpAgent extends Adapter {
 }
 
 export class KimiAgent extends AcpAgent {
-  constructor(binary?: string, launch?: typeof spawn) { super(ACP_PROFILES.kimi, binary, launch); }
+  constructor(binary?: string, launch?: typeof spawnCommand) { super(ACP_PROFILES.kimi, binary, launch); }
 }

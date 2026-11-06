@@ -7,7 +7,7 @@ export const aiReviewInstructions = `You are a manuscript reviewer in Papilot. R
 Reply with exactly one JSON object: {"summary":"Review summary", "notes":[{"start":"p1-l3", "end":"p1-l3", "comment":"An actionable suggestion"}]}. Each start/end must be an ID from the supplied PDF lines, on the same page, in reading order. Follow the author's requested scope and level of detail. Choose how to organize the review and how many findings to return. Anchor each finding to the relevant passage. Do not repeat the notes in the summary. If there are no actionable findings return an empty notes array and say so briefly in summary. Do not include markdown fences or any other text.`;
 
 export function reviewPrompt(request: string, snapshot: ReviewSnapshot) {
-  return `${request || 'Review this manuscript and suggest improvements.'}${snapshot.pdf ? `\n\nThe PDF for this review is at ${JSON.stringify(snapshot.pdf)}. Use your tools to inspect it as needed.` : ''}\n\nPDF snapshot (line IDs are annotation anchors; page numbers start at 1):\n${JSON.stringify(snapshot.lines.map(({ id, text }) => ({ id, text })))}`;
+  return `${request || 'Review this manuscript and suggest improvements.'}${snapshot.pdf ? `\n\nThe PDF for this review is at "${snapshot.pdf}". Use your tools to inspect it as needed.` : ''}\n\nPDF snapshot (line IDs are annotation anchors; page numbers start at 1):\n${JSON.stringify(snapshot.lines.map(({ id, text }) => ({ id, text })))}`;
 }
 
 // IDs are resolved against saved PDF geometry, never coordinates invented by a model.

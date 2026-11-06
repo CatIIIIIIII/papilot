@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { spawn, execFile, type ChildProcess } from 'node:child_process';
+import { execFile, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import { promisify } from 'node:util';
@@ -35,7 +35,8 @@ export interface AgentRuntime extends EventEmitter {
 
 export { AGENT_NAMES };
 
-import { agentDirs, findExecutable, agentPath } from '../../bin/agent-paths.mjs';
+import { agentDirs, execCommand, findExecutable, agentPath, spawnCommand } from '../../bin/agent-paths.mjs';
+import { npmCli } from '../../bin/npm-cli.mjs';
 export { agentDirs, findExecutable };
 
 export interface Thread { readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
@@ -130,7 +131,7 @@ export async function loadPackage(name: string, version: string, label: string, 
   try { entry = resolve(); } catch {
     ready();
     console.log(`Installing ${label} (first use only)...`);
-    await promisify(execFile)('npm', ['install', '--prefix', prefix, `${name}@${version}`, '--no-audit', '--no-fund', '--loglevel=error'], { maxBuffer: 16 * 1024 * 1024 });
+    await promisify(execFile)(process.execPath, [npmCli(), 'install', '--prefix', prefix, `${name}@${version}`, '--no-audit', '--no-fund', '--loglevel=error'], { maxBuffer: 16 * 1024 * 1024 });
     entry = resolve();
   }
   return import(pathToFileURL(entry).href);
@@ -185,7 +186,7 @@ export class ClaudeAgent extends Adapter {
   private login: ClaudeLogin | null = null;
   constructor(private load: () => Promise<typeof import('@anthropic-ai/claude-agent-sdk')['query']> = () => loadClaude(),
     private findCli: () => string | null = () => findExecutable(process.env.PAPILOT_CLAUDE_BIN || 'claude'),
-    private launch: Launch = (command, args, options) => spawn(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] })) { super(); }
+    private launch: Launch = (command, args, options) => spawnCommand(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] })) { super(); }
   detect() { return Boolean(this.findCli()) || claudeConfigured(); }
   async preload() { if (packageFile('@anthropic-ai/claude-agent-sdk')) await this.load(); }
   // The environment Claude Code runs with; undefined keeps Papilot's own.
@@ -195,7 +196,7 @@ export class ClaudeAgent extends Adapter {
     this.cli = this.findCli();
     if (this.cli) {
       // Only the login state is read; the credential stays with Claude Code.
-      const status = await promisify(execFile)(this.cli, ['auth', 'status', '--json'], { timeout: 20000 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout || '{}' }));
+      const status = await execCommand(this.cli, ['auth', 'status', '--json'], { timeout: 20000 }).then(stdout => ({ stdout }), (error: { stdout?: string }) => ({ stdout: error.stdout || '{}' }));
       try { this.login = JSON.parse(status.stdout); } catch { this.login = null; }
       // Claude Code's own model list, with versions and efforts; the aliases stand in if it cannot be read.
       Object.assign(this.info, this.login?.loggedIn ? await this.listModels(this.cli).catch(() => ({ models: [], model: null })) : { models: [], model: null });
@@ -486,7 +487,7 @@ export class AntigravityAgent extends Adapter {
   private catalog: { model: string; displayName: string; efforts: string[]; ids: Record<string, string>; isDefault: boolean; defaultEffort: string | null }[] = [];
   private conversations: Record<string, string> = {};
   constructor(private binary = process.env.PAPILOT_AGY_BIN || 'agy', private file = path.join(DATA, 'antigravity-conversations.json'),
-    private launch: (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess = (command, args, options) => spawn(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] })) {
+    private launch: (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess = (command, args, options) => spawnCommand(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] })) {
     super();
     try { this.conversations = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { /* None yet. */ }
   }
@@ -499,7 +500,7 @@ export class AntigravityAgent extends Adapter {
   }
   async start() {
     if (this.ready) return;
-    const { stdout } = await promisify(execFile)(findExecutable(this.binary) || this.binary, ['models'], { env: this.env(), timeout: 60000 });
+    const stdout = await execCommand(findExecutable(this.binary) || this.binary, ['models'], { env: this.env(), timeout: 60000 });
     let preferred = '';
     try { preferred = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.gemini/antigravity-cli/settings.json'), 'utf8')).model || ''; } catch { /* No saved choice. */ }
     this.catalog = groupModels(stdout, preferred);
