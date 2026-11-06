@@ -42,6 +42,57 @@ test('Windows environment preference and WSL UNC paths are kept separate', async
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('WSL forwarding reports busy when the backend IPC closes during an idle check', { skip: process.platform === 'win32', timeout: 20000 }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-wsl-forward-')), root = process.cwd(), id = 'e'.repeat(64);
+  const runtime = path.join(home, '.local/share/papilot-desktop/runtime', id), data = path.join(home, '.local/share/papilot-desktop/data');
+  const write = (file: string, value: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value)); };
+  const module = JSON.stringify(pathToFileURL(path.join(root, 'desktop/runtime.ts')).href);
+  write(path.join(runtime, 'ready.json'), {}); write(path.join(runtime, 'bridge/package.json'), { type: 'module' });
+  write(path.join(runtime, 'bridge/runtime.js'), `export * from ${module};import {startBackend as start} from ${module};import fs from 'node:fs';import path from 'node:path';
+    export function startBackend(options) {const backend=start(options),send=backend.child.send.bind(backend.child);
+      backend.child.send=(...args)=>{if(args[0]?.type==='papilot:can-switch') {
+        fs.writeFileSync(path.join(options.data,'close-ipc'),'yes');const closed=path.join(options.data,'ipc-closed'),deadline=performance.now()+3000;
+        while(!fs.existsSync(closed)&&performance.now()<deadline)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5);
+        if(!fs.existsSync(closed))throw new Error('The fixture IPC did not close.');
+      }return send(...args);};return backend;}`);
+  const server = path.join(runtime, 'server');
+  write(path.join(server, 'package.json'), { name: 'papilot', version: '0.9.0', type: 'module' });
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(server, 'node_modules'), 'dir');
+  write(path.join(server, 'src/server/start.ts'), `import fs from 'node:fs';import path from 'node:path';import http from 'node:http';const data=process.env.PAPILOT_DATA;
+    fs.writeFileSync(path.join(data,'backend.pid'),String(process.pid));
+    const server=http.createServer((req,res)=>res.end(JSON.stringify({name:'Papilot',desktopInstance:process.env.PAPILOT_DESKTOP_INSTANCE})));
+    server.listen(0,'127.0.0.1',()=>process.send({type:'papilot:ready',url:'http://127.0.0.1:'+server.address().port}));
+    setInterval(()=>{if(process.connected&&fs.existsSync(path.join(data,'close-ipc'))) {process.disconnect();fs.writeFileSync(path.join(data,'ipc-closed'),'yes');}},10);`);
+  const config = Buffer.from(JSON.stringify({ id, fingerprint: '', nodeMajor: process.versions.node.split('.')[0] })).toString('base64');
+  const child = spawn(process.execPath, ['--import', 'tsx', 'desktop/wsl-runtime.mjs', 'serve', config], {
+    cwd: root, env: { ...process.env, HOME: home, PAPILOT_TEST_WSL_RUNTIME: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  let out = '', err = '', pid = 0;
+  child.stdout.on('data', chunk => { out += chunk; }); child.stderr.on('data', chunk => { err += chunk; });
+  const waitFor = async (check: () => boolean) => {
+    const deadline = performance.now() + 10000;
+    while (!check() && child.exitCode === null && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(check(), err || out || 'No bridge response');
+  };
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  try {
+    await waitFor(() => out.includes('papilot:ready'));
+    pid = Number(fs.readFileSync(path.join(data, 'backend.pid'), 'utf8'));
+    child.stdin.write('{"type":"papilot:can-switch","id":"closing-ipc"}\n');
+    await waitFor(() => out.includes('closing-ipc'));
+    const response = JSON.parse(out.split('\n').find(line => line.startsWith('PAPILOT_CONTROL:') && line.includes('closing-ipc'))!.slice(16));
+    assert.deepEqual(response, { type: 'papilot:can-switch', id: 'closing-ipc', busy: true });
+    assert.equal(child.exitCode, null); assert.equal(alive(), true);
+    const ended = new Promise(resolve => child.once('exit', resolve)); child.stdin.end('{"type":"papilot:shutdown"}\n'); await ended;
+    assert.equal(child.exitCode, 0, err); assert.equal(alive(), false);
+    assert.doesNotMatch(err, /EPIPE|Unhandled 'error'/);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) { const ended = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGKILL'); await ended; }
+    if (!pid && fs.existsSync(path.join(data, 'backend.pid'))) pid = Number(fs.readFileSync(path.join(data, 'backend.pid'), 'utf8'));
+    if (pid && alive()) process.kill(pid, 'SIGKILL');
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 for (const shutdown of ['message', 'pipe closed']) test(`WSL bridge runs the real backend and shuts down when ${shutdown}`, { skip: process.platform === 'win32', timeout: 30000 }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-wsl-'));
   const id = 'f'.repeat(64), root = process.cwd(), runtime = path.join(home, '.local/share/papilot-desktop/runtime', id);

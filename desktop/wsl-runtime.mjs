@@ -54,7 +54,7 @@ if (action === 'install') {
   process.stdin.destroy();
 } else if (action === 'serve') {
   if (!fs.existsSync(path.join(target, 'ready.json'))) throw new Error('Prepare this WSL environment before opening it.');
-  const { backendEnvironment, startBackend, startServer, switchServer } = await import(path.join(target, 'bridge/runtime.js'));
+  const { BackendStopError, backendEnvironment, startBackend, startServer, switchServer } = await import(path.join(target, 'bridge/runtime.js'));
   if (options.data !== undefined && (typeof options.data !== 'string' || !path.isAbsolute(options.data))) throw new Error('PAPILOT_WSL_DATA must be an absolute Linux path.');
   const root = path.join(target, 'server'), data = options.data || path.join(base, 'data');
   const backendLog = path.join(data, 'logs/backend.log');
@@ -67,9 +67,11 @@ if (action === 'install') {
     // wait on the transition currently unwinding its database rollback.
     if (stopping) return;
     stopping = true;
-    await backend?.stop();
-    await transition?.catch(() => undefined);
-    process.exit(0);
+    let failure;
+    try { await backend?.stop(); } catch (error) { failure = error; }
+    try { await transition; } catch (error) { if (error instanceof BackendStopError) failure ||= error; }
+    if (failure) console.error(failure);
+    process.exit(failure ? 1 : 0);
   };
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => void stop());
   const input = readline.createInterface({ input: process.stdin });
@@ -90,7 +92,14 @@ if (action === 'install') {
     try {
       const message = JSON.parse(line);
       if (message.type === 'papilot:shutdown') void stop();
-      else if (message.type === 'papilot:can-switch' && backend?.child.connected) backend.child.send(message);
+      else if (message.type === 'papilot:can-switch' && !stopping) {
+        const unavailable = () => { if (!stopping) send({ type: message.type, id: message.id, busy: true }); };
+        if (!backend?.child.connected) unavailable();
+        else {
+          try { backend.child.send(message, error => { if (error) unavailable(); }); }
+          catch { unavailable(); }
+        }
+      }
       else if (message.type === 'papilot:rebind') rebind(message.instance);
     } catch {}
   });
@@ -128,8 +137,14 @@ if (action === 'install') {
   // directly so stopping their candidate rejects and restores the database.
   const launchInitial = async folder => {
     try { await launch(folder); }
-    catch (error) { if (!stopping) throw error; }
+    catch (error) { if (!stopping || error instanceof BackendStopError) throw error; }
   };
   try { transition = startServer(data, bundle, launchInitial); running = await transition; }
-  catch (error) { if (!stopping) { console.error(error); await backend?.stop(); process.exit(1); } }
+  catch (error) {
+    if (!stopping) {
+      console.error(error);
+      try { await backend?.stop(); } catch (failure) { console.error(failure); }
+      process.exit(1);
+    }
+  }
 } else throw new Error('Unknown WSL action.');

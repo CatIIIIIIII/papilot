@@ -46,6 +46,10 @@ export function backendEnvironment(node: string, root: string, data: string, inh
   return env;
 }
 
+// Callers must not replace a database or launch another server while its
+// previous writer may still be running.
+export class BackendStopError extends Error {}
+
 export function startBackend(options: { node: string; root: string; data: string; log: string; env: NodeJS.ProcessEnv }) {
   fs.mkdirSync(options.data, { recursive: true, mode: 0o700 });
   fs.mkdirSync(path.dirname(options.log), { recursive: true });
@@ -72,22 +76,37 @@ export function startBackend(options: { node: string; root: string; data: string
     };
     child.on('message', message); child.once('error', fail); child.once('exit', exited);
   });
-  async function stop() {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    await new Promise<void>(resolve => {
+  let stopping: Promise<void> | undefined;
+  function stop() {
+    return stopping ??= new Promise<void>((resolve, reject) => {
+      if (!child.pid || child.exitCode !== null || child.signalCode !== null) return resolve();
+      let forced: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error?: Error) => {
+        clearTimeout(timer); clearTimeout(forced);
+        child.off('exit', ended); child.off('close', ended);
+        if (error) reject(error); else resolve();
+      };
+      const ended = () => finish();
+      const terminate = () => { try { terminateTree(child); } catch { /* The deadline still forces termination. */ } };
       const timer = setTimeout(() => {
-        try { terminateTree(child, 'SIGKILL'); } catch { /* already stopped */ }
-        resolve();
+        try { terminateTree(child, 'SIGKILL'); } catch { /* Report failure if exit cannot be confirmed. */ }
+        // Rollback may replace the database immediately after stop resolves.
+        // Sending SIGKILL alone does not confirm that the process has exited.
+        forced = setTimeout(() => finish(new BackendStopError('The local server did not exit after termination.')), 4000);
       }, 4000);
-      child.once('exit', () => { clearTimeout(timer); resolve(); });
-      if (child.connected) child.send({ type: 'papilot:shutdown' });
-      else terminateTree(child);
+      child.once('exit', ended); child.once('close', ended);
+      if (child.connected) {
+        try { child.send({ type: 'papilot:shutdown' }, error => { if (error) terminate(); }); }
+        catch { terminate(); }
+      } else terminate();
     });
   }
-  return { child, ready, stop, idle: () => idleCheck(child, message => child.send(message)) };
+  return { child, ready, stop, idle: () => idleCheck(child, message => new Promise<void>((resolve, reject) => {
+    child.send(message, error => { if (error) reject(error); else resolve(); });
+  })) };
 }
 
-export function idleCheck(child: ChildProcess, send: (message: { type: string; id: string }) => void) {
+export function idleCheck(child: ChildProcess, send: (message: { type: string; id: string }) => void | Promise<void>) {
   return new Promise<boolean>((resolve, reject) => {
     const id = randomUUID();
     const timer = setTimeout(() => { child.off('message', receive); reject(new Error('Could not check running tasks. Try again after Papilot responds.')); }, 5000);
@@ -95,9 +114,10 @@ export function idleCheck(child: ChildProcess, send: (message: { type: string; i
       if (message?.type !== 'papilot:can-switch' || message.id !== id) return;
       clearTimeout(timer); child.off('message', receive); resolve(message.busy === false);
     };
+    const fail = (error: unknown) => { clearTimeout(timer); child.off('message', receive); reject(error); };
     child.on('message', receive);
-    try { send({ type: 'papilot:can-switch', id }); }
-    catch (error) { clearTimeout(timer); child.off('message', receive); reject(error); }
+    try { void Promise.resolve(send({ type: 'papilot:can-switch', id })).catch(fail); }
+    catch (error) { fail(error); }
   });
 }
 
@@ -159,6 +179,7 @@ export async function startServer(data: string, bundle: Bundle, launch: (root: s
   if (!chosen) { fs.rmSync(active, { force: true }); await launch(bundle.root); return bundle.root; }
   try { linkBundle(chosen.root, bundle.root); await launch(chosen.root); return chosen.root; }
   catch (error) {
+    if (error instanceof BackendStopError) throw error;
     console.error(`Papilot ${chosen.version} did not start:`, error);
     fs.rmSync(active, { force: true });
     writeJson(status, { ...readJson(status), phase: 'failed', checkedAt: Date.now(), error: STARTUP_FAILED, pid: process.pid });
@@ -200,6 +221,7 @@ export async function switchServer(data: string, bundle: Bundle, request: unknow
       removeLayers(data, target.root === bundle.root ? undefined : target.root);
       return target.root;
     } catch (error) {
+      if (error instanceof BackendStopError) throw error;
       if (previous) writeJson(paths.active, previous); else fs.rmSync(paths.active, { force: true });
       if (backedUp) {
         for (const suffix of ['-wal', '-shm']) fs.rmSync(database + suffix, { force: true });
