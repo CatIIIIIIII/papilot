@@ -20,7 +20,7 @@ const reviewDist = path.resolve(process.env.PAPILOT_REVIEW_DIST || 'engine/dist/
 const task = { id: 'review-flow-fixture', projectId: 'paper', name: 'flow', title: 'Review the new wording', status: 'reviewing', createdAt: 1, updatedAt: 1, review: { state: 'reviewing', round: 1, counts: {}, unsent: 0 } };
 const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper' }], tasks: [task], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
 let latest = 1, serial = 0, undo = null;
-let effectFixture = false, effectRequests = 0;
+let effectFixture = false, effectRequests = 0, looseFixture = false;
 const rounds = { 1: { first: 'pending', second: 'pending', third: 'pending', fourth: 'pending' } };
 const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [], archiveRequests = [], deleteRequests = [];
 let gitFiles = [];
@@ -55,6 +55,7 @@ function detail(round) {
   result.sections[0].blocks[2].after = [];
   for (const block of result.sections[0].blocks) for (const strip of [...block.before, ...block.after]) Object.assign(strip, { page: 1, top: 200 });
   result.sections[0].blocks.unshift({ kind: 'context', image: image('context', 'Unchanged context.') });
+  if (looseFixture) result.loose.push(result.sections[0].blocks.pop());
   return result;
 }
 await page.route('**/api/**', async route => {
@@ -185,5 +186,23 @@ try {
   await page.setViewportSize({width:1000,height:900});
   await aligned();
   assert.deepEqual(errors,[]);
-  console.log('PASS: paired context, unequal heights, insertions, deletions, accept/reject/undo, full-paper canvases and narrow desktop alignment.');
+  looseFixture = true;
+  await page.reload();
+  await page.getByRole('group',{name:'Show',exact:true}).getByRole('button',{name:'Changes',exact:true}).click();
+  await expect(frame.getByText('Other changes', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.locator('.settings-dialog');
+  await settings.getByRole('button', { name: 'Appearance', exact: true }).click();
+  await settings.getByRole('radio', { name: 'Dark', exact: true }).check();
+  await settings.getByText('Advanced', { exact: true }).click();
+  await selectOption(settings.getByRole('combobox', { name: 'PDF appearance', exact: true }), 'light');
+  await page.keyboard.press('Escape');
+  const loose = frame.locator('.change.standalone').first();
+  await expect(loose).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(loose.locator('.change-head')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
+  await expect(loose.locator('.before')).toHaveCSS('background-color', 'rgb(251, 238, 238)');
+  await loose.getByRole('button', { name: /LaTeX$/ }).click();
+  await expect(loose.locator('.source-code').first()).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await page.screenshot({path:'test-results/other-changes-dark-light.png',fullPage:true});
+  console.log('PASS: other-changes palette, paired context, unequal heights, insertions, deletions, accept/reject/undo, full-paper canvases and narrow desktop alignment.');
 } finally { await browser.close(); await server.close(); }
