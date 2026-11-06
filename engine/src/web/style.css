@@ -370,6 +370,9 @@ kbd {
   color: var(--ink);
   white-space: nowrap;
 }
+.change-number-short {
+  display: none;
+}
 .change-where {
   flex: 1;
   min-width: 0;
@@ -1736,7 +1739,7 @@ body {
 .pdf-text-line {
   white-space: pre;
 }
-.pdf-glyph {
+.pdf-glyph,.pdf-line-preview {
   position: absolute;
   font-family: "Times New Roman", serif;
   font-weight: normal;
@@ -1745,7 +1748,7 @@ body {
   transform-origin: 0 0;
   color: transparent;
 }
-.pdf-glyph::selection {
+.pdf-glyph::selection,.pdf-line-preview::selection {
   background: rgb(67 126 231 / 0.35);
   color: transparent;
 }

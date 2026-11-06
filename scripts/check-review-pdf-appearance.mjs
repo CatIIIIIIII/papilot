@@ -15,6 +15,7 @@ const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, h
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const prefix = '/review/paper', reviewDist = path.resolve('engine/dist/web');
 const task = { id: 'appearance-task', projectId: 'paper', name: 'colors', title: 'Clarify the experimental results', status: 'reviewing', createdAt: 1, updatedAt: 1, review: { state: 'reviewing', round: 1, counts: { pending: 3 }, unsent: 0 } };
+let decisions = { first: 'pending', second: 'pending', third: 'pending' };
 const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Example paper', path: '/tmp/paper' }], tasks: [task], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
 const image = name => ({ src: name + '.svg', clean: name + '.svg', width: 600, height: 110, page: 1, label: '1' });
 const block = (...units) => ({ kind: 'change', units, identical: false, before: [image('before')], after: [image('after')] });
@@ -40,7 +41,7 @@ await page.route('**/review/**', async route => {
   if (relative.startsWith('/assets/')) return route.fulfill({ path: path.join(reviewDist, relative), contentType: /\.m?js$/.test(relative) ? 'text/javascript' : relative.endsWith('.css') ? 'text/css' : 'font/otf' });
   if (relative.startsWith('/files/')) return route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 110"><rect width="600" height="110" fill="white"/><text x="40" y="60" font-size="21">${relative.includes('after') ? 'Results improve across all evaluated settings.' : 'Results improve.'}</text></svg>` });
   if (/\/rounds\/\d+$/.test(relative)) return route.fulfill({ json: detail });
-  return route.fulfill({ json: annotateReviewState({ task: 'colors', title: task.title, csrf: 'fixture', closed: false, state: 'reviewing', latest: 1, history: [{ number: 1, created: 1 }], round: 1, revision: 'after', decisions: { first: 'pending', second: 'pending', third: 'pending' }, comments: {}, undo: null, job: null }, [task]) });
+  return route.fulfill({ json: annotateReviewState({ task: 'colors', title: task.title, csrf: 'fixture', closed: false, state: 'reviewing', latest: 1, history: [{ number: 1, created: 1 }], round: 1, revision: 'after', decisions, comments: {}, undo: null, job: null }, [task]) });
 });
 try {
   await page.goto(`http://127.0.0.1:${server.server.address().port}`);
@@ -91,8 +92,55 @@ try {
     }
     if (theme === 'Dark') await page.screenshot({ path: `test-results/review-appearance-pdf-${pdf}-review-${review}.png` });
   }
+  // A decided change still needs its navigation and source controls to fit
+  // inside a narrow desktop pane, without switching to a phone dock.
+  decisions = { first: 'accepted', second: 'accepted', third: 'pending' };
+  await page.reload();
+  await expect(frame.locator('.change.current')).toBeVisible();
+  await frame.getByRole('button', { name: 'History', exact: true }).click();
+  await frame.locator('.change-map-mark').first().click();
+  await expect(frame.getByRole('button', { name: 'Next undecided', exact: true })).toBeVisible();
+  const checkWidths = async () => {
+    for (const width of [320, 500, 700]) {
+      await page.locator('.review-frame').evaluate((iframe, width) => { iframe.style.flex = 'none'; iframe.style.width = `${width}px`; }, width);
+      await expect.poll(() => frame.locator('html').evaluate(() => window.innerWidth)).toBe(width);
+      await expect.poll(() => frame.locator('.change.current .change-head').evaluate(head => {
+        const bounds = head.getBoundingClientRect();
+        return bounds.left >= 0 && bounds.right <= window.innerWidth && bounds.height <= 40 && [...head.querySelectorAll('button')].every(button => {
+          const box = button.getBoundingClientRect();
+          return box.width >= 28 && box.height >= 28 && box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
+        });
+      })).toBe(true);
+    }
+  };
+  await checkWidths();
+  await frame.getByRole('button', { name: 'Next undecided', exact: true }).click();
+  await expect(frame.locator('.change.current')).toHaveAttribute('data-stop', '1');
+  await checkWidths();
+  // Longer translations and multiple-digit change numbers must not steal
+  // the pointer targets' space in a narrow desktop review pane.
+  const ids = Array.from({ length: 12 }, (_, i) => `change-${i}`);
+  decisions = Object.fromEntries(ids.map(id => [id, 'pending']));
+  detail.units = ids.map((id, i) => ({ ...detail.units[0], id, old_start: i + 1, old_end: i + 1, new_start: i + 1, new_end: i + 1 }));
+  detail.sections[0].blocks = ids.map(id => block(id)); detail.loose = [];
+  for (const language of ['en', 'fr', 'de']) {
+    await page.evaluate(language => localStorage.setItem('papilot:language', language), language);
+    await page.reload();
+    await frame.locator('.change-map-mark').nth(9).click();
+    await expect(frame.locator('.change.current')).toHaveAttribute('data-stop', '9');
+    await checkWidths();
+  }
+  await page.evaluate(() => localStorage.setItem('papilot:language', 'en'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
+  await expect(frame.locator('html')).toHaveAttribute('data-papilot-phone', '');
+  await expect.poll(() => frame.locator('.change.current .dock').evaluate(dock => {
+    const box = dock.getBoundingClientRect();
+    return box.bottom <= innerHeight && box.bottom >= innerHeight - 16 && box.left >= 0 && box.right <= innerWidth;
+  })).toBe(true);
   assert.deepEqual(errors, []);
-  console.log('PASS: all 12 UI/PDF/review appearance combinations, inline and standalone changes, preview filters, controls, LaTeX colors and per-edit action hover states.');
+  console.log('PASS: all 12 UI/PDF/review appearance combinations, inline and standalone changes, preview filters, controls, LaTeX colors, per-edit action hover states, pending/decided toolbars at 320/500/700 px, localized two-digit numbers, pointer target sizes, and phone dock positioning.');
 } catch (error) {
   await page.screenshot({ path: 'test-results/review-appearance-failure.png' });
   throw error;

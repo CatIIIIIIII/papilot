@@ -43,7 +43,15 @@ async function selectText(selector) {
     const range = document.createRange(); range.selectNodeContents(el);
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
   });
-  await frame().getByRole('button', { name: 'Comment', exact: true }).click();
+  const comment = frame().getByRole('button', { name: 'Comment', exact: true });
+  await comment.waitFor({ state: 'visible' });
+  assert.equal(await comment.evaluate(button => {
+    const bounds = button.getBoundingClientRect(), paper = document.getElementById('paper').getBoundingClientRect();
+    return !button.closest('.pdf-strip') && bounds.top >= paper.top && bounds.bottom <= paper.bottom &&
+      bounds.left >= paper.left && bounds.right <= paper.right &&
+      button.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
+  }), true, 'selection action must escape strip stacking, fit the viewer and remain clickable');
+  await comment.click();
 }
 
 const noteInput = n => page.getByRole('textbox', { name: `Comment ${n}`, exact: true });

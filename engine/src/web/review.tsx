@@ -755,7 +755,7 @@ export function ReviewApp({
                     aria-keyshortcuts={keys.join(' ')}
                     title={
                       actionLock(kind) ||
-                      [label(kind), keys.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')
+                      [label(kind) + (count > 1 && kind !== "comment" ? ` (${count})` : ""), keys.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')
                     }
                     aria-describedby={
                       actionLock(kind) ? "review-lock" : undefined
@@ -775,6 +775,7 @@ export function ReviewApp({
             <button
               className="skip"
               aria-keyshortcuts={shortcuts.pending.join(' ')}
+              title={[changes ? t("Next unstaged") : t("Next undecided"), shortcuts.pending.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')}
               onClick={() => select(nextPending(stops, decisions, current))}
             >
               {changes ? t("Next unstaged") : t("Next undecided")}
@@ -1002,8 +1003,9 @@ export function ReviewApp({
         <header className="change-head">
           {/* The English number and location are kept for tools that quote
               them to an agent, whatever the interface language. */}
-          <span className="change-number" data-change={index + 1}>
-            {t("Change {n}", { n: index + 1 })}
+          <span className="change-number" data-change={index + 1} title={t("Change {n}", { n: index + 1 })}>
+            <span className="change-number-full">{t("Change {n}", { n: index + 1 })}</span>
+            <span className="change-number-short" aria-hidden="true">#{index + 1}</span>
           </span>
           <span
             className="change-where"
@@ -1013,9 +1015,9 @@ export function ReviewApp({
             {location}
           </span>
           {actionBar(index)}
-          {kindLabel && <span className="change-kind">{kindLabel}</span>}
+          {kindLabel && <span className="change-kind" title={kindLabel}>{kindLabel}</span>}
           {status !== "pending" && (
-            <span className="badge">{stateLabel(status)}</span>
+            <span className="badge" title={stateLabel(status)}>{stateLabel(status)}</span>
           )}
           <button
             className="link copy-reference"
@@ -1028,9 +1030,10 @@ export function ReviewApp({
             {t("Copy reference")}
           </button>
           <button
-            className={`link ${source ? "active" : ""}`}
+            className={`link source-toggle ${source ? "active" : ""}`}
             title={[t('Show LaTeX source'), shortcuts.source.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')}
             aria-keyshortcuts={shortcuts.source.join(' ')}
+            aria-expanded={source}
             onClick={() => toggleSource(index)}
           >
             {block.units.length > 1
