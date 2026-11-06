@@ -36,6 +36,7 @@ await context.route('**/api/**', route => {
 });
 await context.route('**/review/**', route => route.fulfill({ contentType: 'text/html', body: '<html><head></head><body><div class="bar">Review</div><main id="paper">Paper</main></body></html>' }));
 const dialog = page.locator('.settings-dialog');
+const modes = dialog.getByRole('radiogroup', { name: 'Mode', exact: true });
 const open = async () => {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await dialog.getByRole('button', { name: 'Appearance', exact: true }).click();
@@ -52,11 +53,11 @@ try {
   for (const preset of ['papilot', 'paper', 'slate']) {
     await choose('Theme', preset);
     for (const mode of ['Light', 'Dark']) {
-      await dialog.getByRole('radio', { name: mode, exact: true }).check();
+      await modes.getByRole('radio', { name: mode, exact: true }).check();
       await page.screenshot({ animations: 'disabled', path: `test-results/appearance-preset-${preset}-${mode.toLowerCase()}.png` });
     }
   }
-  await dialog.getByRole('radio', { name: 'Light', exact: true }).check();
+  await modes.getByRole('radio', { name: 'Light', exact: true }).check();
   await choose('Theme', 'paper');
   await rootHas('--bg', '#faf9f6');
   await choose('Accent', 'graphite');
@@ -76,22 +77,30 @@ try {
   assert.equal(await variable(page, '--bg'), '#fef9ed');
   await background.press('Escape');
   assert.equal(await background.inputValue(), '#FEF9ED');
-  await dialog.getByRole('radio', { name: 'Dark', exact: true }).check();
+  await modes.getByRole('radio', { name: 'Dark', exact: true }).check();
   await rootHas('--bg', '#282724');
   await background.fill('#252229');
   await background.press('Enter');
   await rootHas('--bg', '#252229');
-  await dialog.getByText('Advanced', { exact: true }).click();
-  await choose('PDF appearance', 'light');
+  await dialog.getByRole('radiogroup', { name: 'PDF appearance', exact: true }).getByRole('radio', { name: 'Original', exact: true }).check();
   await rootHas('--pdf-filter', 'none');
   assert.equal(await variable(page.frameLocator('.review-frame'), '--pdf-filter'), 'none');
+  const reviewOptions = dialog.getByRole('radiogroup', { name: 'Review appearance', exact: true });
+  await expect(dialog.locator('.appearance-paper-card').getByRole('switch')).toHaveCount(0);
+  await expect(reviewOptions).toBeVisible();
+  await expect(reviewOptions.getByRole('radio', { name: 'PDF', exact: true })).toBeChecked();
+  await expect(page.frameLocator('.review-frame').locator('html')).toHaveAttribute('data-review-theme', 'light');
+  await reviewOptions.getByRole('radio', { name: 'Auto', exact: true }).check();
+  await expect(page.frameLocator('.review-frame').locator('html')).toHaveAttribute('data-review-theme', 'dark');
   await page.screenshot({ animations: 'disabled', path: 'test-results/appearance-custom-dark-desktop.png' });
   await page.reload();
   await page.frameLocator('.review-frame').locator('#paper').waitFor();
   await rootHas('--bg', '#252229');
   assert.equal(await variable(page, '--primary'), '#55565a');
+  assert.equal(await variable(page, '--review-theme'), 'dark');
   await open();
-  await dialog.getByRole('radio', { name: 'Light', exact: true }).check();
+  await expect(reviewOptions.getByRole('radio', { name: 'Auto', exact: true })).toBeChecked();
+  await modes.getByRole('radio', { name: 'Light', exact: true }).check();
   await rootHas('--bg', '#fef9ed');
   await dialog.getByLabel('Choose Foreground color', { exact: true }).fill('#40364a');
   await rootHas('--text', '#40364a');
@@ -105,9 +114,13 @@ try {
   // Keep the window receiving pointer input active; the second tab only
   // observes storage changes and may otherwise throttle the first renderer.
   await page.bringToFront();
+  await reviewOptions.getByRole('radio', { name: 'PDF', exact: true }).check();
+  await other.waitForFunction(() => JSON.parse(localStorage.getItem('papilot:appearance')).review === 'pdf');
+  await reviewOptions.getByRole('radio', { name: 'Original', exact: true }).check();
+  await other.waitForFunction(() => JSON.parse(localStorage.getItem('papilot:appearance')).review === 'light');
   await choose('Theme', 'slate');
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#f6f7f8');
-  await dialog.getByRole('radio', { name: 'System', exact: true }).check();
+  await modes.getByRole('radio', { name: 'System', exact: true }).check();
   await page.emulateMedia({ colorScheme: 'dark' });
   await rootHas('--bg', '#24272b');
   await page.emulateMedia({ colorScheme: 'light' });
@@ -121,6 +134,7 @@ try {
   await dialog.getByRole('button', { name: 'Reset appearance', exact: true }).click();
   await rootHas('--bg', '#ffffff');
   await rootHas('--primary', '#2563eb');
+  await expect(reviewOptions.getByRole('radio', { name: 'PDF', exact: true })).toBeChecked();
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#ffffff');
   // The theme select follows the select-only combobox pattern: Escape cancels
   // without closing Settings, Tab accepts, and a space typed into a search

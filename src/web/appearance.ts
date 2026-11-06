@@ -2,9 +2,9 @@ export type ColorMode = 'light' | 'dark';
 export type PresetId = 'papilot' | 'paper' | 'slate';
 export type AccentId = 'default' | 'blue' | 'graphite' | 'stone';
 type Colors = { background?: string; foreground?: string };
-export type Appearance = { preset: PresetId; accent: AccentId; colors: Record<ColorMode, Colors>; pdf: 'theme' | 'light' };
+export type Appearance = { preset: PresetId; accent: AccentId; colors: Record<ColorMode, Colors>; pdf: 'theme' | 'light'; review: 'pdf' | 'theme' | 'light' };
 export const APPEARANCE_KEY = 'papilot:appearance';
-export const DEFAULT_APPEARANCE: Appearance = { preset: 'papilot', accent: 'default', colors: { light: {}, dark: {} }, pdf: 'theme' };
+export const DEFAULT_APPEARANCE: Appearance = { preset: 'papilot', accent: 'default', colors: { light: {}, dark: {} }, pdf: 'theme', review: 'pdf' };
 // Paper stays the visual focus. Presets vary the warmth of neutral surfaces;
 // accents are reserved for actions, selection and focus, with no decorative tint.
 export const PRESETS = {
@@ -31,6 +31,7 @@ export function parseAppearance(value: string | null): Appearance {
       accent: typeof saved?.accent === 'string' && (saved.accent === 'default' || Object.hasOwn(ACCENTS, saved.accent)) ? saved.accent : 'default',
       colors: { light: colors('light'), dark: colors('dark') },
       pdf: saved?.pdf === 'light' ? 'light' : 'theme',
+      review: saved?.review === 'theme' || saved?.review === 'light' ? saved.review : 'pdf',
     };
   } catch { return DEFAULT_APPEARANCE; }
 }
@@ -47,7 +48,9 @@ export function appearanceColors(appearance: Appearance, mode: ColorMode) {
 
 export function appearanceVariables(appearance: Appearance, mode: ColorMode): Record<string, string> {
   const { background: bg, foreground: fg, accent } = appearanceColors(appearance, mode);
-  const dark = mode === 'dark', darkPaper = dark && appearance.pdf === 'theme';
+  const dark = mode === 'dark';
+  const darkPaper = dark && appearance.pdf === 'theme';
+  const darkReview = appearance.review === 'pdf' ? darkPaper : dark && appearance.review === 'theme';
   const custom = appearance.preset !== 'papilot' || appearance.colors[mode].background || appearance.colors[mode].foreground;
   const customAccent = appearance.preset !== 'papilot' || appearance.accent !== 'default';
   const defaults = dark
@@ -68,15 +71,18 @@ export function appearanceVariables(appearance: Appearance, mode: ColorMode): Re
     '--ring': `0 0 0 3px ${activeAccent}33`,
     '--pdf-filter': darkPaper ? 'invert(.84) hue-rotate(180deg)' : 'none',
     '--pdf-page': darkPaper ? '#292929' : '#ffffff',
-    '--pdf-before': darkPaper ? '#432c30' : '#fbeeee',
-    '--pdf-after': darkPaper ? '#28392d' : '#eef8f1',
+    '--review-theme': darkReview ? 'dark' : 'light',
+    '--review-filter': darkReview ? 'invert(.84) hue-rotate(180deg)' : 'none',
+    '--review-page': darkReview ? '#292929' : '#ffffff',
+    '--review-before': darkReview ? '#432c30' : '#fbeeee',
+    '--review-after': darkReview ? '#28392d' : '#eef8f1',
   };
 }
 
 const properties = Object.keys(appearanceVariables(DEFAULT_APPEARANCE, 'light'));
 export function syncAppearance(source: HTMLElement, target: HTMLElement) {
   target.dataset.theme = source.dataset.theme;
-  target.dataset.pdfTheme = source.style.getPropertyValue('--pdf-filter') === 'none' ? 'light' : source.dataset.theme || 'light';
+  target.dataset.reviewTheme = source.style.getPropertyValue('--review-theme') || source.dataset.theme || 'light';
   for (const property of properties) {
     const value = source.style.getPropertyValue(property);
     if (value) target.style.setProperty(property, value); else target.style.removeProperty(property);
