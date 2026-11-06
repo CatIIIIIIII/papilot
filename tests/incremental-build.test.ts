@@ -6,8 +6,11 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { Repo } from '../engine/src/core/git.ts';
-import { Builder } from '../engine/src/core/build.ts';
+import { Builder, auxiliaryBuildError } from '../engine/src/core/build.ts';
 import { loadProject } from '../engine/src/core/config.ts';
+import { App } from '../engine/src/server.ts';
+import { view } from '../engine/src/core/view.ts';
+import type { BuildInfo } from '../engine/src/types.ts';
 import { workingTree } from '../src/server/manuscript.ts';
 
 const tex = (() => {
@@ -127,4 +130,130 @@ test('review builds of a chapter continue from the previous one and take other c
     const renumbered = await builder.build(third, targets, await builder.build(third));
     assert.match(execFileSync('pdftotext', [renumbered.pdf, '-']).toString(), /Second draft\. See Section 3\./, 'References follow the seed, not the earlier build');
   } finally { f.close(); }
+});
+
+test('chapter comparisons reuse yesterday’s exact seed without compiling the full paper again', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async t => {
+  const f = fixture(), epoch = process.env.SOURCE_DATE_EPOCH;
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  t.mock.timers.enable({ apis: ['Date'], now: yesterday.getTime() });
+  delete process.env.SOURCE_DATE_EPOCH;
+  try {
+    fs.mkdirSync(path.join(f.root, 'chapters'));
+    fs.writeFileSync(path.join(f.root, 'main.tex'), '\\documentclass{article}\n\\begin{document}\nDate: \\today.\n\\include{chapters/a}\n\\include{chapters/b}\n\\end{document}\n');
+    fs.writeFileSync(path.join(f.root, 'chapters/a.tex'), '\\section{A}\\label{sec:a}\nOriginal wording. See Section~\\ref{sec:b}.\n');
+    fs.writeFileSync(path.join(f.root, 'chapters/b.tex'), '\\section{B}\\label{sec:b}\nOther chapter.\n');
+    const before = await workingTree(f.root), project = loadProject(f.root), builder = new Builder(project, f.repo);
+    const seed = await builder.build(before);
+    const seedLog = fs.readFileSync(path.join(path.dirname(seed.root), 'latexmk.log'));
+    t.mock.timers.setTime(yesterday.getTime() + 86400000);
+    fs.writeFileSync(path.join(f.root, 'chapters/a.tex'), '\\section{A}\\label{sec:a}\nRevised wording. See Section~\\ref{sec:b}.\n');
+    const after = await workingTree(f.root), targets = await builder.planAsync(before, after, ['chapters/a.tex']);
+    assert.deepEqual(targets, ['chapters/a']);
+    const compile = builder.build.bind(builder), requested: string[][] = [];
+    t.mock.method(builder, 'build', (...args: Parameters<Builder['build']>) => { requested.push(args[1] ?? ['full']); return compile(...args); });
+    const reused = await builder.buildSeed(before);
+    assert.equal(reused.key, seed.key);
+    assert.deepEqual(requested, [], 'a cached seed starts no compiler, even on a new day');
+    const [old, revised] = await Promise.all([builder.build(before, targets, reused), builder.build(after, targets, reused)]);
+    assert.deepEqual(requested, [['chapters/a'], ['chapters/a']], 'both comparison builds compile only the affected chapter');
+    assert.deepEqual(fs.readFileSync(path.join(path.dirname(seed.root), 'latexmk.log')), seedLog);
+    const text = (pdf: string) => execFileSync('pdftotext', [pdf, '-']).toString();
+    const oldText = text(old.pdf), revisedText = text(revised.pdf);
+    assert.match(revisedText, /Revised wording\. See Section 2\./);
+    assert.doesNotMatch(revisedText, /Other chapter\./, 'the other chapter is not typeset');
+    assert.equal(oldText.match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1], 'both comparison sides use the same current date');
+    assert.notEqual(text(seed.pdf).match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1], 'the seed’s old date does not leak into the displayed comparison');
+
+    // Ordinary PDF requests still update today, and forced rebuilds still
+    // work. Neither is allowed to change a cached baseline in place.
+    const full = await builder.build(before);
+    assert.notEqual(full.key, seed.key);
+    assert.match(text(full.pdf), /Other chapter\./);
+    assert.equal(text(full.pdf).match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1]);
+    const forced = await builder.build(before, ['full'], null, { force: true });
+    assert.notEqual(forced.key, full.key);
+
+    // Missing chapter auxiliaries cannot masquerade as a usable seed just
+    // because the corresponding PDF still exists, including today's cache.
+    for (const built of [seed, full, forced]) fs.rmSync(path.join(path.dirname(built.pdf), 'chapters/b.aux'));
+    const repaired = await builder.buildSeed(before);
+    assert.ok(![seed.key, full.key, forced.key].includes(repaired.key));
+    assert.ok(fs.existsSync(path.join(path.dirname(repaired.pdf), 'chapters/b.aux')));
+
+    const changed = await builder.buildSeed(after);
+    assert.notEqual(changed.tree, seed.tree, 'a seed of another source version is never reused');
+    assert.match(text(changed.pdf), /Revised wording/);
+    const configured = new Builder({ ...project, preload: { 'chapters/b': 'chapters/b.tex' } }, f.repo);
+    assert.notEqual((await configured.buildSeed(before)).key, repaired.key, 'changed build settings invalidate seed reuse');
+  } finally {
+    t.mock.timers.reset();
+    if (epoch === undefined) delete process.env.SOURCE_DATE_EPOCH; else process.env.SOURCE_DATE_EPOCH = epoch;
+    f.close();
+  }
+});
+
+for (const entry of ['comparison', 'agent preview']) test(`${entry} recovers an incompatible cached seed after an external package update`, { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async t => {
+  const f = fixture(), epoch = process.env.SOURCE_DATE_EPOCH, inputs = process.env.TEXINPUTS;
+  const yesterday = Date.now() - 86400000, external = path.join(f.base, 'external');
+  t.mock.timers.enable({ apis: ['Date'], now: yesterday });
+  delete process.env.SOURCE_DATE_EPOCH;
+  fs.mkdirSync(external);
+  process.env.TEXINPUTS = `${external}//:${inputs ?? ''}`;
+  let app: App | undefined;
+  try {
+    const style = path.join(external, 'seedcompat.sty');
+    fs.writeFileSync(style, String.raw`\ProvidesPackage{seedcompat}
+\newcommand\oldauxcommand{}
+\makeatletter\AtBeginDocument{\immediate\write\@auxout{\string\oldauxcommand}}\makeatother
+`);
+    fs.writeFileSync(path.join(f.root, 'main.tex'), '\\documentclass{article}\n\\usepackage{seedcompat}\n\\begin{document}\n\\include{a}\n\\include{b}\n\\end{document}\n');
+    fs.writeFileSync(path.join(f.root, 'a.tex'), '\\section{A}\nOriginal wording. See Section~\\ref{sec:b}.\n');
+    fs.writeFileSync(path.join(f.root, 'b.tex'), '\\section{B}\\label{sec:b}\nOther chapter.\n');
+    f.repo.run(['add', '-A']);
+    f.repo.run(['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', 'Fixture']);
+    app = new App(f.root);
+    const task = app.tasks.create('recovery'), builder = new Builder(app.project, app.repo);
+    const old = await builder.build(task.base);
+    t.mock.timers.setTime(yesterday + 86400000);
+    // Installed packages can change while the source tree and compiler's
+    // version stay identical. Yesterday's readable aux is now incompatible.
+    fs.writeFileSync(style, '\\ProvidesPackage{seedcompat}\n');
+    fs.writeFileSync(path.join(task.worktree, 'a.tex'), '\\section{A}\nRevised wording. See Section~\\ref{sec:b}.\n');
+    const original = Builder.prototype.build, requests: { targets: string[]; force: boolean; seed?: string }[] = [], completed: BuildInfo[] = [];
+    let auxiliaryFailures = 0;
+    t.mock.method(Builder.prototype, 'build', async function (this: Builder, ...args: Parameters<Builder['build']>) {
+      requests.push({ targets: args[1] ?? ['full'], force: Boolean(args[3]?.force), seed: args[2]?.key });
+      try { const built = await original.apply(this, args); completed.push(built); return built; }
+      catch (error) { if (auxiliaryBuildError(error)) auxiliaryFailures++; throw error; }
+    });
+    if (entry === 'comparison') {
+      const job = app.publisher.submit(task.name, undefined, false);
+      await app.publisher.join();
+      assert.equal(app.publisher.job(job.id).status, 'done', JSON.stringify(app.publisher.job(job.id).result));
+    } else {
+      const result = await view(app, task.name, { locations: ['a.tex:2'] });
+      assert.equal(result.error, undefined, JSON.stringify(result.details));
+      assert.equal(result.pages.length, 1);
+    }
+    assert.equal(auxiliaryFailures, entry === 'comparison' ? 2 : 1, 'the real compiler rejected the cached auxiliary file');
+    assert.deepEqual(requests.filter(request => request.targets[0] === 'full'), [{ targets: ['full'], force: true, seed: undefined }], 'only the failed seed is rebuilt, exactly once');
+    const fresh = await builder.buildSeed(task.base);
+    assert.notEqual(fresh.key, old.key);
+    assert.deepEqual(requests.filter(request => request.targets[0] !== 'full').map(request => request.seed), entry === 'comparison' ? [old.key, old.key, fresh.key, fresh.key] : [old.key, fresh.key]);
+    const chapters = completed.filter(built => built.targets[0] !== 'full');
+    assert.equal(chapters.length, entry === 'comparison' ? 2 : 1);
+    for (const built of chapters) {
+      const text = execFileSync('pdftotext', [built.pdf, '-']).toString();
+      assert.match(text, /(?:Original|Revised) wording\. See Section 2\./);
+      assert.doesNotMatch(text, /Other chapter\./);
+    }
+    if (entry === 'comparison') assert.equal(app.review.round(task.name, 1).summary.builds?.[0], fresh.key, 'the round retains the rebuilt seed for its comparison');
+    assert.ok(fs.existsSync(old.pdf), 'recovery does not overwrite an existing PDF');
+  } finally {
+    await app?.close();
+    t.mock.timers.reset();
+    if (epoch === undefined) delete process.env.SOURCE_DATE_EPOCH; else process.env.SOURCE_DATE_EPOCH = epoch;
+    if (inputs === undefined) delete process.env.TEXINPUTS; else process.env.TEXINPUTS = inputs;
+    f.close();
+  }
 });
