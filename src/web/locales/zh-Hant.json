@@ -1239,6 +1239,6 @@
   "Task permissions": "任務權限",
   "Workspace access": "工作區權限",
   "Edit the task workspace with network access; other actions may need approval.": "可編輯任務工作區並連網；其他操作可能需要批准。",
-  "Access files, use the network, and run commands without individual approval.": "允許存取檔案、使用網路並執行命令，無需逐項批准。",
+  "Access files, use the network, and run commands without individual approval.": "允許存取檔案、連網查找並執行命令，無需逐項批准。",
   "Pause the task before changing permissions.": "請先暫停任務，再修改權限。"
 }
