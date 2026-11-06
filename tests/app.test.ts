@@ -996,7 +996,7 @@ test('the annotated PDF carries the paper\'s current notes and nothing else', as
 });
 
 test('changing a relocated paper path recovers its preserved review PDF without a build cache', async () => {
-  const f = await fixture(), base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-review-move-')));
+  const f = await fixture(), base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-review-move-')));
   const root = path.join(base, 'paper'), moved = path.join(base, 'moved-paper'), worktree = path.join(base, 'task');
   const git = (folder: string, ...args: string[]) => execFileSync('git', ['-C', folder, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
   try {

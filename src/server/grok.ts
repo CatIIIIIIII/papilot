@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { spawn } from 'node:child_process';
+import { spawnCommand } from '../../bin/agent-paths.mjs';
 import type { TaskPermissionOption, TaskPermissions } from '../shared.ts';
 import type { AgentRuntime } from './agents.ts';
 import { RpcResponseError } from './codex.ts';
@@ -16,7 +16,7 @@ export class GrokAgent extends EventEmitter implements AgentRuntime {
   private workers = new Set<AcpAgent>();
   private approvals = new Map<string, AcpAgent>();
   private generation = 0;
-  constructor(private binary?: string, private launch: typeof spawn = spawn) {
+  constructor(private binary?: string, private launch: typeof spawnCommand = spawnCommand) {
     super();
     this.probe = new AcpAgent(ACP_PROFILES.grok, binary, launch);
     this.probe.on('disconnected', error => { this.close(); this.emit('disconnected', error); });

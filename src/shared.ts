@@ -110,7 +110,7 @@ export interface DiagnosticReport {
   version: string; checkedAt: number; platform: string; arch: string; node: string;
   ok: boolean; checks: DiagnosticCheck[];
 }
-export interface Snapshot { projects: Project[]; tasks: Task[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; viewer?: Viewer }
+export interface Snapshot { projects: Project[]; tasks: Task[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; viewer?: Viewer; gitAvailable?: boolean }
 // Who is looking: the owner on this host or Tailscale (local), or a person
 // signed in with a passkey at the public URL (account). Older servers send none.
 // owner names the owner, whose messages carry no author.

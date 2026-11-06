@@ -1,0 +1,4 @@
+# Keep the desktop shell fingerprint identical on every native CI runner.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

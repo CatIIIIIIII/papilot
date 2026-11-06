@@ -405,7 +405,10 @@ function Activity({ onRevealQuote, task, runtime, reconnecting, onReconnect, ski
 }
 
 // Shorten an absolute repository path to its last folders for menus.
-function shortPath(value: string) { const parts = value.split('/').filter(Boolean); return (parts.length > 2 ? '…/' : '/') + parts.slice(-2).join('/'); }
+function shortPath(value: string) {
+  const normalized = value.replaceAll('\\', '/'), parts = normalized.split('/').filter(Boolean);
+  return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : normalized;
+}
 function gitSummary(git: GitStatus | null) {
   if (!Array.isArray(git?.files)) return '';
   const sync = [git.ahead ? `↑${git.ahead}` : '', git.behind ? `↓${git.behind}` : ''].filter(Boolean).join(' ');
@@ -1459,11 +1462,17 @@ function App() {
     if (next === null) return;
     event.preventDefault(); setChatWidth(Math.min(Math.max(next, 300), max));
   }
-  const manuscriptOpen = !task && Boolean(project) && page === 'manuscript';
+  // Older backends do not report this capability. A current backend always
+  // supplies it; never restore a saved Git page when Git is missing there.
+  const gitAvailable = Boolean(state) && state?.gitAvailable !== false;
+  useEffect(() => { if (state?.gitAvailable === false) setPage(current => current === 'git' ? 'manuscript' : current); }, [state?.gitAvailable]);
+  const manuscriptOpen = !task && Boolean(project) && (page === 'manuscript' || page === 'git' && !gitAvailable);
   const referencesOpen = !task && Boolean(project) && page === 'references';
-  const gitOpen = !task && Boolean(project) && page === 'git';
+  const gitOpen = !task && Boolean(project) && page === 'git' && gitAvailable;
   async function openGit() {
+    if (!gitAvailable) return;
     if (manuscriptNavigationGuard.current && !await manuscriptNavigationGuard.current.save()) return;
+    if (snapshotRef.current?.gitAvailable === false) return;
     setSelected(''); setPage('git'); setRegion(false); setSidebar(false);
   }
   const loadManuscript = useCallback(async (projectId: string, rebuild = false) => {
@@ -1503,13 +1512,13 @@ function App() {
   // the tasks' reviews as well as every 20 seconds.
   const reviewKey = (state?.tasks || []).filter(t => t.projectId === project?.id).map(t => `${t.review?.files?.join()}:${t.review?.counts?.accepted}`).join('|');
   useEffect(() => {
-    if (!project || manuscriptOpen) return;
+    if (!project || manuscriptOpen || !gitAvailable) return;
     let live = true;
     const load = () => void api<GitStatus>(`/projects/${project.id}/git`).then(status => { if (live) setGit({ projectId: project.id, status }); }).catch(() => undefined);
     load(); const timer = setInterval(load, gitOpen ? 5000 : 20000);
     window.addEventListener('focus', load);
     return () => { live = false; clearInterval(timer); window.removeEventListener('focus', load); };
-  }, [project?.id, project?.path, manuscriptOpen, gitOpen, reviewKey]);
+  }, [project?.id, project?.path, manuscriptOpen, gitOpen, gitAvailable, reviewKey]);
   // A skill chosen for one paper may not exist on another.
   useEffect(() => setNewSkill(null), [project?.id, project?.path]);
   // Skills come from Papilot, ~/.papilot/skills and the paper's .papilot/skills,
@@ -1839,7 +1848,8 @@ function App() {
       <div className="sidebar-actions">
         {project && <>
           <button className={'nav-link manuscript-link' + (manuscriptOpen ? ' active' : '')} aria-current={manuscriptOpen ? 'page' : undefined} onClick={() => { setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><Icon name="pdf" size={16}/><span className="nav-label">{t('Manuscript')}</span></button>
-          <button className={'nav-link git-link' + (gitOpen ? ' active' : '')} aria-label={projectGit?.files?.length ? t('Version Management, {n} changed', { n: projectGit.files.length }) : t('Version Management')} aria-current={gitOpen ? 'page' : undefined} title={t('Version management of the manuscript') + '\n' + gitSummary(projectGit)} onClick={openGit}><Icon name="restore" size={16}/><span className="nav-label">{t('Version Management')}</span><span className="nav-meta">{projectGit?.files?.length ? <span className="count">{projectGit.files.length}</span> : null}</span></button>
+          <button className={'nav-link git-link' + (gitOpen ? ' active' : '')} disabled={!gitAvailable} aria-describedby={!gitAvailable ? 'git-install-hint' : undefined} aria-label={gitAvailable && projectGit?.files?.length ? t('Version Management, {n} changed', { n: projectGit.files.length }) : t('Version Management')} aria-current={gitOpen ? 'page' : undefined} title={gitAvailable ? t('Version management of the manuscript') + '\n' + gitSummary(projectGit) : t('Install Git in this environment to use version management.')} onClick={openGit}><Icon name="restore" size={16}/><span className="nav-label">{t('Version Management')}</span><span className="nav-meta">{gitAvailable && projectGit?.files?.length ? <span className="count">{projectGit.files.length}</span> : null}</span></button>
+          {!gitAvailable && <p className="git-install-hint" id="git-install-hint"><a href="https://git-scm.com/install/" target="_blank" rel="noreferrer">{t('Install Git in this environment to use version management.')}</a></p>}
           <ActionMenu label={t('Research Tools')} className="nav-link paper-tools" menuClassName="paper-tools-menu" align="side" actions={[
             { id: 'references', label: t('Reference check'), icon: 'checklist', detail: t('Citations, entries and their records'), hint: problems ? String(problems) : undefined, checked: referencesOpen || undefined, select: () => { setSelected(''); setPage('references'); setSidebar(false); } },
           ]}><Icon name="tool" size={16}/><span className="nav-label">{t('Research Tools')}</span><Icon name="more" size={16}/></ActionMenu>

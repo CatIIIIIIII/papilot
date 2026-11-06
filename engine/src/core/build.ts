@@ -59,7 +59,13 @@ async function filesIn(root: string): Promise<string[]> {
 // folder. Build folders differ only in their equal-length key, so the paths
 // are replaced in place without moving anything else in the file.
 export async function relocate(file: string, from: string, to: string) {
-  const old = Buffer.from(from + path.sep), next = Buffer.from(to + path.sep);
+  // Cache keys are ASCII even when TeX writes the shared parent directory in
+  // a Windows ANSI code page. Match that unique path component so relocation
+  // preserves the original encoding, including in files reused without TeX.
+  const keys = path.dirname(from) === path.dirname(to)
+    && [path.basename(from), path.basename(to)].every(name => /^[a-f0-9]{32}$/.test(name));
+  const old = Buffer.from((keys ? "/" + path.basename(from) : from.replaceAll("\\", "/")) + "/"),
+    next = Buffer.from((keys ? "/" + path.basename(to) : to.replaceAll("\\", "/")) + "/");
   if (old.length !== next.length || old.equals(next)) return;
   let data: Buffer;
   try { data = await fs.promises.readFile(file); }
@@ -97,6 +103,7 @@ const building = new Map<string, Promise<BuildInfo>>();
 // compiles, and continues once none does, so speculation never slows down a
 // PDF someone is waiting for. A build that someone waits for is promoted.
 function schedule() {
+  if (process.platform === "win32") return;
   const top = Math.max(-1, ...[...active].filter((a) => a.child).map((a) => RANK[a.priority]));
   for (const build of active) {
     const pause = build.priority === "background" && top > RANK.background;
@@ -703,7 +710,7 @@ export class Builder {
         env: {
           ...process.env,
           ...date,
-          ...(keeping ? { PAPILOT_PASS_DIR: passes, PAPILOT_PASS_FILES: ["xdv", "pdf", "synctex.gz"].map((ext) => `build/${job}.${ext}`).join("\n") } : {}),
+          ...(keeping ? { PAPILOT_PASS_DIR: passes.replaceAll("\\", "/"), PAPILOT_PASS_FILES: ["xdv", "pdf", "synctex.gz"].map((ext) => `build/${job}.${ext}`).join("\n") } : {}),
         },
         timeout: 1800000,
         started: (child) => {

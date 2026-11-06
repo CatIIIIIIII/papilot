@@ -17,6 +17,7 @@ import { GrokAgent } from './grok.ts';
 import { reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
+import { pathIdentity, realPath } from './real-path.ts';
 import { findSkill, type SkillFile } from './skills.ts';
 import { buildFixPrompt, reviewInstructions, skillPrompt, summarizeFeedback } from '../conversation.ts';
 import { reconciliationPrompt } from './reconcile.ts';
@@ -219,19 +220,24 @@ export class Workspace extends EventEmitter {
   }
   private async projectRoot(input: string) {
     const expanded = input.startsWith('~/') ? path.join(process.env.HOME!, input.slice(2)) : input;
-    const root = fs.realpathSync(expanded);
+    const root = realPath(expanded);
     const git = await execute('git', ['-C', root, 'rev-parse', '--show-toplevel']);
-    if (fs.realpathSync(git.stdout.trim()) !== root) throw new Error('Select the root directory of the Git repository.');
+    if (realPath(git.stdout.trim()) !== root) throw new Error('Select the root directory of the Git repository.');
     await execute('git', ['-C', root, 'rev-parse', '--verify', 'HEAD']);
     return root;
   }
   async addProject(input: string, name?: string) {
     const expanded = input.startsWith('~/') ? path.join(process.env.HOME!, input.slice(2)) : input;
-    await prepareRepository(fs.realpathSync(expanded));
+    await prepareRepository(realPath(expanded));
     const root = await this.projectRoot(input);
-    const existing = this.store.projectByPath(root); if (existing) return existing;
+    const existing = this.projectByPath(root); if (existing) return existing;
     const project = { id: randomUUID(), name: name?.trim() || path.basename(root), path: root, createdAt: Date.now() };
     this.store.saveProject(project); return project;
+  }
+  projectByPath(root: string) {
+    const existing = this.store.projectByPath(root); if (existing) return existing;
+    const identity = pathIdentity(root);
+    return this.store.projects().find(project => pathIdentity(project.path) === identity);
   }
   renameProject(projectId: string, name: string) {
     const project = { ...this.store.project(projectId), name };
@@ -259,25 +265,25 @@ export class Workspace extends EventEmitter {
     try {
       check();
       const root = await this.projectRoot(input), previous = this.store.project(id);
-      if (root === previous.path) return name === undefined ? previous : this.renameProject(id, name);
-      if (this.store.projectByPath(root)) throw new Error('This repository is already added as another paper.');
+      if (root === pathIdentity(previous.path)) return name === undefined ? previous : this.renameProject(id, name);
+      if (this.projectByPath(root)) throw new Error('This repository is already added as another paper.');
       const client = await this.connectReview(root);
       await client.get('/api/tasks');
       const tasks = this.store.tasks().filter(task => task.projectId === id), worktrees = new Map<string, string>();
       // A new path must still contain this paper's existing review tasks.
       // Taking paths from the engine also handles a relocated repository.
-      const common = async (folder: string) => fs.realpathSync(path.resolve(folder, (await execute('git', ['-C', folder, 'rev-parse', '--git-common-dir'])).stdout.trim()));
+      const common = async (folder: string) => realPath(path.resolve(folder, (await execute('git', ['-C', folder, 'rev-parse', '--git-common-dir'])).stdout.trim()));
       const repository = await common(root);
       for (const task of tasks) {
         const info = await client.get(taskRoute(task.name));
         if (info?.task !== task.name || typeof info.worktree !== 'string' || await common(info.worktree) !== repository) throw new Error('The selected repository does not contain this paper’s task worktrees. Select the repository with its existing tasks, or add it as a separate paper.');
-        worktrees.set(task.id, fs.realpathSync(info.worktree));
+        worktrees.set(task.id, realPath(info.worktree));
       }
       const project = { ...this.store.project(id), path: root, ...(name === undefined ? {} : { name }) };
       this.store.transaction(() => {
         for (const task of tasks) {
           const worktree = worktrees.get(task.id)!;
-          if (worktree !== task.worktree) {
+          if (worktree !== pathIdentity(task.worktree)) {
             if (task.threadId) this.loaded.delete(task.threadId);
             this.store.updateTask(task.id, { worktree, threadId: null, turnId: null });
           }
@@ -469,6 +475,19 @@ Preserve meaning and mathematical correctness. Read relevant project instruction
 Never invent a bibliography entry or any of its details. Add a .bib entry only for a work you can identify, take its authors, title, year and venue from the published record, and include its doi or arXiv eprint when it has one. Papilot looks up every added or changed entry in Crossref, DBLP and arXiv and shows the author any it cannot confirm. Name the entries you added or changed in your summary.
 ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. Shell commands follow the current native permission policy; requests needing interactive approval are refused in this headless session.' : 'You may run tools in the task worktree to inspect and validate your changes.'} ${viewPdf ? `When the look of the pages matters, such as line breaks, spacing, figures, tables or displayed formulas, use the ${VIEW_PDF} tool and open the pages it draws with your image viewer to see them as the author does. It compiles the paper, so do not call it for wording alone. ` : ''}If a decision requires the user, ask through the available user-input tool or explain it in your final response. Use English for your progress updates, questions, and final summaries unless the user explicitly requests another language. Preserve the manuscript language unless asked to translate it.`;
   }
+  private async approvalReviewer(task: Task): Promise<{ approvalsReviewer?: 'user' | 'auto_review' | 'guardian_subagent' }> {
+    if (this.agentOf(task) !== 'codex') return {};
+    try {
+      // Resolve per worktree and per turn: project/profile settings and changes
+      // since the thread was loaded must also apply to resumed conversations.
+      const { config } = await this.agents.codex.request('config/read', { includeLayers: false, cwd: task.worktree }, 20000);
+      const reviewer = config?.profiles?.[config.profile]?.approvals_reviewer ?? config?.approvals_reviewer;
+      return reviewer === 'user' || reviewer === 'auto_review' || reviewer === 'guardian_subagent' ? { approvalsReviewer: reviewer } : {};
+    } catch {
+      // Older servers may not expose this setting. Preserve their thread defaults.
+      return {};
+    }
+  }
   private async startRun(run: Run) {
     let task = this.store.task(run.taskId);
     if (task.titleSource === 'prompt' && !task.titleGeneration) {
@@ -478,13 +497,14 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.earlyCompletions.delete(task.id); this.earlyRequests.delete(task.id);
     this.store.saveRun({ ...run, status: 'running' });
     this.store.updateTask(task.id, { status: 'running', turnId: null, error: null });
+    const reviewer = await this.approvalReviewer(task);
     const permissions = task.mode !== 'review' ? await agent.taskPermissionConfig?.(task.permissions || 'workspace', task.worktree) : undefined;
     if (this.active.get(task.id)?.id !== run.id) return;
     if (!task.threadId || !this.loaded.has(task.threadId)) {
       // Codex threads get the view_pdf tool when they start, and keep it when resumed.
       const scope = task.mode === 'review' ? [] : await this.reviewScope(task), codex = this.agentOf(task) === 'codex';
       let viewPdf = task.mode !== 'review' && codex && (task.threadId ? Boolean(task.viewPdf) : !this.noViewPdf);
-      const options = (tool: boolean) => ({ cwd: task.worktree, approvalPolicy: 'on-request', sandbox: 'workspace-write', ...permissions?.thread, config: { web_search: 'live', 'sandbox_workspace_write.network_access': true }, developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
+      const options = (tool: boolean) => ({ cwd: task.worktree, approvalPolicy: 'on-request', sandbox: 'workspace-write', ...permissions?.thread, ...reviewer, config: { web_search: 'live', 'sandbox_workspace_write.network_access': true }, developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
       let result;
       if (task.threadId) result = await agent.request('thread/resume', { ...options(viewPdf), threadId: task.threadId, excludeTurns: true });
       else {
@@ -519,8 +539,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     const model = task.model ? models.find(model => model.id === task.model) : models.find(model => model.isDefault);
     // Explicit defaults replace a previous turn's reasoning override.
     const effort = task.effort || (this.agentOf(task) === 'codex' ? model?.defaultEffort : undefined);
-    // Runtime-owned turn overrides also revoke permissions on already-loaded threads.
-    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, ...permissions?.turn, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
+    // Apply the native policy (including configured roots and tmp exclusions)
+    // and the current worktree reviewer even on already-loaded threads.
+    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, ...permissions?.turn, ...reviewer, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
     catch (error) {
       if (this.active.get(task.id)?.id !== run.id) return;
       if (error instanceof RpcResponseError) throw error;

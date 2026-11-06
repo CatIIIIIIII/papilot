@@ -51,6 +51,27 @@ jobs:
       - name: Pack
         run: npm pack --ignore-scripts --dry-run
 
+  # The same checks on a native Windows host: the CLI, server and review engine
+  # run there too, and the tests that need POSIX signals skip themselves.
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            engine/package-lock.json
+      - run: npm ci
+      - run: npm run setup:review
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   # Which desktop check a pull request or a push to main needs, from the files
   # it changes. Release calls CI for a tag and builds every installer itself.
   changes:
@@ -90,13 +111,14 @@ jobs:
   passed:
     name: CI passed
     if: always()
-    needs: [check, changes, desktop]
+    needs: [check, windows, changes, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: Require explicit success from every required job
         env:
           CHECK_RESULT: ${{ needs.check.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
           DESKTOP_RESULT: ${{ needs.desktop.result }}

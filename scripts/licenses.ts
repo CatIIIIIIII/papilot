@@ -31,10 +31,11 @@ function resolvePackage(name: string, from: string): string | undefined {
 // Include nested notices too: PDF.js, for example, ships separately licensed fonts and decoders.
 function licenseFiles(directory: string, prefix = ''): LicenseNotice['notices'] {
   return fs.readdirSync(path.join(directory, prefix), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
-    const name = path.join(prefix, entry.name);
+    // Notice names are shown in the interface; keep them platform-neutral.
+    const name = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) return licenseFiles(directory, name);
     return entry.isFile() && /^(licen[cs]e|copying|notice|copyright)([._-]|$)/i.test(entry.name)
-      ? [{ name, text: readText(path.join(directory, name)) }] : [];
+      ? [{ name, text: readText(path.join(directory, ...name.split('/'))) }] : [];
   });
 }
 

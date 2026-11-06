@@ -70,7 +70,10 @@ test('draft files are private, become visible with a message, survive restart, a
     await assert.rejects(f.workspace.enqueue(f.task.id, 'Use these.', 'wrong-person', false, { attachments: [image.id], author: { id: 'bob', name: 'Bob' } }), /not available/);
     const run = await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id], author: { id: 'ada', name: 'Ada' } });
     assert.deepEqual(run.attachments, [image, data]);
-    assert.match(run.prompt, /results.csv/); assert.ok(run.prompt.includes(f.workspace.attachments.path(data)));
+    assert.match(run.prompt, /results.csv/);
+    // The listing is JSON for the agent, so the path appears escaped there.
+    const listing = run.prompt.split('User-provided attachments (read-only reference material):\n')[1].split('\nRead these files')[0].split('\n');
+    assert.ok(listing.some(line => (JSON.parse(line) as { path: string }).path === f.workspace.attachments.path(data)));
     assert.deepEqual(f.store.items(f.task.id)[0].meta?.attachments, [image, data]);
     assert.equal(f.workspace.attachments.get('paper', image.id, 'bob').id, image.id);
     assert.throws(() => f.workspace.attachments.resolve('paper', [image.id], 'ada', 'another-task'), /not available/);

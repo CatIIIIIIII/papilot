@@ -33,6 +33,7 @@ test('the shell fingerprint changes exactly when an update would need a new inst
       ['a production dependency', () => { lock.packages['node_modules/fastify'].version = '5.1.0'; write(path.join(root, 'package-lock.json'), lock); }],
       ['an engine dependency', () => write(path.join(root, 'engine/package-lock.json'), { packages: { 'node_modules/diff': { version: '9.1.0' } } })],
       ['the Electron app', () => write(path.join(root, 'desktop/main.ts'), 'changed main')],
+      ['a helper copied into Electron', () => write(path.join(root, 'engine/src/core/platform.mjs'), 'updated process handling')],
       ['how the installer is staged', () => write(path.join(root, 'scripts/desktop.mjs'), 'changed stage')],
       ['Codex', () => { const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')); pkg.devDependencies['@openai/codex'] = '0.165.0'; write(path.join(root, 'package.json'), pkg); }],
     ] as const) {

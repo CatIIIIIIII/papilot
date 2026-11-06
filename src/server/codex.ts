@@ -1,5 +1,5 @@
-import { agentPath } from '../../bin/agent-paths.mjs';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { agentPath, spawnCommand } from '../../bin/agent-paths.mjs';
+import { type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import type { TaskPermissions, TaskPermissionOption } from '../shared.ts';
@@ -35,7 +35,7 @@ export class Codex extends EventEmitter {
       if (resolved.thread?.id) await this.request('thread/unsubscribe', { threadId: resolved.thread.id }).catch(() => {});
     }
   }
-  child: ChildProcessWithoutNullStreams | null = null;
+  child: ChildProcess | null = null;
   private sequence = 0;
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   private starting: Promise<void> | null = null;
@@ -50,11 +50,11 @@ export class Codex extends EventEmitter {
   }
   private async launch() {
     this.stderr = '';
-    const child = spawn(this.binary, this.args, { cwd: ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnCommand(this.binary, this.args, { cwd: ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
-    const lines = createInterface({ input: child.stdout });
+    const lines = createInterface({ input: child.stdout! });
     lines.on('line', line => { try { this.receive(JSON.parse(line)); } catch { /* non-protocol stdout is ignored */ } });
-    child.stderr.on('data', chunk => { this.stderr = (this.stderr + chunk.toString()).slice(-12000); });
+    child.stderr!.on('data', chunk => { this.stderr = (this.stderr + chunk.toString()).slice(-12000); });
     const failed = (error: Error) => {
       if (this.child !== child) return;
       this.ready = false; this.child = null;
@@ -81,13 +81,13 @@ export class Codex extends EventEmitter {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Codex request timed out: ${method}. Check the task status before retrying.`)); }, timeout);
       this.pending.set(id, { resolve, reject, timer });
-      this.child!.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => {
+      this.child!.stdin!.write(JSON.stringify({ id, method, params }) + '\n', error => {
         if (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
       });
     });
   }
-  notify(method: string, params: unknown) { this.child?.stdin.write(JSON.stringify({ method, params }) + '\n'); }
-  respond(id: string | number, result: unknown) { if (!this.child) throw new Error('Codex disconnected. Resume the task before retrying.'); this.child.stdin.write(JSON.stringify({ id, result }) + '\n'); }
-  reject(id: string | number, message: string) { this.child?.stdin.write(JSON.stringify({ id, error: { code: -32601, message } }) + '\n'); }
-  close() { this.child?.stdin.end(); this.child?.kill('SIGTERM'); }
+  notify(method: string, params: unknown) { this.child?.stdin?.write(JSON.stringify({ method, params }) + '\n'); }
+  respond(id: string | number, result: unknown) { if (!this.child) throw new Error('Codex disconnected. Resume the task before retrying.'); this.child.stdin!.write(JSON.stringify({ id, result }) + '\n'); }
+  reject(id: string | number, message: string) { this.child?.stdin?.write(JSON.stringify({ id, error: { code: -32601, message } }) + '\n'); }
+  close() { this.child?.stdin?.end(); this.child?.kill('SIGTERM'); }
 }

@@ -1,6 +1,7 @@
 // Simplified Chinese for the workspace, keyed by the English text (see i18n.ts).
 // Chinese text keeps a space around numbers and Latin words: "修改 2", "PDF 批注".
 export const zhCN: Record<string, string> = {
+  'Environment': '运行环境',
   'Comment': '评论', 'Unchanged text': '未修改的文字',
   "Refresh version history": "刷新版本记录",
   "Loading versions…": "正在读取版本…",
@@ -724,4 +725,5 @@ export const zhCN: Record<string, string> = {
   'Restore presets': '恢复预设', 'Restored the preset notes.': '已恢复预设的常用批注。', 'Quick note icon': '常用批注图标',
   'Short name': '简称', 'Instruction': '要求', 'A word or two for the wheel': '一两个词，显示在圆盘上', 'What the agent should do with the marked text': '希望 agent 怎样处理标出的文字',
   'Line break': '换行', 'Expand': '展开', 'Question': '疑问', 'Flag': '旗标',
+  'Install Git in this environment to use version management.': '请在当前环境中安装 Git 后使用版本管理。',
 };

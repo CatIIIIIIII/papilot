@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('papilotDesktop', {
   maximize: () => ipcRenderer.send('papilot:window', 'maximize'),
   close: () => ipcRenderer.send('papilot:window', 'close'),
   chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke('papilot:choose-directory'),
+  openEnvironment: () => ipcRenderer.invoke('papilot:open-environment'),
+  environment: (): Promise<string> => ipcRenderer.invoke('papilot:current-environment'),
   notify: (alert: { taskId: string | null; title: string; body: string; sound: boolean }): Promise<boolean> => ipcRenderer.invoke('papilot:notify', alert),
   onOpenTask: (listener: (taskId: string) => void) => {
     const receive = (_event: IpcRendererEvent, taskId: unknown) => { if (typeof taskId === 'string') listener(taskId); };
@@ -19,5 +21,21 @@ contextBridge.exposeInMainWorld('papilotDesktop', {
     const receive = (_event: IpcRendererEvent, folder: unknown) => { if (typeof folder === 'string') listener(folder); };
     ipcRenderer.on('papilot:open-folder', receive);
     return () => { ipcRenderer.off('papilot:open-folder', receive); };
+  },
+});
+
+// Every handler validates the local chooser window separately from app pages.
+contextBridge.exposeInMainWorld('papilotEnvironment', {
+  info: () => ipcRenderer.invoke('papilot:environment:info'),
+  inspect: (value: unknown) => ipcRenderer.invoke('papilot:environment:inspect', value),
+  copyInstall: () => ipcRenderer.invoke('papilot:environment:copyInstall'),
+  prepare: (distribution: string) => ipcRenderer.invoke('papilot:environment:prepare', distribution),
+  cancel: () => ipcRenderer.invoke('papilot:environment:cancel'),
+  apply: (value: unknown) => ipcRenderer.invoke('papilot:environment:apply', value),
+  help: (key?: string) => ipcRenderer.invoke('papilot:environment:help', key),
+  onProgress: (listener: (text: string) => void) => {
+    const receive = (_event: IpcRendererEvent, text: unknown) => { if (typeof text === 'string') listener(text); };
+    ipcRenderer.on('papilot:environment:progress', receive);
+    return () => ipcRenderer.off('papilot:environment:progress', receive);
   },
 });

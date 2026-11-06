@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { gitOverview, parseWorktrees } from '../src/server/git-overview.ts';
 import { graphRows } from '../src/web/git-graph.ts';
+import { pathIdentity } from '../src/server/real-path.ts';
 import type { GitGraphCommit } from '../src/shared.ts';
 
 test('worktree porcelain preserves unusual paths, empty locks and detached/unborn HEADs', () => {
@@ -48,7 +49,7 @@ test('repository overview reads each worktree, detached tips, refs and merge par
     fs.writeFileSync(path.join(other, 'new.tex'), 'Untracked');
     const before = fs.readFileSync(path.join(git(other, 'rev-parse', '--absolute-git-dir'), 'index'));
     const alias = path.join(base, 'proposal-alias');
-    fs.symlinkSync(other, alias, 'dir');
+    fs.symlinkSync(other, alias, process.platform === 'win32' ? 'junction' : 'dir');
     const result = await gitOverview(root, [
       { id: 'proposal-task', worktree: alias },
       { id: 'detached-task', worktree: detached },
@@ -58,16 +59,18 @@ test('repository overview reads each worktree, detached tips, refs and merge par
     assert.equal(result.worktrees.length, 4);
     assert.equal(result.worktrees[0].current, true);
     assert.equal(result.worktrees[0].status?.ahead, 2);
+    // Git lists worktrees with forward slashes on Windows.
+    const canonical = pathIdentity;
     const proposal = result.worktrees.find(tree => tree.branch === 'revision')!;
     assert.equal(proposal.taskId, 'proposal-task', 'Task paths resolve through symlink aliases');
-    assert.equal(result.worktrees.find(tree => tree.path === detached)?.taskId, 'detached-task');
-    assert.equal(result.worktrees.find(tree => tree.path === gone)?.taskId, 'missing-task', 'Missing worktrees retain their task association');
+    assert.equal(result.worktrees.find(tree => canonical(tree.path) === canonical(detached))?.taskId, 'detached-task');
+    assert.equal(result.worktrees.find(tree => canonical(tree.path) === canonical(gone))?.taskId, 'missing-task', 'Missing worktrees retain their task association');
     assert.equal(result.worktrees[0].taskId, undefined, 'The manuscript is not assigned another checkout’s task');
     assert.equal(proposal.locked, 'Keep this proposal');
     assert.deepEqual(proposal.status?.files.map(file => [file.path, file.staged, file.unstaged]), [['revision.tex', true, true], ['new.tex', false, true]]);
-    assert.equal(result.worktrees.find(tree => tree.path === gone)?.status, null);
-    assert.ok(result.worktrees.find(tree => tree.path === gone)?.error);
-    assert.ok(result.worktrees.find(tree => tree.path === gone)?.prunable);
+    assert.equal(result.worktrees.find(tree => canonical(tree.path) === canonical(gone))?.status, null);
+    assert.ok(result.worktrees.find(tree => canonical(tree.path) === canonical(gone))?.error);
+    assert.ok(result.worktrees.find(tree => canonical(tree.path) === canonical(gone))?.prunable);
     assert.deepEqual(result.commits.find(commit => commit.hash === mergeTip)?.parents, [mainTip, branchTip]);
     assert.ok(result.commits.some(commit => commit.hash === detachedTip));
     const tip = result.commits.find(commit => commit.hash === branchTip);
@@ -76,9 +79,16 @@ test('repository overview reads each worktree, detached tips, refs and merge par
     assert.ok(!result.commits.some(commit => commit.refs.includes('origin/main') || commit.remotes?.some(ref => ref.endsWith('/HEAD') || ref === 'origin')));
     assert.deepEqual(fs.readFileSync(path.join(git(other, 'rev-parse', '--absolute-git-dir'), 'index')), before);
     const linked = await gitOverview(other);
-    assert.equal(linked.worktrees[0].path, other);
+    assert.equal(canonical(linked.worktrees[0].path), canonical(other));
     assert.equal(linked.worktrees[0].current, true);
     assert.equal(linked.worktrees.filter(tree => tree.current).length, 1);
+    if (process.platform === 'win32') {
+      const alias = root[0].toLowerCase() + root.slice(1);
+      const alternate = await gitOverview(alias, [{ id: 'missing-task', worktree: gone[0].toLowerCase() + gone.slice(1) }]);
+      assert.equal(alternate.worktrees[0].current, true);
+      assert.equal(alternate.worktrees.filter(tree => tree.current).length, 1);
+      assert.equal(alternate.worktrees.find(tree => canonical(tree.path) === canonical(gone))?.taskId, 'missing-task');
+    }
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 

@@ -124,7 +124,8 @@ async function launch(root: string, port: number, owned: boolean): Promise<Clien
         // register the server with macOS as a background app.)
         argv0: owned ? "Papilot review server" : "latex-review server",
         cwd: ROOT,
-        detached: true,
+        detached: process.platform !== "win32" || !owned,
+        windowsHide: true,
         stdio: owned ? ["ignore", fd, fd, "ipc"] : ["ignore", fd, fd],
         env: process.env,
       },

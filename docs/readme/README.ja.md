@@ -6,7 +6,7 @@
 
 AI を用いた責任ある執筆と組版のための**新しいパラダイム**。
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>および <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) 向けに **[Papilot をダウンロード](https://github.com/PapilotAI/papilot/releases/latest)**、<br>または `npm install -g papilot` を実行してください。
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>および <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) または Windows (x64) 向けに **[Papilot をダウンロード](https://github.com/PapilotAI/papilot/releases/latest)**、<br>または `npm install -g papilot` を実行してください。
 
 <a href="https://papilot.ai">
 <picture>
@@ -64,7 +64,7 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
 
 <img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Git を介して共著者と同期。** プルやプッシュを行い、コンフリクトの解決はエージェントに任せられます。
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**無料かつオープンソース。** MIT ライセンスで提供され、macOS と Linux に対応しています。
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**無料かつオープンソース。** MIT ライセンスで提供され、macOS、Linux、Windows に対応しています。
 
 <a id="agents"></a>
 
@@ -91,7 +91,7 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
 
 ## 🚀 はじめに
 
-1. **インストール。** macOS または Linux 向けの[アプリをダウンロード](https://github.com/PapilotAI/papilot/releases/latest)するか、`npm install -g papilot`（Node.js 22.22 以降）を実行します。また、Git と TeX Live または MacTeX が必要です。
+1. **インストール。** macOS、Linux、Windows 向けの[アプリをダウンロード](https://github.com/PapilotAI/papilot/releases/latest)するか、`npm install -g papilot`（Node.js 22.22 以降）を実行します。また、Git と TeX Live または MacTeX が必要です。
 2. **プロジェクトを開く。** `.tex` ファイルが含まれるフォルダを選択すると、Papilot が PDF をビルドします。
 3. **エージェントを選択。** 既存の CLI ログインまたは API キーを使用し、ページに注釈を付けます。
 

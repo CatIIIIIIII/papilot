@@ -26,7 +26,7 @@ const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 
 class FakeCodex extends EventEmitter {
   permissionOptions = Codex.prototype.permissionOptions;
-  async taskPermissionConfig(value: 'workspace' | 'full') {
+  async taskPermissionConfig(value: string, _cwd: string) {
     return { thread: { sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write', approvalPolicy: value === 'full' ? 'never' : 'on-request' },
       turn: { sandboxPolicy: { type: value === 'full' ? 'dangerFullAccess' : 'workspaceWrite' }, approvalPolicy: value === 'full' ? 'never' : 'on-request' } };
   }
@@ -2269,6 +2269,106 @@ test('review threads use normal network access and inherit the resolved sandbox'
     assert.equal(start?.params.approvalPolicy, 'on-request');
     assert.deepEqual(start?.params.config, { web_search: 'live', 'sandbox_workspace_write.network_access': true });
     assert.equal(f.codex.calls.find(c => c.method === 'turn/start')?.params.sandboxPolicy, undefined);
+  } finally { f.close(); }
+});
+
+for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
+  for (const permissions of ['workspace', 'full'] as const)
+  test(`Codex ${lifecycle} inherits the task's configured approval reviewer with ${permissions} access`, async () => {
+    for (const config of [
+      { approvals_reviewer: 'auto_review' },
+      { approvals_reviewer: 'user' },
+      { approvals_reviewer: 'auto_review', profile: 'paper', profiles: { paper: { approvals_reviewer: 'user' } } },
+      { approvals_reviewer: 'guardian_subagent' },
+      { approvals_reviewer: null },
+      { approvals_reviewer: 'unknown' },
+      null,
+    ]) {
+      const f = fixture();
+      try {
+        if (lifecycle !== 'loaded') (f.workspace as any).loaded.clear();
+        if (lifecycle === 'start' || lifecycle === 'fallback') f.store.updateTask(f.task.id, { threadId: null });
+        f.store.updateTask(f.task.id, { permissions });
+        f.codex.ready = true;
+        f.codex.taskPermissionConfig = Codex.prototype.taskPermissionConfig.bind(f.codex);
+        const sandbox = { type: 'workspaceWrite', writableRoots: ['/configured-root'], networkAccess: true, excludeTmpdirEnvVar: true, excludeSlashTmp: true };
+        f.codex.handler = async (method, params) => {
+          if (method === 'config/read') {
+            assert.deepEqual(params, { cwd: f.task.worktree, includeLayers: false });
+            if (!config) throw new RpcResponseError('Unsupported method');
+            return { config };
+          }
+          if (method === 'thread/start' && params.ephemeral) {
+            assert.equal(params.cwd, f.task.worktree);
+            assert.equal(params.sandbox, 'workspace-write');
+            assert.equal(params.approvalPolicy, 'on-request');
+            return { thread: { id: 'permission-probe' }, sandbox, approvalPolicy: 'on-request', approvalsReviewer: 'user' };
+          }
+          if (method === 'thread/unsubscribe') {
+            assert.deepEqual(params, { threadId: 'permission-probe' });
+            return {};
+          }
+          if (lifecycle === 'fallback' && method === 'thread/start' && params.dynamicTools) throw new RpcResponseError('unknown field dynamicTools');
+          return method === 'turn/start' ? { turn: { id: 'turn-new' } } : { thread: { id: 'thread' } };
+        };
+        await f.workspace.enqueue(f.task.id, 'Revise this sentence.', `reviewer-${lifecycle}`, false);
+        await tick(); await tick();
+        const expected = config?.profiles?.paper.approvals_reviewer ?? (['user', 'auto_review', 'guardian_subagent'].includes(config?.approvals_reviewer || '') ? config?.approvals_reviewer : undefined);
+        const calls = f.codex.calls.filter(c => ['thread/start', 'thread/resume', 'turn/start'].includes(c.method) && !c.params.ephemeral);
+        assert.equal(calls.length, lifecycle === 'loaded' ? 1 : lifecycle === 'fallback' ? 3 : 2);
+        assert.equal(f.codex.calls.filter(c => c.method === 'thread/unsubscribe').length, permissions === 'workspace' ? 1 : 0);
+        for (const call of calls) {
+          assert.equal(call.params.approvalsReviewer, expected);
+          if (expected === undefined) assert.equal(Object.hasOwn(call.params, 'approvalsReviewer'), false);
+          if (call.method === 'turn/start') {
+            assert.deepEqual(call.params.sandboxPolicy, permissions === 'full' ? { type: 'dangerFullAccess' } : sandbox);
+            assert.equal(call.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+            assert.match(call.params.additionalContext['papilot-task-access'].value, /replace earlier Papilot instructions about access outside the task worktree/);
+          }
+          else {
+            assert.equal(call.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
+            assert.equal(call.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+          }
+        }
+      } finally { f.close(); }
+    }
+  });
+}
+
+test('loaded Codex turns re-read reviewer changes while switching permissions without a reconnect', async () => {
+  const f = fixture();
+  let reviewer = 'auto_review', root = '/configured-first';
+  try {
+    f.codex.ready = true;
+    f.codex.taskPermissionConfig = Codex.prototype.taskPermissionConfig.bind(f.codex);
+    f.codex.handler = async (method, params) => {
+      if (method === 'config/read') return { config: { approvals_reviewer: reviewer } };
+      if (method === 'thread/start' && params.ephemeral) return {
+        thread: { id: 'permission-probe' }, approvalPolicy: 'on-request',
+        sandbox: { type: 'workspaceWrite', writableRoots: [root], networkAccess: true, excludeTmpdirEnvVar: true, excludeSlashTmp: true },
+      };
+      return { turn: { id: 'turn-new' } };
+    };
+    for (const [permissions, configuredReviewer, configuredRoot] of [
+      ['workspace', 'auto_review', '/configured-first'],
+      ['full', 'guardian_subagent', '/configured-first'],
+      ['workspace', 'user', '/configured-later'],
+    ] as const) {
+      reviewer = configuredReviewer; root = configuredRoot;
+      f.workspace.updateTaskPermissions(f.task.id, permissions);
+      await f.workspace.enqueue(f.task.id, 'Revise this sentence.', `reviewer-${reviewer}`, false);
+      await tick(); await tick();
+      const turn = f.codex.calls.findLast(c => c.method === 'turn/start')!.params;
+      assert.equal(turn.approvalsReviewer, reviewer);
+      assert.equal(turn.threadId, 'thread');
+      assert.equal(turn.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+      assert.deepEqual(turn.sandboxPolicy, permissions === 'full' ? { type: 'dangerFullAccess' }
+        : { type: 'workspaceWrite', writableRoots: [root], networkAccess: true, excludeTmpdirEnvVar: true, excludeSlashTmp: true });
+      await f.workspace.interrupt(f.task.id);
+      await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'turn-new', status: 'interrupted' } } });
+    }
+    assert.equal(f.codex.calls.some(c => c.method === 'thread/resume' || c.method === 'thread/start' && !c.params.ephemeral), false);
+    assert.equal(f.codex.calls.filter(c => c.method === 'thread/unsubscribe').length, 2);
   } finally { f.close(); }
 });
 

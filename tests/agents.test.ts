@@ -116,7 +116,7 @@ test('Antigravity grants only selected images read access for the current turn',
   } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-for (const name of ['wild*card.png', 'paren).png', 'missing.png', 'directory']) test(`Antigravity refuses unsafe image permission paths: ${name}`, async () => {
+for (const name of ['wild*card.png', 'paren).png', 'missing.png', 'directory']) test(`Antigravity refuses unsafe image permission paths: ${name}`, { skip: process.platform === 'win32' && name === 'wild*card.png' && 'Windows forbids * in file names' }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
   const file = path.join(dir, name);
   if (name === 'directory') fs.mkdirSync(file);
@@ -301,17 +301,31 @@ test('executables are found on PATH or by path', () => {
   try {
     const file = path.join(dir, 'tool'), plain = path.join(dir, 'plain');
     fs.writeFileSync(file, '#!/bin/sh\n'); fs.chmodSync(file, 0o755); fs.writeFileSync(plain, 'text');
-    assert.equal(findExecutable('tool', { PATH: `/nonexistent${path.delimiter}${dir}` }), file);
-    assert.equal(findExecutable(file, { PATH: '' }), file);
+    // A Windows executable carries a PATHEXT extension; the shim runs Node on
+    // the script beside it.
+    const shimAt = (target: string) => {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (process.platform === 'win32') {
+        const answer = `${target}.js`;
+        fs.writeFileSync(answer, 'console.log("tool");\n');
+        fs.writeFileSync(`${target}.cmd`, `@echo off\r\n"${process.execPath}" "${answer}" %*\r\n`);
+        return `${target}.cmd`;
+      }
+      fs.writeFileSync(target, '#!/bin/sh\n'); fs.chmodSync(target, 0o755);
+      return target;
+    };
+    const tool = shimAt(file);
+    // PATHEXT spells the extension in upper case; the Windows file system matches either.
+    const same = (a: string | null, b: string) => a !== null && a.toLowerCase() === b.toLowerCase();
+    assert.ok(same(findExecutable('tool', { PATH: `/nonexistent${path.delimiter}${dir}` }), tool));
+    assert.ok(same(findExecutable(tool, { PATH: '' }), tool));
     assert.equal(findExecutable('plain', { PATH: dir }), null, 'a file without execute permission is not an agent');
     assert.equal(findExecutable('tool', { PATH: '', HOME: dir }), null);
     // Under a service whose PATH lacks ~/.local/bin, Claude Code is still found there.
-    fs.mkdirSync(path.join(dir, '.local/bin'), { recursive: true });
-    fs.copyFileSync(file, path.join(dir, '.local/bin/claude')); fs.chmodSync(path.join(dir, '.local/bin/claude'), 0o755);
-    assert.equal(findExecutable('claude', { PATH: '/usr/bin:/bin', HOME: dir }), path.join(dir, '.local/bin/claude'));
-    fs.mkdirSync(path.join(dir, '.grok/bin'), { recursive: true });
-    fs.copyFileSync(file, path.join(dir, '.grok/bin/grok')); fs.chmodSync(path.join(dir, '.grok/bin/grok'), 0o755);
-    assert.equal(findExecutable('grok', { PATH: '/usr/bin:/bin', HOME: dir }), path.join(dir, '.grok/bin/grok'));
+    const claude = shimAt(path.join(dir, '.local/bin/claude'));
+    assert.ok(same(findExecutable('claude', { PATH: '/usr/bin:/bin', HOME: dir }), claude));
+    const grok = shimAt(path.join(dir, '.grok/bin/grok'));
+    assert.ok(same(findExecutable('grok', { PATH: '/usr/bin:/bin', HOME: dir }), grok));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -493,6 +507,14 @@ const CLI_MODELS = [
 function fakeClaudeCli(dir: string, login: Record<string, unknown>, turns: any[][], models: unknown[] | null = CLI_MODELS, currentModel: string | null = 'claude-opus-5-5') {
   const bin = path.join(dir, 'claude');
   fs.writeFileSync(bin, `#!/bin/sh\necho '${JSON.stringify(login)}'\n`); fs.chmodSync(bin, 0o755);
+  // Windows cannot start an extensionless shell script, so a .cmd shim gives
+  // the same answer through Node.
+  const runnable = process.platform === 'win32' ? `${bin}.cmd` : bin;
+  if (process.platform === 'win32') {
+    const answer = `${bin}.js`;
+    fs.writeFileSync(answer, `console.log(${JSON.stringify(JSON.stringify(login))});\n`);
+    fs.writeFileSync(runnable, `@echo off\r\n"${process.execPath}" "${answer}" %*\r\n`);
+  }
   const launches: { command: string; args: string[]; cwd: string; stdin: string; child: any; instructions: string }[] = [];
   const launch = (command: string, args: string[], options: { cwd: string }) => {
     const child: any = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
@@ -518,7 +540,7 @@ function fakeClaudeCli(dir: string, login: Record<string, unknown>, turns: any[]
     if (lines) setImmediate(() => { for (const line of lines) child.stdout.write(JSON.stringify(line) + '\n'); child.stdout.end(); setImmediate(() => child.emit('close', 0)); });
     return child;
   };
-  return { bin, launches, launch };
+  return { bin: runnable, launches, launch };
 }
 
 for (const [current, expected] of [['claude-haiku-5-5', 'haiku'], ['custom-model', 'custom-model'], [null, null]]) {
@@ -713,10 +735,14 @@ for (const provider of ['claude', 'antigravity']) test(`${provider} transports m
     });
   `);
   fs.chmodSync(program, 0o755);
+  // Windows cannot start an extensionless script, so a .cmd shim runs Node on
+  // the same program.
+  const runnable = process.platform === 'win32' ? `${program}.cmd` : program;
+  if (process.platform === 'win32') fs.writeFileSync(runnable, `@echo off\r\n"${process.execPath}" "${program}" %*\r\n`);
   const agent = provider === 'claude'
-    ? new ClaudeAgent(async () => { throw Error('No SDK'); }, () => program)
-    : new AntigravityAgent(program, path.join(dir, 'conversations.json'));
-  if (provider === 'claude') (agent as any).cli = program;
+    ? new ClaudeAgent(async () => { throw Error('No SDK'); }, () => runnable)
+    : new AntigravityAgent(runnable, path.join(dir, 'conversations.json'));
+  if (provider === 'claude') (agent as any).cli = runnable;
   try {
     const instructions = 'Review this manuscript. '.repeat(100000) + 'SYSTEM TAIL';
     const text = '检查所有章节。'.repeat(100000) + 'MESSAGE TAIL';

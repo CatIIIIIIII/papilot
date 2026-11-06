@@ -10,7 +10,7 @@ Review an agent's LaTeX edits directly in the PDF. Accept, reject, or comment; f
 
 ## Install
 
-Requires macOS or Linux, Node.js 22.22+, Git, and TeX Live or MacTeX with `latexmk` and `synctex`.
+Requires macOS, Linux or Windows, Node.js 22.22+, Git, and TeX Live or MacTeX with `latexmk` and `synctex`.
 
 ```sh
 npx skills add cu1ch3n/latex-review-skill -g

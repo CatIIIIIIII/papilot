@@ -12,6 +12,16 @@ import { App } from '../engine/src/server.ts';
 import { view } from '../engine/src/core/view.ts';
 import type { BuildInfo } from '../engine/src/types.ts';
 import { workingTree } from '../src/server/manuscript.ts';
+import * as mupdf from 'mupdf';
+const pdfText = (file: string) => {
+  const document = mupdf.Document.openDocument(fs.readFileSync(file), 'application/pdf');
+  try {
+    return Array.from({ length: document.countPages() }, (_, index) => {
+      const page = document.loadPage(index), text = page.toStructuredText('');
+      try { return text.asText(); } finally { text.destroy(); page.destroy(); }
+    }).join(' ').replace(/\s+/g, ' ');
+  } finally { document.destroy(); }
+};
 
 const tex = (() => {
   try { execFileSync('latexmk', ['--version'], { stdio: 'ignore' }); execFileSync('pdflatex', ['--version'], { stdio: 'ignore' }); return true; }
@@ -75,7 +85,7 @@ test('builds export every file and continue like latexmk in the same folder; sta
     const second = await builder.build(await workingTree(f.root));
     assert.equal(runs(path.dirname(second.root)), 1, 'An edit that keeps references stable needs one pass');
     assert.ok(fs.existsSync(first.pdf), 'The earlier build stays readable');
-    assert.match(execFileSync('pdftotext', [second.pdf, '-']).toString(), /Second draft/);
+    assert.match(pdfText(second.pdf), /Second draft/);
 
     // A file TeX does not read changes: latexmk keeps the PDF, and the
     // SyncTeX data and log now name this build's folder.
@@ -83,15 +93,15 @@ test('builds export every file and continue like latexmk in the same folder; sta
     const third = await builder.build(await workingTree(f.root));
     assert.notEqual(third.key, second.key);
     assert.equal(runs(path.dirname(third.root)), 0, 'Unchanged inputs need no TeX run');
-    const synctex = zlib.gunzipSync(fs.readFileSync(third.pdf.replace(/\.pdf$/, '.synctex.gz'))).toString();
-    assert.ok(synctex.includes(path.join(third.cwd, 'main.tex').replace(/main\.tex$/, '')) && !synctex.includes(path.dirname(second.root)));
-    assert.ok(!fs.readFileSync(third.pdf.replace(/\.pdf$/, '.log'), 'utf8').includes(path.dirname(second.root)));
-    assert.match(execFileSync('pdftotext', [third.pdf, '-']).toString(), /Second draft/);
+    const synctex = zlib.gunzipSync(fs.readFileSync(third.pdf.replace(/\.pdf$/, '.synctex.gz'))).toString().replaceAll('\\', '/');
+    assert.ok(synctex.includes(third.cwd.split(path.sep).join('/') + '/') && !synctex.includes(path.dirname(second.root).split(path.sep).join('/')));
+    assert.ok(!fs.readFileSync(third.pdf.replace(/\.pdf$/, '.log'), 'utf8').replaceAll('\\', '/').includes(path.dirname(second.root).split(path.sep).join('/')));
+    assert.match(pdfText(third.pdf), /Second draft/);
 
     // The old .aux now calls a macro that no longer exists.
     fs.writeFileSync(path.join(f.root, 'main.tex'), paper('Third draft.'));
     const fourth = await builder.build(await workingTree(f.root));
-    assert.match(execFileSync('pdftotext', [fourth.pdf, '-']).toString(), /Third draft/);
+    assert.match(pdfText(fourth.pdf), /Third draft/);
     assert.match(fs.readFileSync(path.join(project.state, 'logs', fourth.key + '.log'), 'utf8'), /build\/main\.aux:\d+: Undefined control sequence/, 'The continued build failed on stale state first');
 
     // A real error is reported once, without a clean retry hiding it.
@@ -122,13 +132,13 @@ test('review builds of a chapter continue from the previous one and take other c
     const second = commit('Second');
     const continued = await builder.build(second, targets, seed);
     assert.equal(runs(path.dirname(continued.root)), 1, 'An edit that keeps references stable needs one pass');
-    assert.match(execFileSync('pdftotext', [continued.pdf, '-']).toString(), /Second draft\. See Section 2\./);
+    assert.match(pdfText(continued.pdf), /Second draft\. See Section 2\./);
 
     // Another chapter gains a section, so Section B is renumbered in the new seed.
     fs.writeFileSync(path.join(f.root, 'chapters/b.tex'), '\\section{Extra}\n\\section{B}\\label{sec:b}\nSee Section~\\ref{sec:a}.\n');
     const third = commit('Third');
     const renumbered = await builder.build(third, targets, await builder.build(third));
-    assert.match(execFileSync('pdftotext', [renumbered.pdf, '-']).toString(), /Second draft\. See Section 3\./, 'References follow the seed, not the earlier build');
+    assert.match(pdfText(renumbered.pdf), /Second draft\. See Section 3\./, 'References follow the seed, not the earlier build');
   } finally { f.close(); }
 });
 
@@ -157,7 +167,7 @@ test('chapter comparisons reuse yesterday’s exact seed without compiling the f
     const [old, revised] = await Promise.all([builder.build(before, targets, reused), builder.build(after, targets, reused)]);
     assert.deepEqual(requested, [['chapters/a'], ['chapters/a']], 'both comparison builds compile only the affected chapter');
     assert.deepEqual(fs.readFileSync(path.join(path.dirname(seed.root), 'latexmk.log')), seedLog);
-    const text = (pdf: string) => execFileSync('pdftotext', [pdf, '-']).toString();
+    const text = (pdf: string) => pdfText(pdf);
     const oldText = text(old.pdf), revisedText = text(revised.pdf);
     assert.match(revisedText, /Revised wording\. See Section 2\./);
     assert.doesNotMatch(revisedText, /Other chapter\./, 'the other chapter is not typeset');
@@ -198,7 +208,7 @@ for (const entry of ['comparison', 'agent preview']) test(`${entry} recovers an 
   t.mock.timers.enable({ apis: ['Date'], now: yesterday });
   delete process.env.SOURCE_DATE_EPOCH;
   fs.mkdirSync(external);
-  process.env.TEXINPUTS = `${external}//:${inputs ?? ''}`;
+  process.env.TEXINPUTS = `${external.split(path.sep).join('/')}//${path.delimiter}${inputs ?? ''}`;
   let app: App | undefined;
   try {
     const style = path.join(external, 'seedcompat.sty');
@@ -243,7 +253,7 @@ for (const entry of ['comparison', 'agent preview']) test(`${entry} recovers an 
     const chapters = completed.filter(built => built.targets[0] !== 'full');
     assert.equal(chapters.length, entry === 'comparison' ? 2 : 1);
     for (const built of chapters) {
-      const text = execFileSync('pdftotext', [built.pdf, '-']).toString();
+      const text = pdfText(built.pdf);
       assert.match(text, /(?:Original|Revised) wording\. See Section 2\./);
       assert.doesNotMatch(text, /Other chapter\./);
     }

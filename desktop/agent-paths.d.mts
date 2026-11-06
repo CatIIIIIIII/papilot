@@ -1,1 +1,1 @@
-export { agentDirs } from '../bin/agent-paths.mjs';
+export { agentDirs, importLoader, linkDirectory } from '../bin/agent-paths.mjs';
