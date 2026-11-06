@@ -1,7 +1,6 @@
 import {
-  comparison,
+  compareDocuments,
   visualDifferences,
-  words,
   type Comparison,
   type Words,
 } from "./effects.ts";
@@ -13,8 +12,7 @@ import type { Mark, Position, Rect, SourceBox } from "../types.ts";
 // A word is marked when that comparison changed it, never because of where
 // a crop happens to start. A change is cut so that the context strips with
 // its old crop read as the old document and with its new crop as the new
-// one: at its changed words when it changed words (with the words at the
-// ends of the old crop that the context also shows faded), otherwise at
+// one: at its changed words when it changed words, otherwise at
 // the same pair of equal lines on both sides. SyncTeX only says which part
 // of the PDF belongs to which edit.
 export type SideName = "old" | "new";
@@ -74,9 +72,8 @@ const known = new WeakMap<Build, WeakMap<Build, Alignment>>();
 export function alignment(old: Build, next: Build): Alignment {
   const cached = known.get(old)?.get(next);
   if (cached !== undefined) return cached;
-  const a = words(old),
-    b = words(next),
-    value = build(old, next, a, b, comparison(a, b));
+  const result = compareDocuments(old, next),
+    value = build(old, next, result.old, result.new, result);
   if (!known.has(old)) known.set(old, new WeakMap());
   known.get(old)!.set(next, value);
   return value;
@@ -699,8 +696,8 @@ function release(al: Alignment, gap: Gap, mine: Mine): Gap {
   }
   return g;
 }
-/** One region's crops: `faded` are words of the old crops that the context
- * strips show too, by page. */
+/** One region's crops. The legacy `faded` field records words also shown by
+ * context strips; rendering preserves their original PDF colours. */
 export interface Group {
   left: Position[];
   right: Position[];
@@ -786,8 +783,8 @@ function completeCrops(
 // words between the last equal word above the new crop and the first below
 // it, however differently the paragraphs wrap: with the context strips, each
 // crop reads as its whole document. Its first and last lines may also hold
-// words the context strips show; those are faded, so no word reads twice,
-// and the rest of a rewrapped paragraph stays in the context.
+// words the context strips show; record that overlap separately from the
+// changed words. The rest of a rewrapped paragraph stays in the context.
 function cut(al: Alignment, region: Region, mine: Mine): Group | null {
   const words = (name: SideName, touch: Touch | null) => {
       const side = al[name],

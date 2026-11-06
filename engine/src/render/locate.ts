@@ -154,6 +154,44 @@ export class Locator {
   cache = new Map<string, Box[]>();
   private index: SynctexIndex | null = null;
   constructor(public build: Build) {}
+  baseline(
+    page: number,
+    origin: [number, number],
+    _row?: number,
+  ): number | undefined {
+    return this.baselines(page, [origin])[0];
+  }
+  baselines(
+    page: number,
+    origins: ([number, number] | undefined)[],
+  ): (number | undefined)[] {
+    this.index ??= new SynctexIndex(this.build.info.pdf);
+    const candidates = origins.map((origin) =>
+      origin ? this.index!.baseline(page + 1, origin[0], origin[1]) : [],
+    );
+    // An overflowing script may overlap the next line. Its rectangle alone
+    // cannot own a glyph when the complete printed line corresponds to a
+    // different TeX line. Intersect the candidates for the entire line first.
+    let common: Set<number> | undefined;
+    for (const boxes of candidates) {
+      if (!boxes.length) continue;
+      const rows = new Set(boxes.map((box) => box[0]));
+      common = common
+        ? new Set([...common].filter((value) => rows.has(value)))
+        : rows;
+    }
+    const row = common?.size === 1 ? [...common][0] : undefined;
+    return candidates.map((boxes, i) => {
+      const box = boxes.find((box) => box[0] === row) ?? boxes[0];
+      if (!box) return;
+      // TeX records more coordinate precision than a PDF text matrix. Use
+      // the drawn baseline for glyphs sitting on their own hbox baseline,
+      // while retaining that box's accumulated inline displacement.
+      const y = origins[i]![1];
+      return box[0] + (Math.abs(y - box[1]) < 0.01 ? y - box[1] : 0);
+    });
+  }
+
   lookup(file: string, line: number): Box[] {
     const key = `${file}:${line}`;
     if (this.cache.has(key)) return this.cache.get(key)!;

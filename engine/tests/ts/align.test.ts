@@ -561,16 +561,15 @@ it.each(["line", "page", "column"] as const)(
     ]) {
       const al = alignment(build(old), build(next))!,
         groups = alignedCrops(al, own(old), own(next), false)!;
-      expect(
-        al[old === split ? "old" : "new"].words.tokens.map((t) => t.text),
-      ).toContain("interoperability");
       const side = old === split ? "old" : "new",
-        word = al[side].words.tokens.find(
-          (t) => t.text === "interoperability",
-        )!,
+        pieces = al[side].words.tokens.filter((t) =>
+          ["inter", "operability"].includes(t.text),
+        );
+      expect(pieces.map((t) => t.text).join("")).toBe("interoperability");
+      const word = pieces.at(-1)!,
         tail = al[side].words.glyphs[word.end - 1];
-      // A source record at the continuation identifies the whole token's
-      // logical line, just as one at its start does.
+      // A source record at the continuation identifies its segment's line.
+      // Both segments must retain every changed glyph below.
       expect(
         printers(al, side, [
           [[tail.page, tail.rect[1], tail.rect[3], tail.rect[0], tail.rect[2]]],
@@ -732,7 +731,7 @@ it.each([false, true])(
     }
   },
 );
-it("fades the words of an old row that the context shows, and only those", () => {
+it("identifies the words of an old row also shown in context, and only those", () => {
   const around = (n: number) =>
       Array.from({ length: 6 }, (_, i): [number, string][] => [
         [30, `Steady line ${n + i} about logs and replicas of the state`],

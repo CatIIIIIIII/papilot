@@ -20,16 +20,65 @@ interface Exports {
   st_close(): void;
   st_view(input: number, line: number): number;
   st_results(): number;
+  st_boxes(page: number): number;
+  st_box_results(): number;
 }
 
 // Page (1-based), x, y, h, v, W, H: the fields of a `synctex view` result.
-export type ViewResult = [number, number, number, number, number, number, number];
+export type ViewResult = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
+export type BaselineBox = [
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  flowBaseline: number,
+  ownBaseline: number,
+  depth: number,
+];
+interface BoxTree {
+  boxes: Float64Array;
+  bottom: Float64Array;
+}
+function boxTree(boxes: BaselineBox[]): BoxTree {
+  const tree = {
+    boxes: new Float64Array(boxes.flat()),
+    bottom: new Float64Array(boxes.length),
+  };
+  // The midpoint is the root of each sorted interval. Only its maximum
+  // bottom needs storage; child pointers are implicit in the two halves.
+  const index = (start: number, end: number): number => {
+    if (start === end) return -Infinity;
+    const mid = (start + end) >>> 1;
+    return (tree.bottom[mid] = Math.max(
+      boxes[mid][3],
+      index(start, mid),
+      index(mid + 1, end),
+    ));
+  };
+  index(0, boxes.length);
+  return tree;
+}
 
 // The few WASI calls the parser makes, served from JavaScript: it reads the
 // .synctex(.gz) file next to the PDF and prints warnings, nothing else.
 // (Node's own WASI can collect garbage inside fd_read while a WebAssembly
 // frame is on the stack, which crashes V8.)
-const ERRNO = { SUCCESS: 0, ACCES: 2, BADF: 8, INVAL: 28, NOENT: 44, NOTSUP: 58 };
+const ERRNO = {
+  SUCCESS: 0,
+  ACCES: 2,
+  BADF: 8,
+  INVAL: 28,
+  NOENT: 44,
+  NOTSUP: 58,
+};
 const ROOT = 3;
 function system(memory: () => WebAssembly.Memory) {
   const files = new Map<number, { data: Uint8Array; position: number }>();
@@ -73,7 +122,8 @@ function system(memory: () => WebAssembly.Memory) {
     ) {
       if (dir !== ROOT) return ERRNO.BADF;
       if (openFlags !== 0) return ERRNO.ACCES; // read only: no create or truncate
-      const name = "/" + new TextDecoder().decode(bytes().subarray(path, path + length));
+      const name =
+        "/" + new TextDecoder().decode(bytes().subarray(path, path + length));
       let data: Uint8Array;
       try {
         if (!fs.statSync(name).isFile()) return ERRNO.NOENT;
@@ -96,7 +146,10 @@ function system(memory: () => WebAssembly.Memory) {
     },
     fd_read(fd: number, iovs: number, count: number, out: number) {
       const file = files.get(fd);
-      if (!file) return fd === 0 ? (view().setUint32(out, 0, true), ERRNO.SUCCESS) : ERRNO.BADF;
+      if (!file)
+        return fd === 0
+          ? (view().setUint32(out, 0, true), ERRNO.SUCCESS)
+          : ERRNO.BADF;
       let read = 0;
       for (const [at, size] of vectors(iovs, count)) {
         const chunk = file.data.subarray(file.position, file.position + size);
@@ -111,7 +164,14 @@ function system(memory: () => WebAssembly.Memory) {
     fd_seek(fd: number, offset: bigint, whence: number, out: number) {
       const file = files.get(fd);
       if (!file) return ERRNO.BADF;
-      const base = whence === 0 ? 0 : whence === 1 ? file.position : whence === 2 ? file.data.length : NaN,
+      const base =
+          whence === 0
+            ? 0
+            : whence === 1
+              ? file.position
+              : whence === 2
+                ? file.data.length
+                : NaN,
         position = base + Number(offset);
       if (!(position >= 0)) return ERRNO.INVAL;
       file.position = position;
@@ -127,7 +187,11 @@ function system(memory: () => WebAssembly.Memory) {
     // Warnings go nowhere; they carry nothing a result does not.
     fd_write(fd: number, iovs: number, count: number, out: number) {
       if (fd > 2) return ERRNO.BADF;
-      view().setUint32(out, vectors(iovs, count).reduce((sum, [, size]) => sum + size, 0), true);
+      view().setUint32(
+        out,
+        vectors(iovs, count).reduce((sum, [, size]) => sum + size, 0),
+        true,
+      );
       return ERRNO.SUCCESS;
     },
     fd_close(fd: number) {
@@ -142,6 +206,7 @@ function system(memory: () => WebAssembly.Memory) {
 
 export class SynctexIndex {
   private exports: Exports | null;
+  private boxes = new Map<number, BoxTree>();
   private open: boolean;
   constructor(pdf: string) {
     let memory: WebAssembly.Memory | undefined;
@@ -159,7 +224,9 @@ export class SynctexIndex {
   private string(text: string) {
     const encoded = new TextEncoder().encode(text + "\0"),
       at = this.exports!.st_alloc(encoded.length);
-    new Uint8Array(this.exports!.memory.buffer, at, encoded.length).set(encoded);
+    new Uint8Array(this.exports!.memory.buffer, at, encoded.length).set(
+      encoded,
+    );
     return at;
   }
   // What `synctex view -i line:0:input -o pdf` reports, in its order.
@@ -180,9 +247,61 @@ export class SynctexIndex {
     }
     return rows;
   }
+  baseline(
+    page: number,
+    x: number,
+    y: number,
+  ): [flowBaseline: number, ownBaseline: number][] {
+    if (!this.exports || !this.open) return [];
+    if (!this.boxes.has(page)) {
+      const count = this.exports.st_boxes(page),
+        data = new Float64Array(
+          this.exports.memory.buffer,
+          this.exports.st_box_results(),
+          count * 7,
+        ),
+        boxes = Array.from(
+          { length: count },
+          (_, i) => Array.from(data.subarray(i * 7, i * 7 + 7)) as BaselineBox,
+        )
+          .filter((box) => box.every(Number.isFinite))
+          .sort((a, b) => a[1] - b[1]);
+      this.boxes.set(page, boxTree(boxes));
+    }
+    let distance = Infinity;
+    const candidates: number[] = [],
+      tree = this.boxes.get(page)!,
+      data = tree.boxes;
+    // Keep equal-baseline alternatives for complete-line association: an
+    // overflowing script can overlap another line's glyph at the same point.
+    const visit = (start: number, end: number) => {
+      if (start === end) return;
+      const mid = (start + end) >>> 1,
+        at = mid * 7;
+      if (tree.bottom[mid] < y - 0.01) return;
+      visit(start, mid);
+      if (data[at + 1] > y + 0.01) return;
+      if (
+        data[at + 3] >= y - 0.01 &&
+        x >= data[at] - 0.01 &&
+        x <= data[at + 2] + 0.01
+      ) {
+        candidates.push(at);
+        distance = Math.min(distance, Math.abs(y - data[at + 5]));
+      }
+      visit(mid + 1, end);
+    };
+    visit(0, tree.bottom.length);
+    return candidates
+      .filter((at) => Math.abs(y - data[at + 5]) <= distance + 0.01)
+      .sort((a, b) => data[b + 6] - data[a + 6])
+      .map((at) => [data[at + 4], data[at + 5]]);
+  }
+
   close() {
     if (!this.exports) return;
     this.exports.st_close();
     this.exports = null;
+    this.boxes.clear();
   }
 }

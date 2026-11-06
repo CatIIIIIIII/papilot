@@ -89,6 +89,14 @@ export interface Token {
   glyphs?: number[];
   semanticGlyphs?: number[];
   flow?: "body" | "edge";
+  /** Physical line-break boundaries within or immediately after this word. */
+  breaks?: number[];
+  /** A physical line-end hyphen not joined during document extraction. */
+  hyphen?: boolean;
+  /** First lexical fragment following a physical line-end hyphen. */
+  afterHyphen?: boolean;
+  /** Shared segmentation preserves the original word and its pieces. */
+  part?: { word: number; index: number; total: number };
 }
 export const tokenGlyphs = (t: Token, semantic = false): number[] =>
   (semantic ? t.semanticGlyphs : t.glyphs) ??

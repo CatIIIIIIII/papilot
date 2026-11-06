@@ -417,6 +417,16 @@ export interface Effect {
   /** Equal text whose printed appearance changed. */
   kind?: "visual";
 }
+/** A non-text change has physical PDF positions, not word offsets. */
+export interface PaintArea extends Position {
+  signature: string;
+}
+export interface PaintEffect {
+  kind: "paint";
+  before: PaintArea[];
+  after: PaintArea[];
+}
+export type DocumentEffect = Effect | PaintEffect;
 export interface History {
   round: number;
   change: string;

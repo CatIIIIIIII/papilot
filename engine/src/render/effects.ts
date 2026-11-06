@@ -1,9 +1,11 @@
+import { sharedWords } from "./segments.ts";
+import { paintChanges, type PaintAnchor } from "./paint.ts";
 import { tokenDiff as opcodes } from "../core/sequence.ts";
 import { JOIN_GAP, snap, type Strips } from "./inline.ts";
 import { headingAt, laneAt, laneX, textBounds, type Build } from "./locate.ts";
 import { containsCenter, union, type PdfDocument } from "./pdf.ts";
 import {
-  extract,
+  normalize,
   mergeRects,
   pixelDifference,
   tokenGlyphs,
@@ -14,6 +16,7 @@ import {
 import type {
   Card,
   Effect,
+  DocumentEffect,
   Op,
   Mark,
   Pair,
@@ -36,6 +39,10 @@ const SPAN = 8;
 // blocks. Candidate discovery uses exact words, including long single words.
 const MOVED = 20;
 export interface Words {
+  /** TeX flow baseline after retaining nested inline-box displacement. */
+  baseline?: (glyph: Glyph) => number | undefined;
+  segmentation?: object;
+  original?: Words;
   document?: PdfDocument;
   glyphs: Glyph[];
   tokens: ReturnType<typeof tokens>;
@@ -92,38 +99,48 @@ export function words(build: Build): Words {
       const target = edges[page].some((r) => containsCenter(r, line.rect))
         ? edge
         : body;
-      for (const glyph of extract(document, [
-        { page, clip: line.rect, label: document.page(page).label },
-      ])[0]) {
-        target.push(glyphs.length);
-        glyphs.push({ ...glyph, pair });
-      }
+      let space = true;
+      for (const char of line.chars)
+        for (const text of normalize(char.text)) {
+          if (/\s/u.test(text)) {
+            space = true;
+            continue;
+          }
+          target.push(glyphs.length);
+          glyphs.push({
+            text,
+            rect: char.rect,
+            origin: char.origin,
+            appearance: char.appearance,
+            space,
+            pair,
+            page,
+          });
+          space = false;
+        }
       pair++;
     }
   function tokenize(ids: number[], flow: "body" | "edge") {
     const result: Token[] = [];
-    let wasWord = false,
-      joinNext = false;
+    let wasWord = false;
     ids.forEach((id, k) => {
       const g = glyphs[id],
         a = glyphs[ids[k - 1]],
         b = glyphs[ids[k + 1]];
-      if (
+      const endHyphen =
         flow === "body" &&
         g.text === "-" &&
+        !g.space &&
         a &&
-        b &&
+        a.pair === g.pair &&
         /\p{L}/u.test(a.text) &&
-        /\p{Ll}/u.test(b.text) &&
-        a.pair !== b.pair
-      ) {
-        result.at(-1)!.glyphs!.push(id);
-        result.at(-1)!.end = id + 1;
-        joinNext = true;
-        return;
+        (!b || g.pair !== b.pair);
+      if (endHyphen) {
+        const token = result.at(-1)!;
+        (token.breaks ??= []).push(token.text.length);
       }
       const word = /[\p{L}\p{N}_]/u.test(g.text);
-      if (result.length && word && wasWord && (!g.space || joinNext)) {
+      if (result.length && word && wasWord && !g.space) {
         const token = result.at(-1)!;
         token.text += g.text;
         token.glyphs!.push(id);
@@ -137,9 +154,10 @@ export function words(build: Build): Words {
           glyphs: [id],
           semanticGlyphs: [id],
           flow,
+          ...(endHyphen ? { hyphen: true } : {}),
+          ...(result.at(-1)?.hyphen && word ? { afterHyphen: true } : {}),
         });
       wasWord = word;
-      joinNext = false;
     });
     return result;
   }
@@ -151,8 +169,33 @@ export function words(build: Build): Words {
     const line = glyphs[token.start].pair;
     ranges[line] = [ranges[line]?.[0] ?? i, i + 1];
   });
+  const baselineCache = new WeakMap<Glyph, number | undefined>();
+  let baselineRows: Map<number, Glyph[]> | undefined;
   const result = {
     document,
+    ...(build.locator?.baselines
+      ? {
+          baseline: (glyph: Glyph) => {
+            if (!baselineCache.has(glyph)) {
+              if (!baselineRows) {
+                baselineRows = new Map();
+                for (const g of glyphs) {
+                  if (!baselineRows.has(g.pair)) baselineRows.set(g.pair, []);
+                  baselineRows.get(g.pair)!.push(g);
+                }
+              }
+              const row = baselineRows.get(glyph.pair)!;
+              const values = build.locator.baselines(
+                glyph.page,
+                row.map((g) => g.origin),
+              );
+              row.forEach((g, i) => baselineCache.set(g, values[i]));
+              baselineRows.delete(glyph.pair);
+            }
+            return baselineCache.get(glyph);
+          },
+        }
+      : {}),
     glyphs,
     tokens: list,
     lines: ranges.filter(Boolean),
@@ -161,6 +204,8 @@ export function words(build: Build): Words {
   return result;
 }
 export interface Comparison {
+  old: Words;
+  new: Words;
   /** For each line of the old document, the equal line of the new one, or -1. */
   match: Int32Array;
   /** For each word of the old document, the equal word of the new one, or -1. */
@@ -182,6 +227,17 @@ export function comparison(a: Words, b: Words): Comparison {
   const result = compare(a, b);
   if (!compared.has(a)) compared.set(a, new WeakMap());
   compared.get(a)!.set(b, result);
+  return result;
+}
+const documentPairs = new WeakMap<Build, WeakMap<Build, Comparison>>();
+/** The shared token domain for every stage of a rendered PDF comparison. */
+export function compareDocuments(old: Build, next: Build): Comparison {
+  const known = documentPairs.get(old)?.get(next);
+  if (known) return known;
+  const [a, b] = sharedWords(words(old), words(next)),
+    result = comparison(a, b);
+  if (!documentPairs.has(old)) documentPairs.set(old, new WeakMap());
+  documentPairs.get(old)!.set(next, result);
   return result;
 }
 // The longest chain of pairs increasing in both coordinates; pairs come
@@ -280,7 +336,7 @@ function compare(a: Words, b: Words): Comparison {
         .map((t) => t.text),
     ),
     body = (w: Words) =>
-      w.tokens.flatMap((t, i) => (edgeText.has(t.text) ? [] : [i])),
+      w.tokens.flatMap((t, i) => (edgeText.has(t.text) || t.hyphen ? [] : [i])),
     ia = body(a),
     ib = body(b),
     tokenMatch = new Int32Array(ta.length).fill(-1),
@@ -314,6 +370,31 @@ function compare(a: Words, b: Words): Comparison {
   let previousA = 0,
     previousB = 0;
   for (const [i, j] of [...primary, [ta.length, tb.length]]) {
+    const left = Array.from(
+        { length: i - previousA },
+        (_, k) => previousA + k,
+      ).filter((k) => !a.tokens[k].hyphen),
+      right = Array.from(
+        { length: j - previousB },
+        (_, k) => previousB + k,
+      ).filter((k) => !b.tokens[k].hyphen);
+    for (const [kind, p, q, r] of opcodes(
+      left.map((k) => ta[k]),
+      right.map((k) => tb[k]),
+    ))
+      if (kind === "equal")
+        for (let k = p; k < q; k++) tokenMatch[left[k]] = right[r + k - p];
+    [previousA, previousB] = [i + 1, j + 1];
+  }
+  // Discretionary hyphens describe physical line breaks. They must not
+  // choose which occurrence of a repeated sentence corresponds. Once its
+  // words are paired, retain matching punctuation in the gaps; unmatched
+  // hyphens still require the word-reconstruction check below.
+  previousA = previousB = 0;
+  for (const [i, j] of [
+    ...Array.from(tokenMatch).flatMap((j, i) => (j >= 0 ? [[i, j]] : [])),
+    [ta.length, tb.length],
+  ]) {
     for (const [kind, p, q, r] of opcodes(
       ta.slice(previousA, i),
       tb.slice(previousB, j),
@@ -379,6 +460,47 @@ function compare(a: Words, b: Words): Comparison {
     }
     return result;
   };
+  const wordParts = [a, b].map((w) => {
+    const groups = new Map<number, number[]>();
+    w.tokens.forEach((token, i) => {
+      if (!token.part) return;
+      const group = groups.get(token.part.word) ?? [];
+      group.push(i);
+      groups.set(token.part.word, group);
+    });
+    return groups;
+  });
+  const continuations = () => {
+    const back = new Int32Array(tb.length).fill(-1);
+    paired.forEach((j, i) => {
+      if (j >= 0) back[j] = i;
+    });
+    const broken = (w: Words, i: number) => {
+      const token = w.tokens[i];
+      return !!(
+        token.breaks?.length ||
+        (token.part && w.original?.tokens[token.part.word].breaks?.length)
+      );
+    };
+    return ([a, b] as const).map((w, side) => {
+      const mapping = side ? back : paired,
+        other = side ? a : b,
+        anchored = new Set<number>();
+      w.tokens.forEach((t, i) => {
+        if (
+          t.part &&
+          mapping[i] >= 0 &&
+          (broken(w, i) || broken(other, mapping[i]))
+        )
+          anchored.add(t.part.word);
+      });
+      return new Set(
+        w.tokens.flatMap((t, i) =>
+          t.part && mapping[i] < 0 && anchored.has(t.part.word) ? [i] : [],
+        ),
+      );
+    });
+  };
   // Consume only equal token occurrences, not an entire compound run. A
   // residual run may move again within the same pair (for example AB -> BA).
   // Every successful pass consumes tokens, so this needs no retry budget.
@@ -394,9 +516,19 @@ function compare(a: Words, b: Words): Comparison {
       }
     });
     let consumed = 0;
-    const taken = new Set<number>();
+    const [continuedOld, continuedNew] = continuations(),
+      reversePaired = new Map<number, number>(),
+      taken = new Set<number>();
+    paired.forEach((other, at) => {
+      if (other >= 0) reversePaired.set(other, at);
+    });
     for (const [i, j] of removed.sort((p, q) => q[1] - q[0] - (p[1] - p[0]))) {
-      if (!long(ta, i, j)) continue;
+      if (
+        !long(ta, i, j) &&
+        !continuedNew.size &&
+        !Array.from(continuedOld).some((t) => t >= i && t < j)
+      )
+        continue;
       const keys = seeds(ta, i, j),
         counts = new Map<string, number>(),
         votes = new Map<number, number>();
@@ -410,33 +542,93 @@ function compare(a: Words, b: Words): Comparison {
       for (const [candidate] of [...votes].sort((p, q) => q[1] - p[1])) {
         const [x, y] = added[candidate],
           ops = opcodes(ta.slice(i, j), tb.slice(x, y));
-        if (
-          ops.reduce(
-            (n, [kind, p, q]) =>
-              n +
-              (kind === "equal"
-                ? ta
-                    .slice(i + p, i + q)
-                    .join("")
-                    .replace(/[^\p{L}\p{N}]/gu, "").length
-                : 0),
-            0,
-          ) < MOVED
-        )
-          continue;
+        const extra = new Map<number, number>(),
+          reverseExtra = new Map<number, number>();
         for (const [kind, p, q, r] of ops)
-          if (kind === "equal") {
-            movedOld.fill(1, i + p, i + q);
-            movedNew.fill(1, x + r, x + r + (q - p));
-            for (let k = p; k < q; k++) paired[i + k] = x + r + k - p;
-            consumed += q - p;
-          }
+          if (kind === "equal")
+            for (let k = p; k < q; k++) {
+              extra.set(i + k, x + r + k - p);
+              reverseExtra.set(x + r + k - p, i + k);
+            }
+        const completeWord = (
+          w: Words,
+          t: number,
+          mapping: (i: number) => number,
+        ) => {
+          const part = w.tokens[t].part;
+          if (!part) return false;
+          const targets = wordParts[w === a ? 0 : 1]
+            .get(part.word)!
+            .map(mapping);
+          return targets.every(
+            (target, index) =>
+              target >= 0 && (!index || target > targets[index - 1]),
+          );
+        };
+        // Refinement must not make a permutation of syllables look like a
+        // moved word. New piece matches preserve each complete word's order.
+        for (;;) {
+          let removed = false;
+          for (const [old, next] of extra)
+            if (
+              (a.tokens[old].part &&
+                !completeWord(a, old, (t) => extra.get(t) ?? paired[t])) ||
+              (b.tokens[next].part &&
+                !completeWord(
+                  b,
+                  next,
+                  (t) => reverseExtra.get(t) ?? reversePaired.get(t) ?? -1,
+                ))
+            ) {
+              extra.delete(old);
+              reverseExtra.delete(next);
+              removed = true;
+            }
+          if (!removed) break;
+        }
+        const continuation = [...extra].some(
+            ([old, next]) => continuedOld.has(old) || continuedNew.has(next),
+          ),
+          letters = [...extra.keys()].reduce(
+            (n, at) => n + ta[at].replace(/[^\p{L}\p{N}]/gu, "").length,
+            0,
+          );
+        if (!continuation && letters < MOVED) continue;
+        for (const [old, next] of extra) {
+          movedOld[old] = movedNew[next] = 1;
+          paired[old] = next;
+          reversePaired.set(next, old);
+        }
+        consumed += extra.size;
         taken.add(candidate);
         break;
       }
     }
     if (!consumed) break;
   }
+  // A line-end hyphen is discretionary only when its surrounding pieces
+  // reconstruct the other document's word. It never licenses a text match.
+  const reverse = new Int32Array(tb.length).fill(-1);
+  paired.forEach((j, i) => {
+    if (j >= 0) reverse[j] = i;
+  });
+  for (const [w, other, mapping, back, moved] of [
+    [a, b, paired, reverse, movedOld],
+    [b, a, reverse, paired, movedNew],
+  ] as const)
+    w.tokens.forEach((token, i) => {
+      if (!token.hyphen || !i || mapping[i - 1] < 0) return;
+      const at = mapping[i - 1],
+        part = other.tokens[at].part;
+      if (!part || part.index + 1 === part.total) return;
+      const pieces = wordParts[other === a ? 0 : 1].get(part.word)!;
+      if (
+        pieces.every(
+          (k, n) => back[k] >= 0 && (!n || back[k] > back[pieces[n - 1]]),
+        )
+      )
+        moved[i] = 1;
+    });
   // A margin can cross a body anchor, or become body text in the other
   // document. Recover its exact occurrences without weakening body movement.
   const residualA = remaining("old", movedOld).flatMap(([i, j]) =>
@@ -460,6 +652,52 @@ function compare(a: Words, b: Words): Comparison {
       movedOld[x] = movedNew[y] = 1;
       paired[x] = y;
     });
+  // Shared pieces still carry word boundaries. Equal letters do not make
+  // inserting or removing an ordinary word space invisible. A physical
+  // line-end hyphen can bridge a reading-flow interruption; a space cannot.
+  const back = new Int32Array(tb.length).fill(-1);
+  paired.forEach((j, i) => {
+    if (j >= 0) back[j] = i;
+  });
+  const inside = (w: Words, left: number, right: number) =>
+      !!w.tokens[left]?.part &&
+      w.tokens[left].part!.word === w.tokens[right]?.part?.word,
+    hyphenAfter = (w: Words, index: number) => {
+      const glyphs = tokenGlyphs(w.tokens[index]),
+        last = glyphs.at(-1);
+      return (
+        (last !== undefined && w.glyphs[last]?.text === "-") ||
+        !!w.tokens[index + 1]?.hyphen
+      );
+    },
+    bad = new Set<number>();
+  paired.forEach((j, i) => {
+    if (j < 0) return;
+    if (
+      i > 0 &&
+      inside(a, i - 1, i) &&
+      paired[i - 1] >= 0 &&
+      !inside(b, paired[i - 1], j) &&
+      !hyphenAfter(b, paired[i - 1])
+    )
+      bad.add(i);
+    if (
+      j > 0 &&
+      inside(b, j - 1, j) &&
+      back[j - 1] >= 0 &&
+      !inside(a, back[j - 1], i) &&
+      !hyphenAfter(a, back[j - 1])
+    )
+      bad.add(i);
+  });
+  const boundaries: Effect[] = [...bad].map((i) => {
+    const j = paired[i];
+    paired[i] = tokenMatch[i] = -1;
+    a.lines.forEach(([start, end], line) => {
+      if (start <= i && i < end) match[line] = -1;
+    });
+    return { old: [i, i + 1], new: [j, j + 1] };
+  });
   // The changed words of a side's range, in runs, without the moved ones.
   const runs = (moved: Uint8Array, from: number, to: number) => {
     const result: [number, number][] = [];
@@ -472,21 +710,26 @@ function compare(a: Words, b: Words): Comparison {
     return result;
   };
   return {
+    old: a,
+    new: b,
     match,
     tokens: tokenMatch,
     paired,
-    changes: changed.flatMap(([, i, j, x, y]): Effect[] => {
-      const olds = runs(movedOld, i, j),
-        news = runs(movedNew, x, y);
-      if (olds.length <= 1 && news.length <= 1)
-        return olds.length || news.length
-          ? [{ old: olds[0] ?? [i, i], new: news[0] ?? [x, x] }]
-          : [];
-      return [
-        ...olds.map((o): Effect => ({ old: o, new: [x, x] })),
-        ...news.map((n): Effect => ({ old: [i, i], new: n })),
-      ];
-    }),
+    changes: [
+      ...changed.flatMap(([, i, j, x, y]): Effect[] => {
+        const olds = runs(movedOld, i, j),
+          news = runs(movedNew, x, y);
+        if (olds.length <= 1 && news.length <= 1)
+          return olds.length || news.length
+            ? [{ old: olds[0] ?? [i, i], new: news[0] ?? [x, x] }]
+            : [];
+        return [
+          ...olds.map((o): Effect => ({ old: o, new: [x, x] })),
+          ...news.map((n): Effect => ({ old: [i, i], new: n })),
+        ];
+      }),
+      ...boundaries,
+    ].sort((x, y) => x.old[0] - y.old[0] || x.new[0] - y.new[0]),
   };
 }
 const glyphsOf = (w: Words, [i, j]: [number, number], semantic = false) =>
@@ -502,6 +745,9 @@ const rounded = (n: number) => Math.round(n * 1000) / 1000;
 // Align each pair of physical rows using corresponding glyphs. New/removed
 // glyphs cannot change this reference, unlike independently inferred baselines.
 function rowShifts(a: Words, b: Words) {
+  const compared = comparison(a, b);
+  a = compared.old;
+  b = compared.new;
   const known = shifts.get(a)?.get(b);
   if (known) return known;
   const counts = new Map<
@@ -548,9 +794,24 @@ function placementOf(
   return left.map((x, k) => {
     const y = right[k];
     return x.origin && y?.origin
-      ? rounded(y.origin[1] - x.origin[1] - (shift.get(rowKey(x, y)) ?? 0))
+      ? rounded(y.origin[1] - x.origin[1] - displacement(a, b, x, y, shift))
       : 0;
   });
+}
+// Source layout removes flow displacement while preserving nested inline
+// offsets. Without that structure, keep the matched-row reference.
+function displacement(
+  a: Words,
+  b: Words,
+  x: Glyph,
+  y: Glyph,
+  shifts: Map<string, number>,
+) {
+  const old = a.baseline?.(x),
+    next = b.baseline?.(y);
+  return old !== undefined && next !== undefined
+    ? next - old
+    : (shifts.get(rowKey(x, y)) ?? 0);
 }
 // Metadata proposes a change; aligned visible ink decides it. The shared
 // row displacement preserves relative script placement and ignores reflow.
@@ -561,7 +822,7 @@ function inkDiffers(a: Words, b: Words, i: number, j: number) {
   if (!a.document || !b.document || left.length !== right.length) return true;
   return left.some((x, k) => {
     const y = right[k],
-      delta = shift.get(rowKey(x, y)) ?? 0;
+      delta = displacement(a, b, x, y, shift);
     if (
       x.appearance === y.appearance &&
       (!x.origin ||
@@ -598,6 +859,9 @@ function inkDiffers(a: Words, b: Words, i: number, j: number) {
 // Text equality does not imply equal ink: color, typeface and script position
 // survive independently of normalization and of pagination/line wrapping.
 export function visualDifferences(a: Words, b: Words): Effect[] {
+  const compared = comparison(a, b);
+  a = compared.old;
+  b = compared.new;
   const cached = appearances.get(a)?.get(b);
   if (cached) return cached;
   const result: Effect[] = [];
@@ -623,10 +887,23 @@ export function visualDifferences(a: Words, b: Words): Effect[] {
 export function allDifferences(a: Words, b: Words): Effect[] {
   return [...differences(a, b), ...visualDifferences(a, b)];
 }
+// Reuse the text comparison's physical correspondences for compositing.
+export function* paintAnchors(compared: Comparison): Generator<PaintAnchor> {
+  const { old: a, new: b, paired } = compared;
+  for (let i = 0; i < paired.length; i++) {
+    const j = paired[i];
+    if (j < 0) continue;
+    const left = tokenGlyphs(a.tokens[i], true),
+      right = tokenGlyphs(b.tokens[j], true);
+    if (left.length !== right.length) continue;
+    for (let k = 0; k < left.length; k++)
+      yield { before: a.glyphs[left[k]], after: b.glyphs[right[k]] };
+  }
+}
 // Every change between two builds, with the cards whose crops show it.
 export function changesOf(old: Build, next: Build, cards: Card[]) {
-  const a = words(old),
-    b = words(next),
+  const compared = compareDocuments(old, next),
+    { old: a, new: b } = compared,
     shows = (card: Card, glyphs: Glyph[], side: "old" | "new") =>
       glyphs.length > 0 &&
       glyphs.every((glyph) =>
@@ -639,7 +916,10 @@ export function changesOf(old: Build, next: Build, cards: Card[]) {
           );
         }),
       );
-  return allDifferences(a, b).map((effect) => ({
+  const text: { effect: DocumentEffect; within: string[] }[] = allDifferences(
+    a,
+    b,
+  ).map((effect) => ({
     effect,
     within: cards
       .filter(
@@ -651,6 +931,38 @@ export function changesOf(old: Build, next: Build, cards: Card[]) {
       )
       .map((card) => card.id),
   }));
+  const paint = paintChanges(
+    old.document,
+    next.document,
+    paintAnchors(compared),
+  ).map((effect) => ({
+    effect,
+    within: cards
+      .filter((card) =>
+        (
+          [
+            ["old", effect.before],
+            ["new", effect.after],
+          ] as const
+        ).every(([side, areas]) =>
+          areas.every((area) =>
+            card.pairs.some((pair) => {
+              const at = pair[side];
+              return (
+                at &&
+                at.page === area.page &&
+                at.clip[0] <= area.clip[0] &&
+                at.clip[1] <= area.clip[1] &&
+                at.clip[2] >= area.clip[2] &&
+                at.clip[3] >= area.clip[3]
+              );
+            }),
+          ),
+        ),
+      )
+      .map((card) => card.id),
+  }));
+  return [...text, ...paint];
 }
 // An overlap only identifies a candidate. A variant establishes an effect
 // when it replaces exactly that old range with the final text AND appearance.
@@ -658,13 +970,46 @@ export function changesOf(old: Build, next: Build, cards: Card[]) {
 export function shownBy(
   old: Build,
   variant: Build,
-  effects: Effect[],
+  effects: DocumentEffect[],
   final: Build,
 ) {
-  const a = words(old),
-    b = words(variant),
-    c = words(final),
+  const original = compareDocuments(old, final),
+    [a, b, c] = sharedWords(words(old), words(variant), words(final)),
     changes = allDifferences(a, b),
+    finalChanges = allDifferences(a, c),
+    rangeMap = (from: Words, to: Words) => {
+      // Both views reference the same physical glyphs. Index them once,
+      // rather than searching the entire target for every changed range.
+      const first = new Int32Array(to.glyphs.length).fill(to.tokens.length),
+        last = new Int32Array(to.glyphs.length).fill(-1),
+        after = new Int32Array(to.glyphs.length + 1).fill(to.tokens.length);
+      to.tokens.forEach((token, index) => {
+        for (const glyph of tokenGlyphs(token)) {
+          first[glyph] = Math.min(first[glyph], index);
+          last[glyph] = Math.max(last[glyph], index);
+        }
+        after[token.start] = Math.min(after[token.start], index);
+      });
+      // Token reading order need not follow glyph offsets across a header.
+      // Preserve findIndex(start >= boundary), including empty ranges.
+      for (let glyph = after.length - 2; glyph >= 0; glyph--)
+        after[glyph] = Math.min(after[glyph], after[glyph + 1]);
+      return ([start, end]: [number, number]): [number, number] => {
+        let low = to.tokens.length,
+          high = -1;
+        for (let i = start; i < end; i++)
+          for (const glyph of tokenGlyphs(from.tokens[i])) {
+            low = Math.min(low, first[glyph]);
+            high = Math.max(high, last[glyph]);
+          }
+        if (high >= 0) return [low, high + 1];
+        const boundary = from.tokens[start]?.start ?? from.glyphs.length,
+          at = after[boundary];
+        return [at, at];
+      };
+    },
+    oldRangeIn = rangeMap(original.old, a),
+    newRangeIn = rangeMap(original.new, c),
     identity = (w: Words, effect: Effect) =>
       JSON.stringify([
         w.tokens.slice(...effect.new).map((t) => t.text),
@@ -673,15 +1018,69 @@ export function shownBy(
           ? placementOf(a, w, effect.old, effect.new)
           : [],
       ]);
-  return effects.map((effect) =>
-    changes.some(
-      (change) =>
-        change.kind === effect.kind &&
-        change.old[0] === effect.old[0] &&
-        change.old[1] === effect.old[1] &&
-        identity(b, change) === identity(c, effect),
-    ),
-  );
+  const drawings = effects.some((effect) => effect.kind === "paint")
+    ? paintChanges(
+        old.document,
+        variant.document,
+        paintAnchors(comparison(a, b)),
+      )
+    : [];
+  return effects.map((effect) => {
+    if (effect.kind === "paint")
+      return drawings.some(
+        (change) =>
+          JSON.stringify(
+            change.before.map(({ page, clip, signature }) => [
+              page,
+              clip,
+              signature,
+            ]),
+          ) ===
+            JSON.stringify(
+              effect.before.map(({ page, clip, signature }) => [
+                page,
+                clip,
+                signature,
+              ]),
+            ) &&
+          JSON.stringify(
+            change.after.map(({ page, clip, signature }) => [
+              page,
+              clip,
+              signature,
+            ]),
+          ) ===
+            JSON.stringify(
+              effect.after.map(({ page, clip, signature }) => [
+                page,
+                clip,
+                signature,
+              ]),
+            ),
+      );
+    const oldRange = oldRangeIn(effect.old),
+      newRange = newRangeIn(effect.new),
+      pieces = finalChanges.filter(
+        (e) =>
+          e.kind === effect.kind &&
+          e.old[0] >= oldRange[0] &&
+          e.old[1] <= oldRange[1] &&
+          e.new[0] >= newRange[0] &&
+          e.new[1] <= newRange[1],
+      );
+    return (
+      pieces.length > 0 &&
+      pieces.every((piece) =>
+        changes.some(
+          (change) =>
+            change.kind === piece.kind &&
+            change.old[0] === piece.old[0] &&
+            change.old[1] === piece.old[1] &&
+            identity(b, change) === identity(c, piece),
+        ),
+      )
+    );
+  });
 }
 // The lines a run of words occupies, one position per column of each page.
 // A side with no words shows the line where they would be.
@@ -766,12 +1165,11 @@ const merge = (a: Position[], b: Position[]) =>
 export function placesOf(
   old: Build,
   next: Build,
-  effects: Effect[],
+  effects: DocumentEffect[],
   causes: string[][],
   within: string[][],
 ) {
-  const a = words(old),
-    b = words(next),
+  const { old: a, new: b } = compareDocuments(old, next),
     drafts = new Map<
       string,
       {
@@ -783,10 +1181,18 @@ export function placesOf(
       }[]
     >();
   effects.forEach((effect, index) => {
-    const left = positions(old, a, effect.old),
-      right = positions(next, b, effect.new),
-      removed = effect.kind === "visual" ? [] : glyphsOf(a, effect.old),
-      added = effect.kind === "visual" ? [] : glyphsOf(b, effect.new);
+    const left =
+        effect.kind === "paint" ? effect.before : positions(old, a, effect.old),
+      right =
+        effect.kind === "paint" ? effect.after : positions(next, b, effect.new),
+      removed =
+        effect.kind === "visual" || effect.kind === "paint"
+          ? []
+          : glyphsOf(a, effect.old),
+      added =
+        effect.kind === "visual" || effect.kind === "paint"
+          ? []
+          : glyphsOf(b, effect.new);
     for (const id of causes[index]) {
       if (within[index].includes(id)) continue;
       const others = causes[index].filter((other) => other !== id),
@@ -874,7 +1280,16 @@ export function renderPlace(
     ] as const) {
       const at = pair[side];
       if (!at) continue;
-      const x = laneX(build.document, laneAt(build.document, at.page, at.clip)),
+      const lane = laneX(
+          build.document,
+          laneAt(build.document, at.page, at.clip),
+        ),
+        // A physical effect can extend into a margin or across columns.
+        // The text lane supplies context, but never clips the effect itself.
+        x: [number, number] = [
+          Math.min(lane[0], at.clip[0]),
+          Math.max(lane[1], at.clip[2]),
+        ],
         image = strips.write(
           build.document,
           at.page,

@@ -10,7 +10,7 @@ import { runAsync } from "./process.ts";
 import type { App } from "../server.ts";
 import type {
   BuildInfo,
-  Effect,
+  DocumentEffect,
   Job,
   JobResult,
   PlaceView,
@@ -151,7 +151,7 @@ export async function render(
   const file = path.join(output, "attribute.json");
   if (!fs.existsSync(file)) return;
   const { changes, silent, cards } = readJson<{
-    changes: { effect: Effect; within: string[] }[];
+    changes: { effect: DocumentEffect; within: string[] }[];
     silent: string[];
     cards: RenderRequest["cards"];
   }>(file, { changes: [], silent: [], cards: undefined });

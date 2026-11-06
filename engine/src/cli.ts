@@ -240,7 +240,7 @@ export async function main(argv = process.argv) {
     .option("--open")
     .option(
       "--indirect",
-      "List each edit's changes elsewhere, such as renumbering, for this task from now on; may compile the paper up to 16 more times",
+      "List each edit's changes elsewhere, such as renumbering, for this task from now on; requires additional compilations",
     )
     .action(
       async (
