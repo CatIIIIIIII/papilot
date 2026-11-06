@@ -1340,9 +1340,9 @@
     "model": "gemini-4-argon-medium"
   },
   "Default": {
-    "revision": "419b24129cddc14707901953a67c80bd40bd4ff64032131142ff06606f441192",
+    "revision": "e300ba74c7984e6e2ef62600b4e18059eddd0520c53133008bec904f9c1d163a",
     "textHash": "10ccf42a824aaa496258cd6a6c2518ef04a58f5c280557cfaa4ce4e684f7d162",
-    "model": "gemini-4-argon-medium"
+    "model": "manual-review"
   },
   "Default model": {
     "revision": "e310b1b041d32257ee7fa14be282f8fb773ea2dd528af67ae0d8f6f64b9ddfd6",
