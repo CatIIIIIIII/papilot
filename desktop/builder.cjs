@@ -9,6 +9,7 @@ module.exports = {
     { from: '.desktop/server/node_modules', to: 'server/node_modules' },
     { from: '.desktop/runtime', to: 'runtime' },
     { from: 'desktop/assets/icon.png', to: 'desktop/assets/icon.png' },
+    { from: 'desktop/assets/icon.ico', to: 'desktop/assets/icon.ico' },
   ],
   asar: true,
   npmRebuild: false,
@@ -27,4 +28,8 @@ module.exports = {
     synopsis: 'A workspace for your papers',
   },
   deb: { depends: ['libgtk-3-0', 'libnotify4', 'libnss3', 'libxss1', 'libxtst6', 'xdg-utils', 'libatspi2.0-0', 'libuuid1', 'libsecret-1-0', 'libasound2', 'libgbm1', 'git'] },
+  win: { icon: 'desktop/assets/icon.ico', target: ['nsis', 'portable'] },
+  nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: 'Papilot' },
+  portable: { artifactName: 'Papilot-${version}-win-${arch}-portable.${ext}' },
 };

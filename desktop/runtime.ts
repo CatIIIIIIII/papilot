@@ -1,4 +1,4 @@
-import { agentDirs } from './agent-paths.mjs';
+import { agentDirs, importLoader, linkDirectory } from './agent-paths.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,7 +34,7 @@ export function startBackend(options: { node: string; root: string; data: string
   const loaders = [path.join(options.root, 'node_modules/tsx/dist/loader.mjs'), path.join(path.dirname(options.root), 'tsx/dist/loader.mjs')];
   let child: ChildProcess;
   try {
-    child = spawn(options.node, ['--import', loaders.find(file => fs.existsSync(file)) || loaders[0], path.join(options.root, 'src/server/start.ts')], {
+    child = spawn(options.node, ['--import', importLoader(loaders.find(file => fs.existsSync(file)) || loaders[0]), path.join(options.root, 'src/server/start.ts')], {
       cwd: options.root, env: options.env, stdio: ['ignore', fd, fd, 'ipc'], detached: process.platform !== 'win32',
     });
   } finally { fs.closeSync(fd); }
@@ -89,8 +89,7 @@ export function linkBundle(root: string, bundle: string) {
     const target = path.join(bundle, folder), link = path.join(root, folder);
     if (!fs.existsSync(target) || !fs.existsSync(path.dirname(link))) continue;
     try { if (fs.readlinkSync(link) === target) continue; } catch { /* absent or not a link */ }
-    fs.rmSync(link, { recursive: true, force: true });
-    fs.symlinkSync(target, link, 'dir');
+    linkDirectory(target, link);
   }
 }
 // A layer this installer can run, downloaded by the updater.

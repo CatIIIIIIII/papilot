@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import http from 'node:http';
 import { buildLayer } from './desktop-layer.mjs';
+import { importLoader } from '../bin/agent-paths.mjs';
 import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { selectOption, selectedValue } from './select.mjs';
 import { checkDesktopNotifications } from './check-desktop-notifications.mjs';
@@ -22,12 +23,12 @@ const base = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 const version = packaged ? JSON.parse(fs.readFileSync(path.join(resources, 'server/package.json'), 'utf8')).version : base;
 if (packaged) {
   // Exercise the bundled tools with no development Node on PATH.
-  env.PATH = '/usr/bin:/bin';
-  const node = path.join(resources, 'runtime/bin/node'), server = path.join(resources, 'server');
+  env.PATH = process.platform === 'win32' ? 'C:\\Windows\\System32;C:\\Windows' : '/usr/bin:/bin';
+  const node = path.join(resources, 'runtime/bin', process.platform === 'win32' ? 'node.exe' : 'node'), server = path.join(resources, 'server');
   assert.match(execFileSync(node, ['--version'], { encoding: 'utf8' }), /^v\d+\./);
   assert.match(execFileSync(node, [path.join(resources, 'runtime/lib/node_modules/npm/bin/npm-cli.js'), '--version'], { encoding: 'utf8' }), /^\d+\./);
   assert.match(execFileSync(node, [path.join(server, 'node_modules/@openai/codex/bin/codex.js'), '--version'], { encoding: 'utf8' }), /codex-cli/);
-  const help = execFileSync(node, ['--import', path.join(server, 'node_modules/tsx/dist/loader.mjs'), path.join(server, 'engine/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
+  const help = execFileSync(node, ['--import', importLoader(path.join(server, 'node_modules/tsx/dist/loader.mjs')), path.join(server, 'engine/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
   assert.match(help, /Usage:/);
 }
 // Keep Chromium's sandbox in native/CI checks. The opt-out is only for a
@@ -61,7 +62,7 @@ try {
   await page.getByRole('button', { name: /^(Hide task list|隐藏任务列表)$/ }).click();
   const restoreSidebar = page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ });
   await expect(restoreSidebar).toBeVisible();
-  assert.ok((await restoreSidebar.boundingBox()).x >= (process.platform === 'linux' ? 112 : 92), 'Controls never overlap the window buttons when the sidebar is hidden');
+  assert.ok((await restoreSidebar.boundingBox()).x >= (process.platform === 'darwin' ? 92 : 112), 'Controls never overlap the window buttons when the sidebar is hidden');
   await restoreSidebar.click();
   if (process.platform === 'linux') {
     const maximize = page.getByRole('button', { name: /^(Maximize or restore window|最大化或还原窗口)$/ });

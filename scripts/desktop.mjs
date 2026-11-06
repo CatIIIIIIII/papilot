@@ -2,15 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { spawnSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { tarCommand, WINDOWS, spawnSyncCommand } from '../bin/agent-paths.mjs';
+import { npmCli } from '../bin/npm-cli.mjs';
 import { buildLayer, desktopVersion, shellFingerprint } from './desktop-layer.mjs';
+import { buildWindowsIcon } from './build-windows-icon.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 process.chdir(root);
 const require = createRequire(import.meta.url), pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-const npm = fs.realpathSync(process.env.npm_execpath || path.join(path.dirname(process.execPath), 'npm'));
+const npm = npmCli();
 const run = (command, args, cwd = root) => {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit' });
+  const result = spawnSyncCommand(command, args, { cwd, stdio: 'inherit' });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${path.basename(command)} exited with ${result.status ?? result.signal}`);
 };
@@ -36,7 +39,8 @@ if (process.argv[2] === 'layer') {
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
   child.on('exit', code => process.exit(code ?? 1));
 } else if (process.argv[2] === 'package') {
-  if (!['darwin', 'linux'].includes(process.platform)) throw new Error('Desktop packaging currently supports macOS and Linux. Build on the target OS and CPU architecture.');
+  if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Error('Desktop packaging supports macOS, Linux and Windows. Build on the target OS and CPU architecture.');
+  if (WINDOWS) buildWindowsIcon();
   writeApp(shellFingerprint(root));
   // Absent Actions secrets arrive as empty strings. electron-builder treats an
   // empty CSC_LINK as a certificate path, so omit unset signing credentials.
@@ -49,13 +53,21 @@ if (process.argv[2] === 'layer') {
   fs.mkdirSync('.desktop/runtime/bin', { recursive: true });
   fs.mkdirSync('.desktop/runtime/lib/node_modules', { recursive: true });
   const node = fs.realpathSync(process.execPath);
-  fs.copyFileSync(node, '.desktop/runtime/bin/node');
-  fs.chmodSync('.desktop/runtime/bin/node', 0o755);
+  const nodeFile = `.desktop/runtime/bin/${WINDOWS ? 'node.exe' : 'node'}`;
+  fs.copyFileSync(node, nodeFile);
+  if (!WINDOWS) fs.chmodSync(nodeFile, 0o755);
   fs.cpSync(path.dirname(path.dirname(npm)), '.desktop/runtime/lib/node_modules/npm', { recursive: true,
     filter: source => path.basename(source) !== '__pycache__' });
-  for (const name of ['npm', 'npx']) fs.symlinkSync(`../lib/node_modules/npm/bin/${name}-cli.js`, `.desktop/runtime/bin/${name}`);
+  if (WINDOWS) {
+    // Windows has no symlinks here without elevation, and npm's own shims are
+    // .cmd files. These call the bundled Node on the bundled npm script.
+    for (const name of ['npm', 'npx']) fs.writeFileSync(`.desktop/runtime/bin/${name}.cmd`,
+      `@echo off\r\n"%~dp0node.exe" "%~dp0..\\lib\\node_modules\\npm\\bin\\${name}-cli.js" %*\r\n`);
+  } else {
+    for (const name of ['npm', 'npx']) fs.symlinkSync(`../lib/node_modules/npm/bin/${name}-cli.js`, `.desktop/runtime/bin/${name}`);
+  }
   const license = [path.resolve(path.dirname(node), '../LICENSE'), path.resolve(path.dirname(node), '../share/doc/node/LICENSE'),
-    path.resolve(path.dirname(node), '../share/doc/node/LICENSE.md')].find(file => fs.existsSync(file));
+    path.resolve(path.dirname(node), '../share/doc/node/LICENSE.md'), path.resolve(path.dirname(node), 'LICENSE')].find(file => fs.existsSync(file));
   if (!license) throw new Error('Use an official Node.js distribution with its LICENSE file to build the app.');
   fs.copyFileSync(license, '.desktop/runtime/LICENSE');
 
@@ -64,7 +76,7 @@ if (process.argv[2] === 'layer') {
   fs.mkdirSync('.desktop/server', { recursive: true });
   runNpm(['pack', '--ignore-scripts', '--pack-destination', '.desktop', '--loglevel=error']);
   const archive = `.desktop/${pkg.name}-${pkg.version}.tgz`;
-  run('tar', ['-xzf', archive, '--strip-components=1', '-C', '.desktop/server']);
+  run(tarCommand(), ['-xzf', archive, '--strip-components=1', '-C', '.desktop/server']);
   fs.rmSync(archive);
   fs.copyFileSync('package-lock.json', '.desktop/server/package-lock.json');
   const serverPackage = JSON.parse(fs.readFileSync('.desktop/server/package.json', 'utf8'));
@@ -77,6 +89,7 @@ if (process.argv[2] === 'layer') {
   fs.writeFileSync('.desktop/server/package.json', JSON.stringify(serverPackage, null, 2) + '\n');
   runNpm(['install', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server'));
   runNpm(['ci', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server/engine'));
+  const target = process.platform === 'darwin' ? '--mac' : process.platform === 'win32' ? '--win' : '--linux';
   run(process.execPath, [require.resolve('electron-builder/cli.js'), '--config', 'desktop/builder.cjs',
-    process.platform === 'darwin' ? '--mac' : '--linux', `--${process.arch}`, '--publish', 'never', ...process.argv.slice(3)]);
+    target, `--${process.arch}`, '--publish', 'never', ...process.argv.slice(3)]);
 } else throw new Error('Expected dev, package or layer.');

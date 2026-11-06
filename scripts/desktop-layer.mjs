@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { tarCommand } from '../bin/agent-paths.mjs';
 
 // The release manifest and layer layout are read by older installed apps:
 // keep them compatible, or raise `format` so those apps ask for an installer.
@@ -43,7 +44,7 @@ export function desktopVersion(version, revision = process.env.PAPILOT_DESKTOP_R
   return `${version}-dev.${revision}`;
 }
 export const layerName = version => `papilot-app-${version}.tgz`;
-export const INSTALLER_SUFFIXES = ['mac-arm64.dmg', 'mac-arm64.zip', 'mac-x64.dmg', 'mac-x64.zip', 'linux-x86_64.AppImage', 'linux-amd64.deb'];
+export const INSTALLER_SUFFIXES = ['mac-arm64.dmg', 'mac-arm64.zip', 'mac-x64.dmg', 'mac-x64.zip', 'linux-x86_64.AppImage', 'linux-amd64.deb', 'win-x64.exe', 'win-x64-portable.exe'];
 // A nightly build whose shell matches the published dev build keeps its
 // installers and uploads only the layer.
 export function reusableInstallers(previous, assets, fingerprint) {
@@ -69,7 +70,7 @@ export function buildLayer(root = process.cwd(), output = path.join(root, 'relea
   const npm = fs.realpathSync(process.env.npm_execpath || path.join(path.dirname(process.execPath), 'npm'));
   run(process.execPath, [npm, 'pack', '--ignore-scripts', '--pack-destination', stage, '--loglevel=error']);
   const packed = path.join(stage, `${pkg.name}-${pkg.version}.tgz`);
-  run('tar', ['-xzf', packed, '-C', stage]);
+  run(tarCommand(), ['-xzf', packed, '-C', stage]);
   fs.rmSync(packed);
   const manifest = path.join(stage, 'package/package.json');
   fs.writeFileSync(manifest, JSON.stringify({ ...read(manifest), version }, null, 2) + '\n');
@@ -78,7 +79,7 @@ export function buildLayer(root = process.cwd(), output = path.join(root, 'relea
   fs.mkdirSync(output, { recursive: true });
   const name = layerName(version), archive = path.join(output, name);
   // macOS tar would otherwise add AppleDouble files for extended attributes.
-  run('tar', ['-czf', archive, '-C', stage, 'package'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
+  run(tarCommand(), ['-czf', archive, '-C', stage, 'package'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
   const bytes = fs.readFileSync(archive);
   const release = { format: LAYER_FORMAT, version, fingerprint, layer: { name, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') } };
   fs.writeFileSync(path.join(output, MANIFEST), JSON.stringify(release, null, 2) + '\n');

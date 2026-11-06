@@ -33,7 +33,9 @@ function showWindow() {
   window = new BrowserWindow({ title: 'Papilot', width: 1380, height: 900, minWidth: 900, minHeight: 620,
     titleBarStyle: 'hidden', trafficLightPosition: { x: 18, y: 16 },
     autoHideMenuBar: process.platform !== 'darwin',
-    icon: process.platform === 'linux' ? path.join(nix && process.env.PAPILOT_DESKTOP_ROOT ? process.env.PAPILOT_DESKTOP_ROOT : app.isPackaged ? process.resourcesPath : path.resolve(fileURLToPath(new URL('../..', import.meta.url))), 'desktop/assets/icon.png') : undefined,
+    icon: process.platform === 'win32'
+      ? path.join(nix && process.env.PAPILOT_DESKTOP_ROOT ? process.env.PAPILOT_DESKTOP_ROOT : app.isPackaged ? process.resourcesPath : path.resolve(fileURLToPath(new URL('../..', import.meta.url))), 'desktop/assets/icon.ico')
+      : process.platform === 'linux' ? path.join(nix && process.env.PAPILOT_DESKTOP_ROOT ? process.env.PAPILOT_DESKTOP_ROOT : app.isPackaged ? process.resourcesPath : path.resolve(fileURLToPath(new URL('../..', import.meta.url))), 'desktop/assets/icon.png') : undefined,
     show: false, backgroundColor: '#ffffff', webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true,
       preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) } });
   window.webContents.setWindowOpenHandler(({ url }) => { external(url); return { action: 'deny' }; });
@@ -95,7 +97,7 @@ else {
       else if (action === 'close') window.close();
     });
     const root = nix && process.env.PAPILOT_DESKTOP_ROOT ? process.env.PAPILOT_DESKTOP_ROOT : app.isPackaged ? path.join(process.resourcesPath, 'server') : path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
-    const node = nix ? process.env.PAPILOT_DESKTOP_NODE : app.isPackaged ? path.join(process.resourcesPath, 'runtime/bin/node') : process.env.PAPILOT_DESKTOP_NODE;
+    const node = nix ? process.env.PAPILOT_DESKTOP_NODE : app.isPackaged ? path.join(process.resourcesPath, 'runtime/bin', process.platform === 'win32' ? 'node.exe' : 'node') : process.env.PAPILOT_DESKTOP_NODE;
     if (!node) throw new Error('Use npm run desktop to start the development app.');
     const data = app.getPath('userData'), log = path.join(app.getPath('logs'), 'backend.log');
     const read = (file: string) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
