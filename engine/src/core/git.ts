@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { capture, run, startTracked, which } from "./process.ts";
-import { same } from "./files.ts";
+import { realPath, same } from "./files.ts";
 const IDENTITY = {
   GIT_AUTHOR_NAME: "latex-review",
   GIT_AUTHOR_EMAIL: "latex-review@localhost",
@@ -32,6 +32,7 @@ export function gitBinary() {
 // directory disappears, as when a repository is moved.
 const gitDirs = new Map<string, string>();
 export function gitDirOf(root: string) {
+  root = realPath(root);
   let dir = gitDirs.get(root);
   if (!dir || !fs.existsSync(dir)) {
     dir = new Repo(root).gitDir();
@@ -147,10 +148,10 @@ export class Repo {
     return (await this.runAsync(args, options)).toString().trim();
   }
   toplevel() {
-    return fs.realpathSync(this.text(["rev-parse", "--show-toplevel"]));
+    return realPath(this.text(["rev-parse", "--show-toplevel"]));
   }
   gitDir() {
-    return fs.realpathSync(this.text(["rev-parse", "--absolute-git-dir"]));
+    return realPath(this.text(["rev-parse", "--absolute-git-dir"]));
   }
   rev(name: string) {
     return this.text(["rev-parse", "--verify", "--quiet", name + "^{commit}"]);

@@ -3,6 +3,14 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import lockfile from "proper-lockfile";
 
+// Git can expand Windows short names or use a different directory casing.
+// Resolve the actual spelling rather than lowercasing case-sensitive folders.
+export function realPath(value: string): string {
+  return process.platform === "win32"
+    ? fs.realpathSync.native(value)
+    : fs.realpathSync(value);
+}
+
 export function atomicWrite(
   file: string,
   data: string | Uint8Array,

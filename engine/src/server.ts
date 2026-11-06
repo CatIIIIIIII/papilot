@@ -15,7 +15,7 @@ import { Reconciliations } from "./core/reconcile.ts";
 import { Deliveries } from "./core/delivery.ts";
 import { more, PublishError, Publisher } from "./core/publish.ts";
 import { view, type ViewRequest } from "./core/view.ts";
-import { acquireLock, now, readJson, writeJson } from "./core/files.ts";
+import { acquireLock, now, readJson, realPath, writeJson } from "./core/files.ts";
 import { stopAll } from "./core/process.ts";
 import { checkInputs, Confirmations, ReferenceChecker } from "./core/verify.ts";
 import type { ActionKind, SourceEditRequest } from "./types.ts";
@@ -39,7 +39,7 @@ export class App {
   private cachedProject?: Project;
   private stamp?: number;
   constructor(root: string) {
-    this.root = fs.realpathSync(root);
+    this.root = realPath(root);
     this.repo = new Repo(this.root);
     this.state = path.join(this.repo.gitDir(), "latex-review");
     this.store = new Store(path.join(this.state, "state.sqlite3"));
