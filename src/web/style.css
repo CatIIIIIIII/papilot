@@ -472,6 +472,8 @@ body.resizing iframe{pointer-events:none}
 .agent-model-label>small{flex-shrink:0;font-size:11px;color:var(--text-3)}
 .agent-picker-trigger>svg{flex-shrink:0}
 .agent-picker-agent{flex-shrink:0;font-size:12px;color:var(--text-3)}
+.agent-permission-label{flex:none;padding-left:8px;border-left:1px solid var(--line-strong);font-size:11px;font-weight:500;line-height:16px;white-space:nowrap;color:var(--text-2)}
+.agent-permission-label[data-mode=full]{color:var(--amber-text)}
 .agent-picker-trigger:disabled{opacity:.6;cursor:default}
 .agent-picker-panel{position:fixed;inset:auto;margin:0;width:min(340px,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow:auto;padding:8px;border:1px solid var(--line-strong);border-radius:16px;background:var(--bg);color:var(--text);box-shadow:var(--float);animation:menu-in .14s var(--ease)}
 .model-search{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg-subtle);color:var(--text-3)}
@@ -479,6 +481,7 @@ body.resizing iframe{pointer-events:none}
 .model-search input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;color:var(--text);font-size:13px}
 .model-search input::-webkit-search-cancel-button{display:none}
 .model-list{max-height:min(320px,45dvh);overflow-y:auto;margin:6px -2px 0;padding:0 2px;overscroll-behavior:contain}
+.agent-picker-panel.has-permissions .model-list{max-height:min(208px,28dvh)}
 .model-group+.model-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .model-group-head{display:flex;align-items:center;gap:7px;padding:7px 8px 3px;font-size:11.5px;font-weight:600;color:var(--text-3)}
 .model-option{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 8px 0 18px;border-radius:7px;font-size:13px;color:var(--text);cursor:pointer;user-select:none}
@@ -494,17 +497,19 @@ body.resizing iframe{pointer-events:none}
 .model-empty{padding:14px 8px;font-size:13px;color:var(--text-3)}
 .agent-picker-panel>.agent-connection{margin:8px 2px 2px}
 .agent-picker-panel>.agent-effort,.agent-picker-panel>.agent-fast{margin-left:6px;margin-right:6px}
-.task-permissions{margin:12px 2px 0;padding-top:12px;border-top:1px solid var(--line)}
+.task-permissions{margin:10px 6px 2px;padding-top:12px;border-top:1px solid var(--line)}
 .task-permissions fieldset{min-width:0;margin:0;padding:0;border:0}
-.task-permissions legend{padding:0 6px;font-size:13px;font-weight:500}
-.task-permissions-hint{margin:4px 6px 6px;font-size:12px;line-height:1.4;color:var(--text-3)}
-.task-permission-option{display:flex;align-items:flex-start;gap:8px;padding:8px 6px;border-radius:8px;cursor:pointer}
-.task-permission-option:has(input:checked){background:var(--bg-subtle)}
-.task-permission-option:hover{background:var(--bg-hover)}
-.task-permission-option input{flex:none;width:14px;height:14px;margin:2px 0 0;accent-color:var(--accent)}
-.task-permission-option>span{display:flex;flex-direction:column;gap:3px;min-width:0}
-.task-permission-option strong{font-size:13px;font-weight:500}
-.task-permission-option small{font-size:12px;line-height:1.4;color:var(--text-3);overflow-wrap:anywhere}
+.task-permissions legend{padding:0;font-size:12px;font-weight:500;color:var(--text-2)}
+.task-permission-choices{display:flex;gap:3px;margin-top:8px;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--bg-subtle)}
+.task-permission-option{position:relative;display:flex;flex:1;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:32px;padding:5px;border-radius:6px;font-size:12px;font-weight:500;line-height:1.4;text-align:center;color:var(--text-3);cursor:pointer}
+.task-permission-option:has(input:checked){background:var(--bg);color:var(--text);box-shadow:var(--shadow-xs)}
+.task-permission-option:hover{color:var(--text)}
+.task-permission-option:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+.task-permission-option input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}
+.task-permission-option>svg{flex:none;visibility:hidden}
+.task-permission-option:has(input:checked)>svg{visibility:visible}
+.task-permission-detail,.task-permissions-hint{margin:8px 0 0;font-size:11.5px;line-height:1.5;color:var(--text-3);overflow-wrap:anywhere}
+.task-permissions-hint{color:var(--text-2)}
 .task-permissions fieldset:disabled .task-permission-option{opacity:.6;cursor:default}
 .agent-status-mark{display:flex;flex:none;color:var(--amber-text)}
 .agent-connection{margin-top:10px;padding:10px 12px;border:1px solid var(--amber-line);border-radius:10px;background:var(--amber-soft);font-size:12px;line-height:1.5;color:var(--text-2)}

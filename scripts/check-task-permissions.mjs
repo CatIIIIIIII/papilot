@@ -73,6 +73,7 @@ try {
     await open();
   };
   await expect(trigger).toHaveCount(1);
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Workspace access');
   await expect(page.getByRole('combobox', { name: 'Task permissions', exact: true })).toHaveCount(0);
   await open();
   await expect(workspace).toBeDisabled();
@@ -84,15 +85,20 @@ try {
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-menu.png' });
   await choose(full);
   await expect(full).toBeChecked();
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Full access');
   assert.equal(task.permissions, 'full');
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-full.png' });
+  await menu.press('Escape');
+  await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-collapsed.png' });
   await page.reload(); await open(); await expect(full).toBeChecked();
   await choose(workspace);
   await expect(workspace).toBeChecked();
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Workspace access');
   permissionFailure = true;
   await choose(full);
   await expect(page.getByText('Permission change failed.', { exact: true })).toBeVisible();
   await expect(workspace).toBeChecked();
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Workspace access');
   permissionFailure = false;
   // Sending and model changes wait for a permission save; permission changes
   // also wait for the existing model-save queue.
@@ -122,22 +128,28 @@ try {
   await menu.press('Escape'); await page.setViewportSize({ width: 1440, height: 900 });
   task.agent = 'claude';
   await page.reload(); await open();
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Bypass permissions');
   await expect(menu.getByRole('radio', { name: 'Sandboxed edits', exact: true })).toBeVisible();
+  await choose(menu.getByRole('radio', { name: 'Sandboxed edits', exact: true }));
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Sandboxed edits');
   await expect(menu.getByText(/Other permission requests are denied in print mode/)).toBeVisible();
-  assert.equal(await menu.locator('.task-permission-option small').first().evaluate(el => el.scrollWidth <= el.clientWidth), true, 'permission descriptions must not be truncated');
+  assert.equal(await menu.locator('.task-permission-detail').evaluate(el => el.scrollWidth <= el.clientWidth), true, 'permission descriptions must not be truncated');
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-claude.png' });
   task.agent = 'glm'; snapshot.runtimes.glm = { ...runtime, permissionOptions: new ClaudeAgent().permissionOptions() };
   await page.reload(); await open();
   await expect(menu.getByText(/Ask before other actions/)).toBeVisible();
   task.agent = 'cursor'; snapshot.runtimes.cursor = { ...runtime, permissionOptions: [] };
   await page.reload(); await open(); await expect(menu.getByRole('group', { name: 'Task permissions', exact: true })).toHaveCount(0);
+  await expect(trigger.locator('.agent-permission-label')).toHaveCount(0);
   task.agent = 'codex'; task.mode = 'review';
   await page.reload(); await open(); await expect(menu.getByRole('group', { name: 'Task permissions', exact: true })).toHaveCount(0);
+  await expect(trigger.locator('.agent-permission-label')).toHaveCount(0);
   delete task.mode; snapshot.tasks = [];
   await page.evaluate(() => localStorage.removeItem('papilot:task'));
   await page.reload();
   const fresh = page.locator('.new-task-panel').getByRole('button', { name: 'Agent settings', exact: true });
   await expect(fresh).toHaveCount(1);
+  await expect(fresh.locator('.agent-permission-label')).toHaveText('Workspace access');
   await open(fresh); await expect(workspace).toBeChecked();
   await full.check(); await expect(full).toBeChecked();
   await expect(menu.getByRole('slider', { name: 'Reasoning effort', exact: true })).toBeVisible();
@@ -146,6 +158,7 @@ try {
   // Switching agents updates permissions inside the same open menu.
   await menu.getByRole('option', { name: 'Opus · Claude', exact: true }).last().click();
   await expect(menu.getByRole('radio', { name: 'Bypass permissions', exact: true })).toBeChecked();
+  await expect(fresh.locator('.agent-permission-label')).toHaveText('Bypass permissions');
   await expect(menu.getByRole('radio', { name: 'Full access', exact: true })).toHaveCount(0);
   await menu.getByRole('option', { name: 'Deep model · Codex', exact: true }).last().click();
   await expect(full).toBeChecked();
@@ -168,10 +181,18 @@ try {
     const panel = await menu.boundingBox();
     assert.ok(panel.x >= 0 && panel.x + panel.width <= viewport.width && panel.y >= 0 && panel.y + panel.height <= viewport.height, 'all settings share one menu within the viewport');
     await workspace.check(); await expect(workspace).toBeChecked();
+    await expect(fresh.locator('.agent-permission-label')).toHaveText('Workspace access');
     await workspace.press('ArrowDown'); await expect(full).toBeChecked();
     await page.screenshot({ animations: 'disabled', path: `test-results/task-permissions-mobile-${viewport.width}.png` });
     await menu.press('Escape');
+    const mode = fresh.locator('.agent-permission-label');
+    await expect(mode).toHaveText('Full access');
+    assert.ok(await mode.evaluate(el => el.scrollWidth <= el.clientWidth), 'the collapsed permission mode must remain readable');
+    await page.screenshot({ animations: 'disabled', path: `test-results/task-permissions-collapsed-${viewport.width}.png` });
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' }); await open(fresh);
+  await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-dark.png' });
   assert.deepEqual(errors, []);
   console.log('PASS: shared agent menu, native permission options, busy/save locks, persistence, error recovery, provider/review restrictions, creation, keyboard and narrow-screen layout.');
 } finally { await browser.close(); await server.close(); }
