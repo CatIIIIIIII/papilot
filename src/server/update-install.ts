@@ -6,19 +6,12 @@ import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { devRevision, readJson, stableVersion } from '../../bin/installation.mjs';
+import { execCommand, importLoader, linkDirectory, tarCommand } from '../../bin/agent-paths.mjs';
+import { npmCli } from '../../bin/npm-cli.mjs';
 
+export { npmCli } from '../../bin/npm-cli.mjs';
 export const DEV_REPOSITORY = 'https://github.com/PapilotAI/papilot.git';
 const git = async (args: string[], cwd: string) => (await promisify(execFile)('git', args, { cwd, timeout: 120000, maxBuffer: 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })).stdout.trim();
-
-export function npmCli(env = process.env, executable = process.execPath) {
-  const candidates = [env.npm_execpath, path.join(path.dirname(executable), '../lib/node_modules/npm/bin/npm-cli.js'), path.join(path.dirname(executable), 'node_modules/npm/bin/npm-cli.js'),
-    ...(env.PATH || '').split(path.delimiter).map(dir => path.join(dir, 'npm'))];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    try { const real = fs.realpathSync(candidate); if (real.endsWith('npm-cli.js')) return real; } catch { /* next installation */ }
-  }
-  throw new Error('npm is unavailable to Papilot.');
-}
 export const loaderFor = (root: string) => createRequire(path.join(root, 'package.json')).resolve('tsx/esm');
 export function runInstall(args: string[], cwd: string, log: number, timeout = 600000) {
   return new Promise<void>((resolve, reject) => {
@@ -41,7 +34,7 @@ export async function probeInstallation(root: string, version: string, stage: st
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const port = (server.address() as net.AddressInfo).port;
   await new Promise<void>(resolve => server.close(() => resolve()));
-  const child = spawn(process.execPath, ['--import', loaderFor(root), path.join(root, 'src/server/main.ts')], {
+  const child = spawn(process.execPath, ['--import', importLoader(loaderFor(root)), path.join(root, 'src/server/main.ts')], {
     cwd: root, env: { ...process.env, PAPILOT_DATA: path.join(stage, 'probe'), PAPILOT_PORT: String(port), PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_UPDATE_PROBE: '1' }, stdio: ['ignore', log, log],
   });
   let ended = false, error: Error | undefined;
@@ -136,8 +129,7 @@ function linkBundle(root: string, bundle: string) {
   for (const folder of ['node_modules', 'engine/node_modules']) {
     const target = path.join(bundle, folder), link = path.join(root, folder);
     if (!fs.existsSync(target) || !fs.existsSync(path.dirname(link))) continue;
-    fs.rmSync(link, { recursive: true, force: true });
-    fs.symlinkSync(target, link, 'dir');
+    linkDirectory(target, link);
   }
 }
 // The desktop app downloads only Papilot's own code, built by the release
@@ -152,7 +144,7 @@ export async function installLayer(data: string, version: string, layer: Desktop
     if (bytes.length !== layer.size || createHash('sha256').update(bytes).digest('hex') !== layer.sha256) throw new Error(INSTALL_FAILED);
     fs.writeFileSync(archive, bytes, { mode: 0o600 });
     fs.mkdirSync(root);
-    await promisify(execFile)('tar', ['-xzf', archive, '-C', root, '--strip-components=1'], { timeout: 120000 });
+    await execCommand(tarCommand(), ['-xzf', archive, '-C', root, '--strip-components=1'], { timeout: 120000 });
     fs.rmSync(archive);
     const pkg = readJson(path.join(root, 'package.json')), shell = readJson(path.join(root, 'desktop-layer.json'));
     if (pkg?.name !== 'papilot' || pkg.version !== version || shell?.version !== version) throw new Error('The downloaded package does not match the requested release.');

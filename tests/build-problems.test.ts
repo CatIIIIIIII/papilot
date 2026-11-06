@@ -191,8 +191,9 @@ test('errors and warnings are placed before typesetting remarks when there are t
 });
 
 test('the served log hides the build folder and home, even when home is the root', () => {
-  assert.equal(scrubLog('/data/build/x.tex in /Users/me/paper', '/data/build', '/Users/me'), '…/x.tex in ~/paper');
-  assert.equal(scrubLog('(/usr/share/a.sty)', undefined, '/'), '(/usr/share/a.sty)');
+  const separator = path.sep, build = ['', 'data', 'build'].join(separator), home = ['', 'Users', 'me'].join(separator);
+  assert.equal(scrubLog(`${build}${separator}x.tex in ${home}${separator}paper`, build, home), `…${separator}x.tex in ~${separator}paper`);
+  assert.equal(scrubLog('(/usr/share/a.sty)', undefined, separator), '(/usr/share/a.sty)');
 });
 
 test('log lines TeX wrapped at 79 characters are joined again', () => {

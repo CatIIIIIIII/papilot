@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
+import { findExecutable } from '../bin/agent-paths.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 interface Check { id: string; ok: boolean; severity: string; detail: string; fix: string | null }
@@ -15,17 +16,24 @@ function fixture() {
   for (const folder of [app, tools, home, path.join(app, 'dist'), path.join(app, 'engine/dist/web')]) fs.mkdirSync(folder, { recursive: true });
   fs.cpSync(path.join(root, 'bin'), path.join(app, 'bin'), { recursive: true });
   fs.copyFileSync(path.join(root, 'package.json'), path.join(app, 'package.json'));
-  fs.symlinkSync(path.join(root, 'node_modules'), path.join(app, 'node_modules'), 'dir');
-  fs.symlinkSync(path.join(root, 'engine/src'), path.join(app, 'engine/src'), 'dir');
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(app, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  fs.symlinkSync(path.join(root, 'engine/src'), path.join(app, 'engine/src'), process.platform === 'win32' ? 'junction' : 'dir');
   fs.writeFileSync(path.join(app, 'dist/index.html'), '<html></html>');
   fs.writeFileSync(path.join(app, 'engine/dist/web/index.html'), '<html></html>');
   const log = path.join(dir, 'commands');
-  const env: NodeJS.ProcessEnv = { PATH: tools, HOME: home, TMPDIR: os.tmpdir(), PAPILOT_DATA: data, PAPILOT_PORT: '65534' };
+  const env: NodeJS.ProcessEnv = { PATH: tools, HOME: home, USERPROFILE: home, TMPDIR: os.tmpdir(), PAPILOT_DATA: data, PAPILOT_PORT: '65534' };
   function tool(name: string, script = 'console.log("test tool 1.0");') {
     const file = path.join(tools, name);
     fs.writeFileSync(file, `#!${process.execPath}\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify([${JSON.stringify(name)}, ...process.argv.slice(2)]) + '\\n');\n${script}\n`, { mode: 0o755 });
     // Node treats extensionless entry points as CJS unless their package is ESM.
     fs.writeFileSync(path.join(tools, 'package.json'), '{"type":"module"}');
+    // Windows cannot start an extensionless script, so a .cmd shim runs Node
+    // on it. Papilot spawns .cmd files through a shell.
+    if (process.platform === 'win32') {
+      const shim = path.join(tools, `${name}.cmd`);
+      fs.writeFileSync(shim, `@echo off\r\n"${process.execPath}" "${file}" %*\r\n`);
+      return shim;
+    }
     return file;
   }
   function baseTools() { for (const name of ['git', 'latexmk', 'synctex', 'pdflatex']) tool(name); }
@@ -65,6 +73,9 @@ test('doctor reports missing tools and actionable fixes without installing or st
     const result = await f.run(['--json']);
     assert.equal(result.code, 1); assert.equal(result.report.ok, false);
     for (const name of ['git', 'latexmk', 'synctex']) {
+      // A tool installed in a standard location off PATH is still found, so
+      // only require a fix for tools Papilot cannot see at all.
+      if (findExecutable(name, { ...process.env, PATH: f.env.PATH })) continue;
       assert.equal(item(result.report, name).ok, false); assert.ok(item(result.report, name).fix);
     }
     assert.equal(item(result.report, 'agents').severity, 'warn');
@@ -133,7 +144,8 @@ test('doctor uses the supported managed Codex and never leaks login output or kn
     f.tool('codex', 'console.log("codex-cli 0.1.0");');
     const managed = path.join(f.data, 'agents/node_modules/.bin'); fs.mkdirSync(managed, { recursive: true });
     const file = f.tool('managed-codex', 'if (process.argv.includes("--version")) console.log("codex-cli 0.164.0"); else console.error("Logged in using API key: top-secret-login");');
-    fs.symlinkSync(file, path.join(managed, 'codex'));
+    if (process.platform === 'win32') fs.copyFileSync(file, path.join(managed, 'codex.cmd'));
+    else fs.symlinkSync(file, path.join(managed, 'codex'));
     const result = await f.run(['--json'], { ANTHROPIC_API_KEY: 'secret-anthropic-value' });
     assert.equal(result.code, 0, result.stdout);
     assert.equal(item(result.report, 'agent.codex').ok, true);
@@ -148,7 +160,7 @@ test('doctor uses the supported managed Codex and never leaks login output or kn
   } finally { f.cleanup(); }
 });
 
-test('doctor checks real repository configuration without changing files or making worktrees', async () => {
+test('doctor checks real repository configuration without changing files or making worktrees', { skip: process.platform === 'win32' && 'uses the POSIX which command and file links' }, async () => {
   const f = fixture();
   try {
     f.baseTools(); f.tool('xelatex');
@@ -252,10 +264,10 @@ test('doctor detects Grok in its installer folder and checks only the isolated s
     const bin = f.tool('grok', `if (JSON.stringify(process.argv.slice(2)) !== '["--no-auto-update","agent","--no-leader","stdio","--help"]') process.exit(99); console.log('Usage: grok agent stdio [OPTIONS]');`);
     const dir = path.join(f.env.HOME!, '.grok/bin');
     fs.mkdirSync(dir, { recursive: true });
-    const installed = path.join(dir, 'grok');
+    const installed = path.join(dir, process.platform === 'win32' ? 'grok.cmd' : 'grok');
     fs.renameSync(bin, installed);
     const result = await f.run(['--json']);
-    assert.equal(item(result.report, 'agent.grok').ok, true);
+    assert.equal(item(result.report, 'agent.grok').ok, true, JSON.stringify(result.report));
     assert.match(item(result.report, 'agent.grok').detail, /login and generation were not tested/);
     assert.equal(fs.existsSync(f.data), false);
     const missing = await f.run(['--json'], { PAPILOT_GROK_BIN: path.join(f.dir, 'absent') });

@@ -2,13 +2,15 @@ module.exports = {
   appId: 'ai.papilot.desktop',
   productName: 'Papilot',
   directories: { app: '.desktop/app', output: 'release/desktop', buildResources: 'desktop/assets' },
-  files: ['*.js', '*.mjs', '*.cjs', 'package.json', '!node_modules{,/**/*}'],
+  files: ['*.js', '*.mjs', '*.cjs', '*.html', '*.css', 'package.json', '!node_modules{,/**/*}'],
   extraResources: [
     { from: '.desktop/server', to: 'server' },
     // electron-builder's generic file copier skips root node_modules.
     { from: '.desktop/server/node_modules', to: 'server/node_modules' },
     { from: '.desktop/runtime', to: 'runtime' },
     { from: 'desktop/assets/icon.png', to: 'desktop/assets/icon.png' },
+    { from: 'desktop/assets/icon.ico', to: 'desktop/assets/icon.ico' },
+    ...(process.platform === 'win32' ? [{ from: '.desktop/wsl', to: 'wsl' }] : []),
   ],
   asar: true,
   npmRebuild: false,
@@ -27,4 +29,8 @@ module.exports = {
     synopsis: 'A workspace for your papers',
   },
   deb: { depends: ['libgtk-3-0', 'libnotify4', 'libnss3', 'libxss1', 'libxtst6', 'xdg-utils', 'libatspi2.0-0', 'libuuid1', 'libsecret-1-0', 'libasound2', 'libgbm1', 'git'] },
+  win: { icon: 'desktop/assets/icon.ico', target: ['nsis', 'portable'], artifactName: 'Papilot-${version}-win-${arch}.${ext}' },
+  nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: 'Papilot' },
+  portable: { artifactName: 'Papilot-${version}-win-${arch}-portable.${ext}' },
 };

@@ -41,7 +41,20 @@ export async function atomicWriteAsync(file: string, data: string | Uint8Array) 
     } finally {
       await handle.close();
     }
-    await fs.promises.rename(temporary, file);
+    // Windows readers and virus scanners can briefly deny replacement. Keep
+    // the old file intact; retry delays total at most 1.26 seconds.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fs.promises.rename(temporary, file);
+        break;
+      } catch (error) {
+        if (
+          process.platform !== "win32" || attempt >= 6 ||
+          !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code || "")
+        ) throw error;
+        await sleep(20 * 2 ** attempt);
+      }
+    }
   } finally {
     await fs.promises.rm(temporary, { force: true });
   }

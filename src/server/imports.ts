@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
 import { DATA, ENGINE } from './paths.ts';
+import { realPath } from './real-path.ts';
 import type { PaperImport, Project } from '../shared.ts';
 import type { Manuscripts } from './manuscript.ts';
 
@@ -110,7 +111,7 @@ function rememberMain(root: string, main: string, engine: string) {
 async function repositoryRoot(root: string) {
   let top: string | undefined;
   try { top = await git(root, 'rev-parse', '--show-toplevel'); } catch { /* A plain folder needs Git. */ }
-  if (top && fs.realpathSync(top) !== root) throw new Error('This folder belongs to a parent Git repository. Select its root folder, or upload a copy.');
+  if (top && realPath(top) !== realPath(root)) throw new Error('This folder belongs to a parent Git repository. Select its root folder, or upload a copy.');
   return top;
 }
 export async function prepareRepository(root: string) {
@@ -128,7 +129,7 @@ export async function prepareRepository(root: string) {
 // files returns them, so the author can pick one.
 export async function openFolder(input: { path?: unknown; main?: unknown }, known: (root: string) => Project | undefined, register: (root: string, name: string) => Promise<Project>): Promise<{ project: Project } | { name: string; candidates: string[] }> {
   if (typeof input.path !== 'string' || !input.path.trim()) throw new Error('Enter a folder path.');
-  const root = fs.realpathSync(input.path);
+  const root = realPath(input.path);
   if (!fs.statSync(root).isDirectory()) throw new Error('Select a folder containing the paper.');
   const project = known(root);
   if (project) return { project };
@@ -200,7 +201,7 @@ export class PaperImports {
     try {
       if (input.path !== undefined) {
         if (typeof input.path !== 'string' || !input.path.trim()) throw new Error('Enter a folder path.');
-        root = fs.realpathSync(input.path.startsWith('~/') ? path.join(os.homedir(), input.path.slice(2)) : input.path);
+        root = realPath(input.path.startsWith('~/') ? path.join(os.homedir(), input.path.slice(2)) : input.path);
         if (!fs.statSync(root).isDirectory()) throw new Error('Select a folder containing the paper.');
       } else {
         root = path.join(this.directory, 'papers', id); copied = true; fs.mkdirSync(root, { recursive: true, mode: 0o700 });

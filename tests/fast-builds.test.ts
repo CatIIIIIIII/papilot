@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Repo } from '../engine/src/core/git.ts';
 import { Builder } from '../engine/src/core/build.ts';
 import { loadProject } from '../engine/src/core/config.ts';
+import { findCommand } from '../engine/src/core/platform.mjs';
 
 const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
 const tex = (() => {
@@ -267,28 +268,47 @@ test('a delivery preview is exactly what applying the task writes, with pending 
 
 // A pdflatex that takes a moment per pass, so a build can be watched while it runs.
 function slowTeX(base: string) {
-  const bin = path.join(base, 'bin'), real = execFileSync('which', ['pdflatex'], { encoding: 'utf8' }).trim(), runs = path.join(base, 'runs');
-  const latexmk = execFileSync('which', ['latexmk'], { encoding: 'utf8' }).trim();
+  const bin = path.join(base, 'bin'), real = findCommand('pdflatex')!, latexmk = findCommand('latexmk')!, runs = path.join(base, 'runs');
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(path.join(bin, 'pdflatex'), `#!/bin/sh\ncase "$1" in --version) exec "${real}" --version;; esac\necho run >> "${runs}"\nsleep 0.6\nexec "${real}" "$@"\n`, { mode: 0o755 });
-  // Nix's latexmk wrapper prepends its own TeX binaries to PATH. Select the
-  // slow compiler explicitly so the test observes its passes on every system.
-  fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\nexec "${latexmk}" '-pdflatex="${path.join(bin, 'pdflatex')}" %O %S' "$@"\n`, { mode: 0o755 });
+  const wrapper = (name: string, source: string) => {
+    const script = path.join(bin, name + '.cjs'); fs.writeFileSync(script, source);
+    if (process.platform === 'win32') fs.writeFileSync(path.join(bin, name + '.cmd'), `@echo off\r\n"${process.execPath}" "%~dp0\\${name}.cjs" %*\r\n`);
+    else fs.writeFileSync(path.join(bin, name), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`, { mode: 0o755 });
+    return script.split(path.sep).join('/');
+  };
+  const slow = wrapper('pdflatex', `const args=process.argv.slice(2);if(args[0]!=='--version'){require('fs').appendFileSync(${JSON.stringify(runs)},'run\\n');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,600);}const r=require('child_process').spawnSync(${JSON.stringify(real)},args,{stdio:'inherit'});process.exit(r.status??1);`);
+  // Nix may prepend its own TeX to PATH; select the delayed compiler explicitly.
+  const command = `-pdflatex="${process.execPath.split(path.sep).join('/')}" "${slow}" %O %S`;
+  wrapper('latexmk', `const r=require('child_process').spawnSync(${JSON.stringify(latexmk)},[${JSON.stringify(command)},...process.argv.slice(2)],{stdio:'inherit'});process.exit(r.status??1);`);
   const previous = process.env.PATH;
-  process.env.PATH = `${bin}:${previous}`;
+  process.env.PATH = `${bin}${path.delimiter}${previous}`;
   return { runs: () => fs.existsSync(runs) ? fs.readFileSync(runs, 'utf8').trim().split('\n').length : 0, restore: () => { process.env.PATH = previous; } };
 }
 
-test('the manuscript compiles what applying a task will write ahead of time, and shows each pass while it builds', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+test('the manuscript compiles what applying a task will write ahead of time, and shows each pass while it builds', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async t => {
   const { Manuscripts } = await import('../src/server/manuscript.ts');
   const f = paper({ 'main.tex': document('\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n') });
   const teX = slowTeX(f.base);
+  const manuscripts = new Manuscripts(), changes: string[] = [], refreshing = new Set<Promise<void>>();
+  const refresh = manuscripts.refresh.bind(manuscripts);
+  // A stale build schedules refresh before its next build is marked busy.
+  // Track that snapshot too, so teardown cannot remove its working directory.
+  manuscripts.refresh = (...args) => {
+    const pending = refresh(...args); refreshing.add(pending);
+    void pending.then(() => refreshing.delete(pending), () => refreshing.delete(pending));
+    return pending;
+  };
   try {
-    const manuscripts = new Manuscripts(), changes: string[] = [];
     manuscripts.on('change', id => changes.push(id));
-    const settled = async () => {
-      for (let i = 0; i < 600; i++) { const { build } = await manuscripts.state('paper', f.root); if (build.status !== 'building') return build; await new Promise(r => setTimeout(r, 50)); }
-      throw new Error('The build did not finish');
+    const settled = async (current = false) => {
+      const deadline = performance.now() + 60000;
+      let last;
+      while (performance.now() < deadline) {
+        const { build } = await manuscripts.state('paper', f.root); last = build;
+        if (build.status === 'failed' || build.status === 'ready' && (!current || build.current)) return build;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      throw new Error(`The build did not finish: ${JSON.stringify(last)}`);
     };
     const first = await settled();
     assert.equal(first.status, 'ready', first.error);
@@ -306,14 +326,15 @@ test('the manuscript compiles what applying a task will write ahead of time, and
     // An edit needing several passes shows the first while the build goes on.
     fs.writeFileSync(path.join(f.root, 'main.tex'), document('\\section{One}\\label{one}See page~\\pageref{three}.\n\\section{Two}\\label{two}Text.\n\\section{Three}\\label{three}More.\n'));
     await manuscripts.refresh('paper', f.root);
-    let preview: string | undefined;
-    for (let i = 0; i < 600 && !preview; i++) {
-      const { build } = await manuscripts.state('paper', f.root);
+    let preview: string | undefined, observed = ready;
+    const previewDeadline = performance.now() + 60000;
+    while (!preview && performance.now() < previewDeadline) {
+      const { build } = await manuscripts.state('paper', f.root); observed = build;
       if (build.status === 'building' && build.key !== ready.key) preview = build.key;
       else if (build.status !== 'building') break;
       await new Promise(r => setTimeout(r, 25));
     }
-    assert.ok(preview, 'a pass replaced the previous PDF before the build finished');
+    assert.ok(preview, `a pass replaced the previous PDF before the build finished: ${JSON.stringify(observed)}`);
     assert.ok(fs.existsSync(manuscripts.pdf('paper', preview!)));
     const done = await settled();
     assert.equal(done.status, 'ready', done.error);
@@ -323,14 +344,21 @@ test('the manuscript compiles what applying a task will write ahead of time, and
     await manuscripts.refresh('paper', f.root);
     fs.writeFileSync(path.join(f.root, 'main.tex'), document('\\section{One}Second edit.\n'));
     await manuscripts.refresh('paper', f.root);
-    for (let i = 0; i < 600; i++) {
-      const { build } = await manuscripts.state('paper', f.root);
-      if (build.status === 'ready' && build.current) break;
-      await new Promise(r => setTimeout(r, 50));
-    }
-    const final = await manuscripts.state('paper', f.root);
-    assert.ok(final.build.current, 'the second edit was compiled');
-  } finally { teX.restore(); f.close(); }
+    const final = await settled(true);
+    assert.equal(final.status, 'ready', final.error);
+    assert.ok(final.current, `the second edit was compiled: ${JSON.stringify(final)}`);
+  } finally {
+    t.after(async () => {
+      try {
+        const deadline = performance.now() + 90000;
+        while (manuscripts.busyForUpdate || refreshing.size) {
+          if (performance.now() >= deadline) throw new Error(`Manuscript cleanup timed out; retained ${f.base}`);
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        await fs.promises.rm(f.base, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } finally { teX.restore(); }
+    });
+  }
 });
 
 test('someone who starts waiting for a background build sees its passes from the latest one on', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {

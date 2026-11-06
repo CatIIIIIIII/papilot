@@ -10,7 +10,7 @@ export function PaperDialog({ paper, canManage, save, remove, onClose }: { paper
   const [form, setForm] = useState({ name: paper.name, path: paper.path }), [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   // The folder's name stays visible, with its slash, while a long parent path is cut short.
-  const locationId = useId(), folderAt = Math.max(0, form.path.replace(/\/+$/, '').lastIndexOf('/'));
+  const locationId = useId(), folderAt = Math.max(0, form.path.replace(/[\\/]+$/, '').replaceAll('\\', '/').lastIndexOf('/'));
   useEffect(() => {
     const element = dialog.current!;
     element.showModal();
@@ -51,7 +51,7 @@ export function PaperDialog({ paper, canManage, save, remove, onClose }: { paper
             <div className="paper-location" title={form.path}>
               <Icon name="folder" size={16}/>
               <span className="paper-location-path"><span className="paper-location-parent">{form.path.slice(0, folderAt)}</span><span className="paper-location-name">{form.path.slice(folderAt)}</span></span>
-              <button type="button" className="button ghost compact" disabled={busy || !canManage} onClick={() => void chooseDirectory().then(path => { if (path) setForm(current => ({ ...current, path })); })}>{
+              <button type="button" className="button ghost compact" disabled={busy || !canManage} onClick={() => void chooseDirectory().then(path => { if (path) setForm(current => ({ ...current, path })); }).catch(failure => setError(failure instanceof Error ? failure.message : String(failure)))}>{
                 // i18n: Opens the system folder picker to point the paper at another folder.
                 t('Change…')
               }</button>

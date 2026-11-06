@@ -6,7 +6,7 @@
 
 AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다임**.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS(Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>및 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux(AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS)용 **[Papilot 다운로드](https://github.com/PapilotAI/papilot/releases/latest)**,<br>또는 `npm install -g papilot`을 실행하세요.
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS(Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>및 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux(AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) 또는 Windows (x64)용 **[Papilot 다운로드](https://github.com/PapilotAI/papilot/releases/latest)**,<br>또는 `npm install -g papilot`을 실행하세요.
 
 <a href="https://papilot.ai">
 <picture>
@@ -64,7 +64,7 @@ AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다�
 
 <img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Git을 통한 공동 저자와의 동기화.** 풀(pull)하고 푸시(push)하며, 충돌 해결은 에이전트에게 맡기세요.
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**무료 및 오픈 소스.** MIT 라이선스로 macOS 및 Linux를 지원합니다.
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**무료 및 오픈 소스.** MIT 라이선스로 macOS, Linux, Windows를 지원합니다.
 
 <a id="agents"></a>
 
@@ -91,7 +91,7 @@ AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다�
 
 ## 🚀 시작하기
 
-1. **설치.** macOS 또는 Linux용 [앱을 다운로드](https://github.com/PapilotAI/papilot/releases/latest)하거나 `npm install -g papilot`(Node.js 22.22+)을 실행하세요. 또한 Git과 TeX Live 또는 MacTeX이 필요합니다.
+1. **설치.** macOS, Linux, Windows용 [앱을 다운로드](https://github.com/PapilotAI/papilot/releases/latest)하거나 `npm install -g papilot`(Node.js 22.22+)을 실행하세요. 또한 Git과 TeX Live 또는 MacTeX이 필요합니다.
 2. **프로젝트 열기.** `.tex` 파일이 있는 폴더를 선택하세요. Papilot이 PDF를 빌드합니다.
 3. **에이전트 선택.** 이미 보유한 CLI 로그인이나 API 키를 사용한 뒤, 페이지에 표시를 남기세요.
 

@@ -1,6 +1,7 @@
 // Simplified Chinese for the workspace, keyed by the English text (see i18n.ts).
 // Chinese text keeps a space around numbers and Latin words: "修改 2", "PDF 批注".
 export const zhCN: Record<string, string> = {
+  'Environment': '运行环境',
   'Comment': '评论', 'Unchanged text': '未修改的文字',
   "Refresh version history": "刷新版本记录",
   "Loading versions…": "正在读取版本…",
@@ -344,14 +345,14 @@ export const zhCN: Record<string, string> = {
   'Region note': '区域批注',
   'or select text to annotate': '或选中文字批注',
   'Edit note': '编辑批注', 'Edit note {n}': '编辑批注 {n}', 'Edit note {n}: {comment}': '编辑批注 {n}：{comment}',
-  'Changes apply to the next turn.': '更改从下一轮对话生效。',
+  'Next turn': '下轮生效',
   'Save': '保存', 'Saving…': '正在保存…',
   'Pending review': '待审阅', 'Accepted': '已接受', 'Rejected': '已拒绝', 'Revision requested': '需再修改', 'Partly reviewed': '部分已审阅',
   'Retry linking changes': '重试关联修改', 'View changes for this note': '查看这条批注对应的修改', 'Change {n}': '修改 {n}',
   'Awaiting changes': '等待修改', 'No linked change': '暂无对应修改', 'Show note {n}: {comment}': '查看批注 {n}：{comment}', 'Note {n}': '批注 {n}',
   'No tasks yet': '暂无任务', 'No matching skills': '没有匹配的技能', 'LaTeX Git repository · Requires a commit and latexmk': 'LaTeX Git 仓库 · 需有提交记录并安装 latexmk',
   '{agent} is unavailable': '{agent} 不可用', 'Connection details': '连接详情',
-  'Faster responses; may use more of your limit.': '响应更快，可能消耗更多额度。',
+  'Faster, higher usage': '更快，用量更高',
   '{agent} was not found on this computer. Install or set it up, then select Reconnect.': '本机未找到 {agent}。安装或配置后点“重新连接”。', 'Search models': '搜索模型', 'Models': '模型', 'Recent': '最近使用', 'Default': '默认', 'No models match “{query}”': '没有匹配“{query}”的模型', 'Wait for the PDF to compile.': '请等待 PDF 编译完成。',
   'Fit width': '适合宽度', 'Fit page': '适合页面', 'What should change here?': '这里应该怎么改？', 'Add note': '添加批注',
   'PDF controls': 'PDF 控件', 'Previous page': '上一页', 'Page number': '页码', 'Next page': '下一页',
@@ -509,8 +510,9 @@ export const zhCN: Record<string, string> = {
   'Choose {color} color': '选择{color}', 'Use a hex color, like #2563EB.': '请输入十六进制颜色，例如 #2563EB。',
   'Editing light mode colors. Changes are saved automatically.': '正在编辑浅色模式配色，修改会自动保存。',
   'Editing dark mode colors. Changes are saved automatically.': '正在编辑深色模式配色，修改会自动保存。',
-  'Advanced': '高级', 'PDF appearance': 'PDF 外观', 'Choose how paper pages look in dark mode.': '选择深色模式下论文页面的显示方式。',
-  'Follow mode': '跟随模式', 'Always light': '始终浅色', 'Reset appearance': '重置外观',
+  'PDF appearance': 'PDF 外观', 'Reset appearance': '重置外观', 'Review appearance': '审阅外观',
+  'Auto': '自动', 'Original': '原始', 'Auto matches the interface mode.': '自动使用当前界面模式。',
+  'PDF uses the setting above.': 'PDF 使用上方的设置。',
   'Appearance': '外观', 'Light': '浅色', 'Dark': '深色', 'System': '跟随系统', 'Language': '语言', 'Browser default ({language})': '浏览器默认（{language}）',
   'Notifications': '通知',
   'Show desktop notifications while Papilot is in the background.': 'Papilot 在后台时，显示桌面通知。',
@@ -723,4 +725,5 @@ export const zhCN: Record<string, string> = {
   'Restore presets': '恢复预设', 'Restored the preset notes.': '已恢复预设的常用批注。', 'Quick note icon': '常用批注图标',
   'Short name': '简称', 'Instruction': '要求', 'A word or two for the wheel': '一两个词，显示在圆盘上', 'What the agent should do with the marked text': '希望 agent 怎样处理标出的文字',
   'Line break': '换行', 'Expand': '展开', 'Question': '疑问', 'Flag': '旗标',
+  'Install Git in this environment to use version management.': '请在当前环境中安装 Git 后使用版本管理。',
 };

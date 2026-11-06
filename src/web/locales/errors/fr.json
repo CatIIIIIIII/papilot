@@ -251,5 +251,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Attendez la fin de la tâche et des actions de révision avant de choisir une destination.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Attendez la fin de la compilation du PDF de cet article avant de modifier son chemin d’accès ou de le supprimer.",
   "ZIP links and special files are not supported.": "Les liens et fichiers spéciaux dans les archives ZIP ne sont pas pris en charge.",
-  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot."
+  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot.",
+  "Invalid task permissions.": "Autorisations de tâche non valides.",
+  "Pause the task and wait for it to finish before changing permissions.": "Mettez la tâche en pause et attendez son arrêt avant de modifier les autorisations.",
+  "Codex could not apply workspace permissions.": "Codex n’a pas pu appliquer les autorisations de l’espace de travail.",
+  "Permissions are only available for editing tasks.": "Les autorisations sont réservées aux tâches de modification.",
+  "Invalid task permissions for this agent.": "Autorisations de tâche non valides pour cet agent.",
+  "This agent does not support the selected permissions.": "Cet agent ne prend pas en charge les autorisations choisies.",
+  "Grok does not support the selected permissions.": "Grok ne prend pas en charge les autorisations choisies.",
+  "Grok disconnected. Reconnect to resume.": "Grok est déconnecté. Reconnectez-vous pour reprendre.",
+  "Pause the task before restoring its session.": "Mettez la tâche en pause avant de restaurer sa session.",
+  "This task already has a running turn.": "Cette tâche a déjà un tour en cours."
 }

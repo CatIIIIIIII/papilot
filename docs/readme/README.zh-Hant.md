@@ -6,7 +6,7 @@
 
 以 AI 進行負責任寫作與排版的**全新典範**。
 
-**[下載 Papilot](https://github.com/PapilotAI/papilot/releases/latest)** 支援 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>與 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS)，<br>或執行 `npm install -g papilot`。
+**[下載 Papilot](https://github.com/PapilotAI/papilot/releases/latest)** 支援 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>與 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) 或 Windows (x64)，<br>或執行 `npm install -g papilot`。
 
 <a href="https://papilot.ai">
 <picture>
@@ -64,7 +64,7 @@
 
 <img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**透過 Git 與共同作者同步。** 拉取、推送，並讓智慧代理解決衝突。
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**免費且開源。** 採用 MIT 授權條款，支援 macOS 與 Linux。
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**免費且開源。** 採用 MIT 授權條款，支援 macOS、Linux 與 Windows。
 
 <a id="agents"></a>
 
@@ -91,7 +91,7 @@
 
 ## 🚀 快速開始
 
-1. **安裝。** [下載應用程式](https://github.com/PapilotAI/papilot/releases/latest)（支援 macOS 或 Linux），或執行 `npm install -g papilot`（需 Node.js 22.22+）。你還需要安裝 Git 以及 TeX Live 或 MacTeX。
+1. **安裝。** [下載應用程式](https://github.com/PapilotAI/papilot/releases/latest)（支援 macOS、Linux 或 Windows），或執行 `npm install -g papilot`（需 Node.js 22.22+）。你還需要安裝 Git 以及 TeX Live 或 MacTeX。
 2. **開啟專案。** 選擇包含 `.tex` 檔案的資料夾。Papilot 會自動建置 PDF。
 3. **選擇智慧代理。** 使用你現有的 CLI 登入憑證或 API 金鑰，接著就能在頁面上標記。
 

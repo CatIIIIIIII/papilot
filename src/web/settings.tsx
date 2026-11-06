@@ -41,6 +41,8 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const [page, setPage] = useState<SettingsPage>(initialPage);
   const [showCategories, setShowCategories] = useState(() => initialPage === 'general' && window.matchMedia('(max-width: 760px)').matches);
   const [query, setQuery] = useState('');
+  const [environment, setEnvironment] = useState('');
+  useEffect(() => { if (window.papilotDesktop?.platform === 'win32') void window.papilotDesktop.environment?.().then(setEnvironment); }, []);
   const [checkReferences, setCheckReferences] = useState(() => browserStorage.getItem(REFERENCE_CHECKS) !== 'off');
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
@@ -124,6 +126,10 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
             <ChipSelect label={t('Language')} value={choice} onChange={value => setLanguage(value as LanguageChoice)} options={[{ value: 'system', label: t('Browser default ({language})', { language: browserName }) }, ...LANGUAGES.map(item => ({ value: item.id, label: item.name }))]}/>
           </div>
           <ModelDefaultSettings {...modelDefaults}/>
+          {window.papilotDesktop?.platform === 'win32' && <div className="settings-row settings-choice">
+            <div className="settings-text"><span className="settings-name">{t('Environment')}</span><p>{environment || 'Windows / WSL'}</p></div>
+            <button type="button" onClick={() => void window.papilotDesktop?.openEnvironment?.()}>{t('Change…')}</button>
+          </div>}
           <div className="settings-row settings-toggle">
             <div className="settings-text">
               <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>

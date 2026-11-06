@@ -7,12 +7,13 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Store } from '../src/server/store.ts';
 import { Workspace } from '../src/server/workspace.ts';
+import { openFolder } from '../src/server/imports.ts';
 import type { Codex } from '../src/server/codex.ts';
 import type { Task } from '../src/shared.ts';
 
 class Agent extends EventEmitter { ready = false; close() {} }
 function fixture() {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-projects-'))), store = new Store(path.join(dir, 'state.sqlite'));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-projects-'))), store = new Store(path.join(dir, 'state.sqlite'));
   const git = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   function repo(name: string) {
     const root = path.join(dir, name); fs.mkdirSync(root); git(root, 'init');
@@ -68,6 +69,24 @@ test('path changes validate repository roots and duplicate papers before saving'
     assert.equal((await f.workspace.changeProjectPath('paper', next, undefined, 'Updated paper')).path, next);
     assert.equal(f.store.project('paper').name, 'Updated paper');
     assert.ok(fs.existsSync(path.join(f.root, 'paper.tex')));
+  } finally { f.close(); }
+});
+
+test('Windows repository aliases reuse existing papers before inspecting their configuration', { skip: process.platform !== 'win32' }, async () => {
+  const f = fixture();
+  try {
+    const alias = f.root[0].toLowerCase() + f.root.slice(1), previous = f.store.project('paper');
+    f.store.saveProject({ ...previous, path: alias });
+    fs.writeFileSync(path.join(f.root, '.latex-review.json'), 'invalid configuration must remain untouched');
+    const existing = await f.workspace.addProject(f.root.toUpperCase());
+    assert.equal(existing.id, 'paper'); assert.equal(f.store.projects().length, 2);
+    const opened = await openFolder({ path: f.root }, root => f.workspace.projectByPath(root), () => { throw new Error('A known paper must not be imported again'); });
+    assert.ok('project' in opened); assert.equal(opened.project.id, 'paper');
+    assert.equal((await f.workspace.changeProjectPath('paper', f.root.toUpperCase())).id, 'paper');
+    await assert.rejects(f.workspace.changeProjectPath('other', f.root.toUpperCase()), /already added/);
+    fs.mkdirSync(path.join(f.root, 'nested'));
+    await assert.rejects(f.workspace.changeProjectPath('paper', path.join(alias, 'nested')), /root directory/);
+    assert.equal(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8'), 'invalid configuration must remain untouched');
   } finally { f.close(); }
 });
 

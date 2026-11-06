@@ -5,6 +5,10 @@
 import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
 export const selectOptions = select => select.locator('xpath=following-sibling::*[@role="listbox"][1]').locator('[role="option"]');
 export async function selectOption(select, value) {
+  // A control near the bottom of Settings may need scrolling into view.
+  // Let that scroll finish before opening a list that dismisses on scroll.
+  await select.scrollIntoViewIfNeeded();
+  await select.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   // The chip itself, since a choice such as a language can rename it.
   const chip = await select.elementHandle();
   await select.click();

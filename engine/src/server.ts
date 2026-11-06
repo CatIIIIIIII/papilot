@@ -177,6 +177,8 @@ export function createServer(app: App) {
         task: j.task,
         status: j.status,
         phase: j.phase,
+        createdAt: j.created * 1000,
+        ...(app.publisher.progress(j.id) ? { progress: app.publisher.progress(j.id) } : {}),
         ...(revision ? { revision } : {}),
         ...j.result,
       };

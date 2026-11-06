@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { serviceEnvironment } from '../src/server/service-environment.ts';
 
-test('the service resolves tools from the installing shell and retains an explicit override on reinstall', () => {
+test('the service resolves tools from the installing shell and retains an explicit override on reinstall', { skip: process.platform === 'win32' && 'the background service is macOS-only' }, () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-service-'));
   try {
     const shellTools = path.join(root, 'shell'), compatibleTools = path.join(root, 'compatible');
@@ -30,7 +30,7 @@ test('the service resolves tools from the installing shell and retains an explic
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('service paths keep the selected Node, exclude relative entries and do not copy unrelated environment', () => {
+test('service paths keep the selected Node, exclude relative entries and do not copy unrelated environment', { skip: process.platform === 'win32' && 'the background service is macOS-only' }, () => {
   const env = serviceEnvironment('/app', '/user', '/node/bin/node', {
     PATH: ':/custom/bin:.:../tools:/custom/bin:/bin',
     PAPILOT_SERVICE_PATH: '/python/bin:relative',

@@ -9,7 +9,7 @@ import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
 import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
-import { fullPaperPdf, nextPaperPass, paperPassPdf, preparePaper } from './pdf.ts';
+import { fullPaperPdf, nextPaperPass, paperPassPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
@@ -30,6 +30,7 @@ import { PaperImports, openFolder } from './imports.ts';
 import { DATA } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
+import { findExecutable } from '../../bin/agent-paths.mjs';
 
 const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
 // Each workspace compiles predicted manuscripts once, however many listeners serve it.
@@ -75,6 +76,8 @@ export interface AppOptions {
   csrf: string; serialGit: ReturnType<typeof gitQueue>; dist: string | null; version: string;
   connectReview?: typeof reviewClient;
   updates?: Updates; updateInstance?: string;
+  desktopInstance?: string;
+  prepareDemo?: () => Promise<void>;
   diagnostics?: Diagnostics;
   latexInstallation?: typeof detectLatex;
 }
@@ -86,7 +89,7 @@ export async function buildApp(options: AppOptions) {
   const changes = options.changes || new Changes(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-changes-')));
   const diagnostics = options.diagnostics || new Diagnostics();
   let imports = importsByWorkspace.get(workspace);
-  if (!imports) { imports = new PaperImports(manuscripts, DATA, root => Boolean(store.projectByPath(root))); importsByWorkspace.set(workspace, imports); }
+  if (!imports) { imports = new PaperImports(manuscripts, DATA, root => Boolean(workspace.projectByPath(root))); importsByWorkspace.set(workspace, imports); }
   workspace.importsBusy = () => imports!.busy;
   // Whether rounds list what each edit changes elsewhere, such as the uses of
   // a macro: the owner's choice in Settings, off by default, since finding
@@ -127,12 +130,11 @@ export async function buildApp(options: AppOptions) {
       void manuscripts.refresh(project.id, project.path).catch(() => undefined);
     } catch { /* The paper or task is gone. */ }
   });
-  // A deferred task is applied as a whole once it is reviewed, so after each
-  // new round and each decision the manuscript it will produce compiles in
-  // the background.
+  // Prepare the manuscript only after the author has decided the proposal.
+  // Pending chapter edits must not trigger speculative full-paper builds.
   const predict = async (taskId: string) => {
     const task = store.task(taskId), project = store.project(task.projectId);
-    if (!task.deferred || task.mode === 'review' || task.delivery?.pending || task.status === 'deleting') return;
+    if (!task.deferred || task.mode === 'review' || task.delivery?.pending || task.status === 'deleting' || (task.review?.counts.pending ?? 0) > 0) return;
     const client = await connectReview(project.path);
     const preview = await client.get<{ files: Record<string, string | null> | null }>(`${taskRoute(task.name)}/preview`);
     if (preview.files) await manuscripts.predict(project.id, project.path, Object.fromEntries(Object.entries(preview.files).map(([file, data]) => [file, data === null ? null : Buffer.from(data, 'base64')])));
@@ -140,12 +142,7 @@ export async function buildApp(options: AppOptions) {
   if (!predicting.has(workspace)) {
     predicting.add(workspace);
     workspace.on('reviewed', (taskId: string) => void predict(taskId).catch(() => undefined));
-    // While a round compiles its changed chapters, the whole new version
-    // compiles too, for the review's full paper and often for the commit.
-    workspace.on('publishing', (taskId: string, revision: string) => {
-      try { preparePaper(store.project(store.task(taskId).projectId).path, revision, 'background'); }
-      catch { /* The task is gone. */ }
-    });
+    // The review's complete PDF is compiled on demand when opened.
   }
   app.addHook('onError', async request => { projectRequests.get(request)?.(); });
   await app.register(compress);
@@ -174,6 +171,7 @@ export async function buildApp(options: AppOptions) {
     return { ok: true };
   });
   async function manuscript(id: string, rebuild = false) {
+    await options.prepareDemo?.();
     const root = store.project(id).path, state = await manuscripts.state(id, root, rebuild);
     const notes = store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note));
     const placed = await manuscripts.reanchor(id, root, notes).catch(() => notes);
@@ -189,7 +187,7 @@ export async function buildApp(options: AppOptions) {
     return { ...state, annotations: store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note)) };
   }
 
-  app.get('/api/health', { config: { access: 'public' } }, () => listener.kind === 'local' ? { ok: true, name: 'Papilot', version: options.version, ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) } : { ok: true });
+  app.get('/api/health', { config: { access: 'public' } }, () => listener.kind === 'local' ? { ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) } : { ok: true });
   // Environment reports include host paths, so they are available only to the owner.
   app.get('/api/runtime/latex', owner, () => (options.latexInstallation || detectLatex)());
   app.post('/api/diagnostics', owner, request => {
@@ -204,9 +202,12 @@ export async function buildApp(options: AppOptions) {
     app.post('/api/updates/channel', owner, request => options.updates!.setChannel((request.body as any)?.channel));
     app.post('/api/updates/install', owner, request => options.updates!.install((request.body as any)?.version));
   }
-  app.get('/api/state', any, request => {
+  app.get('/api/state', any, async request => {
+    await options.prepareDemo?.();
     const viewer = request.viewer!;
-    return { ...visibleSnapshot(workspace.snapshot(), viewer, accounts), csrf: csrfFor(viewer), viewer: viewerInfo(viewer, accounts) };
+    // Check the backend environment (Linux when using WSL), again on each poll
+    // so installing Git unlocks version management without a page reload.
+    return { ...visibleSnapshot(workspace.snapshot(), viewer, accounts), gitAvailable: Boolean(findExecutable('git')), csrf: csrfFor(viewer), viewer: viewerInfo(viewer, accounts) };
   });
   // Each person's quick notes for the magic pen, the same on every device they
   // sign in from. None saved means the presets.
@@ -262,7 +263,7 @@ export async function buildApp(options: AppOptions) {
   const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
   // Adding a paper names a folder on this host, so only the owner can.
   app.post('/api/projects', owner, async request => { const b = request.body as any; return workspace.addProject(string(b.path, 'Repository path', 4000), b.name ? string(b.name, 'Paper name', 120) : undefined); });
-  app.post('/api/projects/open', owner, request => openFolder((request.body || {}) as any, root => store.projectByPath(root), (root, name) => workspace.addProject(root, name)));
+  app.post('/api/projects/open', owner, request => openFolder((request.body || {}) as any, root => workspace.projectByPath(root), (root, name) => workspace.addProject(root, name)));
   app.post('/api/imports', { ...owner, bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
   app.get<{ Params: { id: string } }>('/api/imports/:id', owner, request => imports!.get(request.params.id));
   app.post<{ Params: { id: string } }>('/api/imports/:id/build', owner, request => imports!.build(request.params.id, (request.body || {}) as any));
@@ -295,7 +296,7 @@ export async function buildApp(options: AppOptions) {
     if (existing) { if (existing.projectId !== projectId) throw new Error('Invalid task ID.'); return existing; }
     // AI review compiles the task's own copy of the manuscript, so it does not wait for the preview.
     const reviewing = Boolean(skill && findSkill(store.project(projectId).path, skill).output === 'annotations');
-    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
+    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
   });
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
@@ -348,6 +349,7 @@ export async function buildApp(options: AppOptions) {
     const task = store.task(request.params.id);
     return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: task.agent, fresh: (request.body as any)?.fresh === true });
   });
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/permissions', task, request => workspace.updateTaskPermissions(request.params.id, (request.body as any)?.permissions));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/model', task, request => {
     const b = (request.body || {}) as Record<string, unknown>;
     if (Object.keys(b).some(key => !['model', 'effort', 'serviceTier'].includes(key))) throw new Error('Only the model and its settings can be changed.');
@@ -500,7 +502,7 @@ export async function buildApp(options: AppOptions) {
     const notes = [...new Set<string>(b.annotations)].map(id => store.annotation(project.id, id));
     if (notes.some(note => note.taskId || isTaskReviewNote(note) || note.deletedAt !== undefined)) throw new Error('Select unsent PDF notes for this task.');
     const { title } = annotationTask(notes);
-    return workspace.createTask({ id, projectId: project.id, title, instructions: '', annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
+    return workspace.createTask({ id, projectId: project.id, title, instructions: '', permissions: b.permissions, annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
   });
   // What the last build reported, placed on its PDF, and the TeX log itself.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));

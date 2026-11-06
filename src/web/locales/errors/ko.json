@@ -251,5 +251,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "대상 위치를 선택하기 전에 작업 및 검토 동작이 완료될 때까지 기다려 주세요.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "경로를 변경하거나 제거하기 전에 이 논문의 PDF 빌드가 완료될 때까지 기다리세요.",
   "ZIP links and special files are not supported.": "ZIP 링크 및 특수 파일은 지원되지 않습니다.",
-  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다."
+  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다.",
+  "Invalid task permissions.": "잘못된 작업 권한입니다.",
+  "Pause the task and wait for it to finish before changing permissions.": "작업을 일시 중지하고 멈출 때까지 기다린 후 권한을 변경하세요.",
+  "Codex could not apply workspace permissions.": "Codex가 작업 공간 권한을 적용하지 못했습니다.",
+  "Permissions are only available for editing tasks.": "권한은 편집 작업에서만 설정할 수 있습니다.",
+  "Invalid task permissions for this agent.": "이 에이전트는 선택한 권한을 지원하지 않습니다.",
+  "This agent does not support the selected permissions.": "이 에이전트는 선택한 권한을 지원하지 않습니다.",
+  "Grok does not support the selected permissions.": "Grok은 선택한 권한을 지원하지 않습니다.",
+  "Grok disconnected. Reconnect to resume.": "Grok 연결이 끊겼습니다. 다시 연결하여 계속하세요.",
+  "Pause the task before restoring its session.": "세션을 복원하기 전에 작업을 일시 중지하세요.",
+  "This task already has a running turn.": "이 작업에는 이미 실행 중인 턴이 있습니다."
 }

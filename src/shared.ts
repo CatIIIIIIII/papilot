@@ -20,7 +20,8 @@ export interface UpdateStatus {
 // unsent counts review updates the agent has not received; comments are the
 // ones that ask for a revision. files are the manuscript files this task's
 // accepted changes touched since its last commit, relative to the repository root.
-export interface ReviewSummary { state: string; round: number | null; counts: Record<string, number>; unsent?: number; comments?: number; files?: string[]; next?: string; job?: { id?: string; phase: string; status: string; error?: string; details?: string[] } | null }
+export interface ReviewJob { id?: string; phase: string; status: string; error?: string; details?: string[]; createdAt?: number; progress?: Partial<Record<'baseline' | 'revised', Omit<BuildProgress, 'startedAt'>>> }
+export interface ReviewSummary { state: string; round: number | null; counts: Record<string, number>; unsent?: number; comments?: number; files?: string[]; next?: string; job?: ReviewJob | null }
 export interface PendingBuild { requestId: string; job?: string; runs: string[]; sendBack: boolean; restarts: number }
 export interface PendingReview { route: string; body: Record<string, unknown>; previousStatus: TaskStatus }
 export interface TaskCommitReview { token: string; files: string[]; diff: string }
@@ -29,7 +30,11 @@ export interface TaskReconciliation {
   sourceBase: string; sourceAccepted: string; base: string; ready: boolean;
   intent?: { mode: 'workspace' | 'commit'; message: string };
 }
+// Adapter-owned IDs; workspace is the backwards-compatible default.
+export type TaskPermissions = string;
+export interface TaskPermissionOption { value: TaskPermissions; label: string; detail: string }
 export interface Task {
+  permissions?: TaskPermissions;
   mode?: 'edit' | 'review';
   aiReview?: { key: string; notes?: number; revision?: number };
   // Accepted changes remain isolated until the author applies them.
@@ -94,7 +99,7 @@ export interface UsageWindow { usedPercent: number; minutes: number | null; rese
 export interface Usage { plan: string | null; windows: UsageWindow[]; credits: { unlimited: boolean; balance: number | null } | null; reached: boolean }
 // installed is false when the agent was not found on the host (no CLI, SDK
 // credentials or key); such agents are not offered. Older servers omit it.
-export interface RuntimeStatus { connected: boolean; authenticated: boolean; account: string | null; error: string | null; models: AgentModel[]; usage?: Usage | null; installed?: boolean }
+export interface RuntimeStatus { permissionOptions?: TaskPermissionOption[]; connected: boolean; authenticated: boolean; account: string | null; error: string | null; models: AgentModel[]; usage?: Usage | null; installed?: boolean }
 export interface DiagnosticCheck { id: string; ok: boolean; severity: 'error' | 'warn' | 'info'; detail: string; fix: string | null }
 export interface LatexInstallation {
   distribution: 'MacTeX' | 'BasicTeX' | 'TeX Live' | 'MiKTeX' | null;
@@ -105,7 +110,7 @@ export interface DiagnosticReport {
   version: string; checkedAt: number; platform: string; arch: string; node: string;
   ok: boolean; checks: DiagnosticCheck[];
 }
-export interface Snapshot { projects: Project[]; tasks: Task[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; viewer?: Viewer }
+export interface Snapshot { projects: Project[]; tasks: Task[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; viewer?: Viewer; gitAvailable?: boolean }
 // Who is looking: the owner on this host or Tailscale (local), or a person
 // signed in with a passkey at the public URL (account). Older servers send none.
 // owner names the owner, whose messages carry no author.

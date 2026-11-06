@@ -18,7 +18,7 @@ export function gitBinary() {
   try {
     const candidate = path.join(
       run(binary, ["--exec-path"]).stdout.toString().trim(),
-      "git",
+      process.platform === "win32" ? "git.exe" : "git",
     );
     fs.accessSync(candidate, fs.constants.X_OK);
     binary = candidate;
@@ -50,7 +50,7 @@ export const within = (file: string, scopes: readonly string[]) =>
 export function cleanPath(value: string) {
   const normalized = value.replaceAll("\\", "/");
   const parts = normalized.split("/").filter((p) => p && p !== ".");
-  if (normalized.startsWith("/") || parts.includes("..") || parts[0] === ".git")
+  if (normalized.startsWith("/") || /^[a-z]:/i.test(normalized) || parts.includes("..") || parts[0]?.toLowerCase() === ".git")
     throw new Error(`Use a repository-relative path: ${value}`);
   return parts.join("/");
 }
@@ -118,7 +118,10 @@ export class Repo {
     try {
       return run(
         gitBinary(),
-        ["-c", "core.quotepath=off", "--literal-pathspecs", ...args],
+        // Papilot compares working-tree bytes with Git blobs. Windows Git
+        // defaults to converting line endings, which would make a checkout
+        // differ from its own blob; every operation here treats files as-is.
+        ["-c", "core.quotepath=off", "-c", "core.autocrlf=false", "--literal-pathspecs", ...args],
         { cwd: this.root, ...options },
       ).stdout;
     } catch (error) {
@@ -133,7 +136,7 @@ export class Repo {
     try {
       return (await capture(
         gitBinary(),
-        ["-c", "core.quotepath=off", "--literal-pathspecs", ...args],
+        ["-c", "core.quotepath=off", "-c", "core.autocrlf=false", "--literal-pathspecs", ...args],
         { cwd: this.root, ...options },
       )).stdout;
     } catch (error) {
@@ -500,7 +503,7 @@ export class Repo {
     // snapshot with blobs() both duplicates memory and hits spawnSync's buffer
     // limit for ordinary repositories containing PDFs and figures.
     const child = startTracked(() => spawn(gitBinary(), ["cat-file", "--batch"], {
-      cwd: this.root, detached: true, stdio: ["pipe", "pipe", "pipe"],
+      cwd: this.root, detached: process.platform !== "win32", windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
     }));
     let stderr = "", timedOut = false;
     child.stderr.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-65536); });
@@ -561,7 +564,17 @@ export class Repo {
       if (!(await output.next()).done) throw new GitError("Git snapshot export returned unexpected output.");
       const failure = await finished;
       if (failure) throw failure;
-      for (const [target, link] of links) await fs.promises.symlink(link, target);
+      for (const [target, link] of links) {
+        try { await fs.promises.symlink(link, target); }
+        catch (error) {
+          // Windows needs Developer Mode or elevation for file links. Git
+          // checks such links out as plain files holding the target, so a
+          // snapshot stays complete without them.
+          if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM")
+            await fs.promises.writeFile(target, link, "utf8");
+          else throw error;
+        }
+      }
     } finally {
       clearTimeout(timer);
       if (child.exitCode === null) child.kill("SIGKILL");

@@ -91,9 +91,11 @@ async function main() {
   );
   if (options.open) {
     const { spawn } = await import("node:child_process");
-    spawn(process.platform === "darwin" ? "open" : "xdg-open", [task.url], {
-      stdio: "ignore",
-    }).on("error", () => {});
+    // Windows has no open/xdg-open; start hands the URL to the default browser.
+    const command =
+      process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
+    const args = process.platform === "win32" ? ["/c", "start", "", `"${task.url}"`] : [task.url];
+    spawn(command, args, { stdio: "ignore" }).on("error", () => {});
   }
   console.log(
     `\nClean up:\nnode scripts/review.mjs --repo ${root} --task ${task.task} finish --force\nnode scripts/review.mjs --repo ${root} server stop`,

@@ -6,7 +6,7 @@
 
 Un **nuevo paradigma** para la escritura y composición tipográfica responsable con IA.
 
-**[Descargar Papilot](https://github.com/PapilotAI/papilot/releases/latest)** para <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>y <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS),<br>o ejecuta `npm install -g papilot`.
+**[Descargar Papilot](https://github.com/PapilotAI/papilot/releases/latest)** para <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>y <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) o Windows (x64),<br>o ejecuta `npm install -g papilot`.
 
 <a href="https://papilot.ai">
 <picture>
@@ -64,7 +64,7 @@ Marca una oración, una ecuación o una figura y escribe una anotación.<br>
 
 <img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Sincroniza con coautores mediante Git.** Extrae cambios, súbelos y deja que un agente resuelva los conflictos.
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Gratuito y de código abierto.** Bajo licencia MIT, para macOS y Linux.
+<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Gratuito y de código abierto.** Bajo licencia MIT, para macOS, Linux y Windows.
 
 <a id="agents"></a>
 
@@ -91,7 +91,7 @@ Marca una oración, una ecuación o una figura y escribe una anotación.<br>
 
 ## 🚀 Primeros pasos
 
-1. **Instalar.** [Descarga la aplicación](https://github.com/PapilotAI/papilot/releases/latest) para macOS o Linux, o ejecuta `npm install -g papilot` (Node.js 22.22+). También necesitarás Git y TeX Live o MacTeX.
+1. **Instalar.** [Descarga la aplicación](https://github.com/PapilotAI/papilot/releases/latest) para macOS, Linux o Windows, o ejecuta `npm install -g papilot` (Node.js 22.22+). También necesitarás Git y TeX Live o MacTeX.
 2. **Abrir tu proyecto.** Elige la carpeta con tus archivos `.tex`. Papilot compila el PDF.
 3. **Elegir un agente.** Usa el inicio de sesión por CLI o la clave de API que ya tengas y haz anotaciones en la página.
 

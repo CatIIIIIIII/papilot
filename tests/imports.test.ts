@@ -11,16 +11,31 @@ const source = '\\documentclass{article}\n\\begin{document}\nHello paper.\n\\end
 const data = (text: string) => Buffer.from(text).toString('base64');
 const git = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 function fixture() {
-  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-import-'))), root = path.join(directory, 'original'); fs.mkdirSync(root);
+  const directory = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-import-'))), root = path.join(directory, 'original'); fs.mkdirSync(root);
   const manuscripts = new Manuscripts(); let result: 'ready' | 'failed' = 'failed', calls = 0;
   manuscripts.state = async () => { calls++; return { git: {} as any, build: { status: result, current: result === 'ready', error: result === 'failed' ? 'Missing package.sty' : undefined } }; };
   const imports = new PaperImports(manuscripts, path.join(directory, 'data'));
-  return { directory, root, imports, manuscripts, calls: () => calls, ready: () => { result = 'ready'; }, close: () => fs.rmSync(directory, { recursive: true, force: true }) };
+  const instances = new Set([imports]);
+  const builders = new Set([manuscripts]);
+  const track = (value: PaperImports) => { instances.add(value); return value; };
+  const trackManuscripts = (value: Manuscripts) => { builders.add(value); return value; };
+  // Register with t.after so a cleanup error cannot hide the original assertion.
+  const close = async () => {
+    // A timed-out assertion must not delete a running Git/TeX process's files.
+    const started = performance.now();
+    while ([...instances].some(value => value.busy) || [...builders].some(value => value.busyForUpdate)) {
+      if (performance.now() - started >= 60000) throw new Error(`Import cleanup timed out; retained ${directory}`);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    await fs.promises.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  };
+  return { directory, root, imports, manuscripts, track, trackManuscripts, close, calls: () => calls, ready: () => { result = 'ready'; } };
 }
-async function settled(imports: PaperImports, id: string, timeout = 6000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) { const value = imports.get(id); if (!['building', 'repairing'].includes(value.phase)) return value; await new Promise(resolve => setTimeout(resolve, 20)); }
-  throw new Error('Import did not settle');
+async function settled(imports: PaperImports, id: string, timeout = 30000) {
+  // Several Git commands can exceed six seconds on a busy Windows CI host.
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) { const value = imports.get(id); if (!['building', 'repairing'].includes(value.phase)) return value; await new Promise(resolve => setTimeout(resolve, 20)); }
+  throw new Error(`Import did not settle within ${timeout}ms (phase: ${imports.get(id).phase})`);
 }
 // Construct a stored ZIP so malicious names can be tested without trusting an archiver.
 function archive(name: string, text = source, mode = 0o100644, size?: number) {
@@ -31,7 +46,7 @@ function archive(name: string, text = source, mode = 0o100644, size?: number) {
   return Buffer.concat([local, filename, body, central, filename, end]);
 }
 
-test('folder upload preserves binary assets, unwraps export folder, and detects nested mains', async () => {
+test('folder upload preserves binary assets, unwraps export folder, and detects nested mains', async t => {
   const f = fixture();
   try {
     const binary = Buffer.from([0, 255, 4, 0, 128]);
@@ -42,15 +57,15 @@ test('folder upload preserves binary assets, unwraps export folder, and detects 
     assert.equal((await f.imports.build(value.id, {})).phase, 'building');
     const failed = await settled(f.imports, value.id); assert.equal(failed.phase, 'failed'); assert.equal(failed.versioned, true);
     assert.ok(git(value.path, 'rev-parse', 'HEAD')); assert.equal(f.calls(), 1);
-    const recovered = new PaperImports(f.manuscripts, path.join(f.directory, 'data')); assert.equal(recovered.get(value.id).error, 'Missing package.sty');
+    const recovered = f.track(new PaperImports(f.manuscripts, path.join(f.directory, 'data'))); assert.equal(recovered.get(value.id).error, 'Missing package.sty');
     f.ready(); await recovered.build(value.id, {}); assert.equal((await settled(recovered, value.id)).phase, 'ready');
     const project = { id: 'paper', path: value.path, name: value.name, createdAt: 1 };
     assert.deepEqual(await recovered.finish(value.id, async () => project), project);
     assert.deepEqual(await recovered.finish(value.id, async () => project), project, 'Finalization is retryable');
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('ZIP import unwraps source and rejects traversal, symlinks, oversized and invalid archives', async () => {
+test('ZIP import unwraps source and rejects traversal, symlinks, oversized and invalid archives', async t => {
   const f = fixture();
   try {
     const value = await f.imports.create({ zip: archive('export/main.tex').toString('base64') }); assert.equal(value.main, 'main.tex');
@@ -61,10 +76,10 @@ test('ZIP import unwraps source and rejects traversal, symlinks, oversized and i
     assert.equal(fs.existsSync(path.join(f.directory, 'outside.tex')), false);
     await assert.rejects(f.imports.create({ files: [{ path: '../outside.tex', data: data(source) }] }));
     await assert.rejects(f.imports.create({ files: [{ path: 'a.tex', data: '%%%=' }] }));
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('ambiguous mains need a choice; engine hints and existing configuration are honored', async () => {
+test('ambiguous mains need a choice; engine hints and existing configuration are honored', async t => {
   const f = fixture();
   try {
     fs.writeFileSync(path.join(f.root, 'a.tex'), source); fs.writeFileSync(path.join(f.root, 'b.tex'), source);
@@ -75,10 +90,10 @@ test('ambiguous mains need a choice; engine hints and existing configuration are
     await assert.rejects(f.imports.build(imported.id, { main: '../outside.tex' }), /existing/);
     await f.imports.build(imported.id, {}); await settled(f.imports, imported.id);
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8')).partial_builds, false);
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('local folders can exceed upload limits and inspection leaves their files untouched', async () => {
+test('local folders can exceed upload limits and inspection leaves their files untouched', async t => {
   const f = fixture();
   try {
     fs.writeFileSync(path.join(f.root, 'main.tex'), source);
@@ -96,10 +111,10 @@ test('local folders can exceed upload limits and inspection leaves their files u
     // Its first commit holds 5,001 files, which takes longer on a busy machine.
     f.ready(); await f.imports.build(value.id, {});
     assert.equal((await settled(f.imports, value.id, 30000)).phase, 'ready');
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('main files deeper than twenty folders are discoverable without following symlinks', async () => {
+test('main files deeper than twenty folders are discoverable without following symlinks', { skip: process.platform === 'win32' && 'file links need Windows Developer Mode' }, async t => {
   const f = fixture();
   try {
     const main = [...Array(22).fill('chapter'), 'main.tex'].join('/');
@@ -109,7 +124,7 @@ test('main files deeper than twenty folders are discoverable without following s
     fs.symlinkSync(path.join(f.root, main), path.join(f.root, 'linked.tex'));
     assert.deepEqual(texFiles(f.root), [main]);
     assert.equal((await f.imports.create({ path: f.root })).main, main);
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
 test('configured and nearby main files open without scanning unrelated subtrees', async t => {
@@ -132,10 +147,10 @@ test('configured and nearby main files open without scanning unrelated subtrees'
     reads.length = 0;
     const configured = await inspectPaper(f.root);
     assert.equal(configured.main, main); assert.equal(configured.engine, 'lualatex'); assert.deepEqual(reads, []);
-  } finally { t.mock.restoreAll(); f.close(); }
+  } finally { t.mock.restoreAll(); t.after(f.close); }
 });
 
-test('an alternative main file can be chosen without scanning or following links outside the paper', async () => {
+test('an alternative main file can be chosen without scanning or following links outside the paper', async t => {
   const f = fixture();
   try {
     fs.writeFileSync(path.join(f.root, 'main.tex'), source);
@@ -144,15 +159,15 @@ test('an alternative main file can be chosen without scanning or following links
     const value = await f.imports.create({ path: f.root });
     assert.deepEqual(value.candidates, ['main.tex']);
     const outside = path.join(f.directory, 'outside'); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'main.tex'), source);
-    fs.symlinkSync(outside, path.join(f.root, 'linked'), 'dir');
+    fs.symlinkSync(outside, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
     for (const main of ['../outside/main.tex', 'linked/main.tex', path.join(outside, 'main.tex')]) await assert.rejects(f.imports.build(value.id, { main }), /existing TeX/);
     f.ready(); await f.imports.build(value.id, { main: 'supplement/appendix.tex' });
     const result = await settled(f.imports, value.id);
     assert.equal(result.phase, 'ready'); assert.equal(result.main, 'supplement/appendix.tex');
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('an existing configuration stays byte-for-byte unchanged, keeps its source folder, and is updated only for a new main file', async () => {
+test('an existing configuration stays byte-for-byte unchanged, keeps its source folder, and is updated only for a new main file', async t => {
   const f = fixture();
   try {
     fs.mkdirSync(path.join(f.root, 'paper')); fs.writeFileSync(path.join(f.root, 'paper/main.tex'), source); fs.writeFileSync(path.join(f.root, 'other.tex'), source);
@@ -164,10 +179,10 @@ test('an existing configuration stays byte-for-byte unchanged, keeps its source 
     // A main file outside the configured source folder compiles from the whole folder.
     value = await f.imports.create({ path: f.root }); await f.imports.build(value.id, { main: 'other.tex' }); await settled(f.imports, value.id);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8')), { main: 'other.tex', engine: 'pdflatex', source_dir: '' });
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('existing repositories retain commits, staged edits and Git identity during import', async () => {
+test('existing repositories retain commits, staged edits and Git identity during import', async t => {
   const f = fixture();
   try {
     fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root);
@@ -177,20 +192,37 @@ test('existing repositories retain commits, staged edits and Git identity during
     const value = await f.imports.create({ path: f.root }); await f.imports.build(value.id, {}); await settled(f.imports, value.id);
     assert.equal(git(f.root, 'rev-parse', 'HEAD'), head); assert.equal(git(f.root, 'write-tree'), index); assert.deepEqual(fs.readFileSync(path.join(f.root, 'main.tex')), original);
     assert.throws(() => git(f.root, 'config', '--local', 'user.name'));
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('parent repositories are refused before changing source and empty Git repositories are prepared', async () => {
+test('parent repositories are refused before changing source and empty Git repositories are prepared', async t => {
   const f = fixture();
   try {
     git(f.root, 'init'); const nested = path.join(f.root, 'nested'); fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'main.tex'), source);
     const value = await f.imports.create({ path: nested }); await f.imports.build(value.id, {});
     assert.match((await settled(f.imports, value.id)).error!, /parent Git/); assert.equal(fs.existsSync(path.join(nested, '.latex-review.json')), false);
     fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root); assert.ok(git(f.root, 'rev-parse', 'HEAD'));
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('the desktop opens a folder as a paper at once and asks only which of several main files to compile', async () => {
+test('Windows imports accept alternate root casing while still refusing nested repositories', { skip: process.platform !== 'win32' }, async t => {
+  const f = fixture();
+  try {
+    fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root);
+    const head = git(f.root, 'rev-parse', 'HEAD'), alias = f.root[0].toLowerCase() + f.root.slice(1);
+    await prepareRepository(alias); await prepareRepository(f.root.toUpperCase());
+    assert.equal(git(f.root, 'rev-parse', 'HEAD'), head);
+    f.ready(); const value = await f.imports.create({ path: alias });
+    assert.equal(value.path, fs.realpathSync.native(f.root));
+    await f.imports.build(value.id, {}); const ready = await settled(f.imports, value.id);
+    assert.equal(ready.phase, 'ready', ready.error);
+    const nested = path.join(alias, 'nested'); fs.mkdirSync(nested);
+    await assert.rejects(prepareRepository(nested), /parent Git/);
+    assert.deepEqual(fs.readdirSync(nested), []);
+  } finally { t.after(f.close); }
+});
+
+test('the desktop opens a folder as a paper at once and asks only which of several main files to compile', async t => {
   const f = fixture();
   try {
     const projects = new Map<string, { id: string; name: string; path: string; createdAt: number }>();
@@ -220,10 +252,10 @@ test('the desktop opens a folder as a paper at once and asks only which of sever
     const nested = path.join(f.root, 'chapter'); fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'main.tex'), source);
     await assert.rejects(openFolder({ path: nested }, known, register), /parent Git/);
     assert.deepEqual(fs.readdirSync(nested), ['main.tex']);
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
-test('repair runs once, preserves baseline and retries compilation; unavailable helpers leave a recoverable import', async () => {
+test('repair runs once, preserves baseline and retries compilation; unavailable helpers leave a recoverable import', async t => {
   const f = fixture();
   try {
     fs.writeFileSync(path.join(f.root, 'main.tex'), source);
@@ -235,23 +267,22 @@ test('repair runs once, preserves baseline and retries compilation; unavailable 
     await f.imports.build(value.id, {}, async () => { throw new Error('Sign in to an assistant.'); });
     assert.match((await settled(f.imports, value.id)).error!, /Sign in/);
     assert.equal((await f.imports.finish(value.id, async (root, name) => ({ id: 'p', path: root, name, createdAt: 1 }))).path, f.root);
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });
 
 test('a real imported paper compiles with the manuscript builder', { timeout: 60000 }, async t => {
   try { execFileSync('latexmk', ['--version']); execFileSync('pdflatex', ['--version']); } catch { t.skip('needs TeX Live'); return; }
   const f = fixture();
   try {
-    const imports = new PaperImports(new Manuscripts(), path.join(f.directory, 'real'));
+    const imports = f.track(new PaperImports(f.trackManuscripts(new Manuscripts()), path.join(f.directory, 'real')));
     const value = await imports.create({ zip: archive('main.tex').toString('base64') });
-    // A real TeX build can exceed the mock tests' six-second wait on busy CI
-    // or while packaging the desktop app. Do not remove its files mid-build.
+    // A real TeX build needs extra time on busy CI or during desktop packaging.
     await imports.build(value.id, {}); const ready = await settled(imports, value.id, 45000); assert.equal(ready.phase, 'ready', ready.error);
     // Opening the paper reuses the import's PDF instead of compiling it again.
     const builds = path.join(ready.path, '.git/latex-review/cache/builds'), count = () => fs.readdirSync(builds).filter(name => /^[0-9a-f]{32}$/.test(name)).length;
-    const before = count(), opened = new Manuscripts();
+    const before = count(), opened = f.trackManuscripts(new Manuscripts());
     let state = await opened.state('paper', ready.path);
     for (let attempt = 0; state.build.status === 'building' && attempt < 400; attempt++) { await new Promise(resolve => setTimeout(resolve, 25)); state = await opened.state('paper', ready.path); }
     assert.equal(state.build.status, 'ready', state.build.error); assert.equal(count(), before);
-  } finally { f.close(); }
+  } finally { t.after(f.close); }
 });

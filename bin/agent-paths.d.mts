@@ -1,3 +1,13 @@
+import type { SpawnOptions, SpawnSyncOptions, ChildProcess } from 'node:child_process';
+export const WINDOWS: boolean;
+export function importLoader(file: string): string;
+export function tarCommand(): string;
 export function agentDirs(env?: NodeJS.ProcessEnv): string[];
 export function agentPath(env?: NodeJS.ProcessEnv): string;
 export function findExecutable(command: string, env?: NodeJS.ProcessEnv): string | null;
+export function which(command: string, env?: NodeJS.ProcessEnv): string | null;
+export function spawnCommand(command: string, args: string[], options?: SpawnOptions): ChildProcess;
+export function spawnSyncCommand(command: string, args: string[], options?: SpawnSyncOptions): import('node:child_process').SpawnSyncReturns<Buffer>;
+export function execCommand(command: string, args: string[], options?: { timeout?: number; env?: NodeJS.ProcessEnv; cwd?: string }): Promise<string>;
+export function killTree(pid: number, signal?: NodeJS.Signals): void;
+export function linkDirectory(target: string, link: string): void;

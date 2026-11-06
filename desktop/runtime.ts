@@ -1,11 +1,31 @@
+import { envPath, terminateTree } from './platform.mjs';
+import { pathToFileURL } from 'node:url';
 import { agentDirs } from './agent-paths.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
+
+// Installers update the registry, but a running Electron process retains its
+// old PATH even across app.relaunch(). Use the same refresh for checks and launch.
+export async function refreshWindowsPath(inherited = process.env): Promise<NodeJS.ProcessEnv> {
+  if (process.platform !== 'win32') return inherited;
+  try {
+    const { stdout } = await promisify(execFile)(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+      ['-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Environment]::GetEnvironmentVariable("Path","Machine")+";"+[Environment]::GetEnvironmentVariable("Path","User")'], { windowsHide: true, timeout: 8000, maxBuffer: 65536 });
+    const paths = Object.keys(inherited).filter(key => key.toLowerCase() === 'path').map(key => inherited[key]);
+    return { ...inherited, PATH: [...paths, stdout.trim()].filter(Boolean).join(';') };
+  } catch { return inherited; }
+}
 
 export function backendEnvironment(node: string, root: string, data: string, inherited = process.env) {
+  // Windows may supply both Path and PATH. Keep every inherited directory
+  // before emitting a single canonical key for the backend.
+  const inheritedPath = process.platform === 'win32'
+    ? Object.keys(inherited).filter(key => key.toLowerCase() === 'path').map(key => inherited[key] || '').join(path.delimiter)
+    : envPath(inherited);
   const home = os.homedir();
   const nvm = path.join(inherited.NVM_DIR || path.join(home, '.nvm'), 'versions/node');
   let nodeBins: string[] = [];
@@ -13,7 +33,7 @@ export function backendEnvironment(node: string, root: string, data: string, inh
   // An installed release has its dependencies beside it in node_modules.
   const hoisted = path.basename(path.dirname(root)) === 'node_modules' ? [path.join(path.dirname(root), '.bin')] : [];
   const directories = [path.dirname(node), path.join(root, 'node_modules/.bin'), ...hoisted,
-    ...(inherited.PATH || '').split(path.delimiter), ...agentDirs(inherited),
+    ...inheritedPath.split(path.delimiter), ...agentDirs(inherited),
     ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin', '.volta/bin', '.asdf/shims'].map(dir => path.join(home, dir)), ...nodeBins,
     '/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
   const env = { ...inherited, PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),
@@ -22,8 +42,13 @@ export function backendEnvironment(node: string, root: string, data: string, inh
   // The backend is ordinary Node, even when Electron itself was started by a tool.
   for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'PAPILOT_REVIEW_ENGINE', 'PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX',
     'PAPILOT_DESKTOP_BUNDLE', 'PAPILOT_DESKTOP_FINGERPRINT']) delete (env as NodeJS.ProcessEnv)[key];
+  if (process.platform === 'win32') for (const key of Object.keys(env)) if (key !== 'PATH' && key.toLowerCase() === 'path') delete (env as NodeJS.ProcessEnv)[key];
   return env;
 }
+
+// Callers must not replace a database or launch another server while its
+// previous writer may still be running.
+export class BackendStopError extends Error {}
 
 export function startBackend(options: { node: string; root: string; data: string; log: string; env: NodeJS.ProcessEnv }) {
   fs.mkdirSync(options.data, { recursive: true, mode: 0o700 });
@@ -34,8 +59,8 @@ export function startBackend(options: { node: string; root: string; data: string
   const loaders = [path.join(options.root, 'node_modules/tsx/dist/loader.mjs'), path.join(path.dirname(options.root), 'tsx/dist/loader.mjs')];
   let child: ChildProcess;
   try {
-    child = spawn(options.node, ['--import', loaders.find(file => fs.existsSync(file)) || loaders[0], path.join(options.root, 'src/server/start.ts')], {
-      cwd: options.root, env: options.env, stdio: ['ignore', fd, fd, 'ipc'], detached: process.platform !== 'win32',
+    child = spawn(options.node, ['--import', pathToFileURL(loaders.find(file => fs.existsSync(file)) || loaders[0]).href, path.join(options.root, 'src/server/start.ts')], {
+      cwd: options.root, env: options.env, windowsHide: true, stdio: ['ignore', fd, fd, 'ipc'], detached: process.platform !== 'win32',
     });
   } finally { fs.closeSync(fd); }
   const ready = new Promise<string>((resolve, reject) => {
@@ -51,18 +76,49 @@ export function startBackend(options: { node: string; root: string; data: string
     };
     child.on('message', message); child.once('error', fail); child.once('exit', exited);
   });
-  async function stop() {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    await new Promise<void>(resolve => {
+  let stopping: Promise<void> | undefined;
+  function stop() {
+    return stopping ??= new Promise<void>((resolve, reject) => {
+      if (!child.pid || child.exitCode !== null || child.signalCode !== null) return resolve();
+      let forced: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error?: Error) => {
+        clearTimeout(timer); clearTimeout(forced);
+        child.off('exit', ended); child.off('close', ended);
+        if (error) reject(error); else resolve();
+      };
+      const ended = () => finish();
+      const terminate = () => { try { terminateTree(child); } catch { /* The deadline still forces termination. */ } };
       const timer = setTimeout(() => {
-        try { if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already stopped */ }
-        resolve();
+        try { terminateTree(child, 'SIGKILL'); } catch { /* Report failure if exit cannot be confirmed. */ }
+        // Rollback may replace the database immediately after stop resolves.
+        // Sending SIGKILL alone does not confirm that the process has exited.
+        forced = setTimeout(() => finish(new BackendStopError('The local server did not exit after termination.')), 4000);
       }, 4000);
-      child.once('exit', () => { clearTimeout(timer); resolve(); });
-      child.kill('SIGTERM');
+      child.once('exit', ended); child.once('close', ended);
+      if (child.connected) {
+        try { child.send({ type: 'papilot:shutdown' }, error => { if (error) terminate(); }); }
+        catch { terminate(); }
+      } else terminate();
     });
   }
-  return { child, ready, stop };
+  return { child, ready, stop, idle: () => idleCheck(child, message => new Promise<void>((resolve, reject) => {
+    child.send(message, error => { if (error) reject(error); else resolve(); });
+  })) };
+}
+
+export function idleCheck(child: ChildProcess, send: (message: { type: string; id: string }) => void | Promise<void>) {
+  return new Promise<boolean>((resolve, reject) => {
+    const id = randomUUID();
+    const timer = setTimeout(() => { child.off('message', receive); reject(new Error('Could not check running tasks. Try again after Papilot responds.')); }, 5000);
+    const receive = (message: any) => {
+      if (message?.type !== 'papilot:can-switch' || message.id !== id) return;
+      clearTimeout(timer); child.off('message', receive); resolve(message.busy === false);
+    };
+    const fail = (error: unknown) => { clearTimeout(timer); child.off('message', receive); reject(error); };
+    child.on('message', receive);
+    try { void Promise.resolve(send({ type: 'papilot:can-switch', id })).catch(fail); }
+    catch (error) { fail(error); }
+  });
 }
 
 // Updates download only Papilot's own code (a layer, see scripts/desktop-layer.mjs)
@@ -90,7 +146,7 @@ export function linkBundle(root: string, bundle: string) {
     if (!fs.existsSync(target) || !fs.existsSync(path.dirname(link))) continue;
     try { if (fs.readlinkSync(link) === target) continue; } catch { /* absent or not a link */ }
     fs.rmSync(link, { recursive: true, force: true });
-    fs.symlinkSync(target, link, 'dir');
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
   }
 }
 // A layer this installer can run, downloaded by the updater.
@@ -123,6 +179,7 @@ export async function startServer(data: string, bundle: Bundle, launch: (root: s
   if (!chosen) { fs.rmSync(active, { force: true }); await launch(bundle.root); return bundle.root; }
   try { linkBundle(chosen.root, bundle.root); await launch(chosen.root); return chosen.root; }
   catch (error) {
+    if (error instanceof BackendStopError) throw error;
     console.error(`Papilot ${chosen.version} did not start:`, error);
     fs.rmSync(active, { force: true });
     writeJson(status, { ...readJson(status), phase: 'failed', checkedAt: Date.now(), error: STARTUP_FAILED, pid: process.pid });
@@ -164,6 +221,7 @@ export async function switchServer(data: string, bundle: Bundle, request: unknow
       removeLayers(data, target.root === bundle.root ? undefined : target.root);
       return target.root;
     } catch (error) {
+      if (error instanceof BackendStopError) throw error;
       if (previous) writeJson(paths.active, previous); else fs.rmSync(paths.active, { force: true });
       if (backedUp) {
         for (const suffix of ['-wal', '-shm']) fs.rmSync(database + suffix, { force: true });

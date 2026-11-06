@@ -2,17 +2,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import http from 'node:http';
 import { buildLayer } from './desktop-layer.mjs';
+import { findCommand } from '../engine/src/core/platform.mjs';
 import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { selectOption, selectedValue } from './select.mjs';
 import { checkDesktopNotifications } from './check-desktop-notifications.mjs';
 
 const require = createRequire(import.meta.url);
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-test-'));
+if (process.platform === 'win32') fs.writeFileSync(path.join(data, 'environment.json'), JSON.stringify({ kind: 'native' }));
 const env = { ...process.env, PAPILOT_DESKTOP_DATA: data, PAPILOT_DESKTOP_NODE: process.execPath, PAPILOT_UPDATE_PROBE: '1', LANG: 'en_US.UTF-8' };
 delete env.ELECTRON_RUN_AS_NODE;
 const packaged = process.env.PAPILOT_DESKTOP_EXECUTABLE;
@@ -22,12 +25,16 @@ const base = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 const version = packaged ? JSON.parse(fs.readFileSync(path.join(resources, 'server/package.json'), 'utf8')).version : base;
 if (packaged) {
   // Exercise the bundled tools with no development Node on PATH.
-  env.PATH = '/usr/bin:/bin';
-  const node = path.join(resources, 'runtime/bin/node'), server = path.join(resources, 'server');
+  for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') delete env[key];
+  const git = process.platform === 'win32' && findCommand('git');
+  env.PATH = process.platform === 'win32'
+    ? [path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'), ...(git ? [path.dirname(git)] : [])].join(path.delimiter)
+    : '/usr/bin:/bin';
+  const node = path.join(resources, 'runtime/bin', process.platform === 'win32' ? 'node.exe' : 'node'), server = path.join(resources, 'server');
   assert.match(execFileSync(node, ['--version'], { encoding: 'utf8' }), /^v\d+\./);
   assert.match(execFileSync(node, [path.join(resources, 'runtime/lib/node_modules/npm/bin/npm-cli.js'), '--version'], { encoding: 'utf8' }), /^\d+\./);
   assert.match(execFileSync(node, [path.join(server, 'node_modules/@openai/codex/bin/codex.js'), '--version'], { encoding: 'utf8' }), /codex-cli/);
-  const help = execFileSync(node, ['--import', path.join(server, 'node_modules/tsx/dist/loader.mjs'), path.join(server, 'engine/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
+  const help = execFileSync(node, ['--import', pathToFileURL(path.join(server, 'node_modules/tsx/dist/loader.mjs')).href, path.join(server, 'engine/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
   assert.match(help, /Usage:/);
 }
 // Keep Chromium's sandbox in native/CI checks. The opt-out is only for a
@@ -61,9 +68,31 @@ try {
   await page.getByRole('button', { name: /^(Hide task list|隐藏任务列表)$/ }).click();
   const restoreSidebar = page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ });
   await expect(restoreSidebar).toBeVisible();
-  assert.ok((await restoreSidebar.boundingBox()).x >= (process.platform === 'linux' ? 112 : 92), 'Controls never overlap the window buttons when the sidebar is hidden');
+  // Loading the paper can briefly replace this button after the visibility check.
+  // Wait for the replacement while preserving each platform's window controls.
+  const sidebarLeft = () => restoreSidebar.boundingBox().then(box => box?.x ?? null);
+  if (process.platform === 'win32') await expect.poll(async () => await sidebarLeft() ?? Infinity).toBeLessThan(92);
+  else await expect.poll(async () => await sidebarLeft() ?? -Infinity, {
+    message: 'Controls never overlap the window buttons when the sidebar is hidden',
+  }).toBeGreaterThanOrEqual(process.platform === 'linux' ? 112 : 92);
   await restoreSidebar.click();
-  if (process.platform === 'linux') {
+  if (process.platform === 'win32') {
+    const buttons = page.locator('.desktop-window-buttons button');
+    await expect(buttons.nth(0)).toHaveAttribute('aria-label', /^(Minimize window|最小化窗口)$/);
+    await expect(buttons.nth(1)).toHaveAttribute('aria-label', /^(Maximize or restore window|最大化或还原窗口)$/);
+    await expect(buttons.nth(2)).toHaveAttribute('aria-label', /^(Close window|关闭窗口)$/);
+    const close = await buttons.nth(2).boundingBox();
+    assert.equal(close.x + close.width, await page.evaluate(() => innerWidth), 'Close is at the right window edge');
+    const overlap = await page.evaluate(() => {
+      const controls = document.querySelector('.desktop-window-buttons').getBoundingClientRect();
+      return [...document.querySelectorAll('button,a,input,select')].filter(element => !element.closest('.desktop-window-buttons')).some(element => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.top < controls.bottom && box.bottom > controls.top && box.right > controls.left && box.left < controls.right;
+      });
+    });
+    assert.equal(overlap, false, 'Toolbar controls stay clear of the Windows window buttons');
+  }
+  if (process.platform !== 'darwin') {
     const maximize = page.getByRole('button', { name: /^(Maximize or restore window|最大化或还原窗口)$/ });
     await maximize.click();
     await expect.poll(() => application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
@@ -73,6 +102,22 @@ try {
   await expect(page.locator('.pdf-viewer canvas, .pdfViewer canvas').first()).toBeVisible({ timeout: 30000 });
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-demo-${packaged ? 'packaged' : 'dev'}.png` });
+  if (process.platform === 'win32') {
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 700));
+    await expect.poll(() => page.evaluate(() => innerWidth)).toBe(900);
+    await expect(page.locator('.sidebar')).toBeHidden();
+    await expect.poll(async () => (await page.locator('.main').boundingBox()).x).toBe(0);
+    await page.screenshot({ path: 'test-results/desktop-windows-compact.png' });
+    await page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ }).click();
+    await page.locator('.sidebar').getByRole('button', { name: /^(Version Management|版本管理)/ }).click();
+    await expect(page.locator('.git-workspace')).toBeVisible();
+    await expect(page.locator('.sidebar')).toBeHidden();
+    await page.screenshot({ path: 'test-results/desktop-windows-version-management.png' });
+    await page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ }).click();
+    await page.locator('.sidebar').getByRole('button', { name: /^(Manuscript|稿件)/ }).click();
+    await expect(page.locator('.pdf-toolbar')).toBeVisible();
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1380, 900));
+  }
   assert.ok(fs.existsSync(path.join(data, 'papilot.sqlite')), 'The bundled Node runtime can open SQLite');
   const rejected = await fetch(`${origin}/api/state`, { headers: { Origin: 'https://example.com' } });
   assert.equal(rejected.status, 403, 'The ephemeral port still enforces origin checks');
@@ -140,7 +185,7 @@ try {
   await page.getByRole('menuitem', { name: /^(Edit local-paper|编辑 local-paper)$/ }).click();
   const paperDialog = page.getByRole('dialog', { name: /^(Edit paper|编辑论文)$/ });
   const location = paperDialog.getByRole('group', { name: /^(Location|位置)$/ });
-  await expect(location).toContainText(localPaper.split('/').pop());
+  await expect(location).toContainText(path.basename(localPaper));
   assert.equal(await paperDialog.getByRole('textbox').count(), 1, 'Only the paper name is typed');
   await pick(twoMains);
   await location.getByRole('button', { name: /^(Change…|更改…)$/ }).click();
@@ -176,12 +221,12 @@ try {
     const moved = await application.firstWindow({ timeout: 90000 });
     await moved.waitForURL('http://127.0.0.1:*/');
     assert.notEqual(new URL(moved.url()).origin, origin, 'An occupied saved port falls back to a free port');
-    if (process.platform === 'linux') {
+    if (process.platform !== 'darwin') {
       const closed = application.waitForEvent('close');
       await moved.getByRole('button', { name: /^(Close window|关闭窗口)$/ }).click();
       await closed;
       const movedOrigin = new URL(moved.url()).origin;
-      await assert.rejects(fetch(`${movedOrigin}/api/health`, { signal: AbortSignal.timeout(5000) }), 'Closing the Linux window stops the backend');
+      await assert.rejects(fetch(`${movedOrigin}/api/health`, { signal: AbortSignal.timeout(5000) }), 'Closing the window stops the backend');
     } else await application.close();
     application = null;
   } finally { await new Promise(resolve => occupied.close(resolve)); }

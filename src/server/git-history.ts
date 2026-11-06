@@ -8,7 +8,9 @@ import { gitStatus } from './manuscript.ts';
 const exec = promisify(execFile);
 async function git(root: string, args: string[], env: NodeJS.ProcessEnv = {}) {
   try {
-    return (await exec('git', args, { cwd: root, timeout: 30_000, maxBuffer: 32 * 1024 * 1024,
+    // Restoring a version writes working-tree files; without this Git's line
+    // ending conversion would make them differ from the blob being restored.
+    return (await exec('git', ['-c', 'core.autocrlf=false', ...args], { cwd: root, timeout: 30_000, maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env, GIT_LITERAL_PATHSPECS: '1', GIT_TERMINAL_PROMPT: '0', ...env } })).stdout;
   } catch (error) {
     const failure = error as { stderr?: string; message: string };
@@ -148,7 +150,17 @@ function copyCheckoutEntry(from: string, to: string, name: string) {
     if (!fs.existsSync(parent)) fs.mkdirSync(parent);
     if (!fs.lstatSync(parent).isDirectory()) throw new Error('Save current changes before restoring a version.');
   }
-  if (stat.isSymbolicLink()) fs.symlinkSync(fs.readlinkSync(source), target);
+  if (stat.isSymbolicLink()) {
+    const link = fs.readlinkSync(source);
+    try { fs.symlinkSync(link, target); }
+    catch (error) {
+      // Windows needs Developer Mode or elevation for file links. Git checks
+      // such links out as plain files holding the target; do the same.
+      if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM')
+        fs.writeFileSync(target, link, 'utf8');
+      else throw error;
+    }
+  }
   else if (stat.isFile()) { fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE); fs.chmodSync(target, stat.mode); }
   else throw new Error('Save current changes before restoring a version.');
 }

@@ -29,9 +29,9 @@ class Failure extends Error {
 export const emit = (value: unknown) => console.log(JSON.stringify(value));
 function openBrowser(url: string) {
   const child = spawn(
-    process.platform === "darwin" ? "open" : "xdg-open",
-    [url],
-    { detached: true, stdio: "ignore" },
+    process.platform === "darwin" ? "open" : process.platform === "win32" ? "rundll32.exe" : "xdg-open",
+    process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url],
+    { detached: true, windowsHide: true, stdio: "ignore" },
   );
   child.on("error", () => {});
   child.unref();
@@ -40,16 +40,16 @@ export async function doctor() {
   const texHint =
     process.platform === "darwin"
       ? "Install MacTeX, or BasicTeX with latexmk."
-      : "Install TeX Live, e.g. apt install latexmk texlive-latex-recommended.";
+      : process.platform === "win32" ? "Install TeX Live for Windows (including latexmk)." : "Install TeX Live, e.g. apt install latexmk texlive-latex-recommended.";
   const checks: { name: string; ok: boolean; detail: string; hint?: string }[] =
     [];
   const check = (name: string, ok: boolean, detail: string, hint: string) =>
     checks.push({ name, ok, detail, ...(ok ? {} : { hint }) });
   check(
     "platform",
-    process.platform !== "win32",
+    ["darwin", "linux", "win32"].includes(process.platform),
     process.platform,
-    "Use macOS, Linux or WSL.",
+    "Use macOS, Linux or Windows.",
   );
   check(
     "node",
