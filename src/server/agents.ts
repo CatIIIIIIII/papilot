@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { AccountInfo, ModelInfo, Options, PermissionResult, SDKMessage, SDKRateLimitInfo, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { AGENT_NAMES } from '../shared.ts';
+import { AGENT_NAMES, type TaskPermissions, type TaskPermissionOption } from '../shared.ts';
 import { DATA, ROOT } from './paths.ts';
 import { imageType } from './attachments.ts';
 
@@ -21,6 +21,8 @@ import { imageType } from './attachments.ts';
 // (queueing, approvals, pausing, review rounds) stays in one place.
 export interface AgentRuntime extends EventEmitter {
   ready: boolean;
+  permissionOptions?(): TaskPermissionOption[];
+  taskPermissionConfig?(value: TaskPermissions, cwd: string): Promise<{ thread: Record<string, unknown>; turn: Record<string, unknown> }>;
   // Whether the agent is present on this host (its CLI, SDK credentials or
   // key), checked without starting it. Agents that are not found are hidden.
   detect?(): boolean;
@@ -38,7 +40,7 @@ export { AGENT_NAMES };
 import { agentDirs, findExecutable, agentPath } from '../../bin/agent-paths.mjs';
 export { agentDirs, findExecutable };
 
-export interface Thread { readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
+export interface Thread { permissions?: TaskPermissions; readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
 export interface Item { id: string; type: string; [key: string]: unknown }
 
@@ -60,12 +62,13 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
       const model = params.model || known?.model || null;
-      this.threads.set(id, { readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      this.threads.set(id, { permissions: params.taskPermissions, readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
       return { thread: { id }, model };
     }
     if (method === 'turn/start') {
       const thread = this.threads.get(String(params.threadId));
       if (!thread) throw new Error('Start or resume the thread before starting a turn.');
+      if (params.taskPermissions !== undefined) thread.permissions = params.taskPermissions;
       if (params.model !== undefined) thread.model = params.model || null;
       const text = (params.input || []).filter((part: { text?: unknown }) => typeof part.text === 'string').map((part: { text: string }) => part.text).join('\n');
       const images = (params.input || []).filter((part: { type?: string; path?: string }) => part.type === 'localImage' && typeof part.path === 'string').map((part: { path: string }) => part.path);
@@ -176,6 +179,24 @@ interface ClaudeLogin { loggedIn?: boolean; authMethod?: string; apiProvider?: s
 type Launch = (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess;
 
 export class ClaudeAgent extends Adapter {
+  permissionOptions(): TaskPermissionOption[] {
+    return [
+      { value: 'workspace', label: 'Sandboxed edits', detail: this.cli
+        ? 'Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.'
+        : 'Automatically approve edits and sandboxed commands. Ask before other actions.' },
+      { value: 'full', label: 'Bypass permissions', detail: 'Disable the command sandbox and bypass tool approvals, subject to managed settings.' },
+    ];
+  }
+  async taskPermissionConfig(value: TaskPermissions) {
+    return { thread: { taskPermissions: value }, turn: { taskPermissions: value } };
+  }
+  private nativePermissions(thread: Thread) {
+    const full = !thread.readOnly && thread.permissions === 'full';
+    return { permissionMode: full ? 'bypassPermissions' as const : 'acceptEdits' as const,
+      ...(full ? { allowDangerouslySkipPermissions: true } : {}),
+      sandbox: full ? { enabled: false } : { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
+        ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } };
+  }
   protected name = 'Claude';
   protected info: { account: AccountInfo | null; models: ModelInfo[]; model: string | null } = { account: null, models: [], model: null };
   private rateLimits = new Map<string, SDKRateLimitInfo>();
@@ -318,11 +339,12 @@ export class ClaudeAgent extends Adapter {
         promptFile = path.join(promptDirectory, 'instructions.txt');
         fs.writeFileSync(promptFile, thread.instructions, { mode: 0o600 });
       }
+      const permissions = this.nativePermissions(thread);
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
         ...(thread.readOnly ? ['--tools', ''] : []),
         ...(thread.webSearch ? ['--allowedTools', 'WebSearch,WebFetch'] : []),
-        '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
-        '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } }),
+        '--permission-mode', permissions.permissionMode, ...(permissions.allowDangerouslySkipPermissions ? ['--dangerously-skip-permissions'] : []), '--permission-prompts', 'none', '--setting-sources', thread.readOnly ? '' : 'project',
+        '--settings', JSON.stringify({ sandbox: permissions.sandbox }),
         // A question cannot be answered in -p; Claude asks in its reply instead.
         '--disallowedTools', 'AskUserQuestion', ...(promptFile ? ['--append-system-prompt-file', promptFile] : []),
         ...(thread.model ? ['--model', thread.model] : []), ...(effort ? ['--effort', effort] : []),
@@ -341,7 +363,7 @@ export class ClaudeAgent extends Adapter {
         this.translate(turn, thread, message as SDKMessage, tools, texts, value => { error = value; });
       });
       const code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Claude could not use ${[...new Set(denied)].join(', ')}: with claude -p, Papilot cannot ask for approval, so anything outside the worktree and Claude Code's sandbox is declined.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Claude could not use ${[...new Set(denied)].join(', ')}: with claude -p, Papilot cannot ask for approval, so tools requiring approval are declined; managed restrictions also still apply.` });
       if (stopped) this.finish(turn, 'interrupted');
       else if (error) this.finish(turn, 'failed', error);
       else if (code !== 0) this.finish(turn, 'failed', stderr.trim().split('\n').slice(-3).join(' ') || `claude exited with code ${code}.`);
@@ -365,11 +387,10 @@ export class ClaudeAgent extends Adapter {
         // The thread ID is the Claude session ID, so a later turn resumes it.
         ...(thread.started ? { resume: turn.threadId } : { sessionId: turn.threadId }),
         systemPrompt: { type: 'preset', preset: 'claude_code', append: thread.instructions },
-        settingSources: thread.readOnly ? [] : ['project'], permissionMode: 'acceptEdits', ...(thread.readOnly ? { tools: [] } : {}),
+        settingSources: thread.readOnly ? [] : ['project'], ...this.nativePermissions(thread), ...(thread.readOnly ? { tools: [] } : {}),
         ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}),
-        sandbox: { enabled: true, autoAllowBashIfSandboxed: true, ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) },
         canUseTool: (name, input, { signal, title, decisionReason }) => new Promise<PermissionResult>(resolve => {
-          if (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)) {
+          if (!thread.readOnly && ((thread.permissions === 'full' && name !== 'AskUserQuestion') || (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)))) {
             resolve({ behavior: 'allow', updatedInput: input });
             return;
           }

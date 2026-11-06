@@ -1289,7 +1289,13 @@
   "Task permissions": "任務權限",
   "Workspace access": "工作區權限",
   "Full access": "完整存取",
-  "Edit the task workspace with network access; other actions may need approval.": "可編輯任務工作區並連網；其他操作可能需要批准。",
-  "Access files, use the network, and run commands without individual approval.": "允許存取檔案、連網查找並執行命令，無需逐項批准。",
-  "Pause the task before changing permissions.": "請先暫停任務，再修改權限。"
+  "Pause the task before changing permissions.": "請先暫停任務，再修改權限。",
+  "Sandboxed edits": "沙箱內編輯",
+  "Bypass permissions": "略過權限檢查",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "可寫入工作區及設定的可寫目錄，允許連網。超出沙箱限制前請求核准。",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "關閉沙箱並無需逐項核准即可執行工具，仍受管理設定約束。",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "自動核准編輯和沙箱內命令。命令列非互動模式會拒絕其他權限請求。",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "自動核准編輯和沙箱內命令。其他操作需請求核准。",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "關閉命令沙箱並略過工具核准，仍受管理設定約束。",
+  "Applies to the next message.": "對下一則訊息生效。"
 }

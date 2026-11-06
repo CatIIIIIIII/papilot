@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
+import { Codex } from '../src/server/codex.ts';
+import { ClaudeAgent } from '../src/server/agents.ts';
 import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { selectOption, selectedValue } from './select.mjs';
 
@@ -16,11 +18,11 @@ const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1
 const page = await context.newPage(), errors = [];
 page.on('pageerror', error => errors.push(error.message));
 const task = { id: 'fixture-task', projectId: 'paper', agent: 'codex', name: 'p-task', title: 'Revise the introduction', instructions: 'Keep the meaning.', worktree: '/tmp/paper', threadId: 'thread', turnId: 'turn', model: null, effort: null, status: 'running', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };
-const runtime = { connected: true, authenticated: true, account: null, error: null, models: [
+const runtime = { permissionOptions: new Codex().permissionOptions(), connected: true, authenticated: true, account: null, error: null, models: [
   { id: 'fast-model', name: 'Fast model', isDefault: true, efforts: ['low', 'medium', 'high'], defaultEffort: 'medium' },
   { id: 'deep-model', name: 'Deep model', isDefault: false, efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high', fastMode: { serviceTier: 'priority', description: 'Faster responses' } },
 ] };
-const snapshot = { version: 'test', csrf: 'test', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper', createdAt: 1 }], tasks: [task], requests: [], runtime, runtimes: { codex: runtime, claude: { ...runtime, models: [{ id: 'opus', name: 'Opus', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high' }] } } };
+const snapshot = { version: 'test', csrf: 'test', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper', createdAt: 1 }], tasks: [task], requests: [], runtime, runtimes: { codex: runtime, claude: { ...runtime, permissionOptions: Object.assign(new ClaudeAgent(), { cli: '/fixture/claude' }).permissionOptions(), models: [{ id: 'opus', name: 'Opus', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high' }] } } };
 const modelChanges = [], messages = [];
 let modelFailure = false, holdModel, releaseModel;
 let permissionFailure = false; const permissionChanges = [];
@@ -79,7 +81,17 @@ try {
   await expect(page.getByText('Permission change failed.', { exact: true })).toBeVisible();
   await expect(picker).toHaveAttribute('data-value', 'workspace');
   permissionFailure = false;
-  task.agent = 'cursor'; snapshot.runtimes.cursor = runtime;
+  task.agent = 'claude';
+  await page.reload(); await picker.click();
+  await expect(page.getByRole('option', { name: /Sandboxed edits/ })).toBeVisible();
+  await expect(page.getByText(/Other permission requests are denied in print mode/)).toBeVisible();
+  await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-claude.png' });
+  await picker.press('Escape');
+  task.agent = 'glm'; snapshot.runtimes.glm = { ...runtime, permissionOptions: new ClaudeAgent().permissionOptions() };
+  await page.reload(); await picker.click();
+  await expect(page.getByText(/Ask before other actions/)).toBeVisible();
+  await picker.press('Escape');
+  task.agent = 'cursor'; snapshot.runtimes.cursor = { ...runtime, permissionOptions: [] };
   await page.reload(); await expect(picker).toHaveCount(0);
   task.agent = 'codex'; task.mode = 'review';
   await page.reload(); await expect(picker).toHaveCount(0);

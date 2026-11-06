@@ -1289,7 +1289,13 @@
   "Task permissions": "작업 권한",
   "Workspace access": "작업 공간 접근",
   "Full access": "전체 접근",
-  "Edit the task workspace with network access; other actions may need approval.": "네트워크를 사용하며 작업 공간을 편집합니다. 다른 작업은 승인이 필요할 수 있습니다.",
-  "Access files, use the network, and run commands without individual approval.": "개별 승인 없이 파일 접근, 네트워크 사용 및 명령 실행을 허용합니다.",
-  "Pause the task before changing permissions.": "권한을 변경하기 전에 작업을 일시 중지하세요."
+  "Pause the task before changing permissions.": "권한을 변경하기 전에 작업을 일시 중지하세요.",
+  "Sandboxed edits": "샌드박스 편집",
+  "Bypass permissions": "권한 확인 생략",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "작업 공간과 설정된 쓰기 경로에서 편집하고 네트워크를 사용합니다. 샌드박스 제한을 넘기 전에 승인을 요청합니다.",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "샌드박스를 끄고 승인 없이 도구를 실행합니다. 관리 설정은 계속 적용됩니다.",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "편집과 샌드박스 명령을 자동 승인합니다. 비대화형 모드에서는 다른 권한 요청을 거부합니다.",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "편집과 샌드박스 명령을 자동 승인합니다. 다른 작업은 승인을 요청합니다.",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "명령 샌드박스를 끄고 도구 승인을 생략합니다. 관리 설정은 계속 적용됩니다.",
+  "Applies to the next message.": "다음 메시지부터 적용됩니다."
 }

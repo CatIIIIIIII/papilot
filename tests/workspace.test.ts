@@ -10,7 +10,7 @@ import { Store } from '../src/server/store.ts';
 import { Workspace, accountUsage, acceptedFiles, agentModel, lightModel } from '../src/server/workspace.ts';
 import { findSkill } from '../src/server/skills.ts';
 import { reviewInstructions } from '../src/conversation.ts';
-import { RpcResponseError, type Codex } from '../src/server/codex.ts';
+import { RpcResponseError, Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
 import { AGENT_IDS, type PendingReview, type Run, type Task } from '../src/shared.ts';
 
@@ -24,6 +24,11 @@ const feedback = { cursor: 7, feedback: [{ body: 'Preserve the boundary conditio
 const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 
 class FakeCodex extends EventEmitter {
+  permissionOptions = Codex.prototype.permissionOptions;
+  async taskPermissionConfig(value: 'workspace' | 'full') {
+    return { thread: { sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write', approvalPolicy: value === 'full' ? 'never' : 'on-request' },
+      turn: { sandboxPolicy: { type: value === 'full' ? 'dangerFullAccess' : 'workspaceWrite' }, approvalPolicy: value === 'full' ? 'never' : 'on-request' } };
+  }
   ready = false;
   calls: { method: string; params: any }[] = [];
   replies: { id: string | number; result: unknown }[] = [];
@@ -2187,8 +2192,8 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
       }
       const turn = f.codex.calls.find(c => c.method === 'turn/start');
       assert.ok(turn);
-      assert.equal(Object.hasOwn(turn.params, 'sandboxPolicy'), false,
-        'inherit the resolved thread sandbox, including configured writable roots and temporary-directory exclusions');
+      assert.equal(turn.params.sandboxPolicy.type, 'workspaceWrite', 'apply the runtime policy even to a loaded conversation');
+      assert.equal(turn.params.approvalPolicy, 'on-request');
     } finally { f.close(); }
   });
 }
@@ -2227,7 +2232,9 @@ for (const permissions of ['full', 'workspace'] as const) {
       assert.equal(resume?.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
       assert.equal(resume?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
       if (permissions === 'full') assert.match(resume?.params.developerInstructions, /authorized commands including SSH/);
-      assert.ok(f.codex.calls.some(call => call.method === 'turn/start'));
+      const turn = f.codex.calls.find(call => call.method === 'turn/start');
+      assert.equal(turn?.params.sandboxPolicy.type, permissions === 'full' ? 'dangerFullAccess' : 'workspaceWrite');
+      assert.equal(turn?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
     } finally { f.close(); }
   });
 }

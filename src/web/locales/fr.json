@@ -1289,7 +1289,13 @@
   "Task permissions": "Autorisations de la tâche",
   "Workspace access": "Accès à l’espace de travail",
   "Full access": "Accès complet",
-  "Edit the task workspace with network access; other actions may need approval.": "Modifie l’espace de travail avec accès au réseau ; les autres actions peuvent nécessiter une autorisation.",
-  "Access files, use the network, and run commands without individual approval.": "Accéder aux fichiers, utiliser le réseau et exécuter des commandes sans approbation individuelle.",
-  "Pause the task before changing permissions.": "Mettez la tâche en pause avant de modifier les autorisations."
+  "Pause the task before changing permissions.": "Mettez la tâche en pause avant de modifier les autorisations.",
+  "Sandboxed edits": "Édition en bac à sable",
+  "Bypass permissions": "Ignorer les autorisations",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "Écrire dans l’espace de travail et les dossiers autorisés, avec accès réseau. Demander avant de dépasser les limites du bac à sable.",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "Désactiver le bac à sable et exécuter les outils sans approbation, sous réserve des paramètres administrés.",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "Approuver automatiquement les modifications et les commandes isolées. Les autres demandes sont refusées en mode non interactif.",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "Approuver automatiquement les modifications et les commandes isolées. Demander pour les autres actions.",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "Désactiver le bac à sable des commandes et ignorer les approbations des outils, sous réserve des paramètres administrés.",
+  "Applies to the next message.": "S’applique au prochain message."
 }

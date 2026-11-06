@@ -1289,7 +1289,13 @@
   "Task permissions": "Permisos de la tarea",
   "Workspace access": "Acceso al espacio de trabajo",
   "Full access": "Acceso completo",
-  "Edit the task workspace with network access; other actions may need approval.": "Edita el espacio de trabajo con acceso a la red; otras acciones pueden requerir aprobación.",
-  "Access files, use the network, and run commands without individual approval.": "Accede a archivos, utiliza la red y ejecuta comandos sin aprobación individual.",
-  "Pause the task before changing permissions.": "Pausa la tarea antes de cambiar los permisos."
+  "Pause the task before changing permissions.": "Pausa la tarea antes de cambiar los permisos.",
+  "Sandboxed edits": "Edición en entorno aislado",
+  "Bypass permissions": "Omitir permisos",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "Escribir en el espacio de trabajo y las rutas configuradas, con acceso a la red. Pedir aprobación antes de superar los límites del entorno aislado.",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "Desactivar el aislamiento y ejecutar herramientas sin aprobación, sujeto a la configuración administrada.",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "Aprobar automáticamente las ediciones y los comandos aislados. Las demás solicitudes se rechazan en modo no interactivo.",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "Aprobar automáticamente las ediciones y los comandos aislados. Pedir aprobación para otras acciones.",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "Desactivar el aislamiento de comandos y omitir aprobaciones de herramientas, sujeto a la configuración administrada.",
+  "Applies to the next message.": "Se aplica al siguiente mensaje."
 }

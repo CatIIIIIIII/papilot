@@ -1289,7 +1289,13 @@
   "Task permissions": "Permessi dell’attività",
   "Workspace access": "Accesso all’area di lavoro",
   "Full access": "Accesso completo",
-  "Edit the task workspace with network access; other actions may need approval.": "Modifica l’area di lavoro con accesso alla rete; altre azioni potrebbero richiedere approvazione.",
-  "Access files, use the network, and run commands without individual approval.": "Accedi ai file, usa la rete ed esegui comandi senza approvazioni individuali.",
-  "Pause the task before changing permissions.": "Metti in pausa l’attività prima di modificare i permessi."
+  "Pause the task before changing permissions.": "Metti in pausa l’attività prima di modificare i permessi.",
+  "Sandboxed edits": "Modifiche in sandbox",
+  "Bypass permissions": "Ignora i permessi",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "Scrivere nello spazio di lavoro e nelle directory configurate, con accesso alla rete. Chiedere prima di superare i limiti della sandbox.",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "Disattivare la sandbox ed eseguire strumenti senza approvazione, nel rispetto delle impostazioni gestite.",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "Approvare automaticamente modifiche e comandi nella sandbox. Le altre richieste vengono rifiutate in modalità non interattiva.",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "Approvare automaticamente modifiche e comandi nella sandbox. Chiedere per le altre azioni.",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "Disattivare la sandbox dei comandi e ignorare le approvazioni degli strumenti, nel rispetto delle impostazioni gestite.",
+  "Applies to the next message.": "Si applica al prossimo messaggio."
 }

@@ -1289,7 +1289,13 @@
   "Task permissions": "Uppgiftsbehörigheter",
   "Workspace access": "Åtkomst till arbetsytan",
   "Full access": "Full åtkomst",
-  "Edit the task workspace with network access; other actions may need approval.": "Redigera uppgiftens arbetsyta med nätverksåtkomst; andra åtgärder kan kräva godkännande.",
-  "Access files, use the network, and run commands without individual approval.": "Kom åt filer, använd nätverket och kör kommandon utan enskilda godkännanden.",
-  "Pause the task before changing permissions.": "Pausa uppgiften innan du ändrar behörigheterna."
+  "Pause the task before changing permissions.": "Pausa uppgiften innan du ändrar behörigheterna.",
+  "Sandboxed edits": "Redigering i sandlåda",
+  "Bypass permissions": "Hoppa över behörighetskontroll",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "Skriv i arbetsytan och konfigurerade skrivbara kataloger, med nätverksåtkomst. Fråga innan sandlådans gränser överskrids.",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "Stäng av sandlådan och kör verktyg utan godkännande, med förbehåll för hanterade inställningar.",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "Godkänn automatiskt redigeringar och kommandon i sandlådan. Andra förfrågningar nekas i icke-interaktivt läge.",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "Godkänn automatiskt redigeringar och kommandon i sandlådan. Fråga före andra åtgärder.",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "Stäng av kommandosandlådan och hoppa över verktygsgodkännanden, med förbehåll för hanterade inställningar.",
+  "Applies to the next message.": "Gäller nästa meddelande."
 }

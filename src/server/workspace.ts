@@ -23,7 +23,7 @@ import { taskCaptionFrom, taskCaptionInstructions } from '../task-caption.ts';
 import { notesInstructions, reviewNotesInstructions, summarizeNotes } from '../notes.ts';
 import { canonicalGroup, groupsWithoutInstructions, parseGroupInstructions, type GroupInstructions } from '../note-groups.ts';
 import { commitChanges, conflictMarkers, gitCommit, gitRemote, gitStatus, mergeConflicts, mergeInProgress } from './manuscript.ts';
-import { AGENT_IDS, isTaskReviewNote, supportsFullTaskAccess } from '../shared.ts';
+import { AGENT_IDS, isTaskReviewNote } from '../shared.ts';
 import type { Task, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Author, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview } from '../shared.ts';
 
 const execute = promisify(execFile);
@@ -189,6 +189,7 @@ export class Workspace extends EventEmitter {
     try {
       await agent.start();
       const account = await agent.request('account/read', { refreshToken: false });
+      runtime.permissionOptions = agent.permissionOptions?.() || [];
       runtime.connected = true;
       runtime.authenticated = Boolean(account.account) || account.requiresOpenaiAuth === false;
       runtime.account = account.account?.email || account.account?.type || (runtime.authenticated ? `Local ${name} configuration` : null);
@@ -470,11 +471,13 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     this.earlyCompletions.delete(task.id); this.earlyRequests.delete(task.id);
     this.store.saveRun({ ...run, status: 'running' });
     this.store.updateTask(task.id, { status: 'running', turnId: null, error: null });
+    const permissions = task.mode !== 'review' ? await agent.taskPermissionConfig?.(task.permissions || 'workspace', task.worktree) : undefined;
+    if (this.active.get(task.id)?.id !== run.id) return;
     if (!task.threadId || !this.loaded.has(task.threadId)) {
       // Codex threads get the view_pdf tool when they start, and keep it when resumed.
       const scope = task.mode === 'review' ? [] : await this.reviewScope(task), codex = this.agentOf(task) === 'codex';
       let viewPdf = task.mode !== 'review' && codex && (task.threadId ? Boolean(task.viewPdf) : !this.noViewPdf);
-      const options = (tool: boolean) => ({ cwd: task.worktree, approvalPolicy: task.permissions === 'full' ? 'never' : 'on-request', sandbox: task.permissions === 'full' ? 'danger-full-access' : 'workspace-write', config: { web_search: 'live', 'sandbox_workspace_write.network_access': true }, developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
+      const options = (tool: boolean) => ({ cwd: task.worktree, approvalPolicy: 'on-request', sandbox: 'workspace-write', ...permissions?.thread, config: { web_search: 'live', 'sandbox_workspace_write.network_access': true }, developerInstructions: this.instructions(task, scope, tool), ...(task.model ? { model: task.model } : {}) });
       let result;
       if (task.threadId) result = await agent.request('thread/resume', { ...options(viewPdf), threadId: task.threadId, excludeTurns: true });
       else {
@@ -501,8 +504,8 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     const model = task.model ? models.find(model => model.id === task.model) : models.find(model => model.isDefault);
     // Explicit defaults replace a previous turn's reasoning override.
     const effort = task.effort || (this.agentOf(task) === 'codex' ? model?.defaultEffort : undefined);
-    // Inherit the thread sandbox to preserve configured writable roots and temporary-directory exclusions.
-    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
+    // Runtime-owned turn overrides also revoke permissions on already-loaded threads.
+    try { result = await agent.request('turn/start', { threadId: task.threadId, input, cwd: task.worktree, ...permissions?.turn, clientUserMessageId: run.id, ...(task.model ? { model: task.model } : {}), ...(effort ? { effort } : {}), ...(this.agentOf(task) === 'codex' && task.serviceTier ? { serviceTier: task.serviceTier } : {}) }); }
     catch (error) {
       if (this.active.get(task.id)?.id !== run.id) return;
       if (error instanceof RpcResponseError) throw error;
@@ -1215,14 +1218,15 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
   }
   private validateTaskPermissions(value: unknown, agent: AgentId, reviewing: boolean) {
     if (value !== 'workspace' && value !== 'full') throw new Error('Invalid task permissions.');
-    if (value === 'full' && (reviewing || !supportsFullTaskAccess(agent))) throw new Error('Full access is only available for Codex, Claude and GLM editing tasks.');
+    if (value === 'full' && (reviewing || !this.agents[agent].permissionOptions?.().some(option => option.value === value))) throw new Error('Full access is only available for Codex, Claude and GLM editing tasks.');
   }
   updateTaskPermissions(taskId: string, permissions: unknown) {
     const task = this.store.task(taskId);
     this.validateTaskPermissions(permissions, this.agentOf(task), task.mode === 'review');
     if (this.active.has(taskId) || BUSY.has(task.status) || task.status === 'queued' || task.pendingRunId || task.pendingBuild || task.pendingReview || this.preparing.has(taskId)) throw new Error('Pause the task and wait for it to finish before changing permissions.');
     if ((task.permissions || 'workspace') === permissions) return task;
-    // Resume the same conversation with the new policy, including when downgrading.
+    // Refresh instructions on resume. Native enforcement happens at turn/start;
+    // clearing this local cache does not unload a Codex thread.
     if (task.threadId) this.loaded.delete(task.threadId);
     return this.store.updateTask(taskId, { permissions: permissions as 'workspace' | 'full' });
   }

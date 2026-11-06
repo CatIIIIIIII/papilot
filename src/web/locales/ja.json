@@ -1289,7 +1289,13 @@
   "Task permissions": "タスクの権限",
   "Workspace access": "ワークスペースへのアクセス",
   "Full access": "フルアクセス",
-  "Edit the task workspace with network access; other actions may need approval.": "ネットワークを使用してタスクのワークスペースを編集できます。その他の操作には承認が必要な場合があります。",
-  "Access files, use the network, and run commands without individual approval.": "個別の承認なしに、ファイルへのアクセス、ネットワークの使用、コマンドの実行を許可します。",
-  "Pause the task before changing permissions.": "権限を変更する前にタスクを一時停止してください。"
+  "Pause the task before changing permissions.": "権限を変更する前にタスクを一時停止してください。",
+  "Sandboxed edits": "サンドボックス内で編集",
+  "Bypass permissions": "権限確認をスキップ",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "ワークスペースと設定済みの書き込み先で編集し、ネットに接続します。サンドボックスの制限を超える前に承認を求めます。",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "サンドボックスを無効にし、承認なしでツールを実行します。管理設定は適用されます。",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "編集とサンドボックス内のコマンドを自動承認します。非対話モードでは他の権限要求を拒否します。",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "編集とサンドボックス内のコマンドを自動承認します。他の操作は承認を求めます。",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "コマンドのサンドボックスとツールの承認を無効にします。管理設定は適用されます。",
+  "Applies to the next message.": "次のメッセージに適用されます。"
 }

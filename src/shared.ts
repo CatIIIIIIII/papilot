@@ -30,7 +30,7 @@ export interface TaskReconciliation {
   intent?: { mode: 'workspace' | 'commit'; message: string };
 }
 export type TaskPermissions = 'workspace' | 'full';
-export const supportsFullTaskAccess = (agent: AgentId) => ['codex', 'claude', 'glm'].includes(agent);
+export interface TaskPermissionOption { value: TaskPermissions; label: string; detail: string }
 export interface Task {
   permissions?: TaskPermissions;
   mode?: 'edit' | 'review';
@@ -97,7 +97,7 @@ export interface UsageWindow { usedPercent: number; minutes: number | null; rese
 export interface Usage { plan: string | null; windows: UsageWindow[]; credits: { unlimited: boolean; balance: number | null } | null; reached: boolean }
 // installed is false when the agent was not found on the host (no CLI, SDK
 // credentials or key); such agents are not offered. Older servers omit it.
-export interface RuntimeStatus { connected: boolean; authenticated: boolean; account: string | null; error: string | null; models: AgentModel[]; usage?: Usage | null; installed?: boolean }
+export interface RuntimeStatus { permissionOptions?: TaskPermissionOption[]; connected: boolean; authenticated: boolean; account: string | null; error: string | null; models: AgentModel[]; usage?: Usage | null; installed?: boolean }
 export interface DiagnosticCheck { id: string; ok: boolean; severity: 'error' | 'warn' | 'info'; detail: string; fix: string | null }
 export interface LatexInstallation {
   distribution: 'MacTeX' | 'BasicTeX' | 'TeX Live' | 'MiKTeX' | null;

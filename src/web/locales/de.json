@@ -1289,7 +1289,13 @@
   "Task permissions": "Aufgabenberechtigungen",
   "Workspace access": "Arbeitsbereichszugriff",
   "Full access": "Vollzugriff",
-  "Edit the task workspace with network access; other actions may need approval.": "Bearbeitet den Aufgabenarbeitsbereich mit Netzwerkzugriff; andere Aktionen benötigen eventuell eine Genehmigung.",
-  "Access files, use the network, and run commands without individual approval.": "Dateizugriff, Netzwerknutzung und Befehlsausführung ohne einzelne Genehmigungen.",
-  "Pause the task before changing permissions.": "Pausiere die Aufgabe, bevor du die Berechtigungen änderst."
+  "Pause the task before changing permissions.": "Pausiere die Aufgabe, bevor du die Berechtigungen änderst.",
+  "Sandboxed edits": "Bearbeiten in der Sandbox",
+  "Bypass permissions": "Berechtigungsprüfung überspringen",
+  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "Im Arbeitsbereich und in konfigurierten Schreibverzeichnissen mit Netzwerkzugriff arbeiten. Vor Überschreiten der Sandbox-Grenzen nachfragen.",
+  "Disable the sandbox and run tools without approval, subject to managed settings.": "Sandbox deaktivieren und Werkzeuge ohne Genehmigung ausführen. Verwaltete Einstellungen gelten weiterhin.",
+  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "Bearbeitungen und Sandbox-Befehle automatisch genehmigen. Andere Anfragen werden im nicht interaktiven Modus abgelehnt.",
+  "Automatically approve edits and sandboxed commands. Ask before other actions.": "Bearbeitungen und Sandbox-Befehle automatisch genehmigen. Vor anderen Aktionen nachfragen.",
+  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "Befehlssandbox deaktivieren und Werkzeugfreigaben überspringen. Verwaltete Einstellungen gelten weiterhin.",
+  "Applies to the next message.": "Gilt für die nächste Nachricht."
 }
