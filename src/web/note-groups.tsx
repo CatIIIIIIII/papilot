@@ -83,7 +83,7 @@ export function GroupInstruction({ group, value, disabled, onChange }: { group: 
     return () => observer.disconnect();
   }, []);
   return <div className="group-instruction-input">
-    <textarea ref={input} rows={1} maxLength={4000} aria-label={t('Instructions for {group} notes', { group: groupName(group) })} placeholder={t('What should change in this group?')} value={value} disabled={disabled} onChange={event => onChange(event.target.value)}/>
+    <textarea ref={input} rows={1} aria-label={t('Instructions for {group} notes', { group: groupName(group) })} placeholder={t('What should change in this group?')} value={value} disabled={disabled} onChange={event => onChange(event.target.value)}/>
     <Icon name="pencil" size={13}/>
   </div>;
 }

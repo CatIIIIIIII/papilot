@@ -110,6 +110,16 @@ test('the PDF comparison stages, reverts and restores single changes', { skip: !
 
     page = await changes.act('p', root, 'token', 'unstage', page.latest, [late.id]);
     assert.equal(git('diff', '--cached'), '');
+
+    // Turning on indirect changes compares the same trees again, with them.
+    const before = page.latest;
+    changes.indirectChanges = () => true;
+    for (let tries = 0; tries < 240; tries++) {
+      page = await changes.state('p', root, 'token');
+      if (page.latest !== before && page.state !== 'building') break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    assert.notEqual(page.latest, before, 'A new comparison follows the setting');
   } finally {
     // Revert/undo can schedule another comparison. Let its build release the
     // repository lock before deleting the fixture, or it retries a missing path.

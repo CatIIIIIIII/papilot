@@ -238,9 +238,18 @@ export async function main(argv = process.argv) {
     .option("--no-wait")
     .option("--timeout <seconds>", "Seconds to wait", "900")
     .option("--open")
+    .option(
+      "--indirect",
+      "List each edit's changes elsewhere, such as renumbering, for this task from now on; may compile the paper up to 16 more times",
+    )
     .action(
       async (
-        options: { wait: boolean; timeout: string; open?: boolean },
+        options: {
+          wait: boolean;
+          timeout: string;
+          open?: boolean;
+          indirect?: boolean;
+        },
         command: Command,
       ) => {
         const { root, task } = await context(command, true),
@@ -251,6 +260,7 @@ export async function main(argv = process.argv) {
           throw new Error("--timeout must be nonnegative.");
         const job = await client.post<{ job: string; status: string }>(
           `/api/tasks/${name}/publish`,
+          options.indirect ? { indirect: true } : undefined,
         );
         if (!options.wait) {
           emit({

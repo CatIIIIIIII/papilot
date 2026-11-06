@@ -260,3 +260,14 @@ it("a conflicting accept-all writes none of the otherwise mergeable changes", as
     c002: "pending",
   });
 });
+
+
+it("preserves long comments and review messages in feedback", async () => {
+  two();
+  const text = "Explain the reasoning in this passage. ".repeat(1000) + "FINAL COMMENT";
+  await decide("comment", ["c001"], "long-comment", text);
+  expect(app.review.pageState(task.name).comments.c001).toBe(text);
+  const cursor = app.review.feedback(task.name).cursor;
+  app.review.note(task.name, text);
+  expect(app.review.feedback(task.name, cursor).feedback[0].text).toBe(text);
+});

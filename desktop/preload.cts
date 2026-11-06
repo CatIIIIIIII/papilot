@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld('papilotDesktop', {
   maximize: () => ipcRenderer.send('papilot:window', 'maximize'),
   close: () => ipcRenderer.send('papilot:window', 'close'),
   chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke('papilot:choose-directory'),
+  notify: (alert: { taskId: string | null; title: string; body: string; sound: boolean }): Promise<boolean> => ipcRenderer.invoke('papilot:notify', alert),
+  onOpenTask: (listener: (taskId: string) => void) => {
+    const receive = (_event: IpcRendererEvent, taskId: unknown) => { if (typeof taskId === 'string') listener(taskId); };
+    ipcRenderer.on('papilot:open-task', receive);
+    return () => { ipcRenderer.off('papilot:open-task', receive); };
+  },
   // File › Open Folder… picks the folder in the main process and sends its path.
   onOpenFolder: (listener: (folder: string) => void) => {
     const receive = (_event: IpcRendererEvent, folder: unknown) => { if (typeof folder === 'string') listener(folder); };

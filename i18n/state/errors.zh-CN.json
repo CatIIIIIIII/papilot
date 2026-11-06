@@ -619,6 +619,11 @@
     "textHash": "6d70aee443a3f2ca3ec8b9b18b3ae577a2da42da6ba88dc8bfba4fecf6a9d76a",
     "model": "gemini-4-argon-medium"
   },
+  "Send indirectChanges as true or false.": {
+    "revision": "7f528cb90a94747b2e7a56f7a42c63e7432bfc215282294fbd51c5b83f71526b",
+    "textHash": "bc5e2d517c73a1b0f44cc7b1b054720d1d2bea357781e88c50a2385907263b44",
+    "model": "gemini-4-argon-medium"
+  },
   "Service tiers are only available for Codex.": {
     "revision": "ffdc45352b4f739729858e00e6e1e96fa20c73589b9edbe77556c9bd7fdaaff3",
     "textHash": "dc986be6e2f6713b39531448036aae868276c6aaf4c12e5fb872d56e54caeefe",

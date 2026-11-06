@@ -98,12 +98,13 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .nav-link.active>svg{color:var(--accent)}
 .nav-label{flex-shrink:0}
 .nav-meta{flex:1;min-width:0;text-align:right;font-size:12px;font-weight:400;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.manuscript-link{min-height:36px;gap:8px;font-weight:400}
+.manuscript-link,.git-link{min-height:36px;gap:8px;font-weight:400}
 .manuscript-link.active{background:var(--bg-hover);font-weight:400}
 .manuscript-link.active>svg{color:var(--text-3)}
 .manuscript-link .nav-meta{font-size:11.5px}
 .manuscript-link:active:not(:disabled){background:var(--bg-active)}
 .paper-tools{min-height:36px;gap:8px;font-weight:400;color:var(--text-2)}
+.paper-tools .nav-label{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .paper-tools>svg:last-child{margin-left:auto}
 .paper-tools[aria-expanded=true]{background:var(--bg-hover);color:var(--text)}
 .paper-tools-menu{min-width:240px}
@@ -577,15 +578,17 @@ body.resizing iframe{pointer-events:none}
 .new-task-panel.has-notes .new-task-start{flex:1;min-height:0;margin:0;padding:0}
 .new-task-panel.has-notes .composer textarea{min-height:80px;max-height:min(160px,24dvh)}
 .notes-request{margin:8px 0 12px;white-space:pre-wrap;overflow-wrap:anywhere}
-.contents-panel{flex:1;min-height:0;overflow:auto;padding:8px}
-.contents-panel>p{margin:8px 12px;font-size:13px;line-height:1.5}
-.contents-panel ol{list-style:none;margin:0;padding:0}
-.contents-panel button{display:flex;align-items:baseline;gap:12px;width:100%;padding:9px 12px;border-radius:var(--r);text-align:left;font-size:13px;line-height:1.5;color:var(--text-2)}
-.contents-panel button>span:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
-.contents-panel button:hover{background:var(--bg-hover);color:var(--text)}
-.contents-panel button[aria-current]{background:var(--accent-soft);color:var(--accent)}
-.contents-page{flex-shrink:0;color:var(--text-3);font-variant-numeric:tabular-nums}
-.git-panel{flex:1;min-height:0;overflow:auto;padding:4px 0 24px}
+.pdf-contents-trigger{display:flex;align-items:center;gap:5px;height:30px;padding:0 8px;border-radius:7px;font-size:13px;font-weight:500;color:var(--text-2);white-space:nowrap}
+.pdf-contents-trigger:hover{background:var(--bg-hover);color:var(--text)}
+.pdf-contents-trigger[aria-expanded=true]{background:var(--accent-soft);color:var(--accent)}
+.action-menu.pdf-contents-menu{width:320px;max-height:min(420px,calc(100dvh - 100px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.pdf-contents-menu>button{flex-shrink:0;align-items:baseline;font-size:13px;line-height:1.5}
+.pdf-contents-menu .menu-label{white-space:normal;overflow-wrap:anywhere}
+.pdf-contents-menu .menu-check{order:1;flex-shrink:0;align-self:center}
+.pdf-contents-menu .menu-hint{order:2}
+.pdf-contents-menu>button[aria-checked=true]{background:var(--accent-soft);color:var(--accent)}
+@container (max-width:760px){.pdf-contents-trigger{width:30px;padding:0;justify-content:center}.pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:none}}
+.git-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .notes-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
 .draft-notes-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;font-size:12px;color:var(--text-3)}
 .note-selection-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
@@ -620,6 +623,7 @@ body.resizing iframe{pointer-events:none}
 /* pdf.js viewer: toolbar, find bar, pages and the note layer above each page */
 .pdf-view{flex:1;min-height:0;display:flex;flex-direction:column;container-type:inline-size}
 .pdf-toolbar{display:flex;align-items:center;gap:6px;height:46px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
+.pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding-block:4px}
 .pdf-toolbar-spacer{flex:1;min-width:0}
 .pdf-pager,.pdf-zoom{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .pdf-pager{font-size:13px;color:var(--text-2)}
@@ -671,6 +675,7 @@ body.resizing iframe{pointer-events:none}
    the commit box, and staged and unstaged lists whose actions show on hover. */
 .git-message{margin:0 12px 6px;font-size:12px}
 .git-notice{display:flex;align-items:center;gap:6px;color:var(--green)}
+.git-notice.git-warning{color:var(--red)}
 .git-message-box{position:relative}
 .git-generate{position:absolute;top:5px;right:5px;width:28px;height:28px;color:var(--accent)}
 .git-commit-form{display:flex;flex-direction:column;gap:6px;padding:2px 12px 8px}
@@ -678,28 +683,32 @@ body.resizing iframe{pointer-events:none}
 .git-commit-form textarea:focus{border-color:var(--accent);box-shadow:var(--ring)}
 .git-commit-form .git-generate{top:2px;right:3px}
 .git-commit-split{display:flex}
+.git-commit-button .git-sync{margin:0;font-size:11px;gap:4px;color:inherit}
 .git-commit-button{flex:1;height:28px;gap:6px;font-size:12.5px}
+.git-commit-button:disabled,.git-commit-more:disabled{opacity:1}
 .git-commit-split.has-menu .git-commit-button{border-top-right-radius:0;border-bottom-right-radius:0}
 .git-commit-more{flex:none;width:28px;height:28px;padding:0;border-top-left-radius:0;border-bottom-left-radius:0;box-shadow:inset 1px 0 0 rgb(255 255 255/.3)}
 .git-group-header,.git-row{display:flex;align-items:center;gap:4px;min-height:24px}
-.git-group-header{padding:0 8px}
+.git-group-header{padding:0 12px;background:var(--bg-hover)}
 .git-group-toggle{display:flex;align-items:center;gap:4px;flex:1;min-width:0;min-height:24px;padding:0;font-size:12.5px;color:var(--text-2);text-align:left}
 .git-group-toggle>svg{flex:none;color:var(--text-3)}
 .git-count{flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bg-active);font:600 11px/18px var(--sans);color:var(--text-2);text-align:center}
 .git-files{list-style:none;margin:0;padding:0}
-.git-row{padding:0 8px 0 24px}
-.git-row:hover,.git-group-header:hover,.git-files li.open>.git-row{background:var(--bg-hover)}
+.git-row{padding:1px 12px 1px 24px;gap:4px;min-height:26px}
+.git-row:hover,.git-group-header:hover,.git-files li.selected>.git-row{background:var(--bg-hover)}
 .git-file{flex:1;min-width:0;display:flex;align-items:center;gap:6px;min-height:24px;padding:0;border:0;background:none;font:inherit;text-align:left;color:inherit;cursor:pointer}
 .git-file>svg{flex:none;color:var(--text-3)}
-.git-name{flex-shrink:0;max-width:100%;font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.git-dir{min-width:0;font-size:11.5px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.git-row-actions{display:flex;flex:none;gap:1px}
-.git-row-actions .icon-button{width:22px;height:22px;color:var(--text-2)}
+.git-name{flex:0 1 auto;min-width:0;font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.git-dir{flex:0 4 auto;min-width:0;font-size:11.5px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.git-row-actions{display:flex;align-items:center;flex:none;gap:1px}
+.git-row-actions .icon-button{width:24px;height:24px;border-radius:5px;color:var(--text-3)}
+.git-row-actions .icon-button:hover:not(:disabled),.git-row-actions .icon-button:focus-visible{background:var(--bg-active);color:var(--text)}
 @media(hover:hover){.git-row-actions{opacity:0}.git-row:hover .git-row-actions,.git-row:focus-within .git-row-actions,.git-group-header:hover .git-row-actions,.git-group-header:focus-within .git-row-actions{opacity:1}}
-.git-code{flex:none;width:14px;font:600 12px/24px var(--mono);text-align:center;color:var(--text-3)}
-.git-code.s-m{color:var(--amber-text)}.git-code.s-a,.git-code.s-u{color:var(--green)}.git-code.s-d,.git-code.s-conflict{color:var(--red)}.git-code.s-r,.git-code.s-c{color:var(--accent)}
+.git-code{flex:none;min-width:16px;padding-left:3px;font:500 12px/24px var(--sans);text-align:right;white-space:nowrap;color:var(--text-3)}
+.git-code.s-m{color:var(--accent)}.git-code.s-a,.git-code.s-u{color:var(--green)}.git-code.s-d,.git-code.s-conflict{color:var(--red)}.git-code.s-r,.git-code.s-c{color:var(--accent)}
+.git-incoming.s-m,.git-incoming.s-r,.git-incoming.s-c{color:var(--accent)}.git-incoming.s-a{color:var(--green)}.git-incoming.s-d{color:var(--red)}
+@media(pointer:coarse){.git-row-actions .icon-button{width:32px;height:36px}.git-group-header{min-height:40px}}
 .git-clean{display:flex;align-items:center;gap:8px;margin:0;padding:2px 12px 8px 24px;font-size:12px;color:var(--text-3)}
-.git-panel .git-diff-wrap{margin:2px 8px 8px 24px}
 .git-merge{margin:0 12px 8px;padding:10px 12px;border:1px solid var(--red-line);border-radius:var(--r);background:var(--red-soft);font-size:13px}
 .git-merge.resolved{border-color:var(--accent-line);background:var(--accent-soft)}
 .git-merge>p{display:flex;flex-direction:column;gap:2px;margin:0 0 10px}
@@ -712,15 +721,6 @@ body.resizing iframe{pointer-events:none}
 .commit-dialog textarea{height:auto;min-height:84px;padding:8px 42px 8px 11px;resize:vertical;line-height:1.45;font-family:inherit}
 .commit-dialog .git-generate{top:11px}
 .commit-dialog .inline-error{margin-top:10px}
-.git-diff-wrap{max-height:420px;margin:4px 4px 10px 37px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
-.git-diff{margin:0;padding:6px 0;font:12px/1.55 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-2)}
-.git-diff span{display:block;padding:0 12px 0 24px;text-indent:-12px}
-.git-diff .add{background:var(--green-soft);color:var(--green)}
-.git-diff .del{background:var(--red-soft);color:var(--red)}
-.git-diff .hunk{margin:4px 0;background:var(--bg-subtle);color:var(--text-3)}
-.git-diff .note{color:var(--text-3)}
-.git-diff-wrap .inline-error{margin:8px 10px}
-.git-diff-note{margin:0;padding:8px 12px;font-size:12.5px;color:var(--text-3)}
 
 /* Menus */
 .action-menu{position:fixed;inset:auto;margin:0;padding:5px;min-width:210px;max-width:min(380px,calc(100vw - 16px));border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg);color:var(--text);box-shadow:var(--float);font-size:14px}
@@ -952,8 +952,10 @@ body.resizing iframe{pointer-events:none}
   .manuscript{display:flex;flex-direction:column}
   .manuscript-side{max-height:none;flex:1;border-top:0;padding-bottom:env(safe-area-inset-bottom)}
   .manuscript-side-header{display:none}
-  .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages,.manuscript.show-contents .manuscript-pages,.manuscript.show-git .manuscript-pages{display:none}
-  .contents-panel button{min-height:44px;font-size:15px}
+  .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages{display:none}
+  .pdf-contents-trigger{width:36px;height:40px}
+  .action-menu.pdf-contents-menu{width:auto}
+  .pdf-contents-menu>button{min-height:44px;font-size:15px}
   .note-entry-actions .button{min-height:40px}
   .manuscript-pages{flex:1;display:flex;flex-direction:column}
   .pdf-toolbar{gap:2px;padding:0 4px}
@@ -989,7 +991,14 @@ body.resizing iframe{pointer-events:none}
   .modal-close{width:44px;height:44px;right:6px;top:6px}
   .toast{top:60px}
 }
-/* The paper's four views and its share button fit a large phone when only the open view keeps its label. */
+/* A resized desktop pane needs the same room for controls as a small phone. */
+@container (max-width:480px){
+  .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding:4px}
+  .pdf-toolbar:has(.pdf-contents-trigger) .pdf-toolbar-spacer{flex:0 0 100%;height:0}
+  .pdf-contents-trigger{width:auto;padding:0 8px}
+  .pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:inline}
+}
+/* The paper's views and its share button fit a large phone when only the open view keeps its label. */
 @media(max-width:520px){.manuscript-view-selector>button:not([aria-pressed=true])>span{display:none}}
 @media(max-width:400px){.view-selector>button>span{display:none}.view-selector>button{padding:0 11px}.task-state-actions .button-label{display:none}}
 

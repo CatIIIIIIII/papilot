@@ -4,14 +4,18 @@ import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
 
 export function SkillIconPicker({ value, onChange, disabled }: { value: SkillIcon; onChange: (value: SkillIcon) => void; disabled: boolean }) {
-  return <IconPicker value={value} onChange={onChange} disabled={disabled} icons={SKILL_ICONS.map(icon => ({ id: icon.id, label: t(icon.label) }))} name={t('Skill icon')}/>;
+  return <IconPicker value={value} onChange={onChange} disabled={disabled} searchable icons={SKILL_ICONS.map(icon => ({ id: icon.id, label: t(icon.label), keywords: icon.label }))} name={t('Skill icon')}/>;
 }
 
-// A grid of icons to choose from, opened from a large tile; skills and quick
-// notes each offer their own set.
-export function IconPicker<T extends string>({ value, onChange, disabled, icons, name }: { value: T; onChange: (value: T) => void; disabled: boolean; icons: readonly { id: T; label: string }[]; name: string }) {
+// Skills and quick notes each offer their own set; large catalogs can opt into search.
+export function IconPicker<T extends string>({ value, onChange, disabled, icons, name, searchable = false }: { value: T; onChange: (value: T) => void; disabled: boolean; icons: readonly { id: T; label: string; keywords?: string }[]; name: string; searchable?: boolean }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const search = useRef<HTMLInputElement>(null), grid = useRef<HTMLDivElement>(null);
+  const term = query.trim().toLocaleLowerCase();
+  const visible = icons.filter(icon => `${icon.id} ${icon.label} ${icon.keywords || ''}`.toLocaleLowerCase().includes(term));
+  const tabStop = visible.find(icon => icon.id === value)?.id ?? visible[0]?.id;
   const selected = icons.find(icon => icon.id === value) || icons[0];
   function close(focus = false) { panel.current?.hidePopover(); if (focus) trigger.current?.focus(); }
   useEffect(() => { if (disabled) close(); }, [disabled]);
@@ -34,22 +38,43 @@ export function IconPicker<T extends string>({ value, onChange, disabled, icons,
     <button ref={trigger} type="button" className="skill-icon-trigger" aria-label={t('Choose an icon')} title={`${t('Choose an icon')} · ${selected.label}`} aria-haspopup="dialog" aria-expanded={open} popoverTarget={id} disabled={disabled} onClick={event => { event.preventDefault(); if (panel.current?.matches(':popover-open')) close(); else show(); }}>
       <Icon name={value} size={25}/><span><Icon name="chevronDown" size={10}/></span>
     </button>
-    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Choose an icon')} className="skill-icon-popover" onToggle={event => setOpen((event.nativeEvent as ToggleEvent).newState === 'open')} onKeyDown={event => {
+    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Choose an icon')} className={`skill-icon-popover${searchable ? ' skill-icon-popover-expanded' : ''}`} onToggle={event => {
+      const opened = (event.nativeEvent as ToggleEvent).newState === 'open';
+      setOpen(opened); if (!opened) setQuery('');
+    }} onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
-      else if (event.key === 'Tab') { close(true); }
+      else if (event.key === 'Tab') {
+        if (!searchable) close(true);
+        else if (event.shiftKey && event.target !== search.current) { event.preventDefault(); search.current?.focus(); }
+        else if (event.shiftKey || event.target !== search.current || !visible.length) close(true);
+      }
+      else if (event.target === search.current) {
+        // Keep text-editing keys in the search field; enter the results with Down or Enter.
+        if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+          event.preventDefault(); event.stopPropagation();
+          const items = grid.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+          items[event.key === 'ArrowUp' ? items.length - 1 : 0]?.focus();
+        }
+      }
       else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
         event.preventDefault(); event.stopPropagation();
-        const items = Array.from(panel.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+        const items = Array.from(grid.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+        if (!items.length) return;
         const current = items.indexOf(document.activeElement as HTMLButtonElement);
-        const step = event.key === 'ArrowDown' ? 4 : event.key === 'ArrowUp' ? -4 : event.key === 'ArrowRight' ? 1 : -1;
-        const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + step + items.length) % items.length;
+        const columns = getComputedStyle(grid.current!).gridTemplateColumns.split(' ').length;
+        const step = event.key === 'ArrowDown' ? columns : event.key === 'ArrowUp' ? -columns : event.key === 'ArrowRight' ? 1 : -1;
+        const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : ((current + step) % items.length + items.length) % items.length;
         items[index]?.focus();
-        if (!disabled && icons[index]) onChange(icons[index].id);
+        if (!disabled && visible[index]) onChange(visible[index].id);
       }
     }}>
       <p>{t('Choose an icon')}</p>
-      <div className="skill-icon-grid" role="radiogroup" aria-label={name}>
-        {icons.map(icon => <button key={icon.id} type="button" role="radio" aria-label={icon.label} title={icon.label} aria-checked={icon.id === value} tabIndex={icon.id === value ? 0 : -1} disabled={disabled} onClick={() => { onChange(icon.id); close(true); }}><Icon name={icon.id} size={21}/></button>)}
+      {searchable && <input ref={search} type="search" className="skill-icon-search" aria-label={t('Search icons')} placeholder={t('Search icons')} value={query} onChange={event => { setQuery(event.target.value); grid.current?.parentElement?.scrollTo(0, 0); }}/>}
+      <div className="skill-icon-results">
+        <div ref={grid} className="skill-icon-grid" role="radiogroup" aria-label={name}>
+          {visible.map(icon => <button key={icon.id} type="button" role="radio" aria-label={icon.label} title={icon.label} aria-checked={icon.id === value} tabIndex={icon.id === tabStop ? 0 : -1} disabled={disabled} onClick={() => { onChange(icon.id); close(true); }}><Icon name={icon.id} size={21}/></button>)}
+        </div>
+        {!visible.length && <p className="skill-icon-empty" role="status">{t('No matching icons')}</p>}
       </div>
     </div>
   </>;

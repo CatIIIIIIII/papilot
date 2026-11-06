@@ -121,7 +121,7 @@ export class App {
   }
 }
 export function createServer(app: App) {
-  const server = Fastify({ logger: false, bodyLimit: 999999 });
+  const server = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   server.register(compress, { threshold: 1024 });
   server.addHook("onRequest", async (request, reply) => {
     app.activity = now();
@@ -362,19 +362,19 @@ export function createServer(app: App) {
         );
       },
     );
-    server.post<{ Params: { name: string }; Body: { requestId?: string } }>(
+    server.post<{ Params: { name: string }; Body: { requestId?: string; indirect?: boolean } }>(
       "/api/tasks/:name/publish",
-      { schema: { body: { ...objectSchema, properties: { requestId: { type: "string", pattern: "^[a-zA-Z0-9-]{1,80}$" } } } } },
+      { schema: { body: { ...objectSchema, properties: { requestId: { type: "string", pattern: "^[a-zA-Z0-9-]{1,80}$" }, indirect: { type: "boolean" } } } } },
       (request) => {
         app.delivery.assertReady(request.params.name);
-        const job = app.publisher.submit(request.params.name, request.body?.requestId);
+        const job = app.publisher.submit(request.params.name, request.body?.requestId, request.body?.indirect);
         return { job: job.id, status: job.status };
       },
     );
     // The task's typeset pages as images, for its agent to look at.
     server.post<{ Params: { name: string }; Body: ViewRequest }>(
       "/api/tasks/:name/view",
-      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", maxItems: 8, items: { type: "string", maxLength: 1000 } }, pages: { type: "array", maxItems: 8, items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
+      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", items: { type: "string", maxLength: 1000 } }, pages: { type: "array", items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
       (request) => view(app, request.params.name, request.body),
     );
     server.post<{ Params: { name: string }; Body: { keepCurrent?: boolean; mode?: "workspace" | "commit"; message?: string; confirmation?: string } }>(

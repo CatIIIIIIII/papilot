@@ -12,7 +12,7 @@ import { findSkill } from '../src/server/skills.ts';
 import { reviewInstructions } from '../src/conversation.ts';
 import { RpcResponseError, type Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
-import type { PendingReview, Run, Task } from '../src/shared.ts';
+import { AGENT_IDS, type PendingReview, type Run, type Task } from '../src/shared.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -363,6 +363,17 @@ test('while a round compiles its changed chapters, its new version is announced 
     await f.workspace.publish(f.task.id);
     assert.equal(polls, 3);
     assert.deepEqual(announced, [[f.task.id, 'a1b2c3']]);
+  } finally { f.close(); }
+});
+
+test('a round lists indirect changes only when Settings track them', async () => {
+  const f = fixture();
+  try {
+    const sent = () => f.calls.filter(call => call.route.endsWith('/publish')).map(call => (call.body as { indirect?: boolean }).indirect);
+    await f.workspace.publish(f.task.id);
+    f.workspace.indirectChanges = () => true;
+    await f.workspace.publish(f.task.id);
+    assert.deepEqual(sent(), [false, true]);
   } finally { f.close(); }
 });
 
@@ -1609,9 +1620,10 @@ test('Codex threads get the view_pdf tool, which Papilot answers with typeset pa
     assert.equal(f.store.task(f.task.id).viewPdf, true);
     // Papilot answers the call itself: the author is not asked.
     const call = (id: number, tool: string, args: object) => (f.workspace as any).serverRequest({ id, method: 'item/tool/call', params: { threadId: 'thread', turnId: 'turn-new', callId: `call-${id}`, tool, arguments: args } });
-    call(41, 'view_pdf', { locations: ['main.tex:12'], pages: ['99', 7], accepted: 'yes' });
+    const pages = Array.from({ length: 10 }, (_, index) => String(index + 1));
+    call(41, 'view_pdf', { locations: ['main.tex:12'], pages: [...pages, 7], accepted: 'yes' });
     for (let i = 0; i < 20 && !f.codex.replies.length; i++) await tick();
-    assert.deepEqual(views, [{ locations: ['main.tex:12'], pages: ['99'] }]);
+    assert.deepEqual(views, [{ locations: ['main.tex:12'], pages }]);
     const reply = f.codex.replies[0] as { id: number; result: { success: boolean; contentItems: any[] } };
     assert.equal(reply.id, 41);
     assert.equal(reply.result.success, true);
@@ -1991,7 +2003,7 @@ test('agents that are not found on the host are neither started nor offered, and
   } finally { workspace.close(); store.close(); }
 });
 
-test('AI review runs read-only, saves PDF notes, and never publishes or delivers edits', async () => {
+test('AI review uses normal agent tools and approvals, saves PDF notes, and never publishes or delivers edits', async () => {
   const f = fixture();
   try {
     f.store.updateTask(f.task.id, { mode: 'review', aiReview: { key: 'pdf-original' }, threadId: null });
@@ -2000,17 +2012,21 @@ test('AI review runs read-only, saves PDF notes, and never publishes or delivers
     await f.workspace.enqueue(f.task.id, 'Check the assumptions.', 'ai-review-run');
     await tick(); await tick();
     const start = f.codex.calls.find(call => call.method === 'thread/start')!.params;
-    assert.equal(start.sandbox, 'read-only');
-    assert.equal(start.approvalPolicy, 'never');
+    assert.equal(start.sandbox, 'workspace-write');
+    assert.equal(start.approvalPolicy, 'on-request');
+    assert.equal(start.config.web_search, 'live');
     assert.equal(start.dynamicTools, undefined);
-    assert.match(start.developerInstructions, /Do not edit files/);
+    assert.match(start.developerInstructions, /Do not edit the manuscript/);
     assert.match(f.codex.calls.find(call => call.method === 'turn/start')!.params.input[0].text, /p1-l1/);
     (f.workspace as any).serverRequest({ id: 100, method: 'item/fileChange/requestApproval', params: { threadId: 'thread', turnId: 'turn-new' } });
-    assert.match(f.codex.rejections[0].message, /read-only/);
+    assert.equal(f.codex.rejections.length, 0);
+    assert.equal(f.workspace.requests.size, 1);
     await (f.workspace as any).notification({ method: 'item/completed', params: { threadId: 'thread', turnId: 'turn-new', item: { id: 'answer', type: 'agentMessage', text: JSON.stringify({ summary: 'Clarify the assumptions.', notes: [{ start: 'p1-l1', end: 'p1-l1', comment: 'Which assumptions are required?' }] }) } } });
+    await (f.workspace as any).notification({ method: 'item/completed', params: { threadId: 'thread', turnId: 'turn-new', item: { id: 'denied', type: 'toolCall', status: 'declined', text: 'The CLI could not use Bash.' } } });
     const completion = { method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'turn-new', status: 'completed' } } };
     await (f.workspace as any).notification(completion);
     await (f.workspace as any).notification(completion);
+    assert.equal(f.store.items(f.task.id).find(item => item.id.endsWith(':denied'))?.type, 'tool');
     const notes = f.store.annotations(f.task.projectId);
     assert.equal(notes.length, 1);
     assert.equal(notes[0].key, 'pdf-original');
@@ -2026,7 +2042,7 @@ test('AI review runs read-only, saves PDF notes, and never publishes or delivers
     await assert.rejects(f.workspace.deliverTask(f.task.id, 'workspace'), /no manuscript changes/);
     await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => {}), /PDF notes/);
     await assert.rejects(f.workspace.enqueue(f.task.id, 'Apply the notes', 'wrong-mode', true, { notes }), /editing task/);
-    assert.equal(f.store.items(f.task.id).at(-1)!.text, 'Clarify the assumptions.');
+    assert.equal(f.store.items(f.task.id).filter(item => item.type === 'assistant').at(-1)!.text, 'Clarify the assumptions.');
   } finally { f.close(); }
 });
 
@@ -2107,7 +2123,11 @@ test('creating an AI review skill task persists its snapshot and queues review-o
     assert.equal((await f.workspace.createTask(input)).id, created.id);
     assert.equal(f.calls.filter(call => call.route === '/api/tasks').length, 1);
     await assert.rejects(f.workspace.createTask({ ...input, prepareReview: undefined, instructions: 'Edit it.' }), /Invalid task ID/);
-    await assert.rejects(f.workspace.createTask({ ...input, id: 'ai-review-task-0002', agent: 'cursor' }), /Choose Codex, Claude or GLM/);
+    for (const agent of AGENT_IDS) {
+      const task = await f.workspace.createTask({ ...input, id: `ai-review-client-${agent}`, agent });
+      assert.equal(task.agent, agent);
+      assert.equal(task.mode, 'review');
+    }
   } finally { f.close(); }
 });
 
@@ -2173,7 +2193,7 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
   });
 }
 
-test('editing network permissions do not change read-only review threads', async () => {
+test('review threads use normal network access and inherit the resolved sandbox', async () => {
   const f = fixture();
   try {
     (f.workspace as any).loaded.clear();
@@ -2183,9 +2203,9 @@ test('editing network permissions do not change read-only review threads', async
     await f.workspace.enqueue(f.task.id, 'Review the paper.', 'network-review', false);
     await tick(); await tick();
     const start = f.codex.calls.find(c => c.method === 'thread/start');
-    assert.equal(start?.params.sandbox, 'read-only');
-    assert.equal(start?.params.approvalPolicy, 'never');
-    assert.equal(start?.params.config, undefined);
+    assert.equal(start?.params.sandbox, 'workspace-write');
+    assert.equal(start?.params.approvalPolicy, 'on-request');
+    assert.deepEqual(start?.params.config, { web_search: 'live', 'sandbox_workspace_write.network_access': true });
     assert.equal(f.codex.calls.find(c => c.method === 'turn/start')?.params.sandboxPolicy, undefined);
   } finally { f.close(); }
 });

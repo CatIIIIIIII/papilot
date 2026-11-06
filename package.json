@@ -1,6 +1,6 @@
 {
   "name": "papilot",
-  "version": "0.8.9-preview.13",
+  "version": "0.9.0-preview.14",
   "description": "A Cursor-like workspace for your papers: annotate and review PDFs directly without ever touching LaTeX.",
   "keywords": [
     "latex",
@@ -72,7 +72,7 @@
     "doctor": "node bin/papilot.mjs doctor",
     "service:install": "tsx scripts/service.ts install",
     "service:stop": "tsx scripts/service.ts stop",
-    "test:ui": "npm run build && node scripts/check-ui.mjs && node scripts/check-task-model.mjs && node scripts/check-appearance.mjs && node scripts/check-updates.mjs && node scripts/check-papers.mjs && node scripts/check-imports.mjs && node scripts/check-compilation.mjs && node scripts/check-build-problems.mjs && node scripts/check-review-notes.mjs && node --import tsx scripts/check-note-groups.mjs && node --import tsx scripts/check-pdf-tools.mjs && node scripts/check-note-selection.mjs && node scripts/check-paper-questions.mjs && node scripts/check-ai-review.mjs && node --import tsx scripts/check-note-results.mjs && node --import tsx scripts/check-review-flow.mjs && node scripts/check-skills.mjs && node --import tsx scripts/check-skill-library.mjs && node scripts/check-attachments.mjs && node --import tsx scripts/check-accounts.mjs && node --import tsx scripts/check-places.mjs && node scripts/check-pdf-words.mjs",
+    "test:ui": "npm run build && node scripts/check-git-workspace.mjs && node scripts/check-ui.mjs && node scripts/check-git-panel.mjs && node scripts/check-task-model.mjs && node scripts/check-appearance.mjs && node scripts/check-updates.mjs && node scripts/check-papers.mjs && node scripts/check-imports.mjs && node scripts/check-compilation.mjs && node scripts/check-build-problems.mjs && node scripts/check-review-notes.mjs && node --import tsx scripts/check-note-groups.mjs && node --import tsx scripts/check-pdf-tools.mjs && node scripts/check-note-selection.mjs && node scripts/check-ai-review.mjs && node --import tsx scripts/check-note-results.mjs && node --import tsx scripts/check-review-flow.mjs && node scripts/check-skills.mjs && node --import tsx scripts/check-skill-library.mjs && node scripts/check-attachments.mjs && node --import tsx scripts/check-accounts.mjs && node --import tsx scripts/check-places.mjs && node scripts/check-pdf-words.mjs && node scripts/check-paper-questions.mjs && node scripts/check-task-permissions.mjs",
     "site": "node scripts/build-site.mjs",
     "test:site": "npm run site && node scripts/check-site-analytics.mjs && node scripts/check-site-privacy.mjs && node scripts/check-site.mjs",
     "prepack": "npm run build && npm run setup:review",
@@ -82,7 +82,8 @@
     "test:desktop": "node scripts/check-desktop.mjs",
     "i18n": "tsx scripts/i18n.ts",
     "i18n:check-app": "tsx scripts/i18n/app-locales.ts",
-    "test:locales": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-locales.mjs"
+    "test:locales": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-locales.mjs",
+    "test:review-comments": "npm run build && npm --prefix engine run build && node --import tsx --test tests/composer.test.ts tests/review-draft.test.ts && node --import tsx scripts/check-unified-review.mjs && node scripts/check-review-notes.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^9.2.2",
@@ -98,6 +99,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.311",
+    "@noble/hashes": "^1.8.0",
     "@openai/codex": "0.164.0",
     "@simplewebauthn/browser": "^14.0.0",
     "@types/node": "^22.20.5",

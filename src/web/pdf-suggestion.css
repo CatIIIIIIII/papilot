@@ -34,7 +34,6 @@
 .pdf-note-inline>.pdf-note-tools{grid-column:2;grid-row:1;align-self:start;gap:2px}
 .pdf-note-inline .note-head{min-height:var(--note-tool);margin-bottom:0}
 .pdf-note-inline .pdf-note-tools .icon-button,.pdf-note-inline .note-send{width:var(--note-tool);height:var(--note-tool)}
-.pdf-note-inline .note-send[aria-pressed=true]{width:auto}
 .pdf-note-inline .pdf-note-origin{display:none}
 @media(pointer:fine){.pdf-note-inline .pdf-suggestion-body p,.pdf-note-inline .pdf-note-input{font-size:13px;line-height:1.5}}
 @media(pointer:coarse){.pdf-note-card.pdf-note-inline{--note-tool:36px}}
@@ -42,12 +41,12 @@
 .pdf-note-attach:hover:not(:disabled){color:var(--text);background:var(--bg-hover)}
 @media(pointer:coarse){.pdf-note-attach{width:36px;height:36px}}
 
-/* The popover's send button matches the chat composer's; once the note is in the task it becomes a pill that takes it back out. */
+/* The popover's send button matches the chat composer's; once the note is in the task it becomes a remove icon that takes it back out. */
 .note-send{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;width:28px;height:28px;padding:0;border-radius:999px;background:var(--primary);color:#fff;font:500 12px/1 var(--sans);white-space:nowrap;transition:background-color .15s,color .15s,transform .1s}
 .note-send:hover:not(:disabled){background:var(--primary-hover)}
 .note-send:active:not(:disabled){transform:scale(.94)}
 .note-send:disabled{opacity:1;background:var(--bg-active);color:var(--text-3)}
-.note-send[aria-pressed=true]{width:auto;padding:0 8px 0 11px;background:var(--accent-soft);color:var(--accent)}
+.note-send[aria-pressed=true]{background:var(--accent-soft);color:var(--accent)}
 .note-send[aria-pressed=true] svg{opacity:.7}
 .note-send[aria-pressed=true]:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-hover)}
 .note-send[aria-pressed=true]:hover:not(:disabled) svg{opacity:1}
@@ -55,7 +54,7 @@
 .note-send.quiet:not([aria-pressed=true]){background:transparent;color:var(--text-3)}
 .note-send.quiet:not([aria-pressed=true]):hover:not(:disabled){background:var(--primary);color:#fff}
 .note-send.quiet{width:26px;height:26px}
-@media(pointer:coarse){.note-send,.note-send.quiet{width:36px;height:36px}.note-send[aria-pressed=true]{padding:0 12px 0 14px;font-size:14px}}
+@media(pointer:coarse){.note-send,.note-send.quiet{width:36px;height:36px}}
 
 /* A new note is a single line that grows; the send button stays at its foot. */
 .pdf-note-card.pdf-note-compose{padding:8px 8px 8px 14px}

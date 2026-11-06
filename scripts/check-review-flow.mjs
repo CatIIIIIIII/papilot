@@ -49,10 +49,16 @@ function detail(round) {
   }
   return result;
 }
+// The server keeps whether indirect changes are tracked; reloading reads it.
+let indirectChanges = false;
 await page.route('**/api/**', async route => {
   if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
   if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const url = new URL(route.request().url());
+  if (url.pathname === '/api/indirect-changes') {
+    if (route.request().method() === 'POST') indirectChanges = route.request().postDataJSON().indirectChanges === true;
+    return route.fulfill({ json: { indirectChanges } });
+  }
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
@@ -146,7 +152,7 @@ try {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const settings = () => page.locator('dialog').filter({ has: page.locator('.settings-dialog') });
   await settings().getByRole('button', { name: 'Review preferences', exact: true }).click();
-  const expandEffects = () => settings().getByRole('switch', { name: 'Expand indirect changes', exact: true });
+  const expandEffects = () => settings().getByRole('switch', { name: 'Track indirect changes', exact: true });
   // Reviews open on the changed sections unless the whole paper is chosen here.
   const openOn = settings().getByRole('group', { name: 'Open reviews on', exact: true });
   await expect(openOn.getByRole('button', { name: 'Changes', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -159,6 +165,9 @@ try {
   await expect(expandEffects()).not.toBeChecked();
   await expandEffects().check();
   await expect(indirect().locator('.place')).toHaveCount(2);
+  // Turning them on warns that rounds compile more.
+  await expect(settings().getByRole('note')).toContainText('up to 16 more times');
+  assert.equal(indirectChanges, true, 'The server keeps the setting');
   await page.screenshot({ path: 'test-results/indirect-effects-settings.png', fullPage: true });
   await settings().getByRole('button', { name: 'Close', exact: true }).click();
   assert.equal(writes.length, 0, 'Changing disclosure must not send review decisions');
@@ -179,7 +188,7 @@ try {
   effectFixture = false;
   await page.reload();
   await viewer().locator('.change.current').waitFor();
-  console.log('PASS: Indirect changes fold by default, macro effects remain visible, per-edit expansion is lazy, and live settings survive reload');
+  console.log('PASS: Indirect changes stay folded until tracked, tracking warns and is kept by the server, macro effects remain visible, per-edit expansion is lazy');
   // Decisions replace the iframe's scroll layers. Wheel gestures must follow
   // the pointer even if the browser retains Chat as their previous target.
   timeline = Array.from({ length: 40 }, (_, i) => ({ id: `scroll-${i}`, taskId: task.id, type: 'assistant', text: `Review feedback ${i}.`, createdAt: i + 1 }));
@@ -296,11 +305,10 @@ try {
   assert.equal(writes.length, beforeKeys, 'selected text pauses decision shortcuts');
   await viewer().locator('body').evaluate(() => document.getSelection().removeAllRanges());
   await page.keyboard.press('c');
-  const commentBox = viewer().getByRole('textbox', { name: /^Comment on change/ });
+  const commentBox = page.getByRole('textbox', { name: 'Comment 1', exact: true });
   await commentBox.press('b');
   await expect(commentBox).toHaveValue('b');
   assert.equal(writes.length, beforeKeys, 'typing does not accept a change');
-  await commentBox.press('Escape');
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('b');
   await expect.poll(() => rounds[1].first).toBe('accepted');
@@ -309,6 +317,9 @@ try {
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => rounds[1].first).toBe('pending');
+  // Clean up after checking decision undo; deleting a note has its own undo.
+  await page.getByRole('button', { name: 'Delete review note 1' }).click();
+  await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('?');
   await shortcuts.waitFor();
   await acceptKey.click(); await acceptKey.press('Backspace');
@@ -365,23 +376,25 @@ try {
   await expect(viewer().locator('.change.current')).toHaveAttribute('data-stop', '1');
   // The accepted paragraph remains selectable for another note.
   await accepted.locator('.after .pdf-glyph').evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range); });
-  await viewer().getByRole('button', { name: 'Add note', exact: true }).click();
-  await viewer().getByRole('textbox', { name: 'Note for the agent' }).fill('A note on accepted text.');
-  await viewer().getByRole('button', { name: 'Add note', exact: true }).click();
-  await viewer().getByRole('button', { name: 'Close review notes' }).click();
+  await viewer().locator('.review-add-note').click();
+  await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('A note on accepted text.');
   await viewer().locator('.change.current').getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(viewer().locator('[data-stop="1"] .change-head')).toBeVisible();
   await expect(viewer().locator('[data-stop="1"] .side.before')).toBeVisible();
   await viewer().locator('.change.current').getByRole('button', { name: 'Comment', exact: true }).click();
-  await viewer().getByRole('textbox', { name: /^Comment on change/ }).fill('Try a clearer explanation.');
-  await viewer().getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Comment 2', exact: true }).fill('Try a clearer explanation.');
+  // Comments preserve the pending decision until the author explicitly decides.
+  const commentedChange = viewer().locator('.change[data-stop="2"]');
+  await expect(commentedChange).toHaveAttribute('data-state', 'pending');
+  await commentedChange.locator('.change-number').click();
+  await commentedChange.getByRole('button', { name: 'Reject (2)', exact: true }).click();
   await expect(viewer().locator('.change-head:visible')).toHaveCount(await viewer().locator('.change').count());
   await expect(viewer().locator('.change-map-mark')).toHaveCount(0);
   await expect(viewer().locator('.review-complete')).toBeVisible();
   // Only History mode adds a row under the toolbar.
   await expect(viewer().locator('.review-mode')).toHaveCount(0);
   await sync();
-  await page.getByRole('button', { name: 'Send feedback', exact: true }).click();
+  await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
   await expect(viewer().getByText('Feedback sent · Agent is working', { exact: true })).toBeVisible();
   await viewer().getByRole('button', { name: 'History', exact: true }).click();
   await expect(viewer().locator('.change-head:visible')).toHaveCount(3);
@@ -405,7 +418,7 @@ try {
   await expect(viewer().locator('.mixed-reviewed .side:visible')).toHaveCount(0);
   await expect(viewer().getByText('Reviewed changes · View in History', { exact: true })).toBeVisible();
   // Existing direct-accept tasks retain their commit form; isolated tasks offer both save choices.
-  task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
+  task.review.unsent = 0; task.review.comments = 0; task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
   await sync();
   const card = viewer().locator('.review-complete');
   const taskStatus = page.locator(`[data-task="${task.id}"] .status`);

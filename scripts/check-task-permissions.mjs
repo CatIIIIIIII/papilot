@@ -31,6 +31,7 @@ await page.route('**/api/**', async route => {
   if (new URL(route.request().url()).pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
   if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
+  if (url.pathname.endsWith('/indirect-changes')) return json({ changes: [] });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', canUpdate: false });

@@ -133,10 +133,14 @@ export interface Device { id: string; kind: 'passkey' | 'session'; label: string
 export interface People { origin: string | null; people: Person[] }
 // staged: the index has changes to this file; unstaged: the working tree has more.
 // index is the staged status where it differs from status, which is the working tree's when it has changes.
-export interface GitFile { path: string; status: string; staged: boolean; unstaged: boolean; lines?: [number, number]; from?: string; index?: string }
+export interface GitFile { path: string; status: string; staged: boolean; unstaged: boolean; lines?: [number, number]; from?: string; index?: string; incoming?: string }
 // merging is a merge in progress, with the files whose conflict markers remain.
 export interface GitStatus { branch: string | null; upstream: string | null; ahead: number; behind: number; files: GitFile[]; head: { hash: string; subject: string; date: number } | null; remote?: boolean; merging?: { message: string; conflicts: string[] } | null }
 export interface GitDiff { path: string; diff: string; truncated: boolean }
+export type GitDiffScope = 'all' | 'staged' | 'unstaged';
+export interface GitVersion { hash: string; message: string; author: string; date: number }
+export interface GitHistory { versions: GitVersion[]; next: string | null }
+export interface GitVersionDetail { version: GitVersion; files: { path: string; status: string; from?: string }[] }
 export interface GitWorktree {
   path: string; branch: string | null; head: string | null; current: boolean; bare: boolean;
   locked?: string; prunable?: string; status: GitStatus | null; error?: string;

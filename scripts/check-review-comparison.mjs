@@ -4,6 +4,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { selectOption } from './select.mjs';
 import { annotateReviewState, rewriteReviewHtml } from '../src/server/review.ts';
 
 fs.mkdirSync('test-results', { recursive: true });
@@ -61,6 +62,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/question-sessions')) return route.fulfill({ json: { sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] } });
   if (url.pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
+  if (url.pathname === '/api/indirect-changes') return route.fulfill({ json: { indirectChanges: false } });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
   if (url.pathname === '/api/tasks/question-fixture/items') return route.fulfill({ json: { items: [{ id: 'answer', taskId: 'question-fixture', type: 'assistant', text: 'This equation expresses conservation of mass.', createdAt: 1 }] } });
@@ -157,6 +159,29 @@ try {
   await expect(frame.locator('.paper-context-pair canvas').first()).toBeVisible();
   await aligned();
   await page.screenshot({path:'test-results/review-side-by-side-paper.png',fullPage:true});
+  // Diff rows and transparent PDF strips must use the same paper palette,
+  // even when the interface is dark but paper pages are always light.
+  for (const [mode, pdf, before, after, filter] of [
+    ['Dark', 'theme', 'rgb(67, 44, 48)', 'rgb(40, 57, 45)', 'invert(0.84) hue-rotate(180deg)'],
+    ['Dark', 'light', 'rgb(251, 238, 238)', 'rgb(238, 248, 241)', 'none'],
+    ['Light', 'light', 'rgb(251, 238, 238)', 'rgb(238, 248, 241)', 'none'],
+    ['Light', 'theme', 'rgb(251, 238, 238)', 'rgb(238, 248, 241)', 'none'],
+  ]) {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.settings-dialog');
+    await dialog.getByRole('button', { name: 'Appearance', exact: true }).click();
+    await dialog.getByRole('radio', { name: mode, exact: true }).check();
+    await dialog.getByText('Advanced', { exact: true }).click();
+    await selectOption(dialog.getByRole('combobox', { name: 'PDF appearance', exact: true }), pdf);
+    await page.keyboard.press('Escape');
+    for (const [side, color] of [['before', before], ['after', after]]) {
+      await expect(frame.locator('.side.' + side).first()).toHaveCSS('background-color', color);
+    }
+    await expect(frame.locator('.pdf-strip img').first()).toHaveCSS('filter', filter);
+    await expect(frame.locator('.change.current .change-head').first()).toHaveCSS('background-color', mode === 'Dark' && pdf === 'theme' ? 'rgb(48, 49, 53)' : 'rgb(244, 244, 244)');
+    await page.screenshot({ path: `test-results/review-palette-${mode}-${pdf}.png`, fullPage: true });
+  }
+
   await page.setViewportSize({width:1000,height:900});
   await aligned();
   assert.deepEqual(errors,[]);

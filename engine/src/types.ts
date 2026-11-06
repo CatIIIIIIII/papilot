@@ -88,6 +88,9 @@ export interface Round {
     targets: string[];
     builds: string[];
     renderer?: string;
+    /** Whether the round lists indirect changes; absent in older rounds,
+     * which did. */
+    indirect?: boolean;
   };
   created: number;
 }
@@ -388,6 +391,10 @@ export interface RenderRequest {
   causes?: string[][];
   /** The cards of the first pass, reused with `causes`. */
   cards?: Card[];
+  /** List the changes each edit makes away from its own lines, such as
+   * renumbered references, and compile variants to find their edits. Off,
+   * an edit shows only its own lines. */
+  indirect?: boolean;
 }
 /** Words of the old and new PDF that changed, as ranges of each document's
  * words in reading order. */

@@ -261,5 +261,6 @@
   "{sources} could not be reached.": "Impossible de joindre {sources}.",
   "{source} has this work with other details. Compare them below.": "{source} répertorie cet ouvrage avec d’autres informations. Comparez-les ci-dessous.",
   "{staged} of {total} staged": "{staged} sur {total} indexées",
-  "↵ send · Esc cancel": "↵ envoyer · Esc annuler"
+  "↵ send · Esc cancel": "↵ envoyer · Esc annuler",
+  "Your comments are saved. Continue in Chat to request a revision.": "Vos commentaires sont enregistrés. Poursuivez dans le chat pour demander une révision."
 }

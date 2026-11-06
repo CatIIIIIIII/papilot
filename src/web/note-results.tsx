@@ -3,11 +3,13 @@ import type { NoteChange, NoteResult, Task, TimelineItem } from '../shared.ts';
 import { readNotesInstructions } from '../notes.ts';
 import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
+import { reviewDraft } from './review-draft.ts';
 
 export interface NoteFocus { key: string; change: NoteChange; sequence: number }
 interface Links {
   notes: NoteResult[]; error: boolean; loading: boolean; selected: string; reveal: number;
   focus: NoteFocus | null; reload: () => void;
+  clearFocus: () => void;
   showChange: (key: string, change: NoteChange) => void; showNote: (key: string) => void;
 }
 const Context = createContext<Links | null>(null);
@@ -38,7 +40,9 @@ export function NoteResultsProvider({ task, items, read, openReview, openChat, c
       element?.scrollIntoView({ block: 'center' }); element?.focus({ preventScroll: true });
     });
   };
-  const value: Links = { notes, loading, error, selected, reveal, focus, reload, showNote, showChange(key, change) {
+  const value: Links = { notes, loading, error, selected, reveal, focus, reload, showNote, clearFocus: () => setFocus(null), showChange(key, change) {
+    // A sent-note link replaces any earlier draft quotation destination.
+    if (id) reviewDraft(id).clearReveal();
     setSelected(key); setFocus(previous => ({ key, change, sequence: (previous?.sequence || 0) + 1 })); actions.current.openReview();
   } };
   return <Context.Provider value={value}>{children}</Context.Provider>;

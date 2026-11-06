@@ -1,14 +1,14 @@
 # Ning’s Papilot Preview
 
-Personal distribution: **0.8.9-preview.13**, branch `custom/ning-preview`.
+Personal distribution: **0.9.0-preview.14**, branch `custom/ning-preview`.
 
-Based on official Papilot 0.8.9 and upstream main as of 2026-11-05, including the merged editing-network feature (#54). Integrates paper Q&A with saved conversations (#38), aligned PDF comparison (#40), and the compact reasoning slider (#37). The official note editing/deletion feature (#36) is retained.
+Based on official Papilot 0.9.0 and upstream main as of 2026-11-06, including the merged editing-network feature (#54). Integrates paper Q&A with saved conversations (#38), aligned PDF comparison (#40), and the compact reasoning slider (#37). The official note editing/deletion feature (#36) is retained.
 
 The app is named **Papilot Preview** and continues using `~/Library/Application Support/Papilot Preview`. It can coexist with official Papilot. Official automatic updates are disabled for this distribution so they cannot replace its custom features. Paper Q&A retains the existing full-access behavior for the selected paper; editing tasks retain their workspace sandbox and network access.
 
 ## Build on Apple Silicon
 
-Use the official 0.8.9 mac-arm64 app as the runtime base, with the dependencies in the lockfiles available in the source tree. Build the source:
+Use the official 0.9.0 mac-arm64 app as the runtime base, with the dependencies in the lockfiles available in the source tree. Build the source:
 
 ```sh
 npm run build
@@ -26,4 +26,6 @@ Merge upstream main into this branch, resolve conflicts while preserving the cus
 
 ## Editing permissions (Preview.11)
 
-The revision composer now has a **Task permissions** selector for Codex, Claude and GLM. New tasks default to workspace access with networking. Full access disables the task sandbox and command approvals, allowing authorized SSH and access outside the paper. SSH still requires working credentials and remote authorization. Permission choices are stored with each task. Pause an active task before changing its permissions; the next turn resumes the same conversation with the new policy. AI review remains read-only, and providers without this support do not show the selector.
+The revision composer now has a **Task permissions** selector for Codex, Claude and GLM. New tasks default to workspace access with networking. Full access disables the task sandbox and command approvals, allowing authorized SSH and access outside the paper. SSH still requires working credentials and remote authorization. Permission choices are stored with each task. Pause an active task before changing its permissions; the next turn resumes the same conversation with the new policy. AI review follows the official policy and does not use this editing permission selector, and providers without this support do not show the selector.
+
+Diff backgrounds follow the PDF appearance setting, so a light PDF keeps light comparison colors even when the application uses the dark theme.

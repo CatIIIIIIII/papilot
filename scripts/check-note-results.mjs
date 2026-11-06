@@ -35,6 +35,7 @@ await page.route('**/api/**', async route => {
   if (new URL(route.request().url()).pathname.endsWith('/questions')) return route.fulfill({ json: { questions: [] } });
   const url = new URL(route.request().url());
   if (url.pathname.startsWith('/review/')) return route.fallback();
+  if (url.pathname === '/api/indirect-changes') return route.fulfill({ json: { indirectChanges: false } });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items } });

@@ -261,5 +261,6 @@
   "{sources} could not be reached.": "{sources} に接続できませんでした。",
   "{source} has this work with other details. Compare them below.": "{source} にはこの文献の異なる詳細情報が登録されています。以下で比較してください。",
   "{staged} of {total} staged": "{total} 件中 {staged} 件ステージ済み",
-  "↵ send · Esc cancel": "↵ 送信 · Esc キャンセル"
+  "↵ send · Esc cancel": "↵ 送信 · Esc キャンセル",
+  "Your comments are saved. Continue in Chat to request a revision.": "コメントは保存されました。チャットで修正を依頼してください。"
 }

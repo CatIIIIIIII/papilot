@@ -18,8 +18,11 @@ const origin = `http://127.0.0.1:${server.server.address().port}`;
 const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper' }], tasks: [], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
 const git = { branch: 'main', files: [] };
 let notes = [], serial = 0, quickNotes = null;
+const deletedNotes = new Map();
+let failHistoryDelete = false, releaseHistoryDelete;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/updates') return json({ currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname.endsWith('/question-sessions')) return json({ sessions: [{ id: 'default', title: '', createdAt: 1, updatedAt: 1 }] });
@@ -41,7 +44,17 @@ await page.route('**/api/**', async route => {
   }
   const edit = url.pathname.match(/\/annotations\/(mark-\d+)$/);
   if (edit) { const note = notes.find(note => note.id === edit[1]); note.comment = route.request().postDataJSON().comment; return json(note); }
-  if (url.pathname.endsWith('/delete')) { const id = url.pathname.split('/').at(-2); notes = notes.filter(note => note.id !== id); return json({ ok: true }); }
+  if (url.pathname.endsWith('/delete')) {
+    if (failHistoryDelete) { failHistoryDelete = false; return route.fulfill({ status: 500, json: { error: 'History fixture failure' } }); }
+    if (releaseHistoryDelete) await new Promise(resolve => { releaseHistoryDelete = resolve; });
+    const id = url.pathname.split('/').at(-2); deletedNotes.set(id, notes.find(note => note.id === id));
+    notes = notes.filter(note => note.id !== id); return json({ ok: true });
+  }
+  if (url.pathname.endsWith('/restore')) {
+    const id = url.pathname.split('/').at(-2), note = deletedNotes.get(id);
+    if (note && !notes.some(item => item.id === id)) notes.push(note);
+    notes.sort((a, b) => a.createdAt - b.createdAt); return json({ annotations: notes });
+  }
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
   throw Error(`Unexpected fixture request ${url.pathname}`);
 });
@@ -74,7 +87,37 @@ const key = async value => { await page.locator('.pdf-container').focus(); await
 try {
   await page.goto(origin);
   await words().first().waitFor();
-  await expect(rail().getByRole('button')).toHaveCount(7);
+  await expect(rail().getByRole('button')).toHaveCount(10);
+  await expect(tool('Undo')).toBeDisabled(); await expect(tool('Redo')).toBeDisabled();
+  assert.deepEqual(await rail().getByRole('button').evaluateAll(buttons => buttons.slice(-2).map(button => button.getAttribute('aria-label'))), ['Undo', 'Redo']);
+  const railBox = await rail().boundingBox(), redoBox = await tool('Redo').boundingBox();
+  const bottomGap = railBox.y + railBox.height - redoBox.y - redoBox.height;
+  assert.ok(bottomGap >= 0 && bottomGap < 12, 'History belongs inside the bottom of the rail');
+  // Retracting the rail gives the width back to the PDF, keeps the selected
+  // tool and keyboard shortcuts, and remembers the preference on reload.
+  const collapse = () => tool('Collapse marking tools'), expand = () => tool('Expand marking tools');
+  const expandedWidth = (await settled(page.locator('.pdf-container'))).width;
+  await key('q');
+  await collapse().click();
+  await expect(expand()).toHaveAttribute('aria-expanded', 'false');
+  await expect(expand()).toBeFocused();
+  await expect(rail().getByRole('button')).toHaveCount(1);
+  await expect(page.locator('.pdf-view')).toHaveClass(/tool-magic/);
+  assert.ok((await settled(page.locator('.pdf-container'))).width > expandedWidth + 40);
+  await key('h');
+  await expect(page.locator('.pdf-view')).toHaveClass(/tool-hand/);
+  await expand().click();
+  await expect(tool('Hand')).toHaveAttribute('aria-pressed', 'true');
+  await collapse().click();
+  await page.reload();
+  await words().first().waitFor();
+  await expect(expand()).toBeVisible();
+  await page.screenshot({ path: 'test-results/pdf-tools-collapsed.png' });
+  await expand().focus();
+  await page.keyboard.press('Enter');
+  await expect(collapse()).toHaveAttribute('aria-expanded', 'true');
+  await expect(collapse()).toBeFocused();
+  await expect(rail().getByRole('button')).toHaveCount(10);
   // The note tool is its own color picker: a click picks it, a second opens colors.
   await tool('Note').click();
   await expect(tool('Note')).toHaveAttribute('aria-pressed', 'true');
@@ -96,6 +139,76 @@ try {
   await expect.poll(() => notes.length).toBe(1);
   assert.deepEqual([notes[0].kind, notes[0].comment], ['delete', '']);
   await expect(page.locator('.note-mark[data-kind="delete"]')).toHaveCount(1);
+  // History waits for the server, preserves a failed operation for retry, and
+  // restores the same annotation (including its original id and geometry).
+  const originalMark = structuredClone(notes[0]);
+  // Short windows scroll the tools while history stays visible and clickable.
+  for (const height of [400, 320]) {
+    await page.setViewportSize({ width: 1440, height });
+    const railBox = await settled(rail()), undoBox = await tool('Undo').boundingBox(), redoBox = await tool('Redo').boundingBox();
+    const gap = railBox.y + railBox.height - redoBox.y - redoBox.height;
+    assert.ok(gap >= 0 && gap < 12 && undoBox.y >= railBox.y);
+    await tool('Undo').click(); await expect.poll(() => notes.length).toBe(0);
+    await tool('Redo').click(); await expect.poll(() => notes).toEqual([originalMark]);
+    await tool('Hand').hover();
+    const tip = tool('Hand').locator('.rail-tip');
+    await expect(tip).toBeVisible();
+    const tipBox = await tip.boundingBox();
+    assert.ok(tipBox.x >= railBox.x + railBox.width && tipBox.y >= 0 && tipBox.y + tipBox.height <= height, 'Hover hints escape scroll clipping and stay in the viewport');
+    assert.ok(await rail().locator('.rail-tools').evaluate(element => element.scrollTop > 0));
+    await page.screenshot({ path: `test-results/pdf-tools-short-${height}.png` });
+    await tool('Hand').click(); await expect(tool('Hand')).toHaveAttribute('aria-pressed', 'true');
+    await tool('Magic pen').hover(); await expect(tool('Magic pen').locator('.rail-tip')).toBeVisible();
+  }
+  // Closing a menu restores keyboard focus while the browser is still
+  // changing its popover stack. The hint must wait and never re-enter it.
+  for (let repeat = 0; repeat < 3; repeat++) {
+    await tool('Collapse marking tools').focus(); await page.keyboard.press('Tab');
+    await expect(tool('Magic pen')).toBeFocused();
+    await expect(tool('Magic pen').locator('.rail-tip')).toBeVisible();
+    await page.keyboard.press('Shift+Tab');
+    await expect(tool('Collapse marking tools')).toBeFocused();
+    await expect(page.locator('.rail-tip:popover-open')).toHaveCount(0);
+    await page.keyboard.press('Tab');
+    for (let index = 0; index < 6; index++) await page.keyboard.press('Tab');
+    await expect(tool('Hand')).toBeFocused();
+    await expect(tool('Hand').locator('.rail-tip')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await tool('Magic pen').hover();
+    await expect(tool('Magic pen').locator('.rail-tip')).toBeVisible();
+    await tool('Magic pen').click(); await tool('Magic pen').click();
+    const menu = rail().getByRole('menu', { name: 'Quick notes' });
+    await expect(menu).toBeVisible();
+    await expect(tool('Magic pen').locator('.rail-tip')).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(tool('Magic pen')).toBeFocused();
+    await expect(tool('Magic pen').locator('.rail-tip')).toBeVisible();
+    await page.mouse.move(1000, 250);
+    await page.getByRole('textbox', { name: 'Describe the revision', exact: true }).focus();
+    await expect(page.locator('.rail-tip:popover-open')).toHaveCount(0);
+    assert.deepEqual(errors, []);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await key('d');
+  failHistoryDelete = true;
+  await tool('Undo').click();
+  await expect(page.getByRole('alert').filter({ hasText: 'History fixture failure' })).toBeVisible();
+  await expect(tool('Undo')).toBeEnabled(); await expect(tool('Redo')).toBeDisabled();
+  assert.deepEqual(notes, [originalMark]);
+  releaseHistoryDelete = true;
+  await tool('Undo').click();
+  await expect(tool('Undo')).toBeDisabled(); await expect(tool('Redo')).toBeDisabled();
+  await expect.poll(() => typeof releaseHistoryDelete).toBe('function');
+  releaseHistoryDelete(); releaseHistoryDelete = undefined;
+  await expect.poll(() => notes.length).toBe(0);
+  await expect(tool('Redo')).toBeEnabled();
+  await tool('Redo').click();
+  await expect.poll(() => notes).toEqual([originalMark]);
+  await expect(tool('Undo')).toBeEnabled();
+  await key('ControlOrMeta+z'); await expect.poll(() => notes.length).toBe(0);
+  await expect(tool('Redo')).toBeEnabled();
+  await key('ControlOrMeta+Shift+z'); await expect.poll(() => notes).toEqual([originalMark]);
   await page.locator('.note-tag[data-kind="delete"]').click();
   const card = page.getByRole('dialog', { name: /^PDF note/ });
   await expect(card).toContainText('Delete this text');
@@ -104,6 +217,7 @@ try {
   // Left empty, the deletion still goes into the task.
   await page.keyboard.press('Enter');
   await expect(card).toHaveCount(0);
+
   await page.locator('.note-tag[data-kind="delete"]').click();
   const include = card.getByRole('button', { name: 'Include note 1 in this task' });
   await expect(include).toHaveAttribute('aria-pressed', 'true');
@@ -115,6 +229,14 @@ try {
   await expect.poll(() => notes[0].comment).toBe('plainer words');
   // Marking waits while a note saves; the card closes once it has.
   await expect(card).toHaveCount(0);
+
+  // Editing a comment has its own history entry and leaves the mark in place.
+  await tool('Undo').click();
+  await expect.poll(() => notes[0].comment).toBe('');
+  await tool('Redo').click();
+  await expect.poll(() => notes[0].comment).toBe('plainer words');
+
+  await expect(tool('Undo')).toBeEnabled();
 
   // The magic pen opens its wheel where the drag ended; a number picks a slot.
   await key('q');
@@ -177,6 +299,12 @@ try {
   await tool('Magic pen').click();
   const menu = rail().getByRole('menu', { name: 'Quick notes' });
   await expect(menu.getByRole('menuitemradio')).toHaveCount(6);
+  await page.screenshot({ animations: 'disabled', path: 'test-results/pdf-tools-menu.png' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.screenshot({ animations: 'disabled', path: 'test-results/pdf-tools-menu-dark.png' });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await menu.getByRole('menuitemradio', { name: /Connect/ }).click();
   await expect(rail().locator('.rail-badge')).toHaveText('4');
   await tool('Magic pen').click();
@@ -242,6 +370,18 @@ try {
   await page.keyboard.press('Enter');
   await expect.poll(() => notes.length).toBe(5);
   assert.deepEqual([notes[4].kind, notes[4].comment], ['point', 'Explain why here.']);
+  await tool('Undo').click(); await expect.poll(() => notes.length).toBe(4);
+  await tool('Redo').click(); await expect.poll(() => notes.length).toBe(5);
+
+  // Deleting a note can be undone and redone; a new edit starts a new branch.
+  await key('v');
+  await page.locator('.note-tag[data-kind="point"]').last().click();
+  await sticky.getByRole('button', { name: /^Delete note \d+$/ }).click();
+  await expect.poll(() => notes.length).toBe(4);
+  await tool('Undo').click(); await expect.poll(() => notes.length).toBe(5);
+  await tool('Redo').click(); await expect.poll(() => notes.length).toBe(4);
+  await tool('Undo').click(); await expect.poll(() => notes.length).toBe(5);
+  await key('Escape');
 
   // A selection made first takes the tool picked for it.
   await key('v');
@@ -250,6 +390,7 @@ try {
   await page.keyboard.press('d');
   await expect.poll(() => notes.length).toBe(6);
   assert.equal(notes[5].kind, 'delete');
+  await expect(tool('Redo')).toBeDisabled();
 
   // The hand drags the pages; Space borrows it and a tap still turns the page.
   await page.setViewportSize({ width: 1440, height: 600 });
@@ -280,6 +421,11 @@ try {
   await page.locator('.note-tag[data-kind="point"]').last().click();
   await page.getByRole('dialog', { name: /^PDF note/ }).getByRole('button', { name: /^Edit note \d+$/ }).click();
   await page.keyboard.type(' dq');
+  const beforeTypingUndo = structuredClone(notes);
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  assert.deepEqual(notes, beforeTypingUndo, 'Text editing must keep native undo and redo');
+  await expect(tool('Undo')).toBeDisabled();
   await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Escape');
 
@@ -289,5 +435,5 @@ try {
   await expect(rail()).toBeHidden();
   await expect(page.locator('.pdf-compact-tools')).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('PASS: rail tools, deletions with replacements, the magic pen wheel, number lock, menu and settings, points, sticky notes, hand and Space, tool-after-selection, and narrow viewers.');
+  console.log('PASS: collapsible rail, bottom undo/redo, history retries and keyboard shortcuts, native text undo, deletions with replacements, the magic pen wheel, number lock, menu and settings, points, sticky notes, hand and Space, tool-after-selection, and narrow viewers.');
 } finally { await browser.close(); await server.close(); }

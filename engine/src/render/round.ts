@@ -208,7 +208,9 @@ export function renderRound(
         section: node ? `${node.number} ${node.title}`.trim() : null,
       };
     }
-    const changes = changesOf(old, next, cards),
+    // Without indirect changes, an edit shows only its own lines: the whole
+    // documents are not compared for places, and no variant is compiled.
+    const changes = request.indirect ? changesOf(old, next, cards) : [],
       // An edit that prints nothing of its own, such as a macro definition,
       // changes the PDF only away from its lines. An edit of comments or
       // line breaks alone has no crop and changes nothing.
@@ -218,6 +220,7 @@ export function renderRound(
           (c.comparison === "identical" && c.pairs.length > 0),
       );
     if (
+      request.indirect &&
       request.units.length > 1 &&
       !request.causes &&
       (silent.length > 0 || changes.some((c) => !c.within.length))
@@ -233,13 +236,15 @@ export function renderRound(
         request.units.length === 1
           ? changes.map(() => [request.units[0].id])
           : (request.causes ?? changes.map(() => [])),
-      places = placesOf(
-        old,
-        next,
-        changes.map((c) => c.effect),
-        causes,
-        changes.map((c) => c.within),
-      ),
+      places = request.indirect
+        ? placesOf(
+            old,
+            next,
+            changes.map((c) => c.effect),
+            causes,
+            changes.map((c) => c.within),
+          )
+        : {},
       strips = new Strips(out);
     for (const [id, list] of Object.entries(places))
       result.units[id].effects = {

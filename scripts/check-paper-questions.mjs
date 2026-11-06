@@ -21,6 +21,7 @@ const sessions = Object.fromEntries(['paper', 'other'].map(projectId => [project
 let failPost = false, failDelete = false, taskWrites = 0;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
+  if (url.pathname.endsWith('/indirect-changes')) return json({ changes: [] });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', phase: 'idle', canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });

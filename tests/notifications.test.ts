@@ -32,6 +32,20 @@ test('errors are announced once; pausing and unchanged or new tasks are not', ()
   assert.deepEqual(taskAlerts(snapshot([]), snapshot([{ status: 'failed' }])), []);
 });
 
+test('completion still notifies when a fast build falls between snapshots', () => {
+  for (const status of ['running', 'queued', 'waiting_input'] as const) {
+    const done = snapshot([{ status: 'reviewing', review: { state: 'done', round: 1, counts: { pending: 0 } } }]);
+    assert.equal(taskAlerts(snapshot([{ status }]), done)[0].event, 'finished');
+    assert.deepEqual(taskAlerts(done, done), []);
+  }
+});
+
+test('recovering a review decision does not announce another task completion', () => {
+  const previous = snapshot([{ status: 'uncertain', pendingReview: { route: '/api/tasks/p-a/accept', body: {}, previousStatus: 'reviewing' } }]);
+  const recovered = snapshot([{ status: 'reviewing', pendingReview: null, review: { state: 'done', round: 1, counts: { pending: 0 } } }]);
+  assert.deepEqual(taskAlerts(previous, recovered), []);
+});
+
 test('each notification scenario can be muted independently', () => {
   const all: NotificationEvents = { input: true, approval: true, review: true, finished: true, error: true };
   const cases = {

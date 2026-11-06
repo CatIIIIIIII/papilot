@@ -261,5 +261,6 @@
   "{sources} could not be reached.": "無法連線至 {sources}。",
   "{source} has this work with other details. Compare them below.": "{source} 中收錄的此著作具有其他詳細資訊。請在下方進行比對。",
   "{staged} of {total} staged": "已暫存 {staged} / {total}",
-  "↵ send · Esc cancel": "↵ 傳送 · Esc 取消"
+  "↵ send · Esc cancel": "↵ 傳送 · Esc 取消",
+  "Your comments are saved. Continue in Chat to request a revision.": "您的評論已儲存。請在聊天中繼續提出修改要求。"
 }

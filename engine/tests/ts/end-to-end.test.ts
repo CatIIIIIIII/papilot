@@ -363,12 +363,18 @@ The results follow.
     f.repo.run(["add", "."]);
     f.repo.run(["commit", "-qm", "macro fixture"]);
     const app = f.app();
-    const publish = async (name: string) => {
-      const job = app.publisher.submit(name);
+    const publish = async (name: string, indirect?: boolean) => {
+      const job = app.publisher.submit(name, undefined, indirect);
       await app.publisher.join();
       const done = app.publisher.job(job.id);
       expect(done.status, JSON.stringify(done.result)).toBe("done");
+      return done.result as unknown as { outcome: string };
     };
+    // The PDFs compiled so far: the cache keeps one folder per build.
+    const builds = () =>
+      fs
+        .readdirSync(path.join(app.state, "cache/builds"))
+        .filter((name) => /^[0-9a-f]{32}$/.test(name)).length;
     const blocks = (name: string) => {
       const detail = app.review.roundDetail(name, 1);
       return [
@@ -383,7 +389,7 @@ The results follow.
       // places are the five uses, the first three rendered.
       const single = app.tasks.create("rename");
       f.edit(single, "paper/macros.tex", "MacroNet", "MacroFormer");
-      await publish(single.name);
+      await publish(single.name, true);
       const [unit] = app.review.roundDetail(single.name, 1).units;
       expect(blocks(single.name)).toEqual([[unit.id]]);
       expect(unit.effects?.total).toBe(5);
@@ -404,6 +410,31 @@ The results follow.
       expect(rest.map((p) => p.section)).toEqual(["4 Discussion", "5 Outlook"]);
       expect(rest.every((p) => p.after.length === 1)).toBe(true);
 
+      // By default an edit shows only its own lines: no places, and no
+      // variant is compiled to find them, only the round's new version.
+      const plain = app.tasks.create("plain");
+      f.edit(plain, "paper/macros.tex", "MacroNet", "MacroFormer");
+      f.edit(
+        plain,
+        "paper/main.tex",
+        "Where Macros Point",
+        "Where Do Macros Point",
+      );
+      f.edit(plain, "paper/main.tex", "results follow", "results follow below");
+      const compiled = builds();
+      await publish(plain.name, false);
+      expect(builds() - compiled).toBe(1);
+      expect(
+        app.review.roundDetail(plain.name, 1).units.some((u) => u.effects),
+      ).toBe(false);
+      // Turning them on builds the same edits again, with their places; a
+      // request that does not say keeps the task's choice.
+      await publish(plain.name, true);
+      expect(
+        app.review.roundDetail(plain.name, 2).units.some((u) => u.effects),
+      ).toBe(true);
+      expect((await publish(plain.name)).outcome).toBe("unchanged");
+
       // With other edits in the round, compiling the definition alone tells
       // its places apart from the other edits' own changes.
       const mixed = app.tasks.create("mixed");
@@ -415,7 +446,7 @@ The results follow.
         "Where Do Macros Point",
       );
       f.edit(mixed, "paper/main.tex", "results follow", "results follow below");
-      await publish(mixed.name);
+      await publish(mixed.name, true);
       const units = app.review.roundDetail(mixed.name, 1).units,
         of = (file: string, line: number) =>
           units.find((u) => u.file === file && u.new_start === line)!;
