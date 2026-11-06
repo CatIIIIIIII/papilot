@@ -1,4 +1,4 @@
-> **Ning custom preview — 0.9.0-preview.15.** Based on official 0.9.0 + current upstream changes, with saved paper Q&A, aligned PDF comparison and a compact reasoning slider. See [CUSTOM.md](CUSTOM.md) for build and update instructions.
+> **Ning custom preview — 0.9.0-preview.16.** Based on official 0.9.0 + current upstream changes, with saved paper Q&A, aligned PDF comparison and a compact reasoning slider. See [CUSTOM.md](CUSTOM.md) for build and update instructions.
 
 <div align="center">
 

@@ -1,6 +1,6 @@
 # Ning’s Papilot Preview
 
-Personal distribution: **0.9.0-preview.15**, branch `custom/ning-preview`.
+Personal distribution: **0.9.0-preview.16**, branch `custom/ning-preview`.
 
 Based on official Papilot 0.9.0 and upstream main as of 2026-11-06, including the merged editing-network feature (#54). Integrates paper Q&A with saved conversations (#38), aligned PDF comparison (#40), and the compact reasoning slider (#37). The official note editing/deletion feature (#36) is retained.
 
@@ -31,3 +31,5 @@ The revision composer now has a **Task permissions** selector for Codex, Claude 
 Diff backgrounds follow the PDF appearance setting, so a light PDF keeps light comparison colors even when the application uses the dark theme.
 
 Claude streaming and final replies share the original text block identity even after thinking blocks. Existing unfinished duplicate copies are hidden in the conversation view without changing stored history.
+
+Desktop launches prefer Claude's executable native user installation over legacy PATH installations. Explicit PAPILOT_CLAUDE_BIN overrides and Nix environments retain their existing selection.

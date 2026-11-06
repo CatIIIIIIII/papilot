@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 export function backendEnvironment(node: string, root: string, data: string, inherited = process.env) {
-  const home = os.homedir();
+  const home = inherited.HOME || os.homedir();
   const nvm = path.join(inherited.NVM_DIR || path.join(home, '.nvm'), 'versions/node');
   let nodeBins: string[] = [];
   try { nodeBins = fs.readdirSync(nvm).filter(version => /^v\d+\.\d+\.\d+$/.test(version)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).map(version => path.join(nvm, version, 'bin')); } catch { /* nvm is optional */ }
@@ -16,7 +16,14 @@ export function backendEnvironment(node: string, root: string, data: string, inh
     ...(inherited.PATH || '').split(path.delimiter), ...agentDirs(inherited),
     ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin', '.volta/bin', '.asdf/shims'].map(dir => path.join(home, dir)), ...nodeBins,
     '/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
-  const env = { ...inherited, PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),
+  // Finder/Dock may inherit a PATH that finds an old Homebrew Claude first.
+  // Prefer Claude's native user install; explicit overrides and Nix keep control.
+  const nativeClaude = path.join(home, '.local/bin/claude');
+  let claudeBinary = inherited.PAPILOT_CLAUDE_BIN;
+  if (!claudeBinary && inherited.PAPILOT_INSTALL_METHOD !== 'nix') {
+    try { if (fs.statSync(nativeClaude).isFile()) { fs.accessSync(nativeClaude, fs.constants.X_OK); claudeBinary = nativeClaude; } } catch { /* Use ordinary PATH lookup when no native install exists. */ }
+  }
+  const env = { ...inherited, ...(claudeBinary ? { PAPILOT_CLAUDE_BIN: claudeBinary } : {}), PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),
     NODE_ENV: 'production', PAPILOT_DESKTOP: '1', PAPILOT_DATA: data, PAPILOT_PORT: '0',
     PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_TAILSCALE_LOGIN: '' };
   // The backend is ordinary Node, even when Electron itself was started by a tool.
