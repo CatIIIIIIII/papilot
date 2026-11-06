@@ -14,6 +14,7 @@ import {
   renderDocument,
 } from "../../src/render/inline.ts";
 import type { Build } from "../../src/render/locate.ts";
+import { byReading, laneAt, readingKey } from "../../src/render/locate.ts";
 import { typesetWords } from "../../src/render/round.ts";
 import { opcodes } from "../../src/core/diff.ts";
 import type { Card, Heading, Position, Strip } from "../../src/types.ts";
@@ -168,8 +169,11 @@ it("renders shared ink once across sections and floating edits, retaining every 
         ),
       ).length;
   expect(cards).toEqual(original);
-  expect(changes).toHaveLength(1);
-  expect(changes[0].units).toEqual(["a", "b", "figure"]);
+  expect(changes.map((b) => b.units)).toEqual([
+    ["a", "b", "figure"],
+    ["a", "b", "figure"],
+  ]);
+  expect(changes.filter((b) => b.before.length)).toHaveLength(1);
   const svg = changes[0].before
     .map((s) => fs.readFileSync(path.join(folder, s.src), "utf8"))
     .join("");
@@ -360,6 +364,101 @@ it("partitions nested headings without losing child context or jumping back in r
     () => false,
   );
   expect(scoped.sections.map((s) => s.node)).toEqual(["1"]);
+});
+it("splits a wide source crop into the page's reading lanes and sections", () => {
+  const raw = new mupdf.PDFDocument(),
+    font = new mupdf.Font("Helvetica"),
+    resource = raw.addSimpleFont(font);
+  let content = "";
+  for (const [x, side] of [
+    [30, "LEFT"],
+    [330, "RIGHT"],
+  ] as const)
+    for (let line = 0; line < 12; line++)
+      content += `BT /F1 10 Tf ${x} ${550 - line * 18} Td (${side} line ${line} has several readable words.) Tj ET\n`;
+  const page = raw.addPage(
+    [0, 0, 600, 600],
+    0,
+    { Font: { F1: resource } },
+    content,
+  );
+  raw.insertPage(-1, page);
+  page.destroy();
+  const buffer = raw.saveToBuffer(""),
+    doc = new PdfDocument(buffer.asUint8Array());
+  documents.push(doc);
+  buffer.destroy();
+  resource.destroy();
+  font.destroy();
+  raw.destroy();
+  const build = sectioned(doc, [0, 5]);
+  build.locator.lookup = (_file, line) => [
+    [0, 40 + line * 18, 52 + line * 18, 30, 260],
+  ];
+  expect(doc.page(0).twoColumns).toBe(true);
+  expect(doc.page(0).spanning).toEqual([]);
+  const position: Position = { page: 0, clip: [0, 88, 600, 128], label: "1" },
+    card: Card = {
+      id: "figure",
+      file: "figure.tex",
+      context_node: "0",
+      comparison: "layout",
+      aligned: true,
+      pairs: [
+        {
+          old: position,
+          new: position,
+          group: 0,
+          before_marks: [],
+          after_marks: [],
+        },
+      ],
+    },
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-wide-"));
+  folders.push(folder);
+  const result = renderDocument(
+      build,
+      build,
+      [card],
+      new Strips(folder),
+      () => true,
+    ),
+    changes = result.sections.flatMap((s) =>
+      s.blocks.filter((b) => b.kind === "change"),
+    ),
+    shown = result.sections.flatMap((s) =>
+      s.blocks.flatMap((b) =>
+        b.kind === "context" ? [b.image] : b.kind === "change" ? b.after : [],
+      ),
+    ),
+    key = (s: Strip) =>
+      readingKey(
+        doc,
+        laneAt(doc, s.page! - 1, [
+          s.left ?? 0,
+          s.top!,
+          (s.left ?? 0) + s.width,
+          s.top! + s.height,
+        ]),
+        s.top!,
+      );
+  expect(result.loose).toEqual([]);
+  for (let i = 1; i < shown.length; i++)
+    expect(byReading(key(shown[i - 1]), key(shown[i]))).toBeLessThanOrEqual(0);
+  expect(changes.map((b) => b.units)).toEqual([["figure"], ["figure"]]);
+  expect(changes.filter((b) => b.before.length)).toHaveLength(1);
+  expect(changes.flatMap((b) => b.after).every((s) => s.width <= 300)).toBe(
+    true,
+  );
+  for (const word of doc.page(0).words)
+    expect(
+      shown.filter((s) =>
+        containsCenter(
+          [s.left ?? 0, s.top!, (s.left ?? 0) + s.width, s.top! + s.height],
+          word.rect,
+        ),
+      ),
+    ).toHaveLength(1);
 });
 it("marks whole words including deleted suffixes", () => {
   const old = document([

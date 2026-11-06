@@ -21,6 +21,8 @@ interface Side {
   build: Build;
   words: Words;
   lines: Line[];
+  /** Every physical row occupied by each logical line's tokens. */
+  parts: Line[][];
   /** The line of every glyph. */
   glyphLine: Int32Array;
   /** The indices of each page's lines, in reading order. */
@@ -75,38 +77,42 @@ export function alignment(old: Build, next: Build): Alignment | null {
 function sideOf(build: Build, w: Words): Side {
   const glyphLine = new Int32Array(w.glyphs.length).fill(-1),
     byPage = new Map<number, number[]>();
-  const lines = w.lines.map(([i, j], index): Line => {
+  const parts = w.lines.map(([i, j], index): Line[] => {
     const start = w.tokens[i].start,
       end = w.tokens[j - 1].end,
-      first = w.glyphs[start];
-    let rect = first.rect;
+      rows = new Map<number, Line>();
     for (let g = start; g < end; g++) {
       glyphLine[g] = index;
-      // A word hyphenated across lines belongs to the line it starts on;
-      // its tail keeps the height of its own line out of this one.
-      if (w.glyphs[g].pair === first.pair) rect = union(rect, w.glyphs[g].rect);
+      const { pair, page, rect } = w.glyphs[g],
+        row = rows.get(pair);
+      if (row) row.rect = union(row.rect, rect);
+      else rows.set(pair, { page, rect, column: -1 });
     }
-    if (!byPage.has(first.page)) byPage.set(first.page, []);
-    byPage.get(first.page)!.push(index);
-    return {
-      page: first.page,
-      rect,
-      column: build.document.page(first.page).column(rect),
-    };
+    const parts = [...rows.values()];
+    for (const part of parts)
+      part.column = build.document.page(part.page).column(part.rect);
+    for (const page of new Set(parts.map((part) => part.page))) {
+      if (!byPage.has(page)) byPage.set(page, []);
+      byPage.get(page)!.push(index);
+    }
+    return parts;
   });
   const tokenLine = new Int32Array(w.tokens.length).fill(-1);
   w.lines.forEach(([i, j], line) => tokenLine.fill(line, i, j));
   return {
     build,
     words: w,
-    lines,
+    // Alignment addresses a logical line by its start; drawing and source
+    // ownership use all of its physical rows, even across pages or columns.
+    lines: parts.map((p) => p[0]),
+    parts,
     glyphLine,
     byPage,
     changed: new Map(),
     unpaired: new Map(),
     moved: new Map(),
-    changedLine: new Uint8Array(lines.length),
-    movedLine: new Uint8Array(lines.length),
+    changedLine: new Uint8Array(parts.length),
+    movedLine: new Uint8Array(parts.length),
     tokenLine,
     changedToken: new Uint8Array(w.tokens.length),
   };
@@ -264,19 +270,22 @@ export function printers(
     result = new Map<number, number[]>();
   records.forEach((boxes, edit) => {
     for (const [page, top, bottom, x0, x1] of boxes) {
-      const covered = (side.byPage.get(page) ?? []).filter((line) => {
-        const rect = side.lines[line].rect,
-          across =
-            x0 === undefined ||
-            x1 === undefined ||
-            !Number.isFinite(x0 + x1) ||
-            (x1 > rect[0] && x0 < rect[2]);
-        return (
-          across &&
-          Math.min(bottom, rect[3]) - Math.max(top, rect[1]) >=
-            0.5 * (rect[3] - rect[1])
-        );
-      });
+      const covered = (side.byPage.get(page) ?? []).filter((line) =>
+        side.parts[line].some((part) => {
+          const rect = part.rect,
+            across =
+              x0 === undefined ||
+              x1 === undefined ||
+              !Number.isFinite(x0 + x1) ||
+              (x1 > rect[0] && x0 < rect[2]);
+          return (
+            part.page === page &&
+            across &&
+            Math.min(bottom, rect[3]) - Math.max(top, rect[1]) >=
+              0.5 * (rect[3] - rect[1])
+          );
+        }),
+      );
       // A record over more than a few lines is a box around them, such as
       // a float, a paragraph or an image at its unscaled size, that TeX
       // files under one source line: it says nothing of who printed them.
@@ -339,17 +348,18 @@ function touched(al: Alignment, name: SideName, crops: Position[]): Touch[] {
   return crops.map((at): Touch => {
     const [x0, y0, x1, y1] = at.clip,
       onPage = side.byPage.get(at.page) ?? [],
-      across = onPage.filter((i) => {
-        const r = side.lines[i].rect;
-        return r[0] < x1 && r[2] > x0;
-      }),
-      inside = across.filter((i) => {
-        const y = middle(side.lines[i].rect);
+      across = onPage.flatMap((line) =>
+        side.parts[line]
+          .filter((p) => p.page === at.page && p.rect[0] < x1 && p.rect[2] > x0)
+          .map((p) => ({ line, rect: p.rect })),
+      ),
+      inside = across.filter(({ rect }) => {
+        const y = middle(rect);
         return y >= y0 && y <= y1;
       });
-    if (inside.length) return [inside[0], inside.at(-1)!];
-    const above = across.filter((i) => middle(side.lines[i].rect) < y0).at(-1),
-      below = across.find((i) => middle(side.lines[i].rect) > y1),
+    if (inside.length) return [inside[0].line, inside.at(-1)!.line];
+    const above = across.filter(({ rect }) => middle(rect) < y0).at(-1)?.line,
+      below = across.find(({ rect }) => middle(rect) > y1)?.line,
       before =
         above ?? (onPage.length ? onPage[0] - 1 : lastBefore(side, at.page)),
       after = below ?? (onPage.length ? onPage.at(-1)! + 1 : before + 1);
@@ -450,33 +460,36 @@ function same(
   [newOuter, j]: [number, number],
   end: 0 | 1,
 ) {
-  const band = (
-    side: Side,
-    outer: number,
-    line: number,
-  ): [number, Rect] | null => {
-    const l = side.lines[line],
-      o = side.lines[outer];
-    if (!o || o.page !== l.page || o.column !== l.column) return null;
-    const page = side.build.document.page(l.page),
-      [x0, x1] = page.columnBounds(l.column);
-    return [
-      l.page,
-      end === 0
-        ? [x0, o.rect[3], x1, l.rect[3]]
-        : [x0, l.rect[1], x1, o.rect[1]],
-    ];
-  };
-  const a = band(al.old, oldOuter, i),
-    b = band(al.new, newOuter, j);
-  if (!a || !b) {
-    // Across a page break the space beyond the line belongs to pagination,
-    // which may differ while the text does not: the line itself decides.
-    const l = al.old.lines[i],
-      m = al.new.lines[j];
-    return identical(al, [l.page, l.rect], [m.page, m.rect]);
-  }
-  return identical(al, a, b);
+  const bands = (side: Side, outer: number, line: number): (Rect | null)[] =>
+    side.parts[line].map((l, index, parts) => {
+      const o =
+        end === 0
+          ? (parts[index - 1] ?? side.parts[outer]?.at(-1))
+          : (parts[index + 1] ?? side.parts[outer]?.[0]);
+      // Across a page or column break the intervening space is pagination.
+      if (!o || o.page !== l.page || o.column !== l.column) return null;
+      const [x0, x1] = side.build.document.page(l.page).columnBounds(l.column);
+      // Logical lines may share or overlap physical rows. The intervening
+      // space may vanish, but the comparison must still include this row.
+      return end === 0
+        ? [x0, Math.min(o.rect[3], l.rect[1]), x1, l.rect[3]]
+        : [x0, l.rect[1], x1, Math.max(o.rect[1], l.rect[3])];
+    });
+  const a = bands(al.old, oldOuter, i),
+    b = bands(al.new, newOuter, j);
+  return (
+    a.length === b.length &&
+    a.every((rect, index) => {
+      const left = al.old.parts[i][index],
+        right = al.new.parts[j][index],
+        other = b[index];
+      return identical(
+        al,
+        [left.page, rect && other ? rect : left.rect],
+        [right.page, rect && other ? other : right.rect],
+      );
+    })
+  );
 }
 function identical(
   al: Alignment,
@@ -572,14 +585,13 @@ function cropsOf(
   const side = al[name],
     document = side.build.document,
     [lo, hi] = gap[name],
-    top = lo >= 0 ? side.lines[lo] : null,
-    end = hi < side.lines.length ? side.lines[hi] : null,
+    top = side.parts[lo]?.at(-1) ?? null,
+    end = side.parts[hi]?.[0] ?? null,
     same = (a: number, b: number) => a === b || a === -1 || b === -1,
     parts = new Map<string, Part>();
-  for (let i = lo + 1; i < hi; i++) {
-    const line = side.lines[i];
-    gather(parts, line.page, line.column, line.rect);
-  }
+  for (let i = lo + 1; i < hi; i++)
+    for (const part of side.parts[i])
+      gather(parts, part.page, part.column, part.rect);
   for (const at of own) {
     if ((top && at.page < top.page) || (end && at.page > end.page)) continue;
     const column = document.page(at.page).column(at.clip);
@@ -683,15 +695,14 @@ function linesCrops(
 ): Position[] {
   const side = al[name],
     parts = new Map<string, Part>();
-  for (let i = first; i <= last; i++) {
-    const { page, column, rect } = side.lines[i];
-    gather(parts, page, column, rect);
-  }
+  for (let i = first; i <= last; i++)
+    for (const { page, column, rect } of side.parts[i])
+      gather(parts, page, column, rect);
   return framed(
     side.build.document,
     parts.values(),
-    side.lines[first - 1] ?? null,
-    side.lines[last + 1] ?? null,
+    side.parts[first - 1]?.at(-1) ?? null,
+    side.parts[last + 1]?.[0] ?? null,
   );
 }
 // A region is cut at its words. Its new crop holds the lines from its first

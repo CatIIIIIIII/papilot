@@ -20,9 +20,11 @@ import {
   Build,
   byReading,
   laneAt,
+  laneColumn,
   lanePage,
   laneX,
   readingKey,
+  readingParts,
   readingSections,
   sectionIntervals,
   type Intervals,
@@ -736,12 +738,21 @@ export function renderDocument(
           const [left, right] = laneX(next.document, id);
           return {
             page: lanePage(id),
+            lane: id,
             rect: [left, top, right, bottom] as Rect,
             value,
           };
         }),
       ),
     ),
+    // Section ownership covers the lane's margins too. Context retains the
+    // narrower printed bounds above, but a source crop must not lose ink.
+    boundaries = sectionAreas.map(({ page, lane, rect, value }) => {
+      const [left, right] = next.document
+        .page(page)
+        .columnBounds(laneColumn(lane));
+      return { page, rect: [left, rect[1], right, rect[3]] as Rect, value };
+    }),
     affected = new Set(
       sectionAreas
         .filter((section) =>
@@ -772,7 +783,7 @@ export function renderDocument(
     region?: number;
     section: number;
   }
-  const plans: Display[][] = sections.map(() => []),
+  const plan: Display[] = [],
     loosePlan: Display[] = [],
     oldShown = new Set<number>(),
     display = (
@@ -790,21 +801,39 @@ export function renderDocument(
       section,
     });
   for (const tile of background)
-    plans[tile.value].push(
+    plan.push(
       display({ page: tile.page, clip: tile.rect, label: "" }, tile.value),
     );
   areas.forEach((area, region) => {
-    area.old.sort((a, b) => order(old.document, a, b));
-    area.new.sort((a, b) => order(next.document, a, b));
+    area.old = area.old
+      .flatMap((p) => readingParts(old.document, p))
+      .sort((a, b) => order(old.document, a, b));
+    area.new = area.new
+      .flatMap((p) => readingParts(next.document, p))
+      .sort((a, b) => order(next.document, a, b));
     for (const position of area.new) {
-      // A fragment reads where it prints; its region keeps the complete
-      // correspondence and source ownership, even when it spans sections.
-      const at = context.find(
-        (c) => c.page === position.page && intersects(c.rect, position.clip),
+      // Cut at both reading lanes and headings before assigning a section.
+      // A fragment keeps its region's complete correspondence and source IDs.
+      const pieces = partition(
+        [
+          ...boundaries.filter(
+            (c) => c.page === position.page && intersects(c.rect, position.clip),
+          ),
+          { page: position.page, rect: position.clip, value: sections.length },
+        ],
+        (values) =>
+          values.includes(sections.length) ? Math.min(...values) : undefined,
       );
-      (at ? plans[at.value] : loosePlan).push(
-        display(position, at?.value ?? -1, region),
-      );
+      for (const piece of pieces) {
+        const placed = piece.value < sections.length;
+        (placed ? plan : loosePlan).push(
+          display(
+            { ...position, clip: piece.rect },
+            placed ? piece.value : -1,
+            region,
+          ),
+        );
+      }
     }
   });
   const change = (index: number, positions: Position[]): ChangeBlock => {
@@ -877,15 +906,15 @@ export function renderDocument(
         readingKey(next.document, a.lane, a.top),
         readingKey(next.document, b.lane, b.top),
       ) || a.rect[0] - b.rect[0],
-    plan = plans.flat().sort(compare),
-    kept: (Display | { kind: "gap" })[][] = sections.map(() => []);
-  let section = -1;
+    kept: { section: number; pieces: (Display | { kind: "gap" })[] }[] = [];
   // Fold once in document order, so context can continue through a heading
   // without a second copy or a jump over a child section.
   if (plan.some((p) => p.kind === "change"))
-    for (const piece of foldContext(plan)) {
-      if (piece.kind !== "gap") section = piece.section;
-      if (section >= 0) kept[section].push(piece);
+    for (const piece of foldContext(plan.sort(compare))) {
+      const last = kept.at(-1);
+      if (piece.kind !== "gap" && last?.section !== piece.section)
+        kept.push({ section: piece.section, pieces: [piece] });
+      else last?.pieces.push(piece);
     }
   const render = (pieces: (Display | { kind: "gap" })[]): Block[] => {
     const blocks: Block[] = [];
@@ -923,16 +952,14 @@ export function renderDocument(
     }
     return blocks;
   };
-  const rendered = sections.flatMap(({ node }, index) => {
-      if (!kept[index].some((p) => p.kind !== "gap")) return [];
-      return [
-        {
-          node: node.id,
-          number: node.number,
-          title: node.title,
-          blocks: render(kept[index]),
-        },
-      ];
+  const rendered = kept.map(({ section, pieces }) => {
+      const { node } = sections[section];
+      return {
+        node: node.id,
+        number: node.number,
+        title: node.title,
+        blocks: render(pieces),
+      };
     }),
     loose = render(loosePlan.sort(compare)).filter(
       (b): b is ChangeBlock => b.kind === "change",

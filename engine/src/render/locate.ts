@@ -487,6 +487,25 @@ function stretches(page: PdfPage, top: number, bottom: number) {
   columns(cursor, bottom);
   return result;
 }
+/** Split a source footprint at the page's reading lanes without changing its
+ * coverage. A wide source box can cover separate columns; only printed bands
+ * across the gutter belong in one full-width fragment. */
+export function readingParts(
+  document: PdfDocument,
+  position: Position,
+): Position[] {
+  const page = document.page(position.page);
+  return stretches(page, position.clip[1], position.clip[3]).flatMap(
+    ({ column, top, bottom }) => {
+      const [left, right] = page.columnBounds(column),
+        x0 = Math.max(left, position.clip[0]),
+        x1 = Math.min(right, position.clip[2]);
+      return x1 > x0
+        ? [{ ...position, clip: [x0, top, x1, bottom] as Rect }]
+        : [];
+    },
+  );
+}
 // Where a lane starts in reading order, for sorting: its page, the stretch
 // it is in, and its column.
 export function readingKey(document: PdfDocument, id: number, top: number) {

@@ -1,6 +1,11 @@
 import { afterEach, expect, it } from "vitest";
 import { mupdf, PdfDocument, containsCenter } from "../../src/render/pdf.ts";
-import { alignedCrops, alignment, marksIn } from "../../src/render/align.ts";
+import {
+  alignedCrops,
+  alignment,
+  marksIn,
+  printers,
+} from "../../src/render/align.ts";
 import {
   sectionIntervals,
   laneX,
@@ -422,16 +427,16 @@ it("bounds a move's source by its words when SyncTeX reaches another edit", () =
 });
 // A PDF of rows, each printed as pieces at the x positions given, as an
 // inline formula prints apart from the words around it.
-function rows(list: [number, string][][]) {
+function rows(list: [number, string][][], columnOrder = false) {
   const doc = new mupdf.PDFDocument(),
     font = new mupdf.Font("Helvetica"),
     resource = doc.addSimpleFont(font),
     content = list
-      .flatMap((row, i) =>
-        row.map(
-          ([x, text]) =>
-            `BT /F1 12 Tf ${x} ${550 - 18 * i} Td (${text.replace(/[()\\]/g, "\\$&")}) Tj ET`,
-        ),
+      .flatMap((row, i) => row.map(([x, text]) => ({ x, text, i })))
+      .sort((a, b) => (columnOrder ? a.x - b.x : 0))
+      .map(
+        ({ x, text, i }) =>
+          `BT /F1 12 Tf ${x} ${550 - 18 * i} Td (${text.replace(/[()\\]/g, "\\$&")}) Tj ET`,
       )
       .join("\n"),
     page = doc.addPage(
@@ -451,6 +456,172 @@ function rows(list: [number, string][][]) {
   documents.push(result);
   return result;
 }
+it.each(["line", "page", "column"] as const)(
+  "preserves every changed glyph when a word crosses a %s boundary",
+  (boundary) => {
+    const prefix = Array.from(
+        { length: boundary === "page" ? LINES - 1 : 4 },
+        (_, i) => `Stable preceding sentence ${i} stays in place`,
+      ),
+      suffix = [
+        "The following stable sentence remains in place",
+        "Another independent anchor sentence follows it",
+      ],
+      columns = (split: boolean) =>
+        rows(
+          Array.from({ length: 20 }, (_, i): [number, string][] => [
+            [
+              30,
+              i === 19
+                ? `Opening ${split ? "inter-" : "connectivity"}`
+                : `Left anchor ${i} keeps the reading order`,
+            ],
+            [
+              330,
+              i === 0
+                ? split
+                  ? "operability"
+                  : ""
+                : `Right anchor ${i} keeps the reading order`,
+            ],
+          ]),
+          true,
+        ),
+      split =
+        boundary === "column"
+          ? columns(true)
+          : pdf([...prefix, "Opening inter-", "operability", ...suffix]),
+      joined =
+        boundary === "column"
+          ? columns(false)
+          : pdf([...prefix, "Opening connectivity", "", ...suffix]),
+      own = (doc: PdfDocument): Position[] =>
+        printed(doc)
+          .filter((w) =>
+            ["inter-", "operability", "connectivity"].includes(w.text),
+          )
+          .map(({ page, rect }) => ({
+            page,
+            clip: [rect[0] - 1, rect[1] - 1, rect[2] + 1, rect[3] + 1],
+            label: String(page + 1),
+          }));
+    if (boundary === "column") expect(split.page(0).twoColumns).toBe(true);
+    for (const [old, next] of [
+      [split, joined],
+      [joined, split],
+    ]) {
+      const al = alignment(build(old), build(next))!,
+        groups = alignedCrops(al, own(old), own(next), false)!;
+      expect(
+        al[old === split ? "old" : "new"].words.tokens.map((t) => t.text),
+      ).toContain("interoperability");
+      const side = old === split ? "old" : "new",
+        word = al[side].words.tokens.find(
+          (t) => t.text === "interoperability",
+        )!,
+        tail = al[side].words.glyphs[word.end - 1];
+      // A source record at the continuation identifies the whole token's
+      // logical line, just as one at its start does.
+      expect(
+        printers(al, side, [
+          [[tail.page, tail.rect[1], tail.rect[3], tail.rect[0], tail.rect[2]]],
+        ]).get(al[side].glyphLine[word.end - 1]),
+      ).toEqual([0]);
+      expect(groups).not.toBeNull();
+      for (const side of ["old", "new"] as const) {
+        const crops = groups.flatMap((g) =>
+            side === "old" ? g.left : g.right,
+          ),
+          missing = [...al[side].changed].flatMap(([page, glyphs]) =>
+            glyphs
+              .filter(
+                (g) =>
+                  !crops.some(
+                    (p) =>
+                      p.page === page &&
+                      al[side].words.glyphs[g].rect.every((edge, index) =>
+                        index < 2
+                          ? edge >= p.clip[index]
+                          : edge <= p.clip[index],
+                      ),
+                  ),
+              )
+              .map((g) => al[side].words.glyphs[g].text),
+          );
+        expect(missing.join(""), `${boundary}: ${side}`).toBe("");
+      }
+    }
+  },
+);
+it.each([false, true])(
+  "keeps visual changes where logical lines share a physical row (wide %s)",
+  (wide) => {
+    const colored = (change: boolean) => {
+        const raw = new mupdf.PDFDocument(),
+          font = new mupdf.Font("Helvetica"),
+          resource = raw.addSimpleFont(font),
+          pages = [
+            "BT /F1 12 Tf 30 530 Td (The stable preceding anchor sentence remains in place) Tj ET " +
+              "BT /F1 12 Tf 30 100 Td (Opening inter-) Tj ET",
+            "BT /F1 12 Tf 30 530 Td (operability ) Tj " +
+              (change ? "1 0 0 rg " : "") +
+              "(trailing material remains) Tj ET 0 0 0 rg " +
+              "BT /F1 12 Tf 30 500 Td (An unchanged intervening sentence remains here) Tj ET " +
+              (change ? "0 0 1 rg " : "") +
+              "BT /F1 12 Tf 30 470 Td (Another visual change remains in this source unit) Tj ET 0 0 0 rg " +
+              "BT /F1 12 Tf 30 440 Td (The stable following anchor sentence remains in place) Tj ET",
+          ];
+        for (const content of pages) {
+          const page = raw.addPage(
+            [0, 0, 600, 600],
+            0,
+            { Font: { F1: resource } },
+            content,
+          );
+          raw.insertPage(-1, page);
+          page.destroy();
+        }
+        const buffer = raw.saveToBuffer(""),
+          result = new PdfDocument(buffer.asUint8Array());
+        buffer.destroy();
+        resource.destroy();
+        font.destroy();
+        raw.destroy();
+        documents.push(result);
+        return result;
+      },
+      old = colored(false),
+      next = colored(true),
+      al = alignment(build(old), build(next))!,
+      own: Position[] = [{ page: 1, clip: [0, 50, 600, 145], label: "2" }],
+      groups = alignedCrops(al, own, own, wide)!;
+    // The continuation of one logical line and the following line occupy the
+    // same physical row. Its color change must survive context tightening.
+    for (const [doc, crops] of [
+      [old, groups.flatMap((g) => g.left)],
+      [next, groups.flatMap((g) => g.right)],
+    ] as const)
+      for (const text of [
+        "trailing material remains",
+        "Another visual change",
+      ]) {
+        const rects = doc.page(1).search(text);
+        expect(rects.length, text).toBeGreaterThan(0);
+        expect(
+          rects.every((rect) =>
+            crops.some(
+              (p) =>
+                p.page === 1 &&
+                rect.every((edge, index) =>
+                  index < 2 ? edge >= p.clip[index] : edge <= p.clip[index],
+                ),
+            ),
+          ),
+          text,
+        ).toBe(true);
+      }
+  },
+);
 it("fades the words of an old row that the context shows, and only those", () => {
   const around = (n: number) =>
       Array.from({ length: 6 }, (_, i): [number, string][] => [
