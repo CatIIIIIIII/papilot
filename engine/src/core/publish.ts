@@ -59,15 +59,16 @@ async function work(output: string, request: object) {
     fs.rmSync(file, { force: true });
   }
 }
-// The edits behind each change of the whole documents, found by compiling.
+// One sufficient combination of edits for each whole-document change.
 // An edit that prints nothing of its own, such as a macro definition, is
 // compiled alone onto the accepted text: the changes that build makes are
 // exactly what accepting it makes. Changes outside every crop that those
 // builds leave unexplained are found by halving the other edits: each half is
 // compiled alone, and a change one half makes has its cause there. A change
-// neither half makes needs edits from both, so it lists the whole group, as
-// it does when a variant does not compile or cannot be compared. Partial
-// singleton effects do not exclude an edit from a jointly required group.
+// neither half makes keeps the whole group, as it does when a variant cannot
+// be compared. Partial singleton effects remain available to a joint group.
+// This is not an enumeration of all causes or a proof of minimality: another
+// combination, including one crossing the split, can produce the same effect.
 export async function attribute(
   units: Unit[],
   changes: { within: string[] }[],
@@ -97,7 +98,7 @@ export async function attribute(
     indices.forEach((i) => group.forEach((u) => causes[i].add(u.id)));
   const split = async (group: Unit[], indices: number[]): Promise<void> => {
     if (!indices.length) return;
-    if (group.length === 1) return all(group, indices);
+    if (group.length <= 1) return all(group, indices);
     const halves = [
         group.slice(0, Math.ceil(group.length / 2)),
         group.slice(Math.ceil(group.length / 2)),
@@ -125,9 +126,19 @@ export async function attribute(
     units,
     changes.map((_, i) => i),
   );
-  return causes.map((set) =>
-    units.map((u) => u.id).filter((id) => set.has(id)),
-  );
+  const result: string[][] = [],
+    full = units.map((u) => u.id);
+  for (const [index, set] of causes.entries()) {
+    const group = units.filter((u) => set.has(u.id));
+    // Different sufficient combinations can cancel when combined. Verify
+    // their union before presenting it; the full set is already witnessed
+    // by the final PDF. A failed variant never becomes a causal assertion.
+    const verified =
+      group.length === units.length ||
+      (group.length > 0 && (await compiled(group))?.[index]);
+    result.push(verified ? group.map((u) => u.id) : full);
+  }
+  return result;
 }
 // Renders a comparison. `variant` compiles the accepted text with only some
 // of the edits; without it, changes outside every crop list every edit.

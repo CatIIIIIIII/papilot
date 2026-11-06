@@ -240,12 +240,14 @@ export interface VisualUnit {
   visual: Visual;
   pages: string[];
   section: string | null;
-  /** Where the PDF changes away from this edit's own lines: how many
-   * places, and the first ones rendered. The rest render on request. */
-  effects?: { total: number; shown: PlaceView[] };
+  /** PDF changes produced by a verified combination containing this edit,
+   * away from its own lines. The combination need not be minimal or unique.
+   * The first places are rendered; the rest render on request. */
+  effects?: { total: number; shown: PlaceView[]; verified?: boolean };
 }
-/** A place where an edit changes the PDF away from its own lines, such as a
- * use of a redefined macro. `with` lists the other edits it also needs. */
+/** A PDF change produced by a verified combination containing this edit.
+ * `with` lists the other members, not necessarily required members or every
+ * alternative cause. Accept/reject still operates on the selected edit. */
 export interface Place {
   page: string;
   section: string | null;
@@ -397,8 +399,8 @@ export interface RenderRequest {
   /** Full edited build when `new` is an attribution variant. */
   final?: BuildInfo;
   units: Unit[];
-  /** The edits that cause each change of the whole documents, found by
-   * compiling variants when the round has more than one edit. */
+  /** One verified sufficient combination per whole-document change. This
+   * need not be minimal or include every alternative sufficient combination. */
   causes?: string[][];
   /** The cards of the first pass, reused with `causes`. */
   cards?: Card[];

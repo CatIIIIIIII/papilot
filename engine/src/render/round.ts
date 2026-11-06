@@ -305,6 +305,7 @@ export function renderRound(
     for (const [id, list] of Object.entries(places))
       result.units[id].effects = {
         total: list.length,
+        verified: true,
         shown: list
           .slice(0, SHOWN)
           .map((place) => renderPlace(place, strips, old, next)),
