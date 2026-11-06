@@ -83,6 +83,7 @@
     "i18n": "tsx scripts/i18n.ts",
     "i18n:check-app": "tsx scripts/i18n/app-locales.ts",
     "test:locales": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-locales.mjs",
+    "test:review-tools": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-review-tools.mjs",
     "test:review-comments": "npm run build && npm --prefix engine run build && node --import tsx --test tests/composer.test.ts tests/review-draft.test.ts && node --import tsx scripts/check-unified-review.mjs && node scripts/check-review-notes.mjs"
   },
   "dependencies": {

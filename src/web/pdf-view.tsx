@@ -1,6 +1,6 @@
 import type { NoteGroup } from '../note-groups.ts';
 import { GroupPicker, GroupAction, groupName, groupStyle } from './note-groups.tsx';
-import { forwardRef, Fragment, useEffect, useId, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, Fragment, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import * as pdfjs from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
@@ -8,9 +8,9 @@ import { EventBus, FindState, LinkTarget, PDFFindController, PDFLinkService, PDF
 import viewerStyles from 'pdfjs-dist/web/pdf_viewer.css?inline';
 import worker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Annotation, MarkKind } from '../shared.ts';
-import { loadStamps, slotKey, useStamps, type Stamp } from './stamps.ts';
+import { loadStamps, useStamps, type Stamp } from './stamps.ts';
 import { StampWheel } from './stamp-wheel.tsx';
-import { StampMenu } from './stamp-menu.tsx';
+import { PdfToolRail, TOOL_KEYS, type PdfTool } from './pdf-tool-rail.tsx';
 import { ChipSelect } from './chip-select.tsx';
 import { Icon } from './icons.tsx';
 import { browserStorage } from './storage.ts';
@@ -30,6 +30,7 @@ const styles = document.createElement('style');
 styles.textContent = `@scope (.pdf-view) {${viewerStyles.replaceAll(':root', ':scope').replace(/color-scheme:\s*light dark;?/g, '')}}`;
 document.head.append(styles);
 
+export type { PdfTool } from './pdf-tool-rail.tsx';
 export type Rect = [number, number, number, number];
 export interface OutlineItem { title: string; level: number; dest: unknown; page: number; top: number | null }
 export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note: Annotation) => void; showPlace: (page: number, rect: Rect) => void; focus: () => void; fitWidth: () => void }
@@ -38,11 +39,6 @@ interface Selection { page: number; rects: Rect[]; quote: string; handles?: { fr
 // What a tool marks: selected text, a region, or a point (a small box quoted
 // by the line at or beside it).
 interface Target { page: number; rect: Rect; rects: Rect[]; quote: string; point?: boolean }
-// The tool rail, after an image editor's: each tool stays chosen until another
-// is picked or Escape returns to Select.
-export type PdfTool = 'select' | 'note' | 'magic' | 'region' | 'point' | 'delete' | 'hand';
-const TOOL_KEYS: Record<string, PdfTool> = { v: 'select', t: 'note', q: 'magic', m: 'region', p: 'point', d: 'delete', h: 'hand' };
-
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 const percent = ([x0, y0, x1, y1]: Rect): React.CSSProperties => ({ left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
 const bounds = (rects: Rect[]): Rect => [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1])), Math.max(...rects.map(r => r[2])), Math.max(...rects.map(r => r[3]))];
@@ -185,25 +181,6 @@ export interface PdfHistoryActions {
   undo: () => void; redo: () => void;
 }
 
-// Tooltips use the top layer so scrolling a short rail cannot clip them.
-function hideRailTips(rail: HTMLElement | null, except?: HTMLElement) {
-  rail?.querySelectorAll<HTMLElement>('.rail-tip:popover-open').forEach(tip => { if (tip !== except) tip.hidePopover(); });
-}
-function showRailTip(button: Element | null) {
-  if (!button?.isConnected) return;
-  const rail = button.closest<HTMLElement>('.pdf-rail');
-  const menu = button.getAttribute('popovertarget');
-  if (menu && document.getElementById(menu)?.matches(':popover-open')) { hideRailTips(rail); return; }
-  const tip = button.querySelector<HTMLElement>('.rail-tip');
-  if (!tip) { hideRailTips(rail); return; }
-  const rect = button.getBoundingClientRect(), viewport = button.closest('.rail-tools')?.getBoundingClientRect();
-  if (viewport && (rect.bottom <= viewport.top || rect.top >= viewport.bottom)) { hideRailTips(rail); return; }
-  hideRailTips(rail, tip);
-  if (!tip.matches(':popover-open')) tip.showPopover();
-  tip.style.left = `${Math.max(8, Math.min(rect.right + 12, window.innerWidth - tip.offsetWidth - 8))}px`;
-  tip.style.top = `${Math.max(8, Math.min(rect.top + (rect.height - tip.offsetHeight) / 2, window.innerHeight - tip.offsetHeight - 8))}px`;
-}
-
 export const PdfView = forwardRef<PdfHandle, {
   readOnly?: boolean;
   group?: NoteGroup | null; onGroupChange?: (group: NoteGroup | null) => void; markingDisabled?: boolean;
@@ -245,35 +222,6 @@ export const PdfView = forwardRef<PdfHandle, {
   const [dismissedNote, setDismissedNote] = useState<Annotation | null>(null);
   // The chosen tool; holding Space borrows the hand without changing it.
   const [tool, setTool] = useState<PdfTool>(props.region ? 'region' : 'select'), [spaceHand, setSpaceHand] = useState(false);
-  const railId = useId(), [railCollapsed, setRailCollapsed] = useState(() => browserStorage.getItem('papilot:pdf-tools-collapsed') === 'true');
-  const rail = useRef<HTMLDivElement>(null);
-  const railTipFrame = useRef<number | null>(null);
-  const railTipTarget = useRef<Element | null>(null);
-  // Menu dismissal restores focus synchronously. Defer all tooltip operations
-  // until that native popover operation has finished, and coalesce focus/scroll.
-  function queueRailTip(button: Element | null = railTipTarget.current) {
-    // Preserve the last deliberate hover/focus through scrolling, which can
-    // move unrelated buttons under a stationary pointer.
-    railTipTarget.current = button;
-    if (railTipFrame.current !== null) return;
-    railTipFrame.current = requestAnimationFrame(() => {
-      railTipFrame.current = null;
-      const owner = rail.current, target = railTipTarget.current;
-      if (!target || !owner?.contains(target) || !target.matches(':hover, :focus-visible') || latest.current.suspended) hideRailTips(owner);
-      else showRailTip(target);
-    });
-  }
-  useEffect(() => {
-    const hide = () => queueRailTip(null);
-    window.addEventListener('resize', hide);
-    return () => {
-      window.removeEventListener('resize', hide);
-      if (railTipFrame.current !== null) cancelAnimationFrame(railTipFrame.current);
-      railTipFrame.current = null;
-      railTipTarget.current = null;
-      hideRailTips(rail.current);
-    };
-  }, []);
   const active: PdfTool = spaceHand ? 'hand' : tool, toolRef = useRef(active); toolRef.current = active;
   const spaceRef = useRef({ held: false, used: false }); spaceRef.current.held = spaceHand;
   // A number key keeps one quick note on the magic pen until 0 or Escape.
@@ -796,15 +744,6 @@ export const PdfView = forwardRef<PdfHandle, {
   const pillGroup = active === 'note' || active === 'region' ? props.group || null : null;
   // On touch screens the button beside a selection does what the chosen tool does.
   const pillTool = active === 'delete' || active === 'magic' ? active : null;
-  const railTools: { id: PdfTool; icon: string; label: string; key: string; hint: string }[] = [
-    { id: 'magic', icon: 'toolMagic', label: t('Magic pen'), key: 'Q', hint: t('Drag over text or click a spot, then pick a quick note. Click again, or press a number key, to keep one on the pen.') },
-    { id: 'note', icon: 'toolNote', label: t('Note'), key: 'T', hint: t('Drag over text and write a note straight away. Click again to pick a color, and marks join that color group.') },
-    { id: 'region', icon: 'toolRegion', label: t('Region'), key: 'M', hint: t('Draw a box around a figure, table or equation.') },
-    { id: 'point', icon: 'toolSticky', label: t('Sticky note'), key: 'P', hint: t('Click anywhere on the page to leave a note there.') },
-    { id: 'delete', icon: 'toolStrike', label: t('Delete'), key: 'D', hint: t('Strike out text to ask for it to be removed. Open the mark to give a replacement.') },
-    { id: 'select', icon: 'toolSelect', label: t('Select'), key: 'V', hint: t('Select text to copy it or add a note from the button beside it.') },
-    { id: 'hand', icon: 'toolHand', label: t('Hand'), key: 'H', hint: t('Drag to move around the page. Hold Space to use it with any tool.') },
-  ];
   const lockedStamp = locked === null ? undefined : stamps[locked];
   const tagLabel = (note: Annotation, label: number) => note.aiReview ? t('Suggestion {n}: {comment}', { n: label, comment: note.comment })
     : note.stamp ? t('Quick note {n}: {name}', { n: label, name: note.stamp })
@@ -854,54 +793,7 @@ export const PdfView = forwardRef<PdfHandle, {
       <button type="button" className="icon-button" aria-label={t('Close search')} onClick={closeFind}><Icon name="close" size={15}/></button>
     </div>}
     <div className="pdf-body">
-    {markable && <div ref={rail} className="pdf-rail" data-collapsed={railCollapsed} role="toolbar" aria-orientation="vertical" aria-label={t('Marking tools')}
-      onPointerMove={event => {
-        const button = (event.target as Element).closest('.rail-tool');
-        if (button !== railTipTarget.current) queueRailTip(button);
-      }} onPointerOut={event => {
-        const button = (event.target as Element).closest('.rail-tool');
-        if (button === railTipTarget.current && !button?.contains(event.relatedTarget as Node | null) && !button?.matches(':focus-visible')) queueRailTip(null);
-      }} onFocus={event => { if (event.target.matches(':focus-visible')) queueRailTip(event.target.closest('.rail-tool')); }}
-      onBlur={() => queueRailTip(null)} onPointerDownCapture={() => queueRailTip(null)}
-      onKeyDownCapture={() => queueRailTip(null)} onScrollCapture={() => queueRailTip()}>
-      <button type="button" className="rail-tool rail-toggle" aria-expanded={!railCollapsed} aria-controls={railId}
-        aria-label={railCollapsed ? t('Expand marking tools') : t('Collapse marking tools')} title={railCollapsed ? t('Expand marking tools') : t('Collapse marking tools')}
-        onClick={() => { const next = !railCollapsed; setRailCollapsed(next); browserStorage.setItem('papilot:pdf-tools-collapsed', String(next)); }}>
-        <Icon name={railCollapsed ? 'chevronRight' : 'chevronLeft'} size={16}/>
-      </button>
-      <div id={railId} className="rail-items" hidden={railCollapsed}>
-      <div className="rail-tools">
-      {!railCollapsed && railTools.map(item => {
-        const content = <><Icon name={item.icon} size={item.id === 'magic' ? 22 : 18}/>
-          {item.id === 'magic' && locked !== null && <span className="rail-badge" aria-hidden="true">{slotKey(locked)}</span>}
-          <span className="rail-tip" popover="manual" aria-hidden="true"><span className="rail-tip-title">{item.label}<kbd>{item.key}</kbd></span><span>{item.hint}</span></span></>;
-        return <Fragment key={item.id}>
-          {(item.id === 'note' || item.id === 'select') && <span className="rail-separator" aria-hidden="true"/>}
-          {/* The note tool doubles as its color picker: its underline shows the color. */}
-          {item.id === 'note' && props.onGroupChange ? <GroupPicker value={props.group || null} disabled={props.markingDisabled} onChange={group => props.onGroupChange!(group)}
-            tool={{ label: item.label, pressed: tool === 'note', keys: item.key, content, onPress: () => { if (tool !== 'note') { pickTool('note'); return false; } return !editing; } }}/>
-            : item.id === 'magic' ? <StampMenu label={item.label} keys={item.key} pressed={tool === 'magic'} disabled={props.markingDisabled} content={content} stamps={stamps} locked={locked}
-              onPress={() => { if (tool !== 'magic') { pickTool('magic'); return false; } loadStamps(); return !editing; }} onLock={slot => { if (slot === null) setLocked(null); else lock(slot); }}/>
-            : <button type="button" className="rail-tool" aria-label={item.label} aria-pressed={tool === item.id} aria-keyshortcuts={item.key} disabled={item.id !== 'select' && item.id !== 'hand' && props.markingDisabled} onClick={() => pickTool(item.id)}>{content}</button>}
-        </Fragment>;
-      })}
-      </div>
-      {!railCollapsed && props.history && <div className="rail-history">
-        <span className="rail-separator" aria-hidden="true"/>
-        {(['undo', 'redo'] as const).map(action => {
-          const label = action === 'undo' ? t('Undo') : t('Redo');
-          const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-          const keys = (mac ? '⌘' : 'Ctrl+') + (action === 'redo' ? mac ? '⇧Z' : 'Shift+Z' : 'Z');
-          return <button key={action} type="button" className="rail-tool" aria-label={label}
-            aria-keyshortcuts={`${mac ? 'Meta' : 'Control'}+${action === 'redo' ? 'Shift+' : ''}Z`}
-            disabled={!(action === 'undo' ? props.history!.canUndo : props.history!.canRedo)} onClick={props.history![action]}>
-            <Icon name={action} size={18}/>
-            <span className="rail-tip" popover="manual" aria-hidden="true"><span className="rail-tip-title">{label}<kbd>{keys}</kbd></span></span>
-          </button>;
-        })}
-      </div>}
-      </div>
-    </div>}
+    {markable && <PdfToolRail tool={tool} onTool={pickTool} group={props.group || null} onGroup={props.onGroupChange} disabled={props.markingDisabled} suspended={props.suspended} editing={Boolean(editing)} stamps={stamps} locked={locked} onLock={slot => slot === null ? setLocked(null) : lock(slot)} history={props.history}/>}
     <div className="pdf-scroll-host">
       <div ref={container} className="pdf-container" tabIndex={0} aria-label={t('PDF pages')}>
         <div ref={inner} className="pdfViewer"/>

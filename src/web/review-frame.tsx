@@ -76,6 +76,7 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
       --amber-text:#92400e;--amber-soft:#fffbeb;--amber-line:#fde68a;
       --accept:var(--green);--reject:var(--red);--comment:var(--accent);--ok-soft:var(--green-soft);--bad-soft:var(--red-soft);--warn:var(--amber-text);--warn-soft:var(--amber-soft);--warn-line:var(--amber-line);
     }
+    .review-body{margin-left:var(--papilot-rail,0px)}
     .bar{display:flex;align-items:center;height:var(--papilot-bar-height,44px);min-height:var(--papilot-bar-height,44px);padding:0 max(14px,calc(var(--papilot-tools,0px) + 4px)) 0 calc(var(--papilot-lead,0px) + 14px);gap:12px;flex-wrap:nowrap;overflow:hidden}
     .bar .overview-link,.bar .identity h1,.bar .identity span{display:none}
     .bar .identity{flex:1;min-width:0;flex-direction:row;gap:6px}
@@ -284,6 +285,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   const linkedChange = quoteFocus?.note.stop ?? (linkedRound === task?.review?.round ? noteLinks?.focus?.change.stop : undefined);
   const focusSequence = quoteFocus ? `quote:${quoteFocus.sequence}` : task && noteLinks?.focus ? `result:${noteLinks.focus.sequence}` : undefined;
   const [document, setDocument] = useState<Document | null>(null);
+  const [railSlot, setRailSlot] = useState<HTMLDivElement | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const toolbar = useRef<HTMLDivElement>(null), leading = useRef<HTMLDivElement>(null), hostBar = useRef<HTMLDivElement>(null);
   const [reserve, setReserve] = useState(0), [leadWidth, setLeadWidth] = useState(0);
@@ -350,19 +352,24 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
       if (!box.isConnected || !host.isConnected) return;
       root.toggleAttribute('data-papilot-phone', phone.matches);
       root.style.setProperty('--papilot-tools', `${reserve}px`);
+      root.style.setProperty('--papilot-rail', `${railSlot?.offsetWidth || 0}px`);
       root.style.setProperty('--papilot-lead', `${leadWidth}px`);
       root.style.setProperty('--papilot-bar-height', `${host.offsetHeight}px`);
       root.toggleAttribute('data-papilot-toolbar-stacked', box.clientWidth - reserve - leadWidth < 220);
       const button = toolbar.current?.querySelector<HTMLElement>('.icon-button');
       if (button) root.style.setProperty('--papilot-button-size', `${button.offsetWidth}px`);
-      if (bar) root.style.setProperty('--papilot-review-bar-height', `${bar.offsetHeight}px`);
+      if (bar) {
+        root.style.setProperty('--papilot-review-bar-height', `${bar.offsetHeight}px`);
+        railSlot?.style.setProperty('top', `${bar.offsetHeight}px`);
+      }
     };
     const observer = new ResizeObserver(sync);
     observer.observe(box); observer.observe(host);
     if (bar) observer.observe(bar);
+    if (railSlot) observer.observe(railSlot);
     phone.addEventListener('change', sync); sync();
     return () => { observer.disconnect(); phone.removeEventListener('change', sync); };
-  }, [reserve, leadWidth, document]);
+  }, [reserve, leadWidth, document, railSlot]);
   function loaded() {
     observer.current?.disconnect();
     try {
@@ -450,8 +457,9 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
     {task && ready && <ReviewNoteConnections doc={document} round={linkedRound || task.review?.round || 0}/>}
     <div ref={hostBar} className="review-host-bar">
       {(lead || modes) && <div ref={leading} className="review-lead">{lead}{modes}</div>}
-      <div ref={toolbar} className="review-tools">{task && onComment && <ReviewNotes doc={ready ? document : null} task={task} onComment={onComment}/>}{tools}</div>
+      <div ref={toolbar} className="review-tools">{task && onComment && <ReviewNotes railSlot={railSlot} doc={ready ? document : null} task={task} onComment={onComment}/>}{tools}</div>
     </div>
+    {task && onComment && <div ref={setRailSlot} className="review-marking-rail"/>}
     {slot && completion ? createPortal(completion, slot) : null}
     {!ready && <div className="review-loading"><p role={phase === 'error' ? 'alert' : 'status'}>{phase === 'error' ? t('The PDF review could not be loaded.') : phase === 'slow' ? t('The PDF review is taking longer than expected.') : t('Loading PDF review…')}</p>{phase !== 'loading' && <button className="button secondary" onClick={() => { setPhase('loading'); setAttempt(value => value + 1); }}>{t('Reload review')}</button>}</div>}
   </div>;

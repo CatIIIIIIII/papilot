@@ -61,14 +61,14 @@ const send = () => page.getByRole('button', { name: 'Send instructions', exact: 
 const savedDraft = () => page.evaluate(() => JSON.parse(localStorage.getItem('papilot:review-notes:review-notes-fixture')));
 try {
   await page.goto(origin);
-  await page.getByRole('button', { name: 'Mark region', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Region', exact: true }).waitFor();
   await frame().locator('.review-note-layer').first().waitFor({ state: 'attached' });
   assert.equal(await page.locator('.markdown .file-reference').textContent(), 'acknowledgments.tex');
   assert.equal(await page.locator('.markdown table td').last().textContent(), 'Ready');
   assert.equal(await page.locator('.markdown ul ul li').textContent(), 'Nested item');
   await page.locator('.file-reference').click();
   await page.getByRole('button', { name: 'Copied path' }).waitFor();
-  await page.getByRole('button', { name: 'Mark region', exact: true }).click();
+  await page.getByRole('button', { name: 'Region', exact: true }).click();
   await frame().locator('.review-region-capture').first().waitFor();
   await page.keyboard.press('Escape');
   await frame().locator('.review-region-capture').first().waitFor({ state: 'hidden' });
@@ -84,7 +84,7 @@ try {
   assert.equal(await noteInput(1).inputValue(), 'Keep all the names and make this warmer.');
   await selectText('[data-state="accepted"] .pdf-glyph');
   await noteInput(2).fill('Keep this accepted paragraph.');
-  await page.getByRole('button', { name: 'Mark region', exact: true }).click();
+  await page.getByRole('button', { name: 'Region', exact: true }).click();
   const box = await frame().locator('.context .review-region-capture').boundingBox();
   await page.mouse.move(box.x + 60, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + 250, box.y + 65, { steps: 5 }); await page.mouse.up();
@@ -104,7 +104,7 @@ try {
   assert.equal((await savedDraft()).notes.length, 1);
   await noteInput(1).fill(beforeDelete[2].comment);
   await page.reload();
-  await page.getByRole('button', { name: 'Mark region', exact: true }).focus();
+  await page.getByRole('button', { name: 'Region', exact: true }).focus();
   await page.keyboard.press('Meta+z'); await frame().locator('.review-note-tag').nth(1).waitFor();
   await page.keyboard.press('Control+z'); await frame().locator('.review-note-tag').nth(2).waitFor();
   assert.deepEqual((await savedDraft()).notes, beforeDelete);
@@ -131,7 +131,8 @@ try {
   await page.evaluate(() => localStorage.removeItem('papilot:review-notes:review-notes-fixture'));
   await page.setViewportSize({ width: 1440, height: 900 }); await page.reload();
   await frame().locator('.review-note-layer').first().waitFor({ state: 'attached' });
-  await page.getByRole('button', { name: 'Annotation group color', exact: true }).click();
+  await page.getByRole('button', { name: 'Note', exact: true }).click();
+  await page.getByRole('button', { name: 'Note', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Green', exact: true }).click();
   for (const [index, selector] of ['.context .pdf-glyph', '.before .pdf-glyph'].entries()) {
     await frame().locator(selector).first().evaluate(el => {
@@ -143,7 +144,7 @@ try {
   }
   await frame().locator('.review-note-tag[data-group="green"]').nth(1).waitFor();
   assert.equal(await page.locator('.review-draft textarea:focus').count(), 0);
-  await page.getByRole('button', { name: 'Annotation group color', exact: true }).click();
+  await page.getByRole('button', { name: 'Note', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Individual notes', exact: true }).click();
   await page.getByRole('textbox', { name: 'Instructions for color groups' }).fill('Green: explain these passages.');
   const beforeGroups = messages.length;

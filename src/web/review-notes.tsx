@@ -10,6 +10,10 @@ import noteStyles from './note-controls.css?inline';
 import { mergeLines, type Rect } from './note-geometry.ts';
 import { touchSelection } from './touch-select.ts';
 import { t } from './i18n.ts';
+import { PdfToolRail, type PdfTool } from './pdf-tool-rail.tsx';
+import { loadStamps, useStamps, type Stamp } from './stamps.ts';
+import { StampWheel } from './stamp-wheel.tsx';
+import { useReviewToolKeys } from './review-tool-keys.ts';
 import { useNoteUndo } from './use-note-undo.ts';
 
 import { reviewDraft, useReviewDraft, type ReviewMark as Mark } from './review-draft.ts';
@@ -35,6 +39,18 @@ function rangeMark(layer: Layer, range: Range) {
   const rects: Rect[] = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0).map(r => [unit((r.left - box.left) / box.width), unit((r.top - box.top) / box.height), unit((r.right - box.left) / box.width), unit((r.bottom - box.top) / box.height)]);
   const quote = range.toString().replace(/\s+/g, ' ').trim();
   return quote && rects.length ? mark(layer, mergeLines(rects), quote, false) : null;
+}
+
+function pointMark(layer: Layer, clientX: number, clientY: number): Mark {
+  const box = layer.strip.getBoundingClientRect(), x = unit((clientX - box.left) / box.width), y = unit((clientY - box.top) / box.height);
+  const glyphs = Array.from(layer.strip.querySelectorAll<HTMLElement>('.pdf-glyph')).map(element => ({ element, box: element.getBoundingClientRect() }));
+  const distance = (rect: DOMRect) => Math.max(rect.top - clientY, clientY - rect.bottom, 0) * 4 + Math.max(rect.left - clientX, clientX - rect.right, 0);
+  const nearest = glyphs.sort((a, b) => distance(a.box) - distance(b.box))[0];
+  const line = nearest ? glyphs.filter(glyph => glyph.element.parentElement === nearest.element.parentElement).sort((a, b) => a.box.left - b.box.left) : [];
+  const before = line.filter(glyph => (glyph.box.left + glyph.box.right) / 2 < clientX).map(glyph => glyph.element.textContent).join('');
+  const after = line.filter(glyph => (glyph.box.left + glyph.box.right) / 2 >= clientX).map(glyph => glyph.element.textContent).join('');
+  const quote = `${before}‸${after}`.replace(/\s+/g, ' ').trim();
+  return { ...mark(layer, [[unit(x - .006), unit(y - .004), unit(x + .006), unit(y + .004)]], quote, false), kind: 'point' };
 }
 
 // The menu floats outside the PDF strips' stacking and clipping boundaries,
@@ -64,27 +80,46 @@ function SelectionMenu({ doc, layer, selection, group, onAdd }: { doc: Document;
 
 // Notes belong to the task and the exact displayed round/strip. They do not
 // change accept/reject decisions, and are sent through the normal task queue.
-export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; task: Task; onComment: () => void }) {
+export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTMLElement | null; doc: Document | null; task: Task; onComment: () => void }) {
   const store = reviewDraft(task.id), draft = useReviewDraft(task.id);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [selection, setSelection] = useState<Selected | null>(null);
   const [group, setGroup] = useState<NoteGroup | null>(null);
   const activeGroup = useRef(group); activeGroup.current = group;
-  const [region, setRegion] = useState(false);
+  const [tool, setTool] = useState<PdfTool>('select');
+  const [locked, setLocked] = useState<number | null>(null);
+  const stamps = useStamps();
+  const [wheel, setWheel] = useState<{ x: number; y: number; mark: Mark } | null>(null);
+  const region = tool === 'region';
+  useEffect(() => { if (tool === 'magic') loadStamps(); }, [tool]);
+  useEffect(() => { if (locked !== null && !stamps[locked]) setLocked(null); }, [locked, stamps]);
   const busy = draft.busy || task.status === 'deleting';
   const [drag, setDrag] = useState<{ key: string; rect: Rect } | null>(null);
   const origin = useRef<{ layer: Layer; x: number; y: number } | null>(null);
-  const current = useRef({ region, busy }); current.current = { region, busy };
+  const current = useRef({ region, busy, tool, markSelection }); current.current = { region, busy, tool, markSelection };
   const touch = useRef<ReturnType<typeof touchSelection> | null>(null);
-  useNoteUndo(() => activeGroup.current ? store.undoAdded() : store.undo(), doc);
+  useNoteUndo(() => !busy && store.undo(), doc, () => !busy && store.redo());
   useEffect(() => {
     if (!region || !doc) return;
-    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setRegion(false); setDrag(null); origin.current = null; } };
+    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); chooseTool('select'); setDrag(null); origin.current = null; } };
     doc.addEventListener('keydown', cancel, true); document.addEventListener('keydown', cancel, true);
     return () => { doc.removeEventListener('keydown', cancel, true); document.removeEventListener('keydown', cancel, true); };
   }, [doc, region]);
-  function annotate(region: boolean) { setRegion(region); touch.current?.reset(); setSelection(null); doc?.defaultView?.focus(); }
+  function chooseTool(next: PdfTool) {
+    setTool(next); setWheel(null); setDrag(null); origin.current = null;
+    touch.current?.reset(); setSelection(null); doc?.getSelection()?.removeAllRanges();
+    if (selection && ['note', 'magic', 'delete'].includes(next)) { current.current.tool = next; markSelection(selection); }
+  }
+  function annotate(region: boolean) { chooseTool(region ? 'region' : 'select'); doc?.defaultView?.focus(); }
+  const hand = useReviewToolKeys({ doc, tool, busy, choose: chooseTool, lock: setLocked, stamps, wheel: Boolean(wheel) });
+  current.current.tool = hand ? 'hand' : tool;
   useEffect(() => {
+    if (!doc) return;
+    doc.documentElement.dataset.reviewTool = hand ? 'hand' : tool;
+    return () => { delete doc.documentElement.dataset.reviewTool; };
+  }, [doc, tool, hand]);
+  useEffect(() => {
+    setWheel(null); setDrag(null); origin.current = null;
     if (!doc) return;
     const mounted = new Map<HTMLElement, Layer>();
     const scan = () => {
@@ -110,7 +145,7 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
     observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
     let timer: ReturnType<typeof setTimeout>;
     const select = () => {
-      if (current.current.region || current.current.busy || touch.current?.active()) return;
+      if (['region', 'point', 'hand'].includes(current.current.tool) || current.current.busy || touch.current?.active()) return;
       const selected = doc.getSelection();
       if (!selected?.rangeCount || selected.isCollapsed) { setSelection(null); return; }
       const range = selected.getRangeAt(0);
@@ -124,17 +159,40 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
     const selectionChanged = () => { clearTimeout(timer); timer = setTimeout(select, 100); };
     doc.addEventListener('selectionchange', selectionChanged);
     let disposed = false;
-    const marked = (event: PointerEvent) => {
-      if (!activeGroup.current || event.pointerType === 'touch' || !(event.target as Element).closest('.pdf-text')) return;
-      setTimeout(() => { if (disposed) return; const value = select(); if (value && activeGroup.current) addGrouped(value); }, 0);
+    let pressed: { layer: Layer; x: number; y: number; at: number } | null = null;
+    const press = (event: PointerEvent) => {
+      const target = event.target as Element, strip = target.closest<HTMLElement>('.pdf-strip');
+      const layer = strip && mounted.get(strip);
+      pressed = event.button === 0 && layer && !target.closest('button,a,input,textarea') ? { layer, x: event.clientX, y: event.clientY, at: performance.now() } : null;
     };
+    const marked = (event: PointerEvent) => {
+      const start = pressed; pressed = null;
+      if ((event.target as Element).closest('button,a,input,textarea')) return;
+      // Long presses belong to the touch-selection handles and their menu.
+      if (event.pointerType === 'touch' && (current.current.tool !== 'magic' || touch.current?.active() || !start || performance.now() - start.at >= 450)) return;
+      if (!start && !(event.target as Element).closest('.pdf-strip')) return;
+      if (!['note', 'delete', 'magic'].includes(current.current.tool)) return;
+      // A native selection can end in the blank margin, outside the text layer.
+      // A click with the magic pen marks a point, whether on text or whitespace.
+      setTimeout(() => {
+        if (disposed) return;
+        const value = select();
+        if (value) current.current.markSelection(value, event.clientX, event.clientY);
+        else if (start && current.current.tool === 'magic' && Math.hypot(event.clientX - start.x, event.clientY - start.y) < 6) {
+          current.current.markSelection(pointMark(start.layer, event.clientX, event.clientY), event.clientX, event.clientY);
+        }
+      }, 0);
+    };
+    const cancelPress = () => { pressed = null; };
+    doc.addEventListener('pointercancel', cancelPress);
+    doc.addEventListener('pointerdown', press);
     doc.addEventListener('pointerup', marked);
     // Touch screens select glyphs with Papilot's own handles and menu
     // (review-notes.css turns native selection off there).
     touch.current = touchSelection<Layer>(doc, {
       target: element => { const strip = element.closest('.pdf-text')?.closest<HTMLElement>('.pdf-strip'); return strip ? mounted.get(strip) : undefined; },
       units: layer => ({ units: Array.from(layer.strip.querySelectorAll<HTMLElement>('.pdf-glyph')), line: glyph => glyph.parentElement }),
-      blocked: () => { const { region, busy } = current.current; return region || busy; },
+      blocked: () => { const { busy } = current.current; return ['region', 'point', 'hand'].includes(current.current.tool) || busy; },
       menu: '.review-select-menu',
       onSelect: ({ target: layer, units, from, to }) => {
         const range = doc.createRange(); range.setStart(units[from], 0); range.setEnd(units[to], units[to].childNodes.length);
@@ -147,12 +205,12 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
     });
     return () => {
       disposed = true; clearTimeout(timer); observer.disconnect(); touch.current?.stop(); touch.current = null;
-      doc.removeEventListener('selectionchange', selectionChanged); doc.removeEventListener('pointerup', marked);
+      doc.removeEventListener('selectionchange', selectionChanged); doc.removeEventListener('pointercancel', cancelPress); doc.removeEventListener('pointerdown', press); doc.removeEventListener('pointerup', marked);
       for (const layer of mounted.values()) layer.element.remove();
     };
   }, [doc, task.review?.round]);
   function chooseGroup(next: NoteGroup | null) {
-    setGroup(next); touch.current?.reset(); setSelection(null);
+    setGroup(next); if (next && tool !== 'region') setTool('note'); touch.current?.reset(); setSelection(null);
     if (!next && store.getSnapshot().notes.some(note => note.group)) onComment();
   }
   useEffect(() => {
@@ -160,13 +218,29 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
     doc?.addEventListener('keydown', finish); document.addEventListener('keydown', finish);
     return () => { doc?.removeEventListener('keydown', finish); document.removeEventListener('keydown', finish); };
   }, [doc]);
-  function addGrouped(mark: Mark) {
+  function addGrouped(mark: Mark, comment = '', focus = true) {
     if (current.current.busy) return;
-    store.add({ ...mark, ...(activeGroup.current ? { group: activeGroup.current } : {}) }, !activeGroup.current);
+    const grouped = !mark.kind && !mark.stamp && ['note', 'region'].includes(current.current.tool) && activeGroup.current;
+    store.add({ ...mark, ...(grouped ? { group: grouped } : {}) }, focus && !grouped, comment);
     touch.current?.reset(); setSelection(null); doc?.getSelection()?.removeAllRanges();
   }
-  function edit({ handles: _, ...mark }: Selected) {
-    addGrouped(mark); setRegion(false); onComment();
+  function markSelection({ handles: _, ...mark }: Selected, x?: number, y?: number) {
+    if (current.current.busy) return;
+    if (current.current.tool === 'magic') {
+      const stamp = locked === null ? null : stamps[locked];
+      if (stamp) { addGrouped({ ...mark, stamp: stamp.label }, stamp.instruction, false); return; }
+      const box = (doc?.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect();
+      setWheel({ x: (box?.left || 0) + (x ?? 150), y: (box?.top || 0) + (y ?? 150), mark });
+      touch.current?.reset(); setSelection(null); doc?.getSelection()?.removeAllRanges(); return;
+    }
+    const deleting = current.current.tool === 'delete';
+    addGrouped({ ...mark, ...(deleting ? { kind: 'delete' } : {}) }, '', !deleting);
+    if (!deleting && (!activeGroup.current || !['note', 'region'].includes(current.current.tool))) onComment();
+  }
+  function edit(mark: Selected) { markSelection(mark); }
+  function pickStamp(stamp: Stamp) {
+    if (wheel) addGrouped({ ...wheel.mark, stamp: stamp.label }, stamp.instruction, false);
+    setWheel(null); doc?.defaultView?.focus();
   }
   // The standalone engine keeps its editor; embedded comments join this draft.
   useEffect(() => {
@@ -197,15 +271,20 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
     }
   }, [draft.reveal, layers, doc]);
   return <>
-    <GroupPicker value={group} onChange={chooseGroup} disabled={busy}/>
-    <button type="button" className="icon-button" aria-label={t('Mark region')} title={t('Mark region')} aria-pressed={region} disabled={!doc || busy} onClick={() => annotate(!region)}><Icon name="region" size={16}/></button>
+    <span className="pdf-compact-tools">
+      <GroupPicker value={group} onChange={chooseGroup} disabled={!doc || busy}/>
+      <button type="button" className="icon-button" aria-label={t('Mark region')} title={t('Mark region')} aria-pressed={region} disabled={!doc || busy} onClick={() => annotate(!region)}><Icon name="region" size={16}/></button>
+    </span>
+    {railSlot && createPortal(<PdfToolRail tool={tool} onTool={chooseTool} group={group} onGroup={chooseGroup} disabled={!doc || busy} stamps={stamps} locked={locked} onLock={setLocked}
+      history={{ canUndo: !busy && draft.canUndo, canRedo: !busy && draft.canRedo, undo: () => { store.undo(); }, redo: () => { store.redo(); } }}/>, railSlot)}
+    {wheel && <StampWheel x={wheel.x} y={wheel.y} stamps={stamps} onPick={pickStamp} onClose={() => { setWheel(null); doc?.defaultView?.focus(); }} onFree={() => { addGrouped(wheel.mark); setWheel(null); onComment(); }}/>}
     {doc && createPortal(<style>{styles + noteStyles + groupStyles}</style>, doc.head)}
     {layers.map(layer => createPortal(<Fragment>
       {draft.notes.filter(note => note.strip === layer.key).map(note => <Fragment key={note.id}>
-        {note.rects.map((rect, i) => <div key={i} className={note.region ? 'review-note-box' : 'review-note-mark'} data-group={note.group} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
-        <button className="review-note-tag" data-group={note.group} style={{ top: `${(note.rects[0]?.[1] || 0) * 100}%`, ...groupStyle(note.group) }} title={note.group ? t('Annotation groups') : note.comment} aria-label={t('Review note: {comment}', { comment: note.group ? groupName(note.group) : note.comment })} onClick={() => { store.focus(note.id); onComment(); }}>{draft.notes.indexOf(note) + 1}</button>
+        {note.rects.map((rect, i) => <div key={i} className={note.kind === 'point' ? 'review-note-point' : note.region ? 'review-note-box' : 'review-note-mark'} data-kind={note.kind} data-stamp={note.stamp} data-group={note.group} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
+        <button className="review-note-tag" data-kind={note.kind} data-stamp={note.stamp} data-group={note.group} style={{ top: `${(note.rects[0]?.[1] || 0) * 100}%`, ...groupStyle(note.group) }} title={note.group ? t('Annotation groups') : note.comment} aria-label={t('Review note: {comment}', { comment: note.group ? groupName(note.group) : note.comment })} onClick={() => { store.focus(note.id); onComment(); }}>{draft.notes.indexOf(note) + 1}{note.stamp && <> · {note.stamp}</>}</button>
       </Fragment>)}
-      {region && <div className="review-region-capture" onPointerDown={e => {
+      {!busy && !hand && region && <div className="review-region-capture" onPointerDown={e => {
         if (e.button !== 0) return;
         e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId);
         const box = layer.strip.getBoundingClientRect(), x = unit((e.clientX - box.left) / box.width), y = unit((e.clientY - box.top) / box.height);
@@ -224,6 +303,9 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
         const quote = (start.layer.strip.querySelector('.pdf-text')?.textContent || '').replace(/\s+/g, ' ').trim();
         edit(mark(start.layer, [rect], quote, true));
       }} onPointerCancel={() => { origin.current = null; setDrag(null); }}/>}
+      {!busy && !hand && tool === 'point' && <div className="review-point-capture" onClick={event => {
+        markSelection(pointMark(layer, event.clientX, event.clientY), event.clientX, event.clientY);
+      }}/>}
       {drag?.key === layer.key && <div className="review-note-box" style={percent(drag.rect)}/>}
       {selection?.handles && selection.strip === layer.key && <>
         {selection.rects.map((rect, i) => <div key={i} className="review-note-mark" style={percent(rect)}/>)}

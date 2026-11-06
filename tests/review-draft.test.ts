@@ -91,3 +91,42 @@ test('sending or deleting the revealed note releases its pinned review round', (
   draft.remove(next.id);
   assert.equal(draft.getSnapshot().reveal, undefined);
 });
+
+
+test('review tools retain deletion and quick-note intent through submission and reload', () => {
+  const saved = storage(), draft = new ReviewDraft('task', saved);
+  draft.add({ ...mark, kind: 'delete' }, false);
+  draft.add({ ...mark, kind: 'point', stamp: 'Shorten' }, false, 'Make it concise.');
+  draft.add(mark);
+  const reopened = new ReviewDraft('task', saved);
+  const sent = reviewSubmission(reopened.getSnapshot()).notes.map(reviewNoteSummary);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].kind, 'delete'); assert.equal(sent[0].comment, '');
+  assert.equal(sent[1].kind, 'point'); assert.equal(sent[1].stamp, 'Shorten');
+  assert.equal(sent[1].comment, 'Make it concise.'); assert.equal(sent[1].anchor?.round, 1);
+});
+
+test('review history preserves written text and drops redo after a new mark or send', () => {
+  const draft = new ReviewDraft('task', storage()); draft.add(mark);
+  const note = draft.getSnapshot().notes[0]; draft.edit(note.id, 'Keep this.');
+  assert.equal(draft.undo(), true); assert.equal(draft.getSnapshot().notes.length, 0);
+  assert.equal(draft.redo(), true); assert.equal(draft.getSnapshot().notes[0].comment, 'Keep this.');
+  draft.remove(note.id); draft.undo(); assert.equal(draft.getSnapshot().notes[0].id, note.id);
+  draft.setBusy(true); assert.equal(draft.undo(), false); assert.equal(draft.redo(), false);
+  draft.setBusy(false); draft.add({ ...mark, kind: 'delete' }); assert.equal(draft.redo(), false);
+  draft.clear(reviewSubmission(draft.getSnapshot())); assert.equal(draft.undo(), false);
+});
+
+
+test('review marks work on HTTP tailnet addresses without crypto.randomUUID', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(crypto, 'randomUUID');
+  Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: undefined });
+  try {
+    const draft = new ReviewDraft('task', storage()); draft.add(mark); draft.add(mark);
+    const ids = draft.getSnapshot().notes.map(note => note.id);
+    assert.match(ids[0], /^[a-f0-9]{32}$/); assert.notEqual(ids[0], ids[1]);
+  } finally {
+    if (descriptor) Object.defineProperty(crypto, 'randomUUID', descriptor);
+    else Reflect.deleteProperty(crypto, 'randomUUID');
+  }
+});

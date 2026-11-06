@@ -3,7 +3,7 @@
 .review-note-box{border:1.5px solid var(--primary);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .review-region-capture{position:absolute;inset:0;pointer-events:auto;cursor:crosshair;touch-action:none}
 .review-note-tag{position:absolute;pointer-events:auto;background:var(--primary);color:#fff;border:0;border-radius:16px;padding:5px 10px;font:500 13px/1.4 var(--sans);cursor:pointer;box-shadow:0 2px 8px #0002}
-.review-note-tag{left:8px;min-width:24px;padding:3px 6px}
+.review-note-tag{z-index:1;left:8px;min-width:24px;padding:3px 6px}
 .review-notes-panel{position:fixed;z-index:20;right:16px;bottom:16px;width:min(360px,calc(100% - 32px));max-height:calc(100% - 80px);overflow:auto;padding:14px;box-sizing:border-box;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);box-shadow:var(--float);font:14px/1.5 var(--sans)}
 .review-notes-panel *{box-sizing:border-box}
 .review-notes-panel header,.review-notes-panel footer,.review-note-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -47,3 +47,16 @@
   .review-notes-panel button{min-height:40px}
   .review-notes-panel footer button{padding:0 16px}
 }
+
+/* The review shares the manuscript's marking tools and keeps their geometry
+   anchored to the displayed round and strip. */
+.review-note-mark[data-kind=delete]{background:linear-gradient(to bottom,transparent calc(54% - .75px),var(--red) calc(54% - .75px),var(--red) calc(54% + .75px),transparent calc(54% + .75px))}
+.review-note-mark[data-stamp]{background:color-mix(in srgb,var(--purple) 20%,transparent)}
+.review-note-tag[data-kind=delete]{background:var(--red)}
+.review-note-tag[data-stamp]{background:var(--purple)}
+.review-note-point{position:absolute;border-left:2px solid var(--primary);min-height:16px;pointer-events:none}
+.review-note-point::before{content:"";position:absolute;left:-5px;top:-5px;width:8px;height:8px;border-radius:50%;background:var(--primary)}
+.review-point-capture{position:absolute;inset:0;pointer-events:auto;cursor:crosshair}
+:root[data-review-tool=hand] #paper{cursor:grab;user-select:none;touch-action:none}
+:root[data-review-tool=hand] .pdf-text,:root[data-review-tool=point] .pdf-text{pointer-events:none}
+:root[data-review-tool=delete] .pdf-text ::selection{background:color-mix(in srgb,var(--red) 20%,transparent);text-decoration:line-through}

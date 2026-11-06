@@ -326,13 +326,17 @@ export async function buildApp(options: AppOptions) {
       reviewNotes = b.notes.map((note: any) => {
         if (!note || typeof note !== 'object') throw new Error('Select valid review notes.');
         if (note.group !== undefined && !isNoteGroup(note.group)) throw new Error('Invalid annotation group.');
+        if (note.kind !== undefined && !isMarkKind(note.kind)) throw new Error('Invalid kind of mark.');
+        // Review marks carry the same actions and quick-note labels as manuscript annotations.
+        const stamp = note.stamp === undefined ? '' : string(note.stamp, 'Quick note name', 40).replace(/[·\n]/g, ' ').trim();
+        const comment = note.group || note.kind === 'delete' ? optional(note.comment, 'Note') : string(note.comment, 'Note');
         const anchor = note.anchor;
         if (anchor && (!Array.isArray(anchor.sources) || (anchor.round !== undefined && (!Number.isSafeInteger(anchor.round) || anchor.round < 1 || anchor.round > (task.review?.round || 0))))) throw new Error('Invalid note location.');
         const sources = anchor?.sources.map((source: any) => {
           if (!source || !Array.isArray(source.lines) || source.lines.length !== 2 || !source.lines.every((line: unknown) => Number.isSafeInteger(line) && Number(line) >= 1) || source.lines[1] < source.lines[0]) throw new Error('Invalid note location.');
           return { file: string(source.file, 'Source file', 4096), lines: source.lines as [number, number] };
         });
-        return { ...(note.id ? { id: string(note.id, 'Note ID', 100) } : {}), where: string(note.where, 'Note location'), quote: optional(note.quote, 'PDF text'), comment: note.group ? optional(note.comment, 'Note') : string(note.comment, 'Note'), ...(note.group ? { group: note.group } : {}), ...(anchor ? { anchor: { sources, ...(anchor.round ? { round: anchor.round } : {}) } } : {}) };
+        return { ...(note.id ? { id: string(note.id, 'Note ID', 100) } : {}), where: string(note.where, 'Note location'), quote: optional(note.quote, 'PDF text'), comment, ...(note.group ? { group: note.group } : {}), ...(note.kind ? { kind: note.kind } : {}), ...(stamp ? { stamp } : {}), ...(anchor ? { anchor: { sources, ...(anchor.round ? { round: anchor.round } : {}) } } : {}) };
       });
     }
     const text = feedback || skill || reviewNotes || attachments.length ? optional(b.text, 'Revision instructions') : string(b.text, 'Revision instructions');

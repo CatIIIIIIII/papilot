@@ -523,6 +523,49 @@ test('annotation subsets go to separate agents while unselected notes keep their
   } finally { await f.close(); }
 });
 
+test('review marking tools keep deletion, replacement and quick-note intent through the messages API', async () => {
+  const f = await fixture();
+  try {
+    f.store.updateTask('thesis-task', { review: { state: 'reviewing', round: 1, counts: { pending: 1 } } });
+    f.review.get = async () => ({ cursor: 0, feedback: [] }) as any;
+    const base = { where: 'Round 1 · Before · main.tex:10–12', quote: 'Original technical sentence.', anchor: { round: 1, sources: [{ file: 'main.tex', lines: [10, 12] }] } };
+    const notes = [
+      { ...base, id: 'delete', kind: 'delete', comment: '' },
+      { ...base, id: 'replace', kind: 'delete', comment: 'A replacement sentence.' },
+      { ...base, id: 'point', kind: 'point', quote: 'Original ‸technical sentence.', comment: 'Define this term here.' },
+      { ...base, id: 'quick-point', kind: 'point', stamp: '  Shorten·\npoint  ', comment: 'Make this concise.' },
+      { ...base, id: 'quick-text', stamp: 'Polish', comment: 'Improve this wording.' },
+    ];
+    const response = await f.remote.inject({ method: 'POST', url: '/api/tasks/thesis-task/messages', headers: f.as, payload: { requestKey: 'review-marking-tools', text: '', notes } });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(f.store.items('thesis-task')[0].meta?.notes, notes.map(note => note.id === 'quick-point' ? { ...note, stamp: 'Shorten  point' } : note));
+    const prompt = response.json().prompt;
+    assert.match(prompt, / · Delete\n/); assert.match(prompt, /Delete the marked text/);
+    assert.match(prompt, / · Replace\n/); assert.match(prompt, /A replacement sentence\./);
+    assert.match(prompt, /Original ‸technical sentence\./);
+    assert.match(prompt, /Quick note: Shorten  point/); assert.match(prompt, /Quick note: Polish/);
+  } finally { await f.close(); }
+});
+
+test('review marking tools reject invalid kinds and quick-note labels without weakening ordinary notes', async () => {
+  const f = await fixture();
+  try {
+    const base = { where: 'Round 1 · Before', quote: 'Original text.', comment: 'Revise this.' };
+    const invalid = [
+      ...['erase', '', null, 42, {}].map(kind => ({ ...base, kind })),
+      ...['', '   ', null, 42, {}, 'a'.repeat(41)].map(stamp => ({ ...base, stamp })),
+      { ...base, comment: '' }, { ...base, kind: 'point', comment: '' }, { ...base, stamp: 'Polish', comment: '' },
+      { ...base, kind: 'delete', comment: 42 },
+    ];
+    for (const note of invalid) {
+      const response = await f.remote.inject({ method: 'POST', url: '/api/tasks/thesis-task/messages', headers: f.as, payload: { requestKey: 'invalid-review-mark', text: '', notes: [note] } });
+      assert.equal(response.statusCode, 400, JSON.stringify({ note, response: response.json() }));
+    }
+    assert.equal(f.store.runs().length, 0);
+    assert.equal(f.store.items('thesis-task').length, 0);
+  } finally { await f.close(); }
+});
+
 test('review notes retain their anchors and link only to their own task result', async () => {
   const f = await fixture();
   try {

@@ -1,3 +1,4 @@
+import { checkReviewTools } from './review-tools-checks.mjs';
 import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,7 +14,7 @@ await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const origin = `http://127.0.0.1:${server.server.address().port}`;
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
-const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, height: 1000 } });
+const page = await browser.newPage({ locale: 'en-US', hasTouch: process.env.PAPILOT_REVIEW_TOOLS_TOUCH === '1', viewport: { width: 1440, height: 1000 } });
 page.setDefaultTimeout(15000);
 const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('PAGE ERROR', error.message); });
 const prefix = '/review/paper';
@@ -58,6 +59,7 @@ await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
   if (url.pathname === '/api/indirect-changes') return route.fulfill({ json: { indirectChanges: false } });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
+  if (url.pathname === '/api/quick-notes') return route.fulfill({ json: { quickNotes: null } });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
@@ -138,11 +140,13 @@ async function quote(side, offset = 8) {
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
   }, offset);
-  await viewer().locator('.review-add-note').click();
+  await viewer().locator('.review-select-menu button').click();
 }
 try {
   console.log('Opening fixture'); await page.goto(origin);
   await viewer().locator('.change.current').waitFor();
+  await checkReviewTools(page, writes, sent);
+  if (!process.env.PAPILOT_REVIEW_TOOLS_ONLY) {
   await input().fill('Keep the examples.');
   console.log('Selecting before'); await quote('before');
   await expect(page.getByRole('textbox', { name: 'Comment 1', exact: true })).toBeFocused();
@@ -261,4 +265,5 @@ try {
   await page.screenshot({ path: 'test-results/unified-review-dark.png' });
   assert.deepEqual(errors, []);
   console.log('PASS: unified quote and whole-change comments, before/after anchors, independent decisions, persisted drafts, notes-only send, retry identity, acceptance, rejection-only send, old rounds, mobile and dark mode');
+  }
 } catch (error) { await page.screenshot({ path: 'test-results/unified-review-failure.png' }); console.error(await page.locator('body').innerText()); throw error; } finally { await browser.close(); await server.close(); }

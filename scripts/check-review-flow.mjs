@@ -376,7 +376,7 @@ try {
   await expect(viewer().locator('.change.current')).toHaveAttribute('data-stop', '1');
   // The accepted paragraph remains selectable for another note.
   await accepted.locator('.after .pdf-glyph').evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range); });
-  await viewer().locator('.review-add-note').click();
+  await viewer().locator('.review-select-menu button').click();
   await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('A note on accepted text.');
   await viewer().locator('.change.current').getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(viewer().locator('[data-stop="1"] .change-head')).toBeHidden();
