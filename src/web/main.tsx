@@ -1327,6 +1327,7 @@ function App() {
   // found falls back to Codex without forgetting the choice.
   const offered = AGENT_IDS.filter(id => id === 'codex' || Boolean(runtimes[id] && runtimes[id]!.installed !== false));
   const agentChoice = offered.includes(savedAgent) ? savedAgent : 'codex';
+  const effectivePermissions = runtimes[agentChoice]?.permissionOptions?.some(option => option.value === newPermissions) ? newPermissions : 'workspace';
   const models = runtimes[agentChoice]?.models || [], pref = agentPrefs[agentChoice];
   const chosenModel = models.length && !models.some(m => m.id === pref.model) ? '' : pref.model;
   const modelInfo = models.find(m => m.id === chosenModel) || models.find(m => m.isDefault);
@@ -1342,8 +1343,8 @@ function App() {
   };
   const agentOptions = (disabled: boolean) => <AgentPicker disabled={disabled} agent={agentChoice} model={agent.model} effort={agent.effort} fast={pref.fast}
     agents={offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] }))}
-    permissionMode={newSkill?.output !== 'annotations' ? newPermissions : undefined}
-    permissions={newSkill?.output !== 'annotations' && <PermissionOptions runtime={runtimes[agentChoice]} value={newPermissions} disabled={disabled} onChange={setNewPermissions}/>}
+    permissionMode={newSkill?.output !== 'annotations' ? effectivePermissions : undefined}
+    permissions={newSkill?.output !== 'annotations' && <PermissionOptions runtime={runtimes[agentChoice]} value={effectivePermissions} disabled={disabled} onChange={setNewPermissions}/>}
     reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} onSelect={chooseModel} onChange={remember}/>;
   async function createTask() {
     const text = newDraft.trim(), target = project?.id || projectId, skill = newSkill;

@@ -30,7 +30,8 @@ export interface TaskReconciliation {
   sourceBase: string; sourceAccepted: string; base: string; ready: boolean;
   intent?: { mode: 'workspace' | 'commit'; message: string };
 }
-export type TaskPermissions = 'workspace' | 'full';
+// Adapter-owned IDs; workspace is the backwards-compatible default.
+export type TaskPermissions = string;
 export interface TaskPermissionOption { value: TaskPermissions; label: string; detail: string }
 export interface Task {
   permissions?: TaskPermissions;

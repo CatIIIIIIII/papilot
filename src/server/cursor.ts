@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Adapter, loadPackage, packageFile, toolItem, type Item, type Thread, type Turn } from './agents.ts';
 import { imageType } from './attachments.ts';
 import { DATA } from './paths.ts';
+import type { TaskPermissionOption } from '../shared.ts';
 
 // The parts of @cursor/sdk Papilot uses. The SDK is fetched on first use, so
 // its types are restated here instead of being a build dependency.
@@ -59,9 +60,16 @@ const effortParameter = (model?: CursorModel) => model?.parameters?.find(paramet
 // anything outside the sandbox fails and is reported in the conversation.
 // Each Papilot thread maps to a Cursor agent ID, resumed after a restart.
 export class CursorAgent extends Adapter {
+  permissionOptions(): TaskPermissionOption[] {
+    return [
+      { value: 'workspace', label: 'Sandbox', detail: 'Sandboxed tools' },
+      { value: 'full', label: 'Unrestricted', detail: 'No sandbox' },
+    ];
+  }
   private user: { apiKeyName: string; userEmail?: string } | null = null;
   private catalog: CursorModel[] = [];
   private agents = new Map<string, CursorAgentHandle>();
+  private sandboxed = new Map<string, boolean>();
   private ids: Record<string, string> = {};
   constructor(private load: () => Promise<CursorSdk> = loadCursor, private file = path.join(DATA, 'cursor-agents.json'), private configured = () => cursorConfigured()) {
     super();
@@ -95,15 +103,19 @@ export class CursorAgent extends Adapter {
     if (effort && !parameter?.values.some(value => value.value === effort)) throw new Error(`Cursor does not support reasoning effort ${effort} for this model.`);
     return { id, ...(effort && parameter ? { params: [{ id: parameter.id, value: effort }] } : {}) };
   }
-  private async agent(threadId: string, cwd: string, model: ModelSelection | undefined) {
+  private async agent(threadId: string, cwd: string, model: ModelSelection | undefined, sandbox: boolean) {
     const known = this.agents.get(threadId);
-    if (known) return known;
+    if (known && this.sandboxed.get(threadId) === sandbox) return known;
+    // Sandbox options belong to the SDK handle. Resume the same conversation
+    // with a new handle on a change, including when revoking unrestricted access.
+    if (known) { known.close(); this.agents.delete(threadId); this.sandboxed.delete(threadId); }
     const sdk = await this.load();
-    const options: AgentOptions = { local: { cwd, settingSources: ['project'], sandboxOptions: { enabled: true } } };
+    const options: AgentOptions = { local: { cwd, settingSources: ['project'], sandboxOptions: { enabled: sandbox } } };
     const id = this.ids[threadId];
     const agent = id ? await sdk.Agent.resume(id, options) : await sdk.Agent.create({ ...options, name: 'Papilot task', ...(model ? { model } : {}) });
     if (!id) { this.ids[threadId] = agent.agentId; this.save(); }
     this.agents.set(threadId, agent);
+    this.sandboxed.set(threadId, sandbox);
     return agent;
   }
   protected run(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) { void this.execute(turn, thread, text, effort, images); }
@@ -118,7 +130,7 @@ export class CursorAgent extends Adapter {
     };
     try {
       const model = this.selection(thread.model, effort);
-      const agent = await this.agent(turn.threadId, thread.cwd, model);
+      const agent = await this.agent(turn.threadId, thread.cwd, model, Boolean(thread.readOnly) || thread.permissions !== 'full');
       // Cursor's harness prompt stays in place: the first turn carries Papilot's instructions.
       const prompt = thread.started ? text : `${thread.instructions}\n\n---\n\n${text}`;
       const attached = await Promise.all(images.map(async file => {
@@ -168,6 +180,6 @@ export class CursorAgent extends Adapter {
   close() {
     super.close();
     for (const agent of this.agents.values()) { try { agent.close(); } catch { /* Already closed. */ } }
-    this.agents.clear(); this.ready = false;
+    this.agents.clear(); this.sandboxed.clear(); this.ready = false;
   }
 }

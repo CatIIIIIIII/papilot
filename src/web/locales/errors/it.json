@@ -253,7 +253,13 @@
   "ZIP links and special files are not supported.": "I collegamenti e i file speciali negli archivi ZIP non sono supportati.",
   "npm is unavailable to Papilot.": "npm non è disponibile per Papilot.",
   "Invalid task permissions.": "Permessi dell’attività non validi.",
-  "Full access is only available for Codex, Claude and GLM editing tasks.": "L’accesso completo è disponibile solo per attività di modifica con Codex, Claude e GLM.",
   "Pause the task and wait for it to finish before changing permissions.": "Metti in pausa l’attività e attendi che si arresti prima di modificare i permessi.",
-  "Codex could not apply workspace permissions.": "Codex non ha potuto applicare i permessi dello spazio di lavoro."
+  "Codex could not apply workspace permissions.": "Codex non ha potuto applicare i permessi dello spazio di lavoro.",
+  "Permissions are only available for editing tasks.": "I permessi sono disponibili solo per le attività di modifica.",
+  "Invalid task permissions for this agent.": "Permessi dell’attività non validi per questo agente.",
+  "This agent does not support the selected permissions.": "Questo agente non supporta i permessi selezionati.",
+  "Grok does not support the selected permissions.": "Grok non supporta i permessi selezionati.",
+  "Grok disconnected. Reconnect to resume.": "Grok si è disconnesso. Riconnettiti per riprendere.",
+  "Pause the task before restoring its session.": "Metti in pausa l’attività prima di ripristinarne la sessione.",
+  "This task already has a running turn.": "Questa attività ha già un turno in esecuzione."
 }

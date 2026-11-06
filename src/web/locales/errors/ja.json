@@ -253,7 +253,13 @@
   "ZIP links and special files are not supported.": "ZIP 内のリンクおよび特殊ファイルはサポートされていません。",
   "npm is unavailable to Papilot.": "Papilot から npm を利用できません。",
   "Invalid task permissions.": "タスクの権限が無効です。",
-  "Full access is only available for Codex, Claude and GLM editing tasks.": "フルアクセスは Codex、Claude、GLM の編集タスクでのみ利用できます。",
   "Pause the task and wait for it to finish before changing permissions.": "タスクを一時停止し、停止してから権限を変更してください。",
-  "Codex could not apply workspace permissions.": "Codex はワークスペースの権限を適用できませんでした。"
+  "Codex could not apply workspace permissions.": "Codex はワークスペースの権限を適用できませんでした。",
+  "Permissions are only available for editing tasks.": "権限は編集タスクでのみ設定できます。",
+  "Invalid task permissions for this agent.": "このエージェントは選択した権限に対応していません。",
+  "This agent does not support the selected permissions.": "このエージェントは選択した権限に対応していません。",
+  "Grok does not support the selected permissions.": "Grok は選択した権限に対応していません。",
+  "Grok disconnected. Reconnect to resume.": "Grok が切断されました。再接続して再開してください。",
+  "Pause the task before restoring its session.": "セッションを復元する前にタスクを一時停止してください。",
+  "This task already has a running turn.": "このタスクには実行中のターンがあります。"
 }

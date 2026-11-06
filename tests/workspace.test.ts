@@ -1419,14 +1419,14 @@ test('a task runs on its own agent: turns, approvals and pausing go to that agen
   } finally { f.close(); }
 });
 
-test('Antigravity is told to edit with its file tools, since it cannot run commands', () => {
+test('Antigravity instructions defer to its current native permission policy', () => {
   const f = fixture();
   try {
     const codex = (f.workspace as any).instructions(f.task) as string;
     const antigravity = (f.workspace as any).instructions({ ...f.task, agent: 'antigravity' }) as string;
     assert.match(codex, /You may run tools in the task worktree/);
     assert.match(antigravity, /^You are Antigravity running inside Papilot/);
-    assert.match(antigravity, /Shell commands are not available to you here.*file tools only/);
+    assert.match(antigravity, /Shell commands follow the current native permission policy/);
     assert.doesNotMatch(antigravity, /You may run tools/);
   } finally { f.close(); }
 });
@@ -2264,7 +2264,7 @@ for (const permissions of ['full', 'workspace'] as const) {
 test('editing instructions keep manuscript boundaries without pinning mutable access permissions', () => {
   const f = fixture();
   try {
-    for (const agent of ['codex', 'claude', 'glm'] as const) {
+    for (const agent of ['codex', 'claude', 'glm', 'cursor', 'grok', 'antigravity'] as const) {
       const instructions = (permissions: 'workspace' | 'full') => (f.workspace as any).instructions({ ...f.task, agent, permissions });
       assert.equal(instructions('workspace'), instructions('full'));
       assert.match(instructions('workspace'), /Keep manuscript edits in this isolated task worktree/);
@@ -2272,7 +2272,6 @@ test('editing instructions keep manuscript boundaries without pinning mutable ac
       assert.doesNotMatch(instructions('workspace'), /Only edit this isolated task worktree|The user selected full access/);
       assert.match(instructions('full'), /Never edit the manuscript checkout, other task worktrees, or Papilot's own source\/state/);
     }
-    assert.match((f.workspace as any).instructions({ ...f.task, agent: 'antigravity' }), /Only edit this isolated task worktree/);
   } finally { f.close(); }
 });
 
@@ -2283,8 +2282,8 @@ test('task permission selector refuses active turns, unsupported providers, revi
       f.store.updateTask(f.task.id, { status });
       assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Pause the task/);
     }
-    f.store.updateTask(f.task.id, { status: 'reviewing', agent: 'cursor' });
-    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /only available/);
+    f.store.updateTask(f.task.id, { status: 'reviewing', agent: 'kimi' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Invalid task permissions/);
     f.store.updateTask(f.task.id, { agent: 'codex', mode: 'review' });
     assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /only available/);
     f.store.updateTask(f.task.id, { mode: 'edit' });

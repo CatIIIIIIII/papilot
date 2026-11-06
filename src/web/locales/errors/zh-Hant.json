@@ -253,7 +253,13 @@
   "ZIP links and special files are not supported.": "不支援 ZIP 連結與特殊檔案。",
   "npm is unavailable to Papilot.": "Papilot 無法使用 npm。",
   "Invalid task permissions.": "無效的任務權限。",
-  "Full access is only available for Codex, Claude and GLM editing tasks.": "完整權限僅適用於 Codex、Claude 和 GLM 的論文修改任務。",
   "Pause the task and wait for it to finish before changing permissions.": "請先暫停任務，等待停止後再修改權限。",
-  "Codex could not apply workspace permissions.": "Codex 無法套用工作區權限。"
+  "Codex could not apply workspace permissions.": "Codex 無法套用工作區權限。",
+  "Permissions are only available for editing tasks.": "權限僅適用於論文修改任務。",
+  "Invalid task permissions for this agent.": "此 agent 不支援所選權限。",
+  "This agent does not support the selected permissions.": "此 agent 不支援所選權限。",
+  "Grok does not support the selected permissions.": "Grok 不支援所選權限。",
+  "Grok disconnected. Reconnect to resume.": "Grok 已中斷，請重新連線後繼續。",
+  "Pause the task before restoring its session.": "還原工作階段前請先暫停任務。",
+  "This task already has a running turn.": "此任務已有執行中的回合。"
 }

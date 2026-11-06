@@ -54,6 +54,11 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
   protected account(): unknown { return { account: null, requiresOpenaiAuth: false }; }
   protected models(): unknown { return { data: [] }; }
   protected limits(): unknown { throw new Error('This agent does not report usage.'); }
+  permissionOptions(): TaskPermissionOption[] { return []; }
+  async taskPermissionConfig(value: TaskPermissions) {
+    if (!this.permissionOptions().some(option => option.value === value)) throw new Error('This agent does not support the selected permissions.');
+    return { thread: { taskPermissions: value }, turn: { taskPermissions: value } };
+  }
   async request(method: string, params: any = {}): Promise<any> {
     if (method === 'account/read') return this.account();
     if (method === 'model/list') return this.models();
@@ -503,6 +508,13 @@ export class GlmAgent extends ClaudeAgent {
 // anything else that needs approval (shell commands, edits elsewhere) is
 // declined by agy itself and reported in the conversation.
 export class AntigravityAgent extends Adapter {
+  permissionOptions(): TaskPermissionOption[] {
+    return [
+      { value: 'workspace', label: 'Accept edits', detail: 'Other requests denied' },
+      { value: 'plan', label: 'Plan', detail: 'Plan first' },
+      { value: 'full', label: 'Always proceed', detail: 'Approve all tools' },
+    ];
+  }
   private catalog: { model: string; displayName: string; efforts: string[]; ids: Record<string, string>; isDefault: boolean; defaultEffort: string | null }[] = [];
   private conversations: Record<string, string> = {};
   constructor(private binary = process.env.PAPILOT_AGY_BIN || 'agy', private file = path.join(DATA, 'antigravity-conversations.json'),
@@ -533,7 +545,9 @@ export class AntigravityAgent extends Adapter {
     // Attachments live outside the worktree. Grant read access to only the
     // selected files for this invocation; adding their directory as a workspace
     // would also expose other tasks' attachments and permit writes there.
-    let imageSettings: string[] = [];
+    const permissions = thread.readOnly ? 'plan' : thread.permissions || 'workspace';
+    const full = permissions === 'full';
+    const settings: Record<string, unknown> = { toolPermission: full ? 'always-proceed' : 'request-review', allowNonWorkspaceAccess: full, enableTerminalSandbox: false };
     try {
       const files = images.map(file => {
         const resolved = fs.realpathSync(file);
@@ -543,14 +557,14 @@ export class AntigravityAgent extends Adapter {
       if (files.length) {
         for (const [index, file] of files.entries()) text = text.replaceAll(images[index], file);
         text += '\n\nOpen the attached images with your file/image tools: ' + files.map(file => JSON.stringify(file)).join(', ') + '. If your tools cannot view an image, tell the user rather than guessing what it contains.';
-        imageSettings = ['--settings', JSON.stringify({ permissions: { allow: files.map(file => `read_file(${file})`) } })];
+        settings.permissions = { allow: files.map(file => `read_file(${file})`) };
       }
     } catch (error) { this.finish(turn, 'failed', error instanceof Error ? error.message : String(error)); return; }
     const conversation = this.conversations[turn.threadId], entry = this.catalog.find(model => model.model === thread.model);
     const model = entry ? entry.ids[effort || entry.defaultEffort || ''] || Object.values(entry.ids)[0] : thread.model;
     // agy has no separate system prompt: the first turn carries Papilot's instructions.
     const prompt = conversation ? text : `${thread.instructions}\n\n---\n\n${text}`;
-    const child = this.launch(findExecutable(this.binary) || this.binary, ['--input-format', 'stream-json', '--output-format', 'stream-json', '--mode', 'accept-edits', ...imageSettings, ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
+    const child = this.launch(findExecutable(this.binary) || this.binary, ['--input-format', 'stream-json', '--output-format', 'stream-json', '--mode', permissions === 'plan' ? 'plan' : 'accept-edits', '--settings', JSON.stringify(settings), ...(model ? ['--model', model] : []), ...(conversation ? ['--conversation', conversation] : [])], { cwd: thread.cwd, env: this.env() });
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
@@ -576,7 +590,7 @@ export class AntigravityAgent extends Adapter {
     child.on('close', () => {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
-      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval. It can edit the task worktree and read the images attached to this turn.` });
+      if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval.` });
       if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });

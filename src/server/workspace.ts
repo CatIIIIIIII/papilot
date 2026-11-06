@@ -13,6 +13,7 @@ import { taskAccessInstructions } from './task-permissions.ts';
 import { AGENT_NAMES, AntigravityAgent, ClaudeAgent, GlmAgent, type AgentRuntime } from './agents.ts';
 import { ACP_PROFILES, AcpAgent } from './acp.ts';
 import { CursorAgent } from './cursor.ts';
+import { GrokAgent } from './grok.ts';
 import { reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
@@ -137,7 +138,7 @@ export class Workspace extends EventEmitter {
   constructor(public store: Store, public codex: AgentRuntime = new Codex(), private connectReview = reviewClient, others: Partial<Record<AgentId, AgentRuntime>> = {}) {
     super();
     this.attachments = new Attachments(store);
-    this.agents = { codex, claude: others.claude || new ClaudeAgent(), cursor: others.cursor || new CursorAgent(), copilot: others.copilot || new AcpAgent(ACP_PROFILES.copilot), grok: others.grok || new AcpAgent(ACP_PROFILES.grok), antigravity: others.antigravity || new AntigravityAgent(),
+    this.agents = { codex, claude: others.claude || new ClaudeAgent(), cursor: others.cursor || new CursorAgent(), copilot: others.copilot || new AcpAgent(ACP_PROFILES.copilot), grok: others.grok || new GrokAgent(), antigravity: others.antigravity || new AntigravityAgent(),
       kimi: others.kimi || new AcpAgent(ACP_PROFILES.kimi), glm: others.glm || new GlmAgent(), deepseek: others.deepseek || new AcpAgent(ACP_PROFILES.deepseek),
       qwen: others.qwen || new AcpAgent(ACP_PROFILES.qwen), opencode: others.opencode || new AcpAgent(ACP_PROFILES.opencode) };
     store.on('change', () => this.emit('change'));
@@ -454,7 +455,7 @@ export class Workspace extends EventEmitter {
     if (task.mode === 'review') return aiReviewInstructions + `\nYour task worktree is ${task.worktree}. Use it for any temporary analysis files. Never edit the manuscript checkout, other task worktrees, or Papilot's state.\n\nOriginal review skill and request:\n` + task.instructions;
     // Loaded Codex threads retain these instructions across permission changes.
     // Keep task boundaries stable; the adapter applies the current policy per turn.
-    const permissionScope = this.agents[this.agentOf(task)].permissionOptions?.().some(option => option.value === 'full')
+    const permissionScope = this.agents[this.agentOf(task)].permissionOptions?.().length
       ? taskAccessInstructions
       : 'Only edit this isolated task worktree.';
     return `You are ${this.agentOf(task) === 'codex' ? 'the official Codex agent' : AGENT_NAMES[this.agentOf(task)]} running inside Papilot, a paper editing and review workspace.
@@ -466,7 +467,7 @@ ${permissionScope} Never edit the manuscript checkout, other task worktrees, or 
 ${scope.length ? `The review covers only ${scope.join(', ')} in this worktree, and an edit to any other file stops the PDF build. Leave other files unchanged even when project instructions ask for a matching update; mention that update in your summary instead.\n` : ''}Papilot owns the LaTeX review lifecycle: it compiles and publishes automatically AFTER your turn finishes, and delivers review feedback in a new turn. Do not create another review task, invoke publish, or wait on feedback --wait. This application workflow replaces the standalone latex-review skill's publish-and-wait loop. End your turn after completing the requested edits, with a concise summary for the author of what you changed and why; do not describe Papilot's review workflow.
 Preserve meaning and mathematical correctness. Read relevant project instructions. Treat reviewer comments as instructions tied to their round, file and changes. Rejected edits must not be reintroduced unless explicitly requested. If there is a conflict with accepted text, explain it and propose a revision for a new review round; never overwrite the accepted manuscript.
 Never invent a bibliography entry or any of its details. Add a .bib entry only for a work you can identify, take its authors, title, year and venue from the published record, and include its doi or arXiv eprint when it has one. Papilot looks up every added or changed entry in Crossref, DBLP and arXiv and shows the author any it cannot confirm. Name the entries you added or changed in your summary.
-${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to you here and any attempt is refused, which ends your turn: read, search and edit files in the task worktree with your file tools only.' : 'You may run tools in the task worktree to inspect and validate your changes.'} ${viewPdf ? `When the look of the pages matters, such as line breaks, spacing, figures, tables or displayed formulas, use the ${VIEW_PDF} tool and open the pages it draws with your image viewer to see them as the author does. It compiles the paper, so do not call it for wording alone. ` : ''}If a decision requires the user, ask through the available user-input tool or explain it in your final response. Use English for your progress updates, questions, and final summaries unless the user explicitly requests another language. Preserve the manuscript language unless asked to translate it.`;
+${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. Shell commands follow the current native permission policy; requests needing interactive approval are refused in this headless session.' : 'You may run tools in the task worktree to inspect and validate your changes.'} ${viewPdf ? `When the look of the pages matters, such as line breaks, spacing, figures, tables or displayed formulas, use the ${VIEW_PDF} tool and open the pages it draws with your image viewer to see them as the author does. It compiles the paper, so do not call it for wording alone. ` : ''}If a decision requires the user, ask through the available user-input tool or explain it in your final response. Use English for your progress updates, questions, and final summaries unless the user explicitly requests another language. Preserve the manuscript language unless asked to translate it.`;
   }
   private async startRun(run: Run) {
     let task = this.store.task(run.taskId);
@@ -1223,17 +1224,19 @@ ${this.agentOf(task) === 'antigravity' ? 'Shell commands are not available to yo
     try { return await work(); } finally { this.committing.delete(projectId); }
   }
   private validateTaskPermissions(value: unknown, agent: AgentId, reviewing: boolean) {
-    if (value !== 'workspace' && value !== 'full') throw new Error('Invalid task permissions.');
-    if (value === 'full' && (reviewing || !this.agents[agent].permissionOptions?.().some(option => option.value === value))) throw new Error('Full access is only available for Codex, Claude and GLM editing tasks.');
+    if (typeof value !== 'string' || !value) throw new Error('Invalid task permissions.');
+    if (value === 'workspace') return;
+    if (reviewing) throw new Error('Permissions are only available for editing tasks.');
+    if (!this.agents[agent].permissionOptions?.().some(option => option.value === value)) throw new Error('Invalid task permissions for this agent.');
   }
   updateTaskPermissions(taskId: string, permissions: unknown) {
     const task = this.store.task(taskId);
     this.validateTaskPermissions(permissions, this.agentOf(task), task.mode === 'review');
     if (this.active.has(taskId) || BUSY.has(task.status) || task.status === 'queued' || task.pendingRunId || task.pendingBuild || task.pendingReview || this.preparing.has(taskId)) throw new Error('Pause the task and wait for it to finish before changing permissions.');
     if ((task.permissions || 'workspace') === permissions) return task;
-    // Instructions stay valid for both choices; adapters apply permissions at
+    // Instructions stay valid across choices; adapters apply permissions at
     // turn/start without reloading the conversation.
-    return this.store.updateTask(taskId, { permissions: permissions as 'workspace' | 'full' });
+    return this.store.updateTask(taskId, { permissions: permissions as string });
   }
   updateTaskModel(taskId: string, change: { model?: string; effort?: string; serviceTier?: string }) {
     const task = this.store.task(taskId), agent = this.agentOf(task);

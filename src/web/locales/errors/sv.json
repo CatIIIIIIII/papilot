@@ -253,7 +253,13 @@
   "ZIP links and special files are not supported.": "Länkar och specialfiler i ZIP-arkiv stöds inte.",
   "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot.",
   "Invalid task permissions.": "Ogiltiga uppgiftsbehörigheter.",
-  "Full access is only available for Codex, Claude and GLM editing tasks.": "Full åtkomst är endast tillgänglig för redigeringsuppgifter med Codex, Claude och GLM.",
   "Pause the task and wait for it to finish before changing permissions.": "Pausa uppgiften och vänta tills den har stannat innan du ändrar behörigheterna.",
-  "Codex could not apply workspace permissions.": "Codex kunde inte tillämpa arbetsytans behörigheter."
+  "Codex could not apply workspace permissions.": "Codex kunde inte tillämpa arbetsytans behörigheter.",
+  "Permissions are only available for editing tasks.": "Behörigheter är bara tillgängliga för redigeringsuppgifter.",
+  "Invalid task permissions for this agent.": "Ogiltiga uppgiftsbehörigheter för den här agenten.",
+  "This agent does not support the selected permissions.": "Den här agenten stöder inte de valda behörigheterna.",
+  "Grok does not support the selected permissions.": "Grok stöder inte de valda behörigheterna.",
+  "Grok disconnected. Reconnect to resume.": "Grok kopplades från. Anslut igen för att fortsätta.",
+  "Pause the task before restoring its session.": "Pausa uppgiften innan du återställer sessionen.",
+  "This task already has a running turn.": "Den här uppgiften har redan en pågående tur."
 }

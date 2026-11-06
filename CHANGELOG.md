@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **Permissions in the model menu.** Editing tasks show each agent’s native access modes, including Kimi, Qwen, Copilot, Grok, Cursor, Antigravity and OpenCode. Modes apply to the next turn and can be reduced without losing the conversation. DeepSeek displays its fixed ACP preset.
+
 ## [0.9.0] - 2026-11-05 — A desktop workspace for your papers
 
 Papilot 0.9.0 brings quicker PDF markup, review comments in the chat composer, a dedicated Version Management workspace, Nix packages and AI reviews with any connected, supported agent. For the full **0.8.0 → 0.9.0** overview, including the desktop apps, compilation improvements, PDF exports and language support delivered in the intervening releases, read the [0.9.0 release introduction](https://github.com/PapilotAI/papilot/blob/v0.9.0/docs/releases/0.9.0/release-notes.md). The entries below describe changes since 0.8.9.

@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { Codex } from '../src/server/codex.ts';
 import { ClaudeAgent } from '../src/server/agents.ts';
+import { CursorAgent } from '../src/server/cursor.ts';
 import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
@@ -22,6 +23,10 @@ const runtime = { permissionOptions: new Codex().permissionOptions(), connected:
   { id: 'deep-model', name: 'Deep model', isDefault: false, efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high', fastMode: { serviceTier: 'priority', description: 'Faster responses' } },
 ] };
 const snapshot = { version: 'test', csrf: 'test', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper', createdAt: 1 }], tasks: [task], requests: [], runtime, runtimes: { codex: runtime, claude: { ...runtime, permissionOptions: Object.assign(new ClaudeAgent(), { cli: '/fixture/claude' }).permissionOptions(), models: [{ id: 'opus', name: 'Opus', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high' }] } } };
+snapshot.runtimes.kimi = { ...runtime, models: [{ id: 'kimi-k3', name: 'Kimi K3', isDefault: true, efforts: [] }], permissionOptions: [
+  { value: 'workspace', label: 'Default', detail: 'Ask before tools' }, { value: 'plan', label: 'Plan', detail: 'Read-only planning' },
+  { value: 'auto', label: 'Auto', detail: 'Approve safe operations' }, { value: 'full', label: 'YOLO', detail: 'Approve all tools' },
+] };
 const modelChanges = [], messages = [];
 let modelFailure = false, holdModel, releaseModel;
 let permissionFailure = false, holdPermission, releasePermission; const permissionChanges = [];
@@ -178,6 +183,37 @@ try {
   task.agent = 'glm'; snapshot.runtimes.glm = { ...runtime, permissionOptions: new ClaudeAgent().permissionOptions() };
   await page.reload(); await open();
   await expect(menu.getByText('Sandboxed; exceptions need approval', { exact: true })).toBeVisible();
+  task.agent = 'kimi'; task.model = null;
+  await page.reload(); await open();
+  await expect(menu.getByRole('radio')).toHaveCount(4);
+  await choose(menu.getByRole('radio', { name: 'Auto', exact: true }));
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Auto');
+  assert.equal(task.permissions, 'auto');
+  await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-kimi.png' });
+  await menu.press('Escape');
+  for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
+    await page.setViewportSize(viewport);
+    await page.reload();
+    await page.getByRole('button', { name: 'Chat', exact: true }).click();
+    await open();
+    for (const radio of await menu.locator('.task-permission-option').all()) {
+      const box = await radio.boundingBox();
+      assert.ok(box && box.x >= 0 && box.x + box.width <= viewport.width && box.y >= 0 && box.y + box.height <= viewport.height, 'all native modes must fit on mobile');
+    }
+    await choose(menu.getByRole('radio', { name: 'YOLO', exact: true }));
+    await expect(trigger.locator('.agent-permission-label')).toHaveText('YOLO');
+    await choose(menu.getByRole('radio', { name: 'Default', exact: true }));
+    await expect(trigger.locator('.agent-permission-label')).toHaveText('Default');
+    await page.screenshot({ animations: 'disabled', path: `test-results/task-permissions-kimi-${viewport.width}.png` });
+    await menu.press('Escape');
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  task.agent = 'cursor'; snapshot.runtimes.cursor = { ...runtime, permissionOptions: new CursorAgent().permissionOptions() };
+  await page.reload(); await open();
+  await choose(menu.getByRole('radio', { name: 'Unrestricted', exact: true }));
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Unrestricted');
+  await choose(menu.getByRole('radio', { name: 'Sandbox', exact: true }));
+  await expect(trigger.locator('.agent-permission-label')).toHaveText('Sandbox');
   task.agent = 'cursor'; snapshot.runtimes.cursor = { ...runtime, permissionOptions: [] };
   await page.reload(); await open(); await expect(menu.getByRole('group', { name: 'Permissions', exact: true })).toHaveCount(0);
   await expect(trigger.locator('.agent-permission-label')).toHaveCount(0);
@@ -196,7 +232,13 @@ try {
   await expect(page.locator(':popover-open')).toHaveCount(1);
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-new.png' });
   // Switching agents updates permissions inside the same open menu.
+  await menu.getByRole('option', { name: 'Kimi K3 · Kimi', exact: true }).last().click();
+  await menu.getByRole('radio', { name: 'Auto', exact: true }).check();
+  await expect(fresh.locator('.agent-permission-label')).toHaveText('Auto');
   await menu.getByRole('option', { name: 'Opus · Claude', exact: true }).last().click();
+  await expect(menu.getByRole('radio', { name: 'Sandboxed edits', exact: true })).toBeChecked();
+  await expect(fresh.locator('.agent-permission-label')).toHaveText('Sandboxed edits');
+  await menu.getByRole('radio', { name: 'Bypass permissions', exact: true }).check();
   await expect(menu.getByRole('radio', { name: 'Bypass permissions', exact: true })).toBeChecked();
   await expect(fresh.locator('.agent-permission-label')).toHaveText('Bypass permissions');
   await expect(menu.getByRole('radio', { name: 'Full access', exact: true })).toHaveCount(0);
@@ -235,4 +277,5 @@ try {
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-dark.png' });
   assert.deepEqual(errors, []);
   console.log('PASS: shared agent menu, native permission options, busy/save locks, delayed/failed refresh consistency, persistence, error recovery, provider/review restrictions, creation, keyboard and narrow-screen layout.');
-} finally { releaseState?.(); await browser.close(); await server.close(); }
+} catch (error) { await page.screenshot({ path: 'test-results/task-permissions-failure.png' }); throw error; }
+finally { releaseState?.(); await browser.close(); await server.close(); }

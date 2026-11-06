@@ -61,7 +61,7 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
     assert.equal((await completed(seen)).status, 'completed');
     const args = fake.launches[0].args;
     assert.equal(fake.launches[0].cwd, '/work');
-    assert.deepEqual(args.slice(2), ['--output-format', 'stream-json', '--mode', 'accept-edits', '--model', 'gemini-4-argon-high']);
+    assert.deepEqual(args.slice(2), ['--output-format', 'stream-json', '--mode', 'accept-edits', '--settings', JSON.stringify({ toolPermission: 'request-review', allowNonWorkspaceAccess: false, enableTerminalSandbox: false }), '--model', 'gemini-4-argon-high']);
     assert.deepEqual(args.slice(0, 2), ['--input-format', 'stream-json']);
     assert.match(JSON.parse(fake.launches[0].stdin).message.content, /^Only edit the worktree\.\n\n---\n\nShorten the abstract\.$/);
     assert.deepEqual(seen.filter(e => e.method === 'item/agentMessage/delta').map(e => e.params.delta), ['Editing ', 'now.']);
@@ -105,13 +105,14 @@ test('Antigravity grants only selected images read access for the current turn',
     await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: `See ${image}` }, { type: 'localImage', path: image }] });
     assert.equal((await completed(seen)).status, 'completed');
     const args = fake.launches[0].args, resolved = fs.realpathSync(image);
-    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]), { permissions: { allow: [`read_file(${resolved})`] } });
+    assert.deepEqual(JSON.parse(args[args.indexOf('--settings') + 1]).permissions, { allow: [`read_file(${resolved})`] });
     assert.ok(JSON.parse(fake.launches[0].stdin).message.content.includes(resolved));
     assert.ok(!args.includes('--add-dir') && !args.includes('--dangerously-skip-permissions'));
     const next = events(agent);
     await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Continue without an image.' }] });
     assert.equal((await completed(next)).status, 'completed');
-    assert.ok(!fake.launches[1].args.includes('--settings'), 'Image permission must not persist into later turns');
+    const nextArgs = fake.launches[1].args;
+    assert.equal(JSON.parse(nextArgs[nextArgs.indexOf('--settings') + 1]).permissions, undefined, 'Image permission must not persist into later turns');
   } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -335,6 +336,48 @@ function fakeCursor(script: (send: { message: any; options: any }) => any[], res
   };
   return { sdk, created, resumed, sends, cancelled };
 }
+
+test('Cursor reopens the same conversation when changing its sandbox and keeps other tasks isolated', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-cursor-permissions-'));
+  const fake = fakeCursor(() => [{ delta: { type: 'text-delta', text: 'OK' } }]);
+  const agent = new CursorAgent(async () => fake.sdk, path.join(dir, 'agents.json'), () => true);
+  try {
+    await agent.start();
+    const first = (await agent.request('thread/start', { cwd: '/first', taskPermissions: 'full' })).thread.id;
+    const second = (await agent.request('thread/start', { cwd: '/second' })).thread.id;
+    for (const [threadId, taskPermissions] of [[first, 'full'], [second, 'workspace'], [first, 'workspace'], [first, 'full'], [second, 'workspace'], [first, 'workspace']]) {
+      const seen = events(agent);
+      await agent.request('turn/start', { threadId, ...(await agent.taskPermissionConfig(taskPermissions)).turn, input: [{ type: 'text', text: 'Continue.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+    }
+    assert.deepEqual(fake.created.map(options => [options.local.cwd, options.local.sandboxOptions.enabled]), [['/first', false], ['/second', true]]);
+    assert.deepEqual(fake.resumed.map(call => [call.id, call.options.local.sandboxOptions.enabled]), [['agent-1', true], ['agent-1', false], ['agent-1', true]]);
+    assert.equal(fake.sends[2].message, 'Continue.', 'changing permissions must retain the conversation');
+    const helper = (await agent.request('thread/start', { cwd: '/helper', sandbox: 'read-only', taskPermissions: 'full' })).thread.id;
+    const seen = events(agent); await agent.request('turn/start', { threadId: helper }); await completed(seen);
+    assert.equal(fake.created.at(-1).local.sandboxOptions.enabled, true, 'helper settings must not enable unrestricted tools');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Antigravity resets native permission settings on every turn while retaining its conversation', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-permissions-'));
+  const response = [JSON.stringify({ event: 'init', conversation_id: 'same-conversation' }), JSON.stringify({ event: 'result', result: { status: 'SUCCESS' } })];
+  const fake = fakeAgy(Array.from({ length: 4 }, () => response));
+  const agent = new AntigravityAgent('fake-agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const id = (await agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+    for (const value of ['full', 'workspace', 'plan', 'full']) {
+      const seen = events(agent);
+      await agent.request('turn/start', { threadId: id, ...(await agent.taskPermissionConfig(value)).turn, input: [{ type: 'text', text: 'Continue.' }] });
+      assert.equal((await completed(seen)).status, 'completed');
+    }
+    assert.deepEqual(fake.launches.map(({ args }) => JSON.parse(args[args.indexOf('--settings') + 1])), [true, false, false, true].map(full => ({
+      toolPermission: full ? 'always-proceed' : 'request-review', allowNonWorkspaceAccess: full, enableTerminalSandbox: false,
+    })));
+    assert.deepEqual(fake.launches.map(({ args }) => args[args.indexOf('--mode') + 1]), ['accept-edits', 'accept-edits', 'plan', 'accept-edits']);
+    for (const { args } of fake.launches.slice(1)) assert.equal(args[args.indexOf('--conversation') + 1], 'same-conversation');
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('Cursor runs a sandboxed local SDK agent, streams items and resumes its agent after a restart', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-cursor-'));

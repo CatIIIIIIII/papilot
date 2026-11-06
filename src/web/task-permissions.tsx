@@ -10,6 +10,16 @@ export function permissionText(text: string) {
     "Full access": t("Full access"),
     "Sandboxed edits": t("Sandboxed edits"),
     "Bypass permissions": t("Bypass permissions"),
+    "Default": t("Default"),
+    "Plan": t("Plan"),
+    "Auto": t("Auto"),
+    "YOLO": t("YOLO"),
+    "Auto edit": t("Auto edit"),
+    "Allow all": t("Allow all"),
+    "Sandbox": t("Sandbox"),
+    "Unrestricted": t("Unrestricted"),
+    "Accept edits": t("Accept edits"),
+    "Always proceed": t("Always proceed"),
   };
   return messages[text] || text;
 }
@@ -17,6 +27,18 @@ export function permissionText(text: string) {
 // Keep the provider's approval behavior explicit without displaying long tool descriptions.
 function permissionDetail(detail: string) {
   const messages: Record<string, string> = {
+    "Ask before tools": t("Ask before tools"),
+    "Approve edits": t("Approve edits"),
+    "Read-only planning": t("Read-only planning"),
+    "Approve safe operations": t("Approve safe operations"),
+    "Approve all tools": t("Approve all tools"),
+    "Native approvals": t("Native approvals"),
+    "Sandboxed tools": t("Sandboxed tools"),
+    "No sandbox": t("No sandbox"),
+    "Other requests denied": t("Other requests denied"),
+    "Ask before commands": t("Ask before commands"),
+    "Fixed ACP preset": t("Fixed ACP preset"),
+    "Plan first": t("Plan first"),
     "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": t("Sandboxed; exceptions need approval"),
     "Disable the sandbox and run tools without approval, subject to managed settings.": t("Bypass sandbox and approvals"),
     "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": t("Sandboxed; other requests denied"),
