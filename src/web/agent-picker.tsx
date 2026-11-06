@@ -140,8 +140,11 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
     <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={t('Agent settings')} aria-description={summary} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled}
       onClick={() => panel.current?.matches(':popover-open') ? panel.current.hidePopover() : show()}
       onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); show(); } }}>
-      <BrandIcon name={agent} size={15}/>{!permission && modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}<ModelLabel model={modelName} effort={permission ? undefined : currentEffort} fast={Boolean(fastMode && fast)}/>
-      {permission && <span className="agent-permission-label" data-mode={permission.value}>{permissionText(permission.label)}</span>}
+      <BrandIcon name={agent} size={15}/>{!permission && modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}
+      <span className="agent-picker-selection">
+        <ModelLabel model={modelName} effort={permission ? undefined : currentEffort} fast={Boolean(fastMode && fast)}/>
+        {permission && <small className="agent-permission-label" data-mode={permission.value}>{permissionText(permission.label)}</small>}
+      </span>
       <Icon name="chevronDown" size={13}/>{disconnected && <span className="agent-status-mark"><Icon name="alert" size={13}/></span>}
     </button>
     <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Agent settings')} className={'agent-picker-panel' + (permission ? ' has-permissions' : '')} onToggle={event => {
