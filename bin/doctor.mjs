@@ -1,9 +1,9 @@
-import { findExecutable } from './agent-paths.mjs';
+import { findExecutable, spawnCommand } from './agent-paths.mjs';
 // Deliberately uses only Node built-ins: diagnostics must work before npm setup.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+// spawnCommand runs .cmd shims through a shell on Windows.
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -29,20 +29,24 @@ const atLeast = (version, minimum) => {
   return (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) >= 0;
 };
 function executable(command, env = process.env) {
-  const candidates = command.includes('/') || command.includes('\\') ? [path.resolve(command)]
-    : (env.PATH || '').split(path.delimiter).map(dir => path.resolve(dir || '.', command));
-  return candidates.find(file => {
-    try { fs.accessSync(file, fs.constants.X_OK); return fs.statSync(file).isFile(); } catch { return false; }
-  });
+  return findExecutable(command, env);
 }
 const agentExecutable = findExecutable;
 
 function command(file, args, options = {}) {
+  const timeout = options.timeout ?? 5000;
   return new Promise(resolve => {
     // Never return raw stderr: login commands can print credentials or account data.
-    const child = execFile(file, args, { cwd: os.homedir(), timeout: 5000, killSignal: 'SIGKILL', maxBuffer: 128 * 1024, ...options }, (error, stdout, stderr) => {
-      resolve({ ok: !error, stdout, stderr, reason: error?.killed ? 'timed out' : error ? `failed (${error.code || 'unknown error'})` : '' });
-    });
+    const child = spawnCommand(file, args, { cwd: os.homedir(), timeout, killSignal: 'SIGKILL', ...options });
+    let stdout = '', stderr = '', settled = false, timedOut = false;
+    const finish = (ok, reason) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ ok, stdout, stderr, reason }); };
+    // A killed process can report a plain exit code, so the deadline itself
+    // decides whether the probe timed out.
+    const timer = setTimeout(() => { timedOut = true; finish(false, 'timed out'); }, timeout);
+    child.stdout?.on('data', (data) => { stdout += data; });
+    child.stderr?.on('data', (data) => { stderr += data; });
+    child.on('error', (error) => finish(false, error.code || 'unknown error'));
+    child.on('close', (code, signal) => finish(code === 0, timedOut || signal ? 'timed out' : code === 0 ? '' : `failed (${code})`));
     child.stdin?.end();
   });
 }

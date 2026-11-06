@@ -5,7 +5,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agentPath, findExecutable } from './agent-paths.mjs';
+import { agentPath, findExecutable, spawnSyncCommand, WINDOWS } from './agent-paths.mjs';
+import { npmCli } from './npm-cli.mjs';
 import { activeInstallation } from './installation.mjs';
 
 const usage = `Usage: papilot [doctor | demo | codex <args> | service install | service stop] [--port <number>] [--data <folder>]
@@ -56,8 +57,9 @@ async function main() {
   const supported = version => { const [major, minor] = parse(version); return major > 22 || (major === 22 && minor >= 22); };
   if (!supported(process.versions.node)) {
     const versions = path.join(process.env.NVM_DIR || path.join(os.homedir(), '.nvm'), 'versions/node');
-    const nvm = existsSync(versions) ? readdirSync(versions).map(v => ({ file: path.join(versions, v, 'bin/node'), version: v })) : [];
-    const others = [...new Set([...(process.env.PATH || '').split(path.delimiter).map(dir => path.join(dir, 'node')), '/opt/homebrew/bin/node', '/usr/local/bin/node'])]
+    const nodeFiles = dir => WINDOWS ? [path.join(dir, 'node.exe'), path.join(dir, 'node')] : [path.join(dir, 'node')];
+    const nvm = existsSync(versions) ? readdirSync(versions).flatMap(v => nodeFiles(path.join(versions, v, 'bin')).map(file => ({ file, version: v }))) : [];
+    const others = [...new Set([...(process.env.PATH || '').split(path.delimiter).flatMap(nodeFiles), '/opt/homebrew/bin/node', '/usr/local/bin/node'])]
       .filter(file => existsSync(file)).map(file => ({ file, version: (spawnSync(file, ['--version'], { encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL' }).stdout || '0').trim() }));
     // nvm's versions come first, then any other Node; even majors are LTS releases,
     // and among those the newest wins.
@@ -76,7 +78,7 @@ async function main() {
     await new Promise(() => child.on('exit', code => process.exit(code ?? 1)));
   }
   if (doctor) return (await import('./doctor.mjs')).doctor(args.slice(1));
-  const tex = !spawnSync('latexmk', ['-v'], { stdio: 'ignore' }).error;
+  const tex = !spawnSyncCommand('latexmk', ['-v'], { stdio: 'ignore' }).error;
 
   // Node 22 marks node:sqlite as experimental; that notice is noise for users.
   const emitWarning = process.emitWarning;
@@ -91,18 +93,19 @@ async function main() {
   function findCodex() {
     if (process.env.PAPILOT_CODEX_BIN) return process.env.PAPILOT_CODEX_BIN;
     const tested = pkg.devDependencies['@openai/codex'];
-    const version = file => (spawnSync(file, ['--version'], { encoding: 'utf8' }).stdout || '').match(/\d+\.\d+\.\d+/)?.[0] || '0.0.0';
+    const version = file => (spawnSyncCommand(file, ['--version'], { encoding: 'utf8' }).stdout || '').match(/\d+\.\d+\.\d+/)?.[0] || '0.0.0';
     const recent = file => { const [a, b] = [parse(version(file)), parse(tested)]; return (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) >= 0; };
     const onPath = findExecutable('codex');
     if (onPath && recent(onPath)) return onPath;
-    const prefix = path.join(process.env.PAPILOT_DATA, 'agents'), installed = path.join(prefix, 'node_modules/.bin/codex');
+    const prefix = path.join(process.env.PAPILOT_DATA, 'agents'), bin = path.join(prefix, 'node_modules/.bin');
+    const installed = findExecutable('codex', { ...process.env, PATH: bin + path.delimiter + (process.env.PATH || '') }) || path.join(bin, 'codex');
     if (existsSync(installed) && recent(installed)) return installed;
     if (process.env.PAPILOT_INSTALL_METHOD === 'nix') {
       console.warn('Install a supported Codex separately with Nix, or set PAPILOT_CODEX_BIN to an existing installation.');
       return '';
     }
     console.log(`Installing Codex ${tested} for Papilot (first run only)...`);
-    const result = spawnSync('npm', ['install', '--prefix', prefix, `@openai/codex@${tested}`, '--no-audit', '--no-fund', '--loglevel=error'], { stdio: 'inherit' });
+    const result = spawnSync(process.execPath, [npmCli(), 'install', '--prefix', prefix, `@openai/codex@${tested}`, '--no-audit', '--no-fund', '--loglevel=error'], { stdio: 'inherit' });
     if (result.status === 0 && existsSync(installed)) return installed;
     console.warn('Codex could not be installed, so Codex tasks are unavailable. Install it with npm install -g @openai/codex and run papilot again.');
     return '';
