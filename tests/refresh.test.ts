@@ -120,15 +120,30 @@ test('old Claude streamed duplicates disappear without hiding legitimate repeate
   assert.deepEqual(visibleTimeline([stream]), [stream], 'live streaming remains visible');
   assert.deepEqual(visibleTimeline(mergeTimeline([stream], [final])), [final]);
   assert.deepEqual(visibleTimeline([{ ...stream, status: 'completed' }, final]).length, 2, 'real repeated completed blocks are retained');
-  const live = { ...stream, id: 'task:turn:msg_reply:2', createdAt: 4 };
+  const live = { ...stream, id: 'task:turn:msg_reply:2', status: 'inProgress', createdAt: 4 };
   assert.deepEqual(visibleTimeline([...full, live]), [final, again, otherTurn, tool, different, live], 'a later block is not a legacy duplicate');
+});
+
+test('legacy duplicates stay hidden when a later final overwrote an earlier record', () => {
+  const store = new Store(':memory:');
+  try {
+    const first = { id: 'task:turn:msg_reply:1', taskId: 'task', type: 'assistant', text: 'Checking the table.', createdAt: 1 };
+    const final = { ...first, id: 'task:turn:msg_reply:0', status: 'completed', createdAt: 2 };
+    const second = { ...first, id: 'task:turn:msg_reply:2', text: 'It is too wide.', createdAt: 3 };
+    store.saveItem(first); store.saveItem(final); store.saveItem(second);
+    // Workspace preserves the original createdAt when the old adapter reuses :0.
+    store.saveItem({ ...final, text: second.text });
+    const items = store.items('task');
+    assert.deepEqual(items.map(item => item.id), [first.id, final.id, second.id]);
+    assert.deepEqual(visibleTimeline(items), [first, { ...final, text: second.text }]);
+  } finally { store.close(); }
 });
 
 for (const createdAt of [1, 2]) test(`a repeated Claude block stays visible while streaming, including timestamp ${createdAt}`, () => {
   const store = new Store(':memory:');
   try {
     const first = { id: 'task:turn:msg_reply:1', taskId: 'task', type: 'assistant', text: 'Checking the table.', status: 'completed', createdAt: 1 };
-    const second = { id: 'task:turn:msg_reply:2', taskId: 'task', type: 'assistant', text: 'Checking', createdAt };
+    const second = { id: 'task:turn:msg_reply:2', taskId: 'task', type: 'assistant', text: 'Checking', status: 'inProgress', createdAt };
     store.saveItem(first);
     const initial = store.itemsSince('task');
     store.saveItem(second);
@@ -149,5 +164,5 @@ for (const createdAt of [1, 2]) test(`a repeated Claude block stays visible whil
     refresh();
     store.saveItem({ ...second, status: 'completed' });
     refresh();
-  } finally { store.db.close(); }
+  } finally { store.close(); }
 });

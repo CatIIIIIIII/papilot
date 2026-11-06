@@ -45,7 +45,7 @@ try {
   await expect(page.getByText(text, { exact: true })).toHaveCount(baseline ? 3 : 2);
   // A new block in the same message may repeat an earlier block's text.
   // It must stay visible even if the process exits before its final event.
-  const live = { ...stream, id: 'reply-task:turn:msg_reply:2', createdAt: final.createdAt + 2000 };
+  const live = { ...stream, id: 'reply-task:turn:msg_reply:2', status: 'inProgress', createdAt: final.createdAt + 2000 };
   task.status = 'running';
   items = [...items, live];
   await expect(page.getByText(text, { exact: true })).toHaveCount(baseline ? 4 : 3);
@@ -53,6 +53,12 @@ try {
   task.turnId = null;
   await page.reload();
   await expect(page.getByText(text, { exact: true })).toHaveCount(baseline ? 4 : 3);
+  // The old adapter reused :0 for later final blocks without moving its timestamp.
+  const laterText = 'The second table also needs narrower columns.';
+  items = [stream, { ...final, text: laterText }, { ...stream, id: 'reply-task:turn:msg_reply:2', text: laterText, createdAt: final.createdAt + 1 }];
+  await page.reload();
+  await expect(page.getByText(laterText, { exact: true })).toHaveCount(baseline ? 2 : 1);
+  await expect(page.getByText(text, { exact: true })).toHaveCount(1);
   assert.deepEqual(errors, []);
   console.log('PASS: legacy duplicates hidden; distinct replies, live repeated blocks, and interrupted blocks retained after reload.');
 } finally { await browser.close(); await server.close(); }

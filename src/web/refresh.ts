@@ -35,21 +35,20 @@ export function mergeTimeline<T extends { id: string; createdAt: number }>(items
 }
 
 // Old Claude adapters stored a streamed block and its final envelope under
-// different indexes. Items are in timeline order: only a later completed copy
-// can hide an unfinished block. A new block repeating earlier text stays visible,
-// including after an interruption without a final event.
+// different indexes. Only unmarked legacy copies are hidden; new streamed replies
+// have explicit status, even after interruption. Final records may have been
+// overwritten in place, so their position cannot identify the matching copy.
 export function visibleTimeline<T extends { id: string; type: string; text: string; status?: string }>(items: T[]): T[] {
   const message = (item: T) => item.type === 'assistant' ? /^(.*:msg_[^:]+):\d+$/.exec(item.id)?.[1] : undefined;
   const completed = new Map<string, Set<string>>();
-  const visible: T[] = [];
-  for (let index = items.length - 1; index >= 0; index--) {
-    const item = items[index];
+  for (const item of items) {
     const key = message(item);
-    if (item.status === undefined && key && completed.get(key)?.has(item.text)) continue;
     if (key && item.status === 'completed') {
       const texts = completed.get(key) || new Set<string>(); texts.add(item.text); completed.set(key, texts);
     }
-    visible.push(item);
   }
-  return visible.reverse();
+  return items.filter(item => {
+    const key = message(item);
+    return item.status !== undefined || !key || !completed.get(key)?.has(item.text);
+  });
 }
