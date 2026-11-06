@@ -63,10 +63,19 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     :root[data-papilot-phone] .review-complete-actions{justify-content:flex-start;margin-left:0}
     :root[data-papilot-phone] .review-complete-actions .commit-state:not(.task-save-result){flex-basis:100%}
     :root[data-papilot-phone] .review-complete-actions .commit-button{min-height:40px}
-    /* Page images follow the theme like the manuscript's PDF. They are
-       transparent: the sheet is the paper, and the before/after rows tint it. */
+    /* Review previews, difference rows and embedded controls share one mode.
+       The surrounding toolbar and workspace keep the application's theme. */
+    .document{--pdf-filter:var(--review-filter);--pdf-page:var(--review-page);--before:var(--review-before);--after:var(--review-after)}
     .pdf-strip{color-scheme:light}.pdf-strip img{filter:var(--pdf-filter)}.sheet{background:var(--pdf-page)}
-    :root[data-theme="dark"]{--before:#432c30;--after:#28392d}
+    :root[data-theme="dark"][data-review-theme="light"] :is(.sheet,.paper-page,.document .change){
+      color-scheme:light;--bg:#ffffff;--bg-subtle:#fafafa;--bg-muted:#f4f4f4;--bg-hover:#efefef;--bg-active:#e7e7e7;--frame:#f3f3f3;
+      --text:#171717;--text-2:#525252;--text-3:#8a8a8a;--ink:var(--text);--muted:var(--text-3);--head:var(--bg-subtle);
+      --line:#e8e8e8;--line-strong:#d6d6d6;--line-hover:#c4c4c4;
+      --accent:#2563eb;--accent-hover:#1d4ed8;--accent-soft:#eff6ff;--accent-line:#bfdbfe;
+      --green:#15803d;--green-soft:#f0fdf4;--red:#dc2626;--red-soft:#fef2f2;--red-line:#fecaca;
+      --amber-text:#92400e;--amber-soft:#fffbeb;--amber-line:#fde68a;
+      --accept:var(--green);--reject:var(--red);--comment:var(--accent);--ok-soft:var(--green-soft);--bad-soft:var(--red-soft);--warn:var(--amber-text);--warn-soft:var(--amber-soft);--warn-line:var(--amber-line);
+    }
     .bar{display:flex;align-items:center;height:var(--papilot-bar-height,44px);min-height:var(--papilot-bar-height,44px);padding:0 max(14px,calc(var(--papilot-tools,0px) + 4px)) 0 calc(var(--papilot-lead,0px) + 14px);gap:12px;flex-wrap:nowrap;overflow:hidden}
     .bar .overview-link,.bar .identity h1,.bar .identity span{display:none}
     .bar .identity{flex:1;min-width:0;flex-direction:row;gap:6px}

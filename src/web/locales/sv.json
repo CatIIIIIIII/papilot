@@ -47,7 +47,6 @@
   "Added {n} patterns to .gitignore.": "Lade till {n} mönster i .gitignore.",
   "Address reviewers": "Bemöt granskare",
   "Address {n} PDF notes": "Åtgärda {n} PDF-anteckningar",
-  "Advanced": "Avancerat",
   "After": "Efter",
   "After you mark text with the magic pen, its wheel offers these notes, clockwise from the top. Each is sent to the agent as the instruction for that text.": "När du har markerat text med magiska pennan visar hjulet dessa anteckningar medurs uppifrån. Var och en skickas till agenten som instruktion för texten.",
   "Agent configuration": "Agentkonfiguration",
@@ -59,7 +58,6 @@
   "Allow this action": "Tillåt denna åtgärd",
   "Already set up?": "Redan konfigurerad?",
   "Already used for {action}. Choose another shortcut.": "Används redan för {action}. Välj ett annat kortkommando.",
-  "Always light": "Alltid ljust",
   "An environment variable set in a new terminal does not reach an already running server. Restart Papilot with the credentials; Reconnect alone cannot change its environment.": "En miljövariabel som anges i en ny terminal når inte en server som redan körs. Starta om Papilot med autentiseringsuppgifterna; det räcker inte att bara återansluta för att ändra dess miljö.",
   "Annotation group color": "Färg för anteckningsgrupp",
   "Annotation groups": "Anteckningsgrupper",
@@ -155,7 +153,6 @@
   "Choose attachments": "Välj bilagor",
   "Choose different files": "Välj andra filer",
   "Choose folder": "Välj mapp",
-  "Choose how paper pages look in dark mode.": "Välj hur artikelsidor ser ut i mörkt läge.",
   "Choose on the wheel": "Välj på hjulet",
   "Choose the papers to share, then send a personal invite link.": "Välj vilka artiklar som ska delas och skicka sedan en personlig inbjudningslänk.",
   "Choose up to 5,000 files, totaling less than 64 MB.": "Välj upp till 5 000 filer på totalt mindre än 64 MB.",
@@ -386,7 +383,6 @@
   "Flag": "Flagga",
   "Folder": "Mapp",
   "Folder path": "Mappsökväg",
-  "Follow mode": "Följläge",
   "For the SDK instead, start Papilot with ANTHROPIC_API_KEY or a supported cloud provider configured. Restart Papilot after changing its environment.": "För SDK:n i stället, starta Papilot med ANTHROPIC_API_KEY eller en molnleverantör som stöds konfigurerad. Starta om Papilot efter att ha ändrat dess miljö.",
   "Foreground": "Förgrund",
   "Full PDF": "Hela PDF:en",
@@ -1288,5 +1284,10 @@
   "{n} review updates included": "{n} granskningssynpunkter bifogas",
   "Preparing both versions for comparison. Large documents can take several minutes.": "Förbereder båda versionerna för jämförelse. Långa dokument kan ta flera minuter.",
   "Comparing the typeset pages…": "Jämför de satta sidorna…",
-  "Elapsed: {time}": "Förfluten tid: {time}"
+  "Elapsed: {time}": "Förfluten tid: {time}",
+  "Auto": "Auto",
+  "PDF uses the setting above.": "PDF använder inställningen ovan.",
+  "Review appearance": "Granskningens utseende",
+  "Auto matches the interface mode.": "Auto använder gränssnittets läge.",
+  "Original": "Original"
 }
