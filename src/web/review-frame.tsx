@@ -90,10 +90,9 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .bar .status{font-size:13px}
     .sheet{border-radius:4px;box-shadow:0 1px 2px rgb(0 0 0/.06),0 8px 24px rgb(0 0 0/.08)}
     .change-head{font-size:13px;background:var(--bg-subtle)}.link{font-size:13px}
-    /* The current change: a thin accent outline and a warm header, like a selected
-       row in the workspace, rather than a blue frame on a blue-grey header. */
-    .change.current{box-shadow:0 0 0 1px var(--accent-line),0 0 0 4px rgb(37 99 235/.07)}
-    .change.current .change-head{background:var(--bg-muted);color:var(--ink)}
+    /* Keep the selection cue in the toolbar, clear of the PDF itself. */
+    .change.current{box-shadow:none}
+    .change.current .change-head{background:var(--bg-muted);box-shadow:inset 2px 0 var(--accent);color:var(--ink)}
     .change-head .link{display:inline-flex;align-items:center;height:28px;padding:0 8px;border-radius:7px;color:var(--text-2);font-weight:500}
     .change-head .link:hover{background:var(--bg-hover);color:var(--ink);text-decoration:none}
     .change-head .link.active{background:var(--accent-soft);color:var(--accent);text-decoration:none}
@@ -133,13 +132,13 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .change-head .actions .unstage:disabled{opacity:.4}
     .unit-actions .unstage{color:var(--text-2)}
     .bar .ghost.undo{flex-shrink:0;white-space:nowrap}
-    /* A narrow desktop pane keeps the actions with its change. Wrapping
-       the header preserves its tools without switching to a phone dock. */
-    .change-head{flex-wrap:wrap;align-items:center;gap:4px 6px;padding:5px 8px 5px 12px;min-height:40px}
+    /* A single compact row: location yields space to the change's controls. */
+    .change-head{flex-wrap:nowrap;align-items:center;gap:4px;padding:4px 8px;min-height:36px}
     .change-head .dock,.change-head .actions{display:contents}
     .change-head .actions>.nav:first-child{order:1}.change-head .change-number{order:2}.change-head .actions>.nav:not(:first-child){order:3}
-    .change-head .change-where{order:4;flex:1 1 100px;min-width:0;margin-left:4px}
-    .change-head .change-kind,.change-head .badge{order:5}
+    .change-head .change-where{order:4;flex:1 1 0;min-width:0;margin-left:4px;color:var(--text-3);font-size:10px}
+    .change-head .change-kind,.change-head .badge{order:5;font-size:11px;color:var(--text-3)}
+    .change-head .change-kind{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
     .change-head .actions>*{order:6}
     .change-head .link{order:7}
     :root:not([data-papilot-phone]) .change-head .position,:root:not([data-papilot-phone]) .change-head .complete{display:none}
@@ -147,16 +146,6 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .change-head .actions .nav{width:28px;height:28px;font-size:18px}
     .change-head .copy-reference{width:28px;padding:0;justify-content:center;font-size:0}
     .change-head .copy-reference::before{content:"";width:15px;height:15px;background:currentColor;-webkit-mask:var(--icon-copy) center/contain no-repeat;mask:var(--icon-copy) center/contain no-repeat}
-    @media(max-width:680px){
-      :root:not([data-papilot-phone]){
-        .change-head .dock{display:flex;order:8;flex:1 0 100%;margin:0}
-        .change-head .actions{display:flex;width:100%;flex-wrap:wrap;gap:3px;padding:0;border:0;border-radius:0;background:none;box-shadow:none}
-        .change-head .position{display:inline;order:2;min-width:30px}
-        .change-head .actions>.nav:not(:first-child){margin-right:auto}
-        .change-head .actions button{padding:0 6px;font-size:12.5px}
-        .change-head .actions .nav{padding:0;font-size:18px}
-      }
-    }
     #paper{--paper-top:14px;padding-top:14px}
     .review-body>#paper{padding-right:34px;overscroll-behavior:contain}
     .change-map{top:10px;bottom:10px;right:8px;width:14px;border:0;border-radius:0;background:none;box-shadow:none}
@@ -205,6 +194,14 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
       .side .pdf-strip,.context .pdf-strip{width:calc(100% * var(--pdf-crop-scale,1));margin-left:calc(-100% * var(--pdf-crop-scale,1) * var(--pdf-crop-shift,0))}
       .side,.context{overflow-x:clip}
     }
+    /* Keep readable names and shortcut hints while drawing only the icons. */
+    :root{--icon-source:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16'/></svg>")}
+    :root .change-head .actions button:is(.accept,.reject,.comment,.unstage){width:28px;padding:0;gap:0;font-size:0;flex:none}
+    .change-head .actions button:is(.accept,.reject,.comment,.unstage)::before{width:15px;height:15px}
+    .change-head .source-toggle{width:28px;padding:0;flex:none;justify-content:center;font-size:0}
+    .change-head .source-toggle::before{content:"";width:16px;height:16px;background:currentColor;-webkit-mask:var(--icon-source) center/contain no-repeat;mask:var(--icon-source) center/contain no-repeat}
+    :root[data-papilot-phone] .change-head .actions button:is(.accept,.reject,.comment,.unstage){width:44px;flex:1 1 auto}
+    :root[data-papilot-phone] .change-head .actions button:is(.accept,.reject,.comment,.unstage)::before{width:18px;height:18px}
     /* History shares the PDF tools' size. Shortcut settings live in Papilot. */
     /* Papilot shows the full paper switch with its own controls. */
     .view-switch{display:none}
@@ -232,6 +229,12 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
 function cropMargins(doc: Document) {
   let min = 1, max = 0;
   for (const strip of doc.querySelectorAll<HTMLElement>('.pdf-strip')) {
+    // The renderer knows these edges before any text is laid out. Reading
+    // them also includes the compact text layers outside the viewport.
+    if (strip.dataset.textLeft !== undefined && strip.dataset.textRight !== undefined) {
+      min = Math.min(min, Number(strip.dataset.textLeft)); max = Math.max(max, Number(strip.dataset.textRight)); continue;
+    }
+    // Older engines do not expose normalized edges.
     const box = strip.getBoundingClientRect(); if (!box.width) continue;
     for (const line of strip.querySelectorAll('.pdf-text-line')) {
       const first = line.firstElementChild?.getBoundingClientRect(), last = line.lastElementChild?.getBoundingClientRect();
@@ -372,8 +375,17 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
       // Strips render after the viewer starts; re-measure the text edges when they change.
       let pending: ReturnType<typeof setTimeout> | undefined;
       cropper.current?.disconnect();
-      cropper.current = new MutationObserver(() => { clearTimeout(pending); pending = setTimeout(() => cropMargins(doc), 150); });
-      cropper.current.observe(doc.body, { childList: true, subtree: true });
+      cropper.current = new MutationObserver(records => {
+        // Moving the current toolbar, adding notes and updating the minimap do
+        // not change PDF text edges. Do not measure every glyph while scrolling.
+        const contentChanged = records.some(record => record.type === 'attributes'
+          ? (record.target as Element).matches('.pdf-strip img')
+          : [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1 &&
+            ((node as Element).matches('.pdf-strip,.pdf-text') || (node as Element).querySelector('.pdf-strip,.pdf-text'))));
+        if (!contentChanged) return;
+        clearTimeout(pending); pending = setTimeout(() => cropMargins(doc), 150);
+      });
+      cropper.current.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
       const inspect = () => {
         const paper = doc.getElementById('paper');
         if (!paper) return;

@@ -755,7 +755,7 @@ export function ReviewApp({
                     aria-keyshortcuts={keys.join(' ')}
                     title={
                       actionLock(kind) ||
-                      [label(kind), keys.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')
+                      [label(kind) + (count > 1 && kind !== "comment" ? ` (${count})` : ""), keys.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')
                     }
                     aria-describedby={
                       actionLock(kind) ? "review-lock" : undefined
@@ -1013,7 +1013,7 @@ export function ReviewApp({
             {location}
           </span>
           {actionBar(index)}
-          {kindLabel && <span className="change-kind">{kindLabel}</span>}
+          {kindLabel && <span className="change-kind" title={kindLabel}>{kindLabel}</span>}
           {status !== "pending" && (
             <span className="badge">{stateLabel(status)}</span>
           )}
@@ -1028,9 +1028,10 @@ export function ReviewApp({
             {t("Copy reference")}
           </button>
           <button
-            className={`link ${source ? "active" : ""}`}
+            className={`link source-toggle ${source ? "active" : ""}`}
             title={[t('Show LaTeX source'), shortcuts.source.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')}
             aria-keyshortcuts={shortcuts.source.join(' ')}
+            aria-expanded={source}
             onClick={() => toggleSource(index)}
           >
             {block.units.length > 1

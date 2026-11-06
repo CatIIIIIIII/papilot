@@ -2,16 +2,15 @@
 .review-note-mark,.review-note-box{position:absolute;pointer-events:none;background:color-mix(in srgb,var(--accent) 20%,transparent);border-radius:2px}
 .review-note-box{border:1.5px solid var(--primary);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .review-region-capture{position:absolute;inset:0;pointer-events:auto;cursor:crosshair;touch-action:none}
-.review-note-tag,.review-add-note{position:absolute;pointer-events:auto;background:var(--primary);color:#fff;border:0;border-radius:16px;padding:5px 10px;font:500 13px/1.4 var(--sans);cursor:pointer;box-shadow:0 2px 8px #0002}
+.review-note-tag{position:absolute;pointer-events:auto;background:var(--primary);color:#fff;border:0;border-radius:16px;padding:5px 10px;font:500 13px/1.4 var(--sans);cursor:pointer;box-shadow:0 2px 8px #0002}
 .review-note-tag{left:8px;min-width:24px;padding:3px 6px}
-.review-add-note{transform:translate(-50%,4px);white-space:nowrap;z-index:2}
 .review-notes-panel{position:fixed;z-index:20;right:16px;bottom:16px;width:min(360px,calc(100% - 32px));max-height:calc(100% - 80px);overflow:auto;padding:14px;box-sizing:border-box;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);box-shadow:var(--float);font:14px/1.5 var(--sans)}
 .review-notes-panel *{box-sizing:border-box}
 .review-notes-panel header,.review-notes-panel footer,.review-note-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .review-notes-panel header{margin-bottom:10px}
 .review-notes-panel button{font:inherit;cursor:pointer;border:0;border-radius:7px;background:var(--bg-muted);padding:5px 10px;color:var(--text-2)}
 .review-notes-panel button:disabled{opacity:.45;cursor:default}
-.review-notes-panel button:focus-visible,.review-add-note:focus-visible,.review-note-tag:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.review-notes-panel button:focus-visible,.review-select-menu button:focus-visible,.review-note-tag:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .review-notes-panel button.primary{background:var(--primary);color:white;padding:7px 12px}
 .review-notes-panel footer{justify-content:flex-end;margin-top:10px}
 .review-notes-panel p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}

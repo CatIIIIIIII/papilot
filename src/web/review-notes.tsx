@@ -37,9 +37,9 @@ function rangeMark(layer: Layer, range: Range) {
   return quote && rects.length ? mark(layer, mergeLines(rects), quote, false) : null;
 }
 
-// The menu for a touch selection floats in the viewer above the selection,
+// The menu floats outside the PDF strips' stacking and clipping boundaries,
 // or below it near the top, and follows it as the paper scrolls.
-function SelectionMenu({ doc, layer, selection, group, onAdd }: { doc: Document; layer: Layer; selection: Mark; group: NoteGroup | null; onAdd: () => void }) {
+function SelectionMenu({ doc, layer, selection, group, onAdd }: { doc: Document; layer: Layer; selection: Selected; group: NoteGroup | null; onAdd: () => void }) {
   const menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const place = () => {
@@ -47,8 +47,9 @@ function SelectionMenu({ doc, layer, selection, group, onAdd }: { doc: Document;
       const box = layer.strip.getBoundingClientRect(), paper = doc.getElementById('paper')?.getBoundingClientRect() || doc.body.getBoundingClientRect();
       const top = box.top + selection.rects[0][1] * box.height, bottom = box.top + selection.rects.at(-1)![3] * box.height;
       const middle = box.left + box.width * (Math.min(...selection.rects.map(r => r[0])) + Math.max(...selection.rects.map(r => r[2]))) / 2;
-      const height = element.offsetHeight, half = element.offsetWidth / 2, above = top - height - 22 >= paper.top + 6;
-      element.style.top = `${above ? top - height - 22 : bottom + 22}px`;
+      const gap = selection.handles ? 22 : 8;
+      const height = element.offsetHeight, half = element.offsetWidth / 2, above = top - height - gap >= paper.top + 6;
+      element.style.top = `${Math.max(paper.top + 6, Math.min(paper.bottom - height - 6, above ? top - height - gap : bottom + gap))}px`;
       element.style.left = `${Math.max(paper.left + half + 8, Math.min(paper.right - half - 8, middle))}px`;
       element.style.visibility = bottom < paper.top || top > paper.bottom ? 'hidden' : '';
     };
@@ -57,8 +58,8 @@ function SelectionMenu({ doc, layer, selection, group, onAdd }: { doc: Document;
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(place); };
     doc.addEventListener('scroll', schedule, true); doc.defaultView?.addEventListener('resize', schedule);
     return () => { cancelAnimationFrame(frame); doc.removeEventListener('scroll', schedule, true); doc.defaultView?.removeEventListener('resize', schedule); };
-  }, [doc, layer, selection]);
-  return <div ref={menu} className="review-select-menu"><button type="button" aria-label={group ? t('Add to {group}', { group: groupName(group) }) : t('Comment')} onClick={onAdd}>{group ? <GroupAction group={group}/> : t('Comment')}</button></div>;
+  }, [doc, layer, selection, group]);
+  return <div ref={menu} className="review-select-menu" onPointerDown={event => event.preventDefault()}><button type="button" aria-label={group ? t('Add to {group}', { group: groupName(group) }) : t('Comment')} onClick={onAdd}>{group ? <GroupAction group={group}/> : t('Comment')}</button></div>;
 }
 
 // Notes belong to the task and the exact displayed round/strip. They do not
@@ -228,9 +229,8 @@ export function ReviewNotes({ doc, task, onComment }: { doc: Document | null; ta
         {selection.rects.map((rect, i) => <div key={i} className="review-note-mark" style={percent(rect)}/>)}
         {(['from', 'to'] as const).map(end => { const [x, top, bottom] = selection.handles![end]; return <span key={end} className="select-handle" data-end={end} style={{ left: `${x * 100}%`, top: `${top * 100}%`, height: `${(bottom - top) * 100}%` }}/>; })}
       </>}
-      {selection?.strip === layer.key && !selection.handles && !busy && <button className="review-add-note" aria-label={group ? t('Add to {group}', { group: groupName(group) }) : t('Comment')} style={{ left: `${Math.min(80, selection.rects.at(-1)![2] * 100)}%`, top: `${selection.rects.at(-1)![3] * 100}%` }} onPointerDown={e => e.preventDefault()} onClick={() => edit(selection)}>{group ? <GroupAction group={group}/> : t('Comment')}</button>}
     </Fragment>, layer.element, layer.key))}
-    {doc && selection?.handles && !busy && (() => {
+    {doc && selection && !busy && (() => {
       const layer = layers.find(layer => layer.key === selection.strip);
       return layer ? createPortal(<SelectionMenu doc={doc} layer={layer} selection={selection} group={group} onAdd={() => edit(selection)}/>, doc.body) : null;
     })()}
