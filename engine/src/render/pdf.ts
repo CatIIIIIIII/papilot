@@ -28,7 +28,6 @@ export interface Character {
   /** Translation-independent glyph appearance, before text normalization. */
   appearance?: string;
   origin?: [number, number];
-  baseline?: number;
 }
 export interface Word {
   text: string;
@@ -126,7 +125,6 @@ export class PdfPage {
     );
     const shapes = glyphShapes(this.raw, shapeCache);
     let block: TextBlock, line: Line;
-    let appearance: { shape: unknown[]; baseline: number }[] = [];
     const rounded = (n: number) => Math.round(n * 1000) / 1000;
     walkText(text, {
       onVector: (rect, _flags, color) => {
@@ -138,28 +136,24 @@ export class PdfPage {
         this.blocks.push(block);
       },
       beginLine: (rect) => {
-        appearance = [];
         shapes.line();
         line = { rect, text: "", chars: [] };
         block.lines.push(line);
         this.lines.push(line);
       },
       onChar: (c, origin, font, size, quad, color) => {
-        appearance.push({
-          shape: [
-            c.normalize("NFC"),
-            shapes.char(c, origin, font) ??
-              font.getName().replace(/^[A-Z]{6}\+/, ""),
-            rounded(size),
-            Array.from(color).map(rounded),
-          ],
-          baseline: rounded(origin[1]),
-        });
         const xs = [quad[0], quad[2], quad[4], quad[6]],
           ys = [quad[1], quad[3], quad[5], quad[7]];
         line.chars.push({
           text: c,
           origin: [origin[0], origin[1]],
+          appearance: JSON.stringify([
+            c.normalize("NFC"),
+            shapes.char(c, origin, font) ??
+              font.getName().replace(/^[A-Z]{6}\+/, ""),
+            rounded(size),
+            Array.from(color).map(rounded),
+          ]),
           rect: [
             Math.min(...xs),
             Math.min(...ys),
@@ -170,22 +164,6 @@ export class PdfPage {
         line.text += c;
       },
       endLine: () => {
-        const counts = new Map<number, number>();
-        appearance.forEach(({ baseline }, i) => {
-          if (line.chars[i].text.trim())
-            counts.set(baseline, (counts.get(baseline) ?? 0) + 1);
-        });
-        const baseline = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
-        line.chars.forEach((char, i) => {
-          const a = appearance[i];
-          char.baseline =
-            line.chars.find((c) => rounded(c.origin![1]) === baseline)
-              ?.origin![1] ?? baseline;
-          char.appearance = JSON.stringify([
-            ...a.shape,
-            rounded(a.baseline - baseline),
-          ]);
-        });
         block.text += line.text + "\n";
         let word: Word | null = null;
         for (const char of line.chars) {

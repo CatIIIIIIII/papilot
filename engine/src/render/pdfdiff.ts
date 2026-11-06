@@ -11,7 +11,6 @@ export interface Glyph {
   space: boolean;
   appearance?: string;
   origin?: [number, number];
-  baseline?: number;
 }
 interface Word {
   text: string;
@@ -46,7 +45,6 @@ export function extract(
               page: position.page,
               appearance: char.appearance,
               origin: char.origin,
-              baseline: char.baseline,
             });
             space = false;
           }

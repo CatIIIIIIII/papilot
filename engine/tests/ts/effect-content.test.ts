@@ -57,6 +57,47 @@ const changedText = (a: Build, b: Build) => {
       .join(" "),
   }));
 };
+function math(content: string) {
+  const raw = new mupdf.PDFDocument(),
+    font = new mupdf.Font("Helvetica"),
+    ref = raw.addSimpleFont(font),
+    page = raw.addPage(
+      [0, 0, 600, 600],
+      0,
+      { Font: { F: ref } },
+      `BT /F 12 Tf 40 500 Td ${content} ET`,
+    );
+  raw.insertPage(-1, page);
+  const buffer = raw.saveToBuffer(""),
+    document = new PdfDocument(buffer.asUint8Array());
+  buffer.destroy();
+  page.destroy();
+  ref.destroy();
+  font.destroy();
+  raw.destroy();
+  documents.push(document);
+  return { document } as Build;
+}
+it("does not change the appearance of existing glyphs when added math shifts the modal baseline", () => {
+  const old = math("(base ) Tj 6 Ts (n ) Tj"),
+    next = math("(base ) Tj 6 Ts (n +abc) Tj");
+  const effects = allDifferences(words(old), words(next));
+  expect(effects.length).toBeGreaterThan(0);
+  expect(effects.some((e) => e.kind === "visual")).toBe(false);
+});
+it("distinguishes two different script placements during attribution", () => {
+  const script = (rise: number) =>
+      math(
+        `(The stable base x) Tj /F 8 Tf ${rise} Ts (2) Tj 0 Ts /F 12 Tf ( stays here.) Tj`,
+      ),
+    old = script(5),
+    variant = script(2),
+    final = script(-3),
+    effects = allDifferences(words(old), words(final));
+  expect(effects.some((e) => e.kind === "visual")).toBe(true);
+  expect(shownBy(old, variant, effects, final).every((s) => !s)).toBe(true);
+  expect(shownBy(old, final, effects, final).every(Boolean)).toBe(true);
+});
 it.each([false, true])(
   "retains repeated edge body text, including page-label-like numbers (%s)",
   (numbered) => {

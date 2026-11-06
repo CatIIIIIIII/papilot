@@ -819,8 +819,11 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
   let first: number, last: number;
   if (removed.length || added.length) {
     const shown: number[] = [...added];
-    for (const t of removed)
-      shown.push(equal("old", t, -1), equal("old", t, 1));
+    for (const t of removed) {
+      const counterpart = al.tokens.old[t];
+      if (counterpart >= 0) shown.push(counterpart);
+      else shown.push(equal("old", t, -1), equal("old", t, 1));
+    }
     if (!removed.length) for (const t of added) shown.push(t - 1, t + 1);
     const inside = shown.filter((t) => t >= 0 && t < count.new);
     if (!inside.length) return null;

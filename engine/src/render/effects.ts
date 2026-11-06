@@ -496,24 +496,82 @@ const glyphsOf = (w: Words, [i, j]: [number, number], semantic = false) =>
 const appearanceOf = (w: Words, range: [number, number]) =>
   glyphsOf(w, range, true).map((g) => g.appearance);
 const appearances = new WeakMap<Words, WeakMap<Words, Effect[]>>();
-// Metadata proposes a change; aligned visible ink decides it. Baseline-relative
-// clips retain script rise while ignoring whole-row translation and wrapping.
+const shifts = new WeakMap<Words, WeakMap<Words, Map<string, number>>>();
+const rowKey = (a: Glyph, b: Glyph) => `${a.pair}:${b.pair}`;
+const rounded = (n: number) => Math.round(n * 1000) / 1000;
+// Align each pair of physical rows using corresponding glyphs. New/removed
+// glyphs cannot change this reference, unlike independently inferred baselines.
+function rowShifts(a: Words, b: Words) {
+  const known = shifts.get(a)?.get(b);
+  if (known) return known;
+  const counts = new Map<
+    string,
+    Map<number, { count: number; delta: number }>
+  >();
+  comparison(a, b).paired.forEach((j, i) => {
+    if (j < 0) return;
+    const left = glyphsOf(a, [i, i + 1], true),
+      right = glyphsOf(b, [j, j + 1], true);
+    if (left.length !== right.length) return;
+    left.forEach((x, k) => {
+      const y = right[k];
+      if (!x.origin || !y.origin) return;
+      const key = rowKey(x, y),
+        delta = y.origin[1] - x.origin[1],
+        value = rounded(delta);
+      if (!counts.has(key)) counts.set(key, new Map());
+      const row = counts.get(key)!,
+        entry = row.get(value) ?? { count: 0, delta };
+      entry.count++;
+      row.set(value, entry);
+    });
+  });
+  const result = new Map(
+    [...counts].map(([key, row]) => [
+      key,
+      [...row.values()].sort((a, b) => b.count - a.count)[0].delta,
+    ]),
+  );
+  if (!shifts.has(a)) shifts.set(a, new WeakMap());
+  shifts.get(a)!.set(b, result);
+  return result;
+}
+function placementOf(
+  a: Words,
+  b: Words,
+  old: [number, number],
+  next: [number, number],
+) {
+  const left = glyphsOf(a, old, true),
+    right = glyphsOf(b, next, true),
+    shift = rowShifts(a, b);
+  return left.map((x, k) => {
+    const y = right[k];
+    return x.origin && y?.origin
+      ? rounded(y.origin[1] - x.origin[1] - (shift.get(rowKey(x, y)) ?? 0))
+      : 0;
+  });
+}
+// Metadata proposes a change; aligned visible ink decides it. The shared
+// row displacement preserves relative script placement and ignores reflow.
 function inkDiffers(a: Words, b: Words, i: number, j: number) {
   const left = glyphsOf(a, [i, i + 1], true),
-    right = glyphsOf(b, [j, j + 1], true);
+    right = glyphsOf(b, [j, j + 1], true),
+    shift = rowShifts(a, b);
   if (!a.document || !b.document || left.length !== right.length) return true;
   return left.some((x, k) => {
-    const y = right[k];
-    if (x.appearance === y.appearance) return false;
+    const y = right[k],
+      delta = shift.get(rowKey(x, y)) ?? 0;
     if (
-      !x.origin ||
-      !y.origin ||
-      x.baseline === undefined ||
-      y.baseline === undefined
+      x.appearance === y.appearance &&
+      (!x.origin ||
+        !y.origin ||
+        rounded(y.origin[1] - x.origin[1] - delta) === 0)
     )
-      return true;
-    const ax = [x.origin[0], x.baseline],
-      ay = [y.origin[0], y.baseline],
+      return false;
+    if (!x.origin || !y.origin) return true;
+    const ax = x.origin,
+      ay = [y.origin[0], x.origin[1] + delta],
       relative = (g: Glyph, at: number[]): Rect => [
         g.rect[0] - at[0],
         g.rect[1] - at[1],
@@ -546,8 +604,9 @@ export function visualDifferences(a: Words, b: Words): Effect[] {
   comparison(a, b).paired.forEach((j, i) => {
     if (
       j < 0 ||
-      JSON.stringify(appearanceOf(a, [i, i + 1])) ===
-        JSON.stringify(appearanceOf(b, [j, j + 1])) ||
+      (JSON.stringify(appearanceOf(a, [i, i + 1])) ===
+        JSON.stringify(appearanceOf(b, [j, j + 1])) &&
+        placementOf(a, b, [i, i + 1], [j, j + 1]).every((d) => d === 0)) ||
       !inkDiffers(a, b, i, j)
     )
       return;
@@ -606,10 +665,13 @@ export function shownBy(
     b = words(variant),
     c = words(final),
     changes = allDifferences(a, b),
-    identity = (w: Words, range: [number, number]) =>
+    identity = (w: Words, effect: Effect) =>
       JSON.stringify([
-        w.tokens.slice(...range).map((t) => t.text),
-        appearanceOf(w, range),
+        w.tokens.slice(...effect.new).map((t) => t.text),
+        appearanceOf(w, effect.new),
+        effect.kind === "visual"
+          ? placementOf(a, w, effect.old, effect.new)
+          : [],
       ]);
   return effects.map((effect) =>
     changes.some(
@@ -617,7 +679,7 @@ export function shownBy(
         change.kind === effect.kind &&
         change.old[0] === effect.old[0] &&
         change.old[1] === effect.old[1] &&
-        identity(b, change.new) === identity(c, effect.new),
+        identity(b, change) === identity(c, effect),
     ),
   );
 }
