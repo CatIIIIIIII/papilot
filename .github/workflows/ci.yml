@@ -41,8 +41,22 @@ jobs:
             engine/package-lock.json
       - run: npm ci
       - run: npm run setup:review
+      - name: Install TeX for PDF integration tests
+        if: matrix.node == 22
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-xetex texlive-lang-chinese poppler-utils
       - run: npm run typecheck
       - run: npm test
+      - name: PDF diff engine tests
+        run: npm --prefix engine test
+      - name: Install browser for PDF review tests
+        if: matrix.node == 22
+        working-directory: engine
+        run: npx playwright install --with-deps chromium
+      - name: PDF review browser tests
+        if: matrix.node == 22
+        run: npm --prefix engine run test:browser
       - run: npm run i18n -- check
       - run: npm run i18n:check-app
       - run: npm run build
@@ -70,6 +84,8 @@ jobs:
       - run: npm run setup:review
       - run: npm run typecheck
       - run: npm test
+      - name: PDF diff engine tests
+        run: npm --prefix engine test
       - run: npm run build
 
   # Which desktop check a pull request or a push to main needs, from the files

@@ -11,9 +11,9 @@ import {
 import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import worker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { ChangeBlock, Strip } from "../types.ts";
+import type { ChangeBlock } from "../types.ts";
 import { t } from "./i18n.ts";
-import type { PlacedChange } from "./paper.ts";
+import { paperPlan, type Cut, type PlacedChange } from "./paper.ts";
 import { cMapData } from "./pdf-cmaps.ts";
 
 // Built assets share one folder, and a host such as Papilot serves the viewer
@@ -34,64 +34,12 @@ const CMapData = cMapData(
 // where a change's new lines are, and that change shown there as in the
 // changes view, old lines above new. Pages are painted only near the
 // viewport, so a long thesis scrolls like a short paper.
-interface Cut {
-  top: number;
-  bottom: number;
-  // Changes shown at this cut: the one whose new lines start here, and
-  // changes without new lines of their own that follow it.
-  shown: PlacedChange[];
-}
 interface Paper {
   pdf: PDFDocumentProxy;
   width: number;
   height: number;
   pages: Cut[][];
   before: PlacedChange[];
-}
-
-// The page of this PDF that shows a strip of the round's PDF. A round may
-// compile only the changed chapters, so pages are matched by their labels,
-// moving forward through the paper.
-function locator(count: number, labels: string[] | null) {
-  let cursor = 0;
-  return (strip: Strip) => {
-    if (!labels) return strip.page - 1 < count ? strip.page - 1 : -1;
-    for (const from of [cursor, 0]) {
-      const found = labels.indexOf(strip.label, from);
-      if (found >= 0) return (cursor = found);
-    }
-    return -1;
-  };
-}
-
-function plan(count: number, labels: string[] | null, changes: PlacedChange[]) {
-  const pages: Cut[][] = Array.from({ length: count }, () => []),
-    before: PlacedChange[] = [],
-    find = locator(count, labels);
-  let last: Cut | null = null;
-  for (const change of changes) {
-    const spots = change.block.after.map((strip) => ({ strip, page: strip.top === undefined ? -1 : find(strip) }));
-    if (!spots.length || spots.some((s) => s.page < 0)) {
-      // No new lines here (a deletion), or none this PDF has: after the
-      // previous change, or before the paper when it is the first.
-      if (last) last.shown.push(change);
-      else before.push(change);
-      continue;
-    }
-    for (const [k, { strip, page }] of spots.entries()) {
-      const cut: Cut = { top: strip.top!, bottom: strip.top! + strip.height, shown: k ? [] : [change] };
-      pages[page].push(cut);
-      if (!k) last = cut;
-    }
-  }
-  for (const cuts of pages) {
-    cuts.sort((a, b) => a.top - b.top);
-    for (let i = 1; i < cuts.length; i++) {
-      cuts[i].top = Math.max(cuts[i].top, cuts[i - 1].bottom);
-      cuts[i].bottom = Math.max(cuts[i].bottom, cuts[i].top);
-    }
-  }
-  return { pages, before };
 }
 
 const clock = (ms: number) => {
@@ -198,7 +146,13 @@ export function FullPaper({
         pdf: loaded.pdf,
         width: loaded.width,
         height: loaded.height,
-        ...plan(loaded.pdf.numPages, loaded.labels, changes),
+        ...paperPlan({
+          count: loaded.pdf.numPages,
+          labels: loaded.labels,
+          changes,
+          width: loaded.width,
+          height: loaded.height,
+        }),
       },
     [loaded, changes],
   );
@@ -271,37 +225,48 @@ function Pages({
   // The pages exist now: the selected change can be scrolled to, before
   // they are painted.
   useLayoutEffect(() => ready.current(), [paper]);
-  const slice = (page: number, top: number, bottom: number) =>
-    bottom - top > 0.5 && (
-      <div className="paper-context" key={`${page}:${top}`}>
-        <div
-          className="paper-slice"
-          data-top={top}
-          data-bottom={bottom}
-          style={{ aspectRatio: `${paper.width} / ${bottom - top}` }}
-        />
+  const context = (cut: Cut) => cut.context.length > 0 && (
+    <div className="paper-context">
+      <div
+        className="paper-band"
+        style={{ aspectRatio: `${paper.width} / ${cut.bottom - cut.top}` }}
+      >
+        {cut.context.map(([left, top, right, bottom]) => (
+          <div
+            key={`${left}:${top}:${right}:${bottom}`}
+            className="paper-slice"
+            data-left={left}
+            data-right={right}
+            data-top={top}
+            data-bottom={bottom}
+            style={{
+              left: `${left / paper.width * 100}%`,
+              top: `${(top - cut.top) / (cut.bottom - cut.top) * 100}%`,
+              width: `${(right - left) / paper.width * 100}%`,
+              height: `${(bottom - top) / (cut.bottom - cut.top) * 100}%`,
+            }}
+          />
+        ))}
       </div>
-    );
+    </div>
+  );
   return (
     <div className="paper" ref={box}>
       {paper.before.map((c) => (
         <Fragment key={c.index}>{render(c.block, c.index)}</Fragment>
       ))}
-      {paper.pages.map((cuts, page) => {
-        let cursor = 0;
-        const parts: ReactNode[] = [];
-        for (const cut of cuts) {
-          parts.push(slice(page, cursor, cut.top));
-          for (const c of cut.shown) parts.push(<Fragment key={c.index}>{render(c.block, c.index)}</Fragment>);
-          cursor = cut.bottom;
-        }
-        parts.push(slice(page, cursor, paper.height));
-        return (
-          <section className="paper-page" data-page={page} key={page}>
-            {parts}
-          </section>
-        );
-      })}
+      {paper.pages.map((cuts, page) => (
+        <section className="paper-page" data-page={page} key={page}>
+          {cuts.map((cut, i) => (
+            <Fragment key={i}>
+              {cut.shown.map(c => (
+                <Fragment key={c.index}>{render(c.block, c.index)}</Fragment>
+              ))}
+              {context(cut)}
+            </Fragment>
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
@@ -347,7 +312,7 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
       const page = await paper.pdf.getPage(index + 1);
       if (stopped || alive.get(index) !== entry) return;
       const slices = Array.from(element.querySelectorAll<HTMLElement>(".paper-slice")),
-        cssWidth = slices[0]?.clientWidth || element.clientWidth,
+        cssWidth = element.querySelector<HTMLElement>(".paper-band")?.clientWidth || element.clientWidth,
         size = page.getViewport({ scale: 1 }),
         scale = (cssWidth * Math.min(window.devicePixelRatio || 1, 3)) / size.width,
         viewport = page.getViewport({ scale }),
@@ -358,13 +323,15 @@ function paint(container: HTMLElement, paper: Paper, root: HTMLElement | null) {
       await entry.task.promise;
       if (stopped || alive.get(index) !== entry) return;
       for (const slice of slices) {
-        const top = Math.round(Number(slice.dataset.top) * scale),
-          bottom = Math.min(source.height, Math.round(Number(slice.dataset.bottom) * scale));
-        if (bottom - top < 1) continue;
+        const top = Math.max(0, Math.round(Number(slice.dataset.top) * scale)),
+          bottom = Math.min(source.height, Math.round(Number(slice.dataset.bottom) * scale)),
+          left = Math.max(0, Math.round(Number(slice.dataset.left) * scale)),
+          right = Math.min(source.width, Math.round(Number(slice.dataset.right) * scale));
+        if (bottom - top < 1 || right - left < 1) continue;
         const canvas = document.createElement("canvas");
-        canvas.width = source.width;
+        canvas.width = right - left;
         canvas.height = bottom - top;
-        canvas.getContext("2d")!.drawImage(source, 0, top, source.width, bottom - top, 0, 0, source.width, bottom - top);
+        canvas.getContext("2d")!.drawImage(source, left, top, right - left, bottom - top, 0, 0, right - left, bottom - top);
         slice.querySelectorAll("canvas").forEach(free);
         slice.append(canvas);
         entry.canvases.push(canvas);

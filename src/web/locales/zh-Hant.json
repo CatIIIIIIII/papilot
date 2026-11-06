@@ -917,7 +917,7 @@
   "Skills": "技能",
   "Slate": "岩灰",
   "Slate blue": "岩藍",
-  "Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.": "審閱速度較慢：為了判別是哪一項編輯造成此類變更，每一輪最多可能需要額外編譯論文 16 次。",
+  "Slower reviews: verifying which edits reproduce each indirect change requires additional compilations.": "審閱會變慢：驗證哪些修改能重現每處間接變化，需要額外編譯論文。",
   "Some note positions need confirmation. Their original text and comments are kept.": "部分註解位置需要確認。其原始文字與評論已保留。",
   "Source": "原始碼",
   "Sparkles": "閃耀",

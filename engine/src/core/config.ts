@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Repo, cleanPath, gitDirOf, within } from "./git.ts";
+import { realPath } from "./files.ts";
 export const CONFIG_NAME = ".latex-review.json";
 export const ENGINES = ["pdflatex", "xelatex", "lualatex"] as const;
 type Engine = (typeof ENGINES)[number];
@@ -103,7 +104,7 @@ export function detectMain(root: string) {
   );
 }
 export function loadProject(root: string): Project {
-  root = fs.realpathSync(root);
+  root = realPath(root);
   const file = path.join(root, CONFIG_NAME);
   let settings: Settings = {};
   if (fs.existsSync(file)) {

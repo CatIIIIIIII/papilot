@@ -180,7 +180,8 @@ export interface Position {
   label: string;
 }
 export interface Mark {
-  kind: "removed" | "added" | "moved";
+  /** context: words at the end of an old crop that the context strips show. */
+  kind: "removed" | "added" | "moved" | "context";
   rect: Rect;
 }
 export interface Pair {
@@ -188,6 +189,8 @@ export interface Pair {
   new: Position | null;
   before_marks: Mark[];
   after_marks: Mark[];
+  /** Pairs of an aligned card in the same group show one region. */
+  group?: number;
 }
 export type Visual = "unmapped" | "text" | "layout" | "position" | "identical";
 export interface Card {
@@ -197,6 +200,8 @@ export interface Card {
   comparison: Visual;
   own?: { old: SourceBox[]; new: SourceBox[] };
   context_node?: string | null;
+  /** The crops were cut at the same anchors of the whole comparison. */
+  aligned?: boolean;
 }
 export interface TextGlyph {
   text: string;
@@ -213,6 +218,8 @@ export interface Strip {
   height: number;
   /** Where the strip starts on its page, in points; absent in older rounds. */
   top?: number;
+  /** Where the strip starts across its page, when it shows one column. */
+  left?: number;
   page: number;
   label: string;
   text?: TextLine[];
@@ -222,6 +229,8 @@ export interface ChangeBlock {
   units: string[];
   identical: boolean;
   reflow?: boolean;
+  /** Some words of the block moved here or away unchanged, drawn in blue. */
+  moved?: boolean;
   before: Strip[];
   after: Strip[];
 }
@@ -231,12 +240,14 @@ export interface VisualUnit {
   visual: Visual;
   pages: string[];
   section: string | null;
-  /** Where the PDF changes away from this edit's own lines: how many
-   * places, and the first ones rendered. The rest render on request. */
-  effects?: { total: number; shown: PlaceView[] };
+  /** PDF changes produced by a verified combination containing this edit,
+   * away from its own lines. The combination need not be minimal or unique.
+   * The first places are rendered; the rest render on request. */
+  effects?: { total: number; shown: PlaceView[]; verified?: boolean };
 }
-/** A place where an edit changes the PDF away from its own lines, such as a
- * use of a redefined macro. `with` lists the other edits it also needs. */
+/** A PDF change produced by a verified combination containing this edit.
+ * `with` lists the other members, not necessarily required members or every
+ * alternative cause. Accept/reject still operates on the selected edit. */
 export interface Place {
   page: string;
   section: string | null;
@@ -385,9 +396,11 @@ export interface RenderRequest {
   figures: string[];
   old: BuildInfo;
   new: BuildInfo;
+  /** Full edited build when `new` is an attribution variant. */
+  final?: BuildInfo;
   units: Unit[];
-  /** The edits that cause each change of the whole documents, found by
-   * compiling variants when the round has more than one edit. */
+  /** One verified sufficient combination per whole-document change. This
+   * need not be minimal or include every alternative sufficient combination. */
   causes?: string[][];
   /** The cards of the first pass, reused with `causes`. */
   cards?: Card[];
@@ -401,7 +414,19 @@ export interface RenderRequest {
 export interface Effect {
   old: [number, number];
   new: [number, number];
+  /** Equal text whose printed appearance changed. */
+  kind?: "visual";
 }
+/** A non-text change has physical PDF positions, not word offsets. */
+export interface PaintArea extends Position {
+  signature: string;
+}
+export interface PaintEffect {
+  kind: "paint";
+  before: PaintArea[];
+  after: PaintArea[];
+}
+export type DocumentEffect = Effect | PaintEffect;
 export interface History {
   round: number;
   change: string;

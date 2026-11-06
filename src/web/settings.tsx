@@ -156,7 +156,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
             <div className="settings-text">
               <label className="settings-name" htmlFor="settings-effects">{t('Track indirect changes')}</label>
               <p id="settings-effects-detail">{t('Find and show what each edit changes elsewhere, such as the uses of a macro and renumbered references. Off by default: each edit shows its own lines.')}</p>
-              {indirectChanges && <p className="settings-warning" role="note">{t('Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.')}</p>}
+              {indirectChanges && <p className="settings-warning" role="note">{t('Slower reviews: verifying which edits reproduce each indirect change requires additional compilations.')}</p>}
             </div>
             <input id="settings-effects" type="checkbox" role="switch" className="switch" aria-describedby="settings-effects-detail" checked={indirectChanges} onChange={event => void saveIndirectChanges(event.target.checked)}/>
           </div>}

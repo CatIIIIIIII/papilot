@@ -917,7 +917,7 @@
   "Skills": "スキル",
   "Slate": "スレート",
   "Slate blue": "スレートブルー",
-  "Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.": "レビューに時間がかかります：どの編集がそれぞれの変更を引き起こしたかを特定するため、1ラウンドあたり論文を最大16回多くコンパイルする場合があります。",
+  "Slower reviews: verifying which edits reproduce each indirect change requires additional compilations.": "レビューに時間がかかります。どの編集が各間接的な変更を再現するかを検証するため、追加のコンパイルが必要です。",
   "Some note positions need confirmation. Their original text and comments are kept.": "一部の注釈の位置は確認が必要です。元のテキストとコメントは保持されます。",
   "Source": "ソース",
   "Sparkles": "きらめき",

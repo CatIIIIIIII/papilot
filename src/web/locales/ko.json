@@ -917,7 +917,7 @@
   "Skills": "스킬",
   "Slate": "슬레이트",
   "Slate blue": "슬레이트 블루",
-  "Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.": "검토 속도 저하: 어떤 수정 사항이 각 변경을 유발했는지 확인하기 위해, 한 라운드에서 논문을 최대 16번 더 컴파일할 수 있습니다.",
+  "Slower reviews: verifying which edits reproduce each indirect change requires additional compilations.": "검토에 시간이 더 걸립니다. 어떤 수정이 각 간접 변경을 재현하는지 확인하려면 추가 컴파일이 필요합니다.",
   "Some note positions need confirmation. Their original text and comments are kept.": "일부 주석 위치를 확인해야 합니다. 원본 텍스트와 의견은 유지됩니다.",
   "Source": "소스",
   "Sparkles": "반짝임",

@@ -5,6 +5,7 @@
  * same expressions synctex_main.c prints. */
 #include <stdlib.h>
 #include "synctex_parser.h"
+#include "synctex_parser_advanced.h"
 
 static synctex_scanner_p scanner = NULL;
 static double *results = NULL;
@@ -49,3 +50,41 @@ __attribute__((export_name("st_view"))) int st_view(const char *input, int line)
 }
 
 __attribute__((export_name("st_results"))) double *st_results(void) { return results; }
+
+/* Actual hboxes and their line baselines. A child can extend outside a zero
+ * height parent (raisebox/smash), so walk the tree without clipping to parents.
+ * Horizontal-list edges carry inline vertical offsets; vertical-list edges
+ * place independent flow lines. Keep the former through nested boxes while
+ * ignoring the latter, so raising a fraction differs from reflowing its rows. */
+static double *boxes = NULL;
+static int box_capacity = 0;
+static int box_count = 0;
+static void collect_boxes(synctex_node_p node, double offset, int depth, int horizontal, double parent_v) {
+    for (; node; node = synctex_node_sibling(node)) {
+        synctex_node_type_t type = synctex_node_target_type(node);
+        int hbox = type == synctex_node_type_hbox || type == synctex_node_type_void_hbox;
+        double v = synctex_node_visible_v(node);
+        double shifted = offset + (horizontal ? v - parent_v : 0);
+        if (hbox) {
+            if (box_count == box_capacity) {
+                box_capacity = box_capacity ? 2 * box_capacity : 64;
+                boxes = realloc(boxes, sizeof(double) * 7 * box_capacity);
+            }
+            double *row = boxes + 7 * box_count++;
+            row[0] = synctex_node_visible_h(node);
+            row[1] = synctex_node_visible_v(node) - synctex_node_visible_height(node);
+            row[2] = row[0] + synctex_node_visible_width(node);
+            row[3] = synctex_node_visible_v(node) + synctex_node_visible_depth(node);
+            row[4] = v - shifted;
+            row[5] = synctex_node_visible_v(node);
+            row[6] = depth;
+        }
+        collect_boxes(synctex_node_child(node), shifted, depth + 1, hbox, v);
+    }
+}
+__attribute__((export_name("st_boxes"))) int st_boxes(int page) {
+    box_count = 0;
+    if (scanner) collect_boxes(synctex_sheet_content(scanner, page), 0, 0, 0, 0);
+    return box_count;
+}
+__attribute__((export_name("st_box_results"))) double *st_box_results(void) { return boxes; }

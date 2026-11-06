@@ -1,5 +1,8 @@
 import { it, expect } from "vitest";
-import { connect, stop } from "../../src/client.ts";
+import fs from "node:fs";
+import path from "node:path";
+import { connect, probe, serverHome, stop } from "../../src/client.ts";
+import { createServer } from "../../src/server.ts";
 import { environmentVersion } from "../../src/runtime.ts";
 import { Fixture } from "./helpers.ts";
 
@@ -13,6 +16,35 @@ it("fingerprints build settings without including unrelated credentials", () => 
   expect(environmentVersion({ PATH: "/bin", TEXINPUTS: "one" })).not.toBe(
     environmentVersion({ PATH: "/bin", TEXINPUTS: "two" }),
   );
+});
+
+it("recognizes repository aliases when probing a running review server", async () => {
+  const fixture = new Fixture(),
+    app = fixture.app(),
+    server = createServer(app),
+    alias = path.join(fixture.base, "alias"),
+    other = path.join(fixture.base, "other");
+  try {
+    fs.symlinkSync(fixture.root, alias, process.platform === "win32" ? "junction" : "dir");
+    fs.mkdirSync(other);
+    await server.listen({ host: "127.0.0.1", port: 0 });
+    const address = server.server.address();
+    if (!address || typeof address === "string") throw new Error("No server address");
+    const connection = { url: `http://127.0.0.1:${address.port}` };
+    app.url = connection.url;
+    const aliases = [alias, fixture.root];
+    // Git and Node can spell the Windows temp directory differently, including
+    // the RUNNER~1 short name. Native identity must agree for all spellings.
+    if (process.platform === "win32") aliases.push(fixture.root.toUpperCase(), fixture.root.toLowerCase());
+    for (const root of aliases) {
+      expect((await probe(root, connection))?.pid).toBe(process.pid);
+      expect(serverHome(root)).toBe(serverHome(fixture.root));
+    }
+    expect(await probe(other, connection)).toBeNull();
+  } finally {
+    await server.close();
+    await fixture.close();
+  }
 });
 
 it("restarts an idle detached review server when its build environment changes", async () => {

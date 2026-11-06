@@ -93,8 +93,8 @@ export async function buildApp(options: AppOptions) {
   workspace.importsBusy = () => imports!.busy;
   // Whether rounds list what each edit changes elsewhere, such as the uses of
   // a macro: the owner's choice in Settings, off by default, since finding
-  // which edit made such a change may compile the paper up to sixteen more
-  // times. Task rounds and the manuscript's Changes both follow it.
+  // which combination reproduces a change needs additional compilations.
+  // Task rounds and the manuscript's Changes both follow it.
   const indirectChanges = () => store.preference<boolean>(accounts.owner().id, 'indirect-changes') === true;
   workspace.indirectChanges = changes.indirectChanges = indirectChanges;
   // A public request must arrive in full within a minute; held-open bodies tie up nothing.

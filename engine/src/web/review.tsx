@@ -817,9 +817,8 @@ export function ReviewApp({
       setMore((m) => ({ ...m, [key]: { error: (error as Error).message } }));
     }
   }
-  // Where an edit changes the PDF away from its own lines, such as the uses
-  // of a macro it redefines. The places have no buttons: the edit's decide
-  // them all.
+  // Places produced by a verified combination containing this edit. These
+  // previews do not change which source edit an accept/reject action applies.
   function effects(
     unit: Unit & Partial<VisualUnit>,
     clean: boolean,
@@ -853,12 +852,17 @@ export function ReviewApp({
           <button className="link effects-toggle" aria-expanded={open} aria-controls={bodyId}
             onClick={() => setEffectOverrides((values) => ({ ...values, [key]: !open }))}>
             <span aria-hidden="true">{open ? "▾" : "▸"}</span>{" "}
-            {tn(total, "Affects {n} place", "Affects {n} places")}
+            {tn(total, "{n} related PDF change", "{n} related PDF changes")}
           </button>
         </p>
         <div id={bodyId} hidden={!open}>
           {open && (
             <>
+              {unit.effects!.verified && (
+                <p className="caption">
+                  {t("These previews show one verified combination of edits. Other or smaller combinations may produce the same result. Accepting or rejecting applies only to the selected edit.")}
+                </p>
+              )}
               {places.map((place, i) => (
                 <div className="place" key={i}>
                   <p className="place-where">
@@ -942,11 +946,13 @@ export function ReviewApp({
         : block.reflow
         ? t("Reflow")
         : [
-            ...new Set(
-              known
+            ...new Set([
+              ...known
                 .filter((u) => !(u.effects && u.visual === "unmapped"))
                 .map((u) => u.visual ?? "unmapped"),
-            ),
+              // Text that moved, drawn in blue, reads as moved.
+              ...(block.moved ? (["position"] as const) : []),
+            ]),
           ]
             .filter((kind) => kind !== "text")
             .map((kind) => t(KIND[kind]))

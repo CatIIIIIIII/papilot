@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { ROOT, codeVersion, environmentVersion } from "./runtime.ts";
 import { gitDirOf } from "./core/git.ts";
-import { readJson, sleep, withLock } from "./core/files.ts";
+import { readJson, realPath, sleep, withLock } from "./core/files.ts";
 export interface Connection {
   url: string;
   port: number;
@@ -69,7 +69,7 @@ export async function probe(root: string, info: Partial<Connection> | null) {
       "",
       5000,
     );
-    return path.resolve(answer.root) === path.resolve(root) ? answer : null;
+    return realPath(answer.root) === realPath(root) ? answer : null;
   } catch {
     return null;
   }
@@ -173,7 +173,7 @@ export async function connect(
   { owned = false }: { owned?: boolean } = {},
 ): Promise<Client | null> {
   // Match the canonical repository path reported by the server (e.g. macOS /var).
-  root = fs.realpathSync(root);
+  root = realPath(root);
   const home = serverHome(root);
   // A reader neither starts nor upgrades the server. Do not wait behind an
   // upgrader holding start.lock while the job we need to inspect is building.

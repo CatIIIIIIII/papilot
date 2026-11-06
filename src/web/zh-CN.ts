@@ -526,7 +526,7 @@ export const zhCN: Record<string, string> = {
   'Check references online': '联网核对参考文献',
   'Track indirect changes': '追踪间接影响',
   'Find and show what each edit changes elsewhere, such as the uses of a macro and renumbered references. Off by default: each edit shows its own lines.': '查找并展示每处修改在别处造成的变化，比如宏的各处用法、重新编号的引用。默认关闭：每处修改只显示它自己的那几行。',
-  'Slower reviews: to tell which edit caused each such change, a round may compile your paper up to 16 more times.': '审阅会变慢：为了分清每处这类变化是哪处修改造成的，每一轮最多可能多编译 16 次论文。',
+  'Slower reviews: verifying which edits reproduce each indirect change requires additional compilations.': '审阅会变慢：验证哪些修改能重现每处间接变化，需要额外编译论文。',
   'When a change adds or edits a bibliography entry, look up its title, authors, year and DOI in Crossref, DBLP and arXiv. Nothing else from your paper is sent.': '改动新增或修改参考文献条目时，用它的标题、作者、年份和 DOI 在 Crossref、DBLP 和 arXiv 中核对。论文的其他内容不会发出去。',
   'Send a test notification': '发送测试通知',
   'Sent. If nothing appeared, allow notifications for this browser in your system settings.': '已发送。如果没有看到通知，请在系统设置中允许此浏览器发送通知。',

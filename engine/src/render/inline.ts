@@ -5,18 +5,39 @@ import { opcodes as compare, similarity } from "../core/diff.ts";
 import type {
   Block,
   Card,
+  ChangeBlock,
   Heading,
   Mark,
   Op,
   Pair,
   Position,
   Rect,
+  RenderedRound,
   Span,
   Strip,
 } from "../types.ts";
-import { Build, sectionIntervals, type Box, type Intervals } from "./locate.ts";
-import { containsCenter, intersect, intersects, PdfDocument } from "./pdf.ts";
+import {
+  Build,
+  byReading,
+  laneAt,
+  laneColumn,
+  lanePage,
+  laneX,
+  readingKey,
+  readingParts,
+  readingSections,
+  sectionIntervals,
+  type Intervals,
+} from "./locate.ts";
+import {
+  containsCenter,
+  intersect,
+  intersects,
+  PdfDocument,
+  type Raster,
+} from "./pdf.ts";
 import { textChanges } from "./pdfdiff.ts";
+import { partition, regions } from "./plan.ts";
 const RUN_GAP = 3,
   MARGIN = 900;
 // Changed regions closer than this share one crop.
@@ -28,48 +49,39 @@ export interface Row {
   column?: number;
 }
 type Region = [number, number, number, number];
-type PairRef = [number, number];
-interface Group {
-  top: number;
-  bottom: number;
-  pairs: PairRef[];
-}
 interface Piece {
   kind: "context" | "change";
-  page: number;
+  lane: number;
   top: number;
   bottom: number;
-  pairs?: PairRef[];
-  parts?: Box[];
 }
-type Planned = Piece | { kind: "gap" };
 export function textRows(document: PdfDocument, intervals: Intervals): Row[] {
-  const rows: Row[] = [];
-  for (const [page, spans] of [...intervals].sort((a, b) => a[0] - b[0]))
-    for (const line of document.page(page).lines) {
-      const text = line.text.trim().replace(/\s+/g, " ");
+  const rows: [number[], Row][] = [];
+  for (const [id, spans] of intervals) {
+    const number = lanePage(id),
+      page = document.page(number);
+    for (const line of page.lines) {
+      const text = line.text.trim().replace(/\s+/g, " "),
+        middle = (line.rect[1] + line.rect[3]) / 2;
       if (
         text &&
-        spans.some(
-          ([a, b]) =>
-            a <= (line.rect[1] + line.rect[3]) / 2 &&
-            (line.rect[1] + line.rect[3]) / 2 <= b,
-        )
+        laneAt(document, number, line.rect) === id &&
+        spans.some(([a, b]) => a <= middle && middle <= b)
       )
-        rows.push({
-          page,
-          rect: line.rect,
-          text,
-          column: document.page(page).column(line.rect),
-        });
+        rows.push([
+          [...readingKey(document, id, line.rect[1]), line.rect[0]],
+          {
+            page: number,
+            rect: line.rect,
+            text,
+            column: page.column(line.rect),
+          },
+        ]);
     }
-  return rows.sort(
-    (a, b) =>
-      a.page - b.page ||
-      (document.page(a.page).twoColumns
-        ? 0
-        : a.rect[1] - b.rect[1] || a.rect[0] - b.rect[0]),
-  );
+  }
+  return rows
+    .sort(([a], [b]) => byReading(a, b) || a[4] - b[4])
+    .map(([, row]) => row);
 }
 export function pairRelocated(
   regions: Region[],
@@ -383,105 +395,73 @@ export function changedLineBounds(
       ]
     : [position.clip[1], position.clip[3]];
 }
+// White is the page background. A contrast threshold would discard faint
+// coloured ink at a crop edge even though the PDF comparison can see it.
+function inkRows(image: Raster): boolean[] {
+  return Array.from({ length: image.height }, (_, row) =>
+    image.pixels
+      .subarray(
+        row * image.stride,
+        row * image.stride + image.width * image.channels,
+      )
+      .some((channel) => channel !== 255),
+  );
+}
 export function snap(
   document: PdfDocument,
   number: number,
   top: number,
   bottom: number,
-  limit = 10,
+  [x0, x1]: Span = [0, document.page(number).width],
 ): Span {
-  const page = document.page(number),
+  const limit = 10,
+    page = document.page(number),
     ink = (y0: number, y1: number): [Span, boolean[]] => {
       y0 = Math.max(0, y0);
       y1 = Math.min(page.height, y1);
       if (y1 - y0 < 1) return [[y0, y1], []];
-      const image = page.raster([0, y0, page.width, y1], 2, true);
-      return [
-        [y0, y1],
-        Array.from({ length: image.height }, (_, r) =>
-          image.pixels
-            .subarray(r * image.stride, r * image.stride + image.width)
-            .some((p) => p < 200),
-        ),
-      ];
+      return [[y0, y1], inkRows(page.raster([x0, y0, x1, y1], 2, false, true))];
     };
   let [clip, rows] = ink(bottom, bottom + limit),
     index = rows.findIndex((filled) => !filled);
   if (index >= 0)
-    bottom = clip[0] + (index * (clip[1] - clip[0])) / rows.length;
+    bottom = Math.min(clip[1], clip[0] + index / 2);
   else if (rows.length) bottom = clip[1];
   [clip, rows] = ink(top - limit, top);
   index = rows.findLastIndex((filled) => !filled);
   if (index >= 0)
-    top = clip[0] + ((index + 1) * (clip[1] - clip[0])) / rows.length;
+    top = Math.min(clip[1], clip[0] + (index + 1) / 2);
   else if (rows.length) top = clip[0];
   return [top, bottom];
 }
-export function groupedRegions(
-  cards: [number, Card][],
-  intervals: Intervals,
-  snapped?: (page: number, top: number, bottom: number) => Span,
-) {
-  const result = new Map<number, Group[]>();
-  for (const [index, card] of cards)
-    card.pairs.forEach((pair, pairIndex) => {
-      const position = pair.new;
-      if (!position) return;
-      for (const [start, end] of intervals.get(position.page) ?? []) {
-        let top = Math.max(start, position.clip[1]),
-          bottom = Math.min(end, position.clip[3]);
-        if (bottom > top && snapped)
-          [top, bottom] = snapped(position.page, top, bottom);
-        if (bottom > top) {
-          if (!result.has(position.page)) result.set(position.page, []);
-          result
-            .get(position.page)!
-            .push({ top, bottom, pairs: [[index, pairIndex]] });
-        }
-      }
-    });
-  for (const [page, regions] of result) {
-    const merged: Group[] = [];
-    for (const region of regions.sort((a, b) => a.top - b.top)) {
-      const last = merged.at(-1),
-        shared =
-          last && region.pairs.some(([i]) => last.pairs.some(([j]) => i === j));
-      if (
-        last &&
-        (region.top <= last.bottom ||
-          (shared && region.top - last.bottom <= JOIN_GAP))
-      ) {
-        last.bottom = Math.max(last.bottom, region.bottom);
-        last.pairs.push(...region.pairs);
-      } else merged.push(region);
-    }
-    result.set(page, merged);
-  }
-  return result;
+// An aligned crop already ends between printed lines, so it never cuts a
+// glyph; only the blank space at its ends goes. Growing it to the nearest
+// blank row, as snap does, would take in the equal line it ends at.
+export function trimmed(
+  document: PdfDocument,
+  number: number,
+  top: number,
+  bottom: number,
+  [x0, x1]: Span = [0, document.page(number).width],
+): Span {
+  const page = document.page(number);
+  top = Math.max(0, top);
+  bottom = Math.min(page.height, bottom);
+  if (bottom - top < 1) return [top, bottom];
+  const rows = inkRows(page.raster([x0, top, x1, bottom], 2, false, true)),
+    first = rows.indexOf(true),
+    last = rows.lastIndexOf(true);
+  return first < 0
+    ? [top, bottom]
+    : [
+        Math.max(top, top + first / 2 - 1),
+        Math.min(bottom, top + (last + 1) / 2 + 1),
+      ];
 }
-export function contextPlan(
-  intervals: Intervals,
-  groups: Map<number, Group[]>,
-): Piece[] {
-  const plan: Piece[] = [];
-  for (const [page, spans] of [...intervals].sort((a, b) => a[0] - b[0]))
-    for (const [start, end] of spans) {
-      let cursor = start;
-      for (const group of groups.get(page) ?? []) {
-        const top = Math.max(start, group.top),
-          bottom = Math.min(end, group.bottom);
-        if (bottom <= top) continue;
-        if (top > cursor)
-          plan.push({ kind: "context", page, top: cursor, bottom: top });
-        plan.push({ kind: "change", page, top, bottom, pairs: group.pairs });
-        cursor = bottom;
-      }
-      if (cursor < end)
-        plan.push({ kind: "context", page, top: cursor, bottom: end });
-    }
-  return plan;
-}
-export function foldContext(plan: Piece[], margin = MARGIN): Planned[] {
+export function foldContext<T extends Piece>(
+  plan: T[],
+  margin = MARGIN,
+): (T | { kind: "gap" })[] {
   let total = 0;
   const offsets = plan.map((p) => {
       const offset = total;
@@ -494,7 +474,7 @@ export function foldContext(plan: Piece[], margin = MARGIN): Planned[] {
         : [],
     );
   if (!changes.length) return plan;
-  const result: Planned[] = [];
+  const result: (T | { kind: "gap" })[] = [];
   plan.forEach((piece, i) => {
     if (piece.kind === "change") {
       result.push(piece);
@@ -523,37 +503,11 @@ export function foldContext(plan: Piece[], margin = MARGIN): Planned[] {
     (p, i) => p.kind !== "gap" || i === 0 || result[i - 1].kind !== "gap",
   );
 }
-export function acrossPages(plan: Planned[]) {
-  const result: Planned[] = [];
-  for (const original of plan) {
-    let piece = original;
-    if (piece.kind === "change") {
-      let k = result.length;
-      while (k) {
-        const p = result[k - 1];
-        if (p.kind !== "context" || p.bottom - p.top >= 12) break;
-        k--;
-      }
-      const previous = k ? result[k - 1] : null;
-      if (
-        previous?.kind === "change" &&
-        previous.parts!.at(-1)![0] !== piece.page &&
-        previous.pairs!.some(
-          ([i]) =>
-            piece.kind === "change" && piece.pairs!.some(([j]) => i === j),
-        )
-      ) {
-        result.splice(k);
-        previous.parts!.push([piece.page, piece.top, piece.bottom]);
-        previous.pairs!.push(...piece.pairs!);
-        continue;
-      }
-      piece = { ...piece, parts: [[piece.page, piece.top, piece.bottom]] };
-    }
-    result.push(piece);
-  }
-  return result;
-}
+// The marks a card's strips draw. Moved words are drawn only where the whole
+// comparison found them: text that left one place for another. Compared
+// alone, a card's crops call moved the words a paragraph only rewrapped.
+export const drawn = (card: Card, marks: Mark[]) =>
+  card.aligned ? marks : marks.filter((m) => m.kind !== "moved");
 export class Strips {
   count = 0;
   constructor(public out: string) {}
@@ -564,12 +518,30 @@ export class Strips {
     bottom: number,
     marks: Mark[] = [],
     side = "",
+    [left, right]: Span = [0, document.page(number).width],
   ): Strip | null {
     const page = document.page(number);
     top = Math.max(0, top);
     bottom = Math.min(page.height, bottom);
-    if (bottom - top < 0.1) return null;
-    const svg = page.svg(top, bottom),
+    left = Math.max(0, left);
+    right = Math.min(page.width, right);
+    if (bottom - top < 0.1 || right - left < 0.1) return null;
+    const clip: Rect = [left, top, right, bottom];
+    // A strip that shows nothing, such as the space above a band printed
+    // across both columns, is not written.
+    if (
+      !page.lines.some((line) =>
+        line.chars.some((char) => containsCenter(clip, char.rect)),
+      ) &&
+      page.raster(clip, 2, false, true).pixels.every((p) => p === 255)
+    )
+      return null;
+    // Red and green say that words were removed or added; a light blue,
+    // that words moved here or away unchanged (see `drawn`).
+    // Keep unchanged context readable in the PDF's original colours, even
+    // when reflow makes it appear both in a crop and the surrounding text.
+    marks = marks.filter((mark) => mark.kind !== "context");
+    const svg = page.svg(top, bottom, left, right),
       digest = createHash("sha256")
         .update(svg)
         .update(JSON.stringify(marks))
@@ -583,17 +555,19 @@ export class Strips {
       const color = side === "old" ? "#c72938" : "#1f8c52",
         overlays = marks
           .map((mark) => {
-            const r = intersect(mark.rect, [0, top, page.width, bottom]);
+            const r = intersect(mark.rect, clip);
             if (r[2] <= r[0] || r[3] <= r[1]) return "";
-            const x = r[0],
+            const x = r[0] - left,
               y = r[1] - top,
               width = r[2] - r[0],
               height = r[3] - r[1],
               strike = y + height * 0.55;
+            if (mark.kind === "moved")
+              return `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#2563c9" fill-opacity=".14"/>`;
             return (
               `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${color}" fill-opacity=".18"/>` +
               (side === "old"
-                ? `<path d="M ${x} ${strike} H ${r[2]}" stroke="${color}" stroke-width=".45"/>`
+                ? `<path d="M ${x} ${strike} H ${r[2] - left}" stroke="${color}" stroke-width=".45"/>`
                 : "")
             );
           })
@@ -606,15 +580,13 @@ export class Strips {
     const text = page.lines
       .map((line) => {
         const chars = line.chars
-          .filter((char) =>
-            containsCenter([0, top, page.width, bottom], char.rect),
-          )
+          .filter((char) => containsCenter(clip, char.rect))
           .map((char) => ({
             text: char.text,
             rect: [
-              char.rect[0],
+              char.rect[0] - left,
               char.rect[1] - top,
-              char.rect[2],
+              char.rect[2] - left,
               char.rect[3] - top,
             ] as Rect,
           }));
@@ -624,29 +596,30 @@ export class Strips {
     return {
       src: name + ".svg",
       clean,
-      width: Math.round(page.width * 100) / 100,
+      width: Math.round((right - left) * 100) / 100,
       height: Math.round((bottom - top) * 100) / 100,
       top: Math.round(top * 100) / 100,
+      ...(left > 0 ? { left: Math.round(left * 100) / 100 } : {}),
       page: number + 1,
       label: page.label,
       text,
     };
   }
 }
-export function renderSection(
+function balanceSection(
   old: Build,
   next: Build,
   node: Heading,
-  inputCards: [number, Card][],
-  strips: Strips,
+  cards: Card[],
+  intervals: Intervals,
   figureFiles: (file: string) => boolean,
-): [Block[], number[], number] {
-  const [intervals, missing] = sectionIntervals(next, node, figureFiles),
-    cards: [number, Card][] = structuredClone(inputCards);
+) {
   let oldRows: Row[] = [],
     newRows: Row[] = [],
     opcodes: Op[] = [];
-  if (cards.some(([, card]) => card.comparison === "text")) {
+  // Aligned cards already end at the same lines on both sides; the rows of
+  // the section only balance the crops of the others.
+  if (cards.some((card) => card.comparison === "text" && !card.aligned)) {
     const oldNode = old.outline.find((n) => n.id === node.id);
     if (oldNode)
       try {
@@ -660,8 +633,9 @@ export function renderSection(
         /* Missing PDF heading: use the source-local crops. */
       }
   }
-  for (const [, card] of cards) {
-    if (card.comparison !== "text" || figureFiles(card.file)) continue;
+  for (const card of cards) {
+    if (card.comparison !== "text" || card.aligned || figureFiles(card.file))
+      continue;
     if (opcodes.length) {
       const balanced = balancedTextPairs(
         card,
@@ -695,113 +669,297 @@ export function renderSection(
         );
       }
   }
-  const plan = acrossPages(
-      foldContext(
-        contextPlan(
-          intervals,
-          groupedRegions(cards, intervals, (p, a, b) =>
-            snap(next.document, p, a, b),
+}
+
+/** Plan the whole round before assigning sections. Source edits identify
+ * regions; sections provide context, but never own a second copy of ink. */
+export function renderDocument(
+  old: Build,
+  next: Build,
+  inputCards: Card[],
+  strips: Strips,
+  figureFiles: (file: string) => boolean,
+): Pick<RenderedRound, "sections" | "loose"> {
+  const cards = structuredClone(inputCards);
+  for (const node of next.outline) {
+    const members = cards.filter((c) => c.context_node === node.id);
+    if (!members.some((c) => c.comparison === "text" && !c.aligned)) continue;
+    try {
+      const [intervals] = sectionIntervals(next, node, figureFiles);
+      balanceSection(old, next, node, members, intervals, figureFiles);
+    } catch (error) {
+      if (
+        !(error as Error).message.includes("PDF outline") &&
+        !(error as Error).message.includes("outside this PDF")
+      )
+        throw error;
+    }
+  }
+  const sections = readingSections(next);
+  // Set the final footprint before resolving ownership. No later snap or
+  // margin expansion may make independently owned crops overlap again.
+  for (const card of cards)
+    for (const pair of card.pairs)
+      for (const [side, build] of [
+        ["old", old],
+        ["new", next],
+      ] as const) {
+        const at = pair[side];
+        if (!at) continue;
+        const x = laneX(
+            build.document,
+            laneAt(build.document, at.page, at.clip),
           ),
-        ),
+          y = (card.aligned ? trimmed : snap)(
+            build.document,
+            at.page,
+            at.clip[1],
+            at.clip[3],
+            x,
+          );
+        at.clip = [x[0], y[0], x[1], y[1]];
+      }
+  const order = (document: PdfDocument, a: Position, b: Position) =>
+      byReading(
+        readingKey(document, laneAt(document, a.page, a.clip), a.clip[1]),
+        readingKey(document, laneAt(document, b.page, b.clip), b.clip[1]),
+      ) || a.clip[0] - b.clip[0],
+    areas = regions(cards),
+    sectionAreas = sections.flatMap(({ intervals }, value) =>
+      [...intervals].flatMap(([id, spans]) =>
+        spans.map(([top, bottom]) => {
+          const [left, right] = laneX(next.document, id);
+          return {
+            page: lanePage(id),
+            lane: id,
+            rect: [left, top, right, bottom] as Rect,
+            value,
+          };
+        }),
       ),
     ),
-    byIndex = new Map(cards),
-    blocks: Block[] = [],
-    located = new Set<number>();
-  for (const piece of plan) {
-    if (piece.kind === "gap") {
-      blocks.push({ kind: "gap" });
-      continue;
-    }
-    if (piece.kind === "context") {
-      const image = strips.write(
-        next.document,
-        piece.page,
-        piece.top,
-        piece.bottom,
-      );
-      if (image) blocks.push({ kind: "context", image });
-      continue;
-    }
-    const indices = [...new Set(piece.pairs!.map(([i]) => i))].sort(
-      (a, b) => a - b,
+    // Section ownership covers the lane's margins too. Context retains the
+    // narrower printed bounds above, but a source crop must not lose ink.
+    boundaries = sectionAreas.map(({ page, lane, rect, value }) => {
+      const [left, right] = next.document
+        .page(page)
+        .columnBounds(laneColumn(lane));
+      return { page, rect: [left, rect[1], right, rect[3]] as Rect, value };
+    }),
+    affected = new Set(
+      sectionAreas
+        .filter((section) =>
+          areas.some((area) =>
+            area.new.some(
+              (p) =>
+                p.page === section.page && intersects(p.clip, section.rect),
+            ),
+          ),
+        )
+        .map((section) => section.value),
+    ),
+    context = sectionAreas.filter((section) => affected.has(section.value)),
+    // Display sections are disjoint. Change regions take precedence over
+    // all context, including floating figures.
+    background = partition(
+      [
+        ...context,
+        ...areas.flatMap((area) =>
+          area.new.map((p) => ({ page: p.page, rect: p.clip, value: -1 })),
+        ),
+      ],
+      (values) => (values.includes(-1) ? undefined : Math.min(...values)),
     );
-    indices.forEach((i) => located.add(i));
-    const pairs = piece.pairs!.map(([i, j]) => byIndex.get(i)!.pairs[j]),
-      identical = indices.every(
-        (i) => byIndex.get(i)!.comparison === "identical",
-      );
-    const regions = identical
-        ? []
-        : pairs.flatMap((pair) =>
-            pair.old
-              ? [
-                  {
-                    page: pair.old.page,
-                    top: pair.old.clip[1],
-                    bottom: pair.old.clip[3],
-                    marks: pair.before_marks,
-                  },
-                ]
-              : [],
+  interface Display extends Piece {
+    page: number;
+    rect: Rect;
+    region?: number;
+    section: number;
+  }
+  const plan: Display[] = [],
+    loosePlan: Display[] = [],
+    oldShown = new Set<number>(),
+    display = (
+      position: Position,
+      section: number,
+      region?: number,
+    ): Display => ({
+      kind: region === undefined ? "context" : "change",
+      page: position.page,
+      rect: position.clip,
+      lane: laneAt(next.document, position.page, position.clip),
+      top: position.clip[1],
+      bottom: position.clip[3],
+      region,
+      section,
+    });
+  for (const tile of background)
+    plan.push(
+      display({ page: tile.page, clip: tile.rect, label: "" }, tile.value),
+    );
+  areas.forEach((area, region) => {
+    area.old = area.old
+      .flatMap((p) => readingParts(old.document, p))
+      .sort((a, b) => order(old.document, a, b));
+    area.new = area.new
+      .flatMap((p) => readingParts(next.document, p))
+      .sort((a, b) => order(next.document, a, b));
+    for (const position of area.new) {
+      // Cut at both reading lanes and headings before assigning a section.
+      // A fragment keeps its region's complete correspondence and source IDs.
+      const pieces = partition(
+        [
+          ...boundaries.filter(
+            (c) =>
+              c.page === position.page && intersects(c.rect, position.clip),
           ),
-      merged: typeof regions = [];
-    for (const region of regions.sort(
-      (a, b) => a.page - b.page || a.top - b.top,
-    )) {
-      const last = merged.at(-1);
-      if (
-        last &&
-        region.page === last.page &&
-        region.top <= last.bottom + JOIN_GAP
-      ) {
-        last.bottom = Math.max(last.bottom, region.bottom);
-        last.marks.push(...region.marks);
-      } else merged.push({ ...region, marks: [...region.marks] });
+          { page: position.page, rect: position.clip, value: sections.length },
+        ],
+        (values) =>
+          values.includes(sections.length) ? Math.min(...values) : undefined,
+      );
+      for (const piece of pieces) {
+        const placed = piece.value < sections.length;
+        (placed ? plan : loosePlan).push(
+          display(
+            { ...position, clip: piece.rect },
+            placed ? piece.value : -1,
+            region,
+          ),
+        );
+      }
     }
-    const before = merged
-        .map((r) =>
-          strips.write(
-            old.document,
-            r.page,
-            ...snap(old.document, r.page, r.top, r.bottom),
-            r.marks,
-            "old",
-          ),
-        )
-        .filter((s): s is Strip => s !== null),
-      after = piece
-        .parts!.map(([page, top, bottom]) =>
-          strips.write(
-            next.document,
-            page,
-            top,
-            bottom,
-            pairs
-              .filter((p) => p.new?.page === page)
-              .flatMap((p) => p.after_marks),
-            "new",
-          ),
-        )
-        .filter((s): s is Strip => s !== null),
-      edited = pairs.some((p) =>
-        [...p.before_marks, ...p.after_marks].some((m) => m.kind !== "moved"),
-      );
-    blocks.push({
+  });
+  const change = (index: number, positions: Position[]): ChangeBlock => {
+    const area = areas[index],
+      members = area.members.map((i) => cards[i]),
+      identical = members.every((c) => c.comparison === "identical"),
+      marks = (side: "old" | "new", page: number) => {
+        const all = area.pairs.flatMap(([i, j]) => {
+            const card = cards[i],
+              pair = card.pairs[j];
+            return pair[side]?.page === page
+              ? drawn(
+                  card,
+                  side === "old" ? pair.before_marks : pair.after_marks,
+                )
+              : [];
+          }),
+          unique = [
+            ...new Map(all.map((m) => [JSON.stringify(m), m])).values(),
+          ],
+          edits = unique.filter((m) => m.kind !== "context");
+        return unique.filter(
+          (m) =>
+            m.kind !== "context" ||
+            !edits.some((e) => intersects(e.rect, m.rect)),
+        );
+      },
+      images = (side: "old" | "new", build: Build, positions: Position[]) =>
+        positions
+          .map((p) =>
+            strips.write(
+              build.document,
+              p.page,
+              p.clip[1],
+              p.clip[3],
+              marks(side, p.page),
+              side,
+              [p.clip[0], p.clip[2]],
+            ),
+          )
+          .filter((s): s is Strip => s !== null),
+      kinds = new Set(
+        area.pairs.flatMap(([i, j]) => {
+          const card = cards[i],
+            pair = card.pairs[j];
+          return drawn(card, [...pair.before_marks, ...pair.after_marks]).map(
+            (m) => m.kind,
+          );
+        }),
+      ),
+      edited = kinds.has("removed") || kinds.has("added") || kinds.has("moved"),
+      before =
+        oldShown.has(index) || (identical && area.new.length)
+          ? []
+          : images("old", old, area.old);
+    oldShown.add(index);
+    return {
       kind: "change",
-      units: indices.map((i) => byIndex.get(i)!.id),
+      units: members.map((c) => c.id),
       identical,
       reflow:
-        !identical &&
-        !edited &&
-        indices.every((i) => byIndex.get(i)!.comparison === "text"),
+        !identical && !edited && members.every((c) => c.comparison === "text"),
+      ...(kinds.has("moved") ? { moved: true } : {}),
       before,
-      after,
-    });
-  }
-  return [
-    blocks,
-    cards.map(([i]) => i).filter((i) => !located.has(i)),
-    missing.length,
-  ];
+      after: images("new", next, positions),
+    };
+  };
+  const compare = (a: Display, b: Display) =>
+      byReading(
+        readingKey(next.document, a.lane, a.top),
+        readingKey(next.document, b.lane, b.top),
+      ) || a.rect[0] - b.rect[0],
+    kept: { section: number; pieces: (Display | { kind: "gap" })[] }[] = [];
+  // Fold once in document order, so context can continue through a heading
+  // without a second copy or a jump over a child section.
+  if (plan.some((p) => p.kind === "change"))
+    for (const piece of foldContext(plan.sort(compare))) {
+      const last = kept.at(-1);
+      if (piece.kind !== "gap" && last?.section !== piece.section)
+        kept.push({ section: piece.section, pieces: [piece] });
+      else last?.pieces.push(piece);
+    }
+  const render = (pieces: (Display | { kind: "gap" })[]): Block[] => {
+    const blocks: Block[] = [];
+    let previous: number | undefined;
+    for (const piece of pieces) {
+      if (piece.kind === "gap") {
+        blocks.push({ kind: "gap" });
+        previous = undefined;
+      } else if (piece.region === undefined) {
+        const image = strips.write(
+          next.document,
+          piece.page,
+          piece.top,
+          piece.bottom,
+          [],
+          "",
+          [piece.rect[0], piece.rect[2]],
+        );
+        if (image) {
+          blocks.push({ kind: "context", image });
+          previous = undefined;
+        }
+      } else {
+        const block = change(piece.region, [
+            { page: piece.page, clip: piece.rect, label: "" },
+          ]),
+          last = blocks.at(-1);
+        // Adjacent fragments can share a block. Intervening printed context
+        // or another change stays in reading order, never inside an envelope.
+        if (previous === piece.region && last?.kind === "change")
+          last.after.push(...block.after);
+        else blocks.push(block);
+        previous = piece.region;
+      }
+    }
+    return blocks;
+  };
+  const rendered = kept.map(({ section, pieces }) => {
+      const { node } = sections[section];
+      return {
+        node: node.id,
+        number: node.number,
+        title: node.title,
+        blocks: render(pieces),
+      };
+    }),
+    loose = render(loosePlan.sort(compare)).filter(
+      (b): b is ChangeBlock => b.kind === "change",
+    );
+  areas.forEach((area, index) => {
+    if (!area.new.length) loose.push(change(index, []));
+  });
+  return { sections: rendered, loose };
 }

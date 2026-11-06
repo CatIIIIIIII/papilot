@@ -11,17 +11,22 @@ import {
   withoutMoves,
   changedLineBounds,
   foldContext,
+  renderDocument,
+  snap,
+  trimmed,
 } from "../../src/render/inline.ts";
+import type { Build } from "../../src/render/locate.ts";
+import { byReading, laneAt, readingKey } from "../../src/render/locate.ts";
 import { typesetWords } from "../../src/render/round.ts";
 import { opcodes } from "../../src/core/diff.ts";
-import type { Card, Position } from "../../src/types.ts";
+import type { Card, Heading, Position, Strip } from "../../src/types.ts";
 const documents: PdfDocument[] = [];
 const folders: string[] = [];
 it("keeps at least a page of context on each side of an isolated edit", () => {
   const plan = foldContext([
-    { kind: "context", page: 0, top: 0, bottom: 2000 },
-    { kind: "change", page: 0, top: 2000, bottom: 2050 },
-    { kind: "context", page: 0, top: 2050, bottom: 4000 },
+    { kind: "context", lane: 0, top: 0, bottom: 2000 },
+    { kind: "change", lane: 0, top: 2000, bottom: 2050 },
+    { kind: "context", lane: 0, top: 2050, bottom: 4000 },
   ]);
   const visible = plan.filter((p) => p.kind === "context");
   expect(visible).toHaveLength(2);
@@ -62,6 +67,18 @@ export function document(pages: string[]) {
   documents.push(result);
   return result;
 }
+function drawing(content: string) {
+  const raw = new mupdf.PDFDocument(),
+    page = raw.addPage([0, 0, 200, 200], 0, {}, content);
+  raw.insertPage(-1, page);
+  const buffer = raw.saveToBuffer(""),
+    doc = new PdfDocument(buffer.asUint8Array().slice());
+  documents.push(doc);
+  buffer.destroy();
+  page.destroy();
+  raw.destroy();
+  return doc;
+}
 const positions = (doc: PdfDocument): Position[] =>
   Array.from({ length: doc.length }, (_, page) => ({
     page,
@@ -70,11 +87,420 @@ const positions = (doc: PdfDocument): Position[] =>
   }));
 const compare = (a: PdfDocument, b: PdfDocument) =>
   textChanges(a, b, positions(a), positions(b));
+it("retains faint coloured drawings while omitting truly blank strips", () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-faint-"));
+  folders.push(folder);
+  const strips = new Strips(folder);
+  for (const color of ["1 0.99 0.99", "0.99 0.99 1", "1 1 1"]) {
+    const doc = drawing(`${color} rg 40 40 20 20 re f`);
+    const strip = strips.write(doc, 0, 139, 161, [], "", [39, 61]);
+    if (color === "1 1 1") expect(strip).toBeNull();
+    else expect(strip).not.toBeNull();
+  }
+});
+it("keeps faint ink at both crop edges while trimming only blank rows", () => {
+  const doc = drawing(
+    "1 0.99 0.99 rg 40 158 20 2 re f " +
+      "0 0 0 rg 40 148 20 2 re f " +
+      "0.99 0.99 1 rg 40 138 20 2 re f",
+  );
+  // The three printed bands occupy y=40..42, 50..52, and 60..62.
+  expect(trimmed(doc, 0, 35, 65, [35, 65])).toEqual([39, 63]);
+  expect(snap(doc, 0, 41, 61, [35, 65])).toEqual([40, 62]);
+  expect(trimmed(doc, 0, 70, 80, [35, 65])).toEqual([70, 80]);
+});
+it("keeps the raster scale when a fractional crop reaches the page edge", () => {
+  const doc = drawing("0 0 0 rg 40 .7 20 10 re f");
+  // Ink ends at y=199.3. A partial final raster row must not compress all
+  // the preceding rows and move the bottom boundary back into that ink.
+  expect(snap(doc, 0, 190, 195.3, [35, 65])[1]).toBeCloseTo(199.3);
+});
 afterEach(() => {
   documents.splice(0).forEach((d) => d.close());
   folders
     .splice(0)
     .forEach((f) => fs.rmSync(f, { recursive: true, force: true }));
+});
+function sectioned(doc: PdfDocument, lines: number[]): Build {
+  const nodes: Heading[] = lines.map((line, i) => ({
+      id: String(i),
+      title: `Section ${i}`,
+      number: String(i + 1),
+      kind: "section",
+      level: 1,
+      file: "paper.tex",
+      line,
+      parent: null,
+      labels: [],
+      files: ["paper.tex"],
+      ranges: {},
+    })),
+    build = {
+      document: doc,
+      outline: nodes,
+      path: (name: string) => name,
+      locator: {
+        lookup: (_file: string, line: number) => [
+          [0, 38 + line * 18, 52 + line * 18, 0, 600],
+        ],
+      },
+      margins: { body: () => [32, 260] },
+      figures: { locate: () => [] },
+    } as unknown as Build;
+  return build;
+}
+it("renders shared ink once across sections and floating edits, retaining every edit", () => {
+  const doc = document([
+      Array.from(
+        { length: 12 },
+        (_, i) => `Line ${i} has distinct words here`,
+      ).join("\n"),
+    ]),
+    build = sectioned(doc, [0, 5]),
+    cards: Card[] = [
+      ["a", "0", 88, 128],
+      ["b", "1", 110, 164],
+      ["figure", null, 145, 182],
+    ].map(([id, section, top, bottom]) => ({
+      id: String(id),
+      file: "paper.tex",
+      context_node: section as string | null,
+      comparison: "text",
+      aligned: true,
+      pairs: [
+        {
+          old: {
+            page: 0,
+            clip: [0, Number(top), 600, Number(bottom)],
+            label: "1",
+          },
+          new: {
+            page: 0,
+            clip: [0, Number(top), 600, Number(bottom)],
+            label: "1",
+          },
+          group: 0,
+          before_marks: [],
+          after_marks: [],
+        },
+      ],
+    })),
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-global-"));
+  folders.push(folder);
+  const rect = doc.page(0).search("Line 4")[0];
+  cards[0].pairs[0].before_marks = [{ kind: "context", rect }];
+  cards[1].pairs[0].before_marks = [
+    { kind: "removed", rect },
+    { kind: "removed", rect },
+  ];
+  const original = structuredClone(cards),
+    result = renderDocument(
+      build,
+      build,
+      cards,
+      new Strips(folder),
+      () => false,
+    ),
+    blocks = [...result.sections.flatMap((s) => s.blocks), ...result.loose],
+    changes = blocks.filter((b) => b.kind === "change"),
+    shown = (word: { rect: number[] }, strips: Strip[]) =>
+      strips.filter((s) =>
+        containsCenter(
+          [s.left ?? 0, s.top!, (s.left ?? 0) + s.width, s.top! + s.height],
+          word.rect as [number, number, number, number],
+        ),
+      ).length;
+  expect(cards).toEqual(original);
+  expect(changes.map((b) => b.units)).toEqual([
+    ["a", "b", "figure"],
+    ["a", "b", "figure"],
+  ]);
+  expect(changes.filter((b) => b.before.length)).toHaveLength(1);
+  const svg = changes[0].before
+    .map((s) => fs.readFileSync(path.join(folder, s.src), "utf8"))
+    .join("");
+  expect(svg).not.toContain('fill-opacity=".7"');
+  expect(svg.match(/fill="#c72938"/g)).toHaveLength(1);
+  for (const side of ["before", "after"] as const) {
+    const strips = blocks.flatMap((b) =>
+      b.kind === "change"
+        ? b[side]
+        : side === "after" && b.kind === "context"
+          ? [b.image]
+          : [],
+    );
+    for (const word of doc.page(0).words) {
+      expect(shown(word, strips)).toBeLessThanOrEqual(1);
+      if (
+        original.some((c) =>
+          containsCenter(
+            c.pairs[0][side === "before" ? "old" : "new"]!.clip,
+            word.rect,
+          ),
+        )
+      )
+        expect(shown(word, strips)).toBe(1);
+    }
+  }
+});
+it("keeps separated fragments and intervening context in reading order", () => {
+  const doc = document([
+      Array.from({ length: 12 }, (_, i) => `Line ${i} remains readable`).join(
+        "\n",
+      ),
+    ]),
+    build = sectioned(doc, [0]),
+    position = (top: number, bottom: number): Position => ({
+      page: 0,
+      clip: [0, top, 600, bottom],
+      label: "1",
+    }),
+    cards: Card[] = [
+      {
+        id: "a",
+        file: "paper.tex",
+        context_node: "0",
+        comparison: "text",
+        aligned: true,
+        pairs: [
+          {
+            old: position(54, 75),
+            new: position(54, 75),
+            group: 0,
+            before_marks: [],
+            after_marks: [],
+          },
+          {
+            old: null,
+            new: position(180, 201),
+            group: 0,
+            before_marks: [],
+            after_marks: [],
+          },
+        ],
+      },
+      {
+        id: "b",
+        file: "paper.tex",
+        context_node: "0",
+        comparison: "text",
+        aligned: true,
+        pairs: [
+          {
+            old: position(216, 237),
+            new: position(108, 129),
+            group: 0,
+            before_marks: [],
+            after_marks: [],
+          },
+        ],
+      },
+    ],
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-order-"));
+  folders.push(folder);
+  const result = renderDocument(
+      build,
+      build,
+      cards,
+      new Strips(folder),
+      () => false,
+    ),
+    blocks = result.sections.flatMap((s) => s.blocks),
+    changes = blocks.filter((b) => b.kind === "change"),
+    strips = blocks.flatMap((b) =>
+      b.kind === "context" ? [b.image] : b.kind === "change" ? b.after : [],
+    );
+  expect(changes.map((b) => b.units)).toEqual([["a"], ["b"], ["a"]]);
+  expect(changes.map((b) => b.before.length)).toEqual([1, 1, 0]);
+  expect(strips.map((s) => s.top)).toEqual(
+    strips.map((s) => s.top).sort((a, b) => a! - b!),
+  );
+  expect(
+    strips
+      .flatMap((s) => s.text ?? [])
+      .map((l) => l.text)
+      .join(" "),
+  ).toContain("Line 6 remains readable");
+});
+it("partitions nested headings without losing child context or jumping back in reading order", () => {
+  const doc = document([
+      Array.from({ length: 12 }, (_, i) => `Line ${i} remains readable`).join(
+        "\n",
+      ),
+    ]),
+    build = sectioned(doc, [0, 5, 10]);
+  build.outline[0].level = 0;
+  build.outline[1].parent = build.outline[2].parent = "0";
+  const cards: Card[] = [
+      ["parent", "0", 54, 75],
+      ["child", "1", 180, 237],
+    ].map(([id, section, top, bottom]) => ({
+      id: String(id),
+      file: "paper.tex",
+      context_node: String(section),
+      comparison: "text",
+      aligned: true,
+      pairs: [
+        {
+          old: {
+            page: 0,
+            clip: [0, Number(top), 600, Number(bottom)],
+            label: "1",
+          },
+          new: {
+            page: 0,
+            clip: [0, Number(top), 600, Number(bottom)],
+            label: "1",
+          },
+          group: 0,
+          before_marks: [],
+          after_marks: [],
+        },
+      ],
+    })),
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-headings-"));
+  folders.push(folder);
+  const result = renderDocument(
+      build,
+      build,
+      cards,
+      new Strips(folder),
+      () => false,
+    ),
+    child = result.sections.find((s) => s.node === "1")!,
+    strips = result.sections.flatMap((s) =>
+      s.blocks.flatMap((b) =>
+        b.kind === "context" ? [b.image] : b.kind === "change" ? b.after : [],
+      ),
+    );
+  expect(
+    child.blocks.some((b) => b.kind === "change" && b.units.includes("child")),
+  ).toBe(true);
+  expect(
+    child.blocks
+      .flatMap((b) => (b.kind === "context" ? (b.image.text ?? []) : []))
+      .map((l) => l.text)
+      .join(" "),
+  ).toContain("Line 6 remains readable");
+  expect(strips.map((s) => s.top)).toEqual(
+    strips.map((s) => s.top).sort((a, b) => a! - b!),
+  );
+  for (const word of doc.page(0).words)
+    expect(
+      strips.filter((s) =>
+        containsCenter(
+          [s.left ?? 0, s.top!, (s.left ?? 0) + s.width, s.top! + s.height],
+          word.rect,
+        ),
+      ),
+    ).toHaveLength(1);
+  // Unaffected preceding sections must not push the first edit out of view.
+  const onlyChild = structuredClone(cards.slice(1));
+  for (const side of ["old", "new"] as const)
+    onlyChild[0].pairs[0][side]!.clip = [0, 162, 600, 183];
+  const scoped = renderDocument(
+    build,
+    build,
+    onlyChild,
+    new Strips(folder),
+    () => false,
+  );
+  expect(scoped.sections.map((s) => s.node)).toEqual(["1"]);
+});
+it("splits a wide source crop into the page's reading lanes and sections", () => {
+  const raw = new mupdf.PDFDocument(),
+    font = new mupdf.Font("Helvetica"),
+    resource = raw.addSimpleFont(font);
+  let content = "";
+  for (const [x, side] of [
+    [30, "LEFT"],
+    [330, "RIGHT"],
+  ] as const)
+    for (let line = 0; line < 12; line++)
+      content += `BT /F1 10 Tf ${x} ${550 - line * 18} Td (${side} line ${line} has several readable words.) Tj ET\n`;
+  const page = raw.addPage(
+    [0, 0, 600, 600],
+    0,
+    { Font: { F1: resource } },
+    content,
+  );
+  raw.insertPage(-1, page);
+  page.destroy();
+  const buffer = raw.saveToBuffer(""),
+    doc = new PdfDocument(buffer.asUint8Array());
+  documents.push(doc);
+  buffer.destroy();
+  resource.destroy();
+  font.destroy();
+  raw.destroy();
+  const build = sectioned(doc, [0, 5]);
+  build.locator.lookup = (_file, line) => [
+    [0, 40 + line * 18, 52 + line * 18, 30, 260],
+  ];
+  expect(doc.page(0).twoColumns).toBe(true);
+  expect(doc.page(0).spanning).toEqual([]);
+  const position: Position = { page: 0, clip: [0, 88, 600, 128], label: "1" },
+    card: Card = {
+      id: "figure",
+      file: "figure.tex",
+      context_node: "0",
+      comparison: "layout",
+      aligned: true,
+      pairs: [
+        {
+          old: position,
+          new: position,
+          group: 0,
+          before_marks: [],
+          after_marks: [],
+        },
+      ],
+    },
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-wide-"));
+  folders.push(folder);
+  const result = renderDocument(
+      build,
+      build,
+      [card],
+      new Strips(folder),
+      () => true,
+    ),
+    changes = result.sections.flatMap((s) =>
+      s.blocks.filter((b) => b.kind === "change"),
+    ),
+    shown = result.sections.flatMap((s) =>
+      s.blocks.flatMap((b) =>
+        b.kind === "context" ? [b.image] : b.kind === "change" ? b.after : [],
+      ),
+    ),
+    key = (s: Strip) =>
+      readingKey(
+        doc,
+        laneAt(doc, s.page! - 1, [
+          s.left ?? 0,
+          s.top!,
+          (s.left ?? 0) + s.width,
+          s.top! + s.height,
+        ]),
+        s.top!,
+      );
+  expect(result.loose).toEqual([]);
+  for (let i = 1; i < shown.length; i++)
+    expect(byReading(key(shown[i - 1]), key(shown[i]))).toBeLessThanOrEqual(0);
+  expect(changes.map((b) => b.units)).toEqual([["figure"], ["figure"]]);
+  expect(changes.filter((b) => b.before.length)).toHaveLength(1);
+  expect(changes.flatMap((b) => b.after).every((s) => s.width <= 300)).toBe(
+    true,
+  );
+  for (const word of doc.page(0).words)
+    expect(
+      shown.filter((s) =>
+        containsCenter(
+          [s.left ?? 0, s.top!, (s.left ?? 0) + s.width, s.top! + s.height],
+          word.rect,
+        ),
+      ),
+    ).toHaveLength(1);
 });
 it("marks whole words including deleted suffixes", () => {
   const old = document([
@@ -222,9 +648,10 @@ it("keeps a moved float outside the edit and pairs relocated sentences", () => {
       unchanged.join("\n"),
       "Since type variables now depend on their bounds, both guards must be context-aware.",
     ]);
+  // Lanes of pages 0 and 1, which have one column.
   const intervals = new Map([
       [0, [[0, 600] as [number, number]]],
-      [1, [[0, 600] as [number, number]]],
+      [3, [[0, 600] as [number, number]]],
     ]),
     a = textRows(old, intervals),
     b = textRows(next, intervals),

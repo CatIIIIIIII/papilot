@@ -122,9 +122,11 @@ export const zhCN: Record<string, string> = {
   "No visible change in the PDF; see the LaTeX source.":
     "PDF 中没有可见变化，请查看 LaTeX 源码。",
   "Continued: only line breaks moved here.": "续：这里只有换行位置变化。",
-  "Affects {n} place": "影响 {n} 处",
-  "Affects {n} places": "影响 {n} 处",
-  "with {changes}": "需与{changes}一起",
+  "{n} related PDF change": "{n} 处相关 PDF 变化",
+  "{n} related PDF changes": "{n} 处相关 PDF 变化",
+  "These previews show one verified combination of edits. Other or smaller combinations may produce the same result. Accepting or rejecting applies only to the selected edit.":
+    "这些预览显示一组已验证的修改组合。其他组合或更少的修改也可能产生相同结果。接受或拒绝只作用于选中的修改。",
+  "with {changes}": "与{changes}组合",
   "Show {n} more": "再显示 {n} 处",
   "Loading…": "正在加载…",
   "Your comment: ": "你的评论：",

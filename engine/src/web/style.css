@@ -972,9 +972,12 @@ kbd {
 .paper-context {
   line-height: 0;
 }
-.paper-slice {
+.paper-band {
   position: relative;
   width: 100%;
+}
+.paper-slice {
+  position: absolute;
 }
 .paper-slice canvas {
   position: absolute;
@@ -984,7 +987,7 @@ kbd {
   filter: var(--pdf-filter, none);
 }
 @media (max-width: 680px) {
-  .paper-slice {
+  .paper-band {
     width: calc(100% * var(--pdf-crop-scale, 1));
     margin-left: calc(-100% * var(--pdf-crop-scale, 1) * var(--pdf-crop-shift, 0));
   }

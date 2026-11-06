@@ -5,18 +5,28 @@ import { within } from "../core/git.ts";
 import { deepestNode } from "../core/outline.ts";
 import { referenceChanges } from "../core/bib.ts";
 import { changesOf, placesOf, renderPlace } from "./effects.ts";
+import {
+  alignedCrops,
+  alignment,
+  marksIn,
+  type Mine,
+  printers,
+  type Alignment,
+} from "./align.ts";
 import { Build } from "./locate.ts";
-import { renderSection, snap, Strips } from "./inline.ts";
+import { renderDocument, Strips } from "./inline.ts";
 import { pixelDifference, textChanges } from "./pdfdiff.ts";
+import { containsCenter } from "./pdf.ts";
 import type {
   Card,
-  ChangeBlock,
+  Mark,
   Pair,
   Place,
+  Position,
   PlaceView,
   RenderedRound,
   RenderRequest,
-  Strip,
+  SourceBox,
   Unit,
 } from "../types.ts";
 export function typesetWords(text: string) {
@@ -46,7 +56,8 @@ export function classify(
   unit: Unit,
   body: Set<string>,
   figureFiles: (file: string) => boolean,
-): Pick<Card, "pairs" | "comparison" | "own"> {
+  mine?: Mine,
+): Pick<Card, "pairs" | "comparison" | "own" | "aligned"> {
   const name = unit.file;
   // A changed line may be inside a whitespace-sensitive environment without
   // including its \begin in the hunk. Inspect the owning file before using
@@ -70,54 +81,86 @@ export function classify(
   const located =
       name.endsWith(".tex") && unit.kind !== "binary" && body.has(name),
     whole = unit.whole_file || figureFiles(name),
-    left =
-      located && unit.status !== "added"
-        ? old.locator.locate(name, unit.old_start, unit.old_end, whole)
-        : [],
-    right =
-      located && unit.status !== "deleted"
-        ? next.locator.locate(name, unit.new_start, unit.new_end, whole)
-        : [],
-    analysis = textChanges(old.document, next.document, left, right),
+    own0 = {
+      left:
+        located && unit.status !== "added"
+          ? old.locator.locate(name, unit.old_start, unit.old_end, whole)
+          : [],
+      right:
+        located && unit.status !== "deleted"
+          ? next.locator.locate(name, unit.new_start, unit.new_end, whole)
+          : [],
+    },
+    al = own0.left.length || own0.right.length ? alignment(old, next) : null,
+    // Located edits use the whole comparison to crop between anchors around
+    // changed lines, or keep their SyncTeX crops when no words changed.
+    groups = al && alignedCrops(al, own0.left, own0.right, whole, mine),
     pairs: Pair[] = [];
-  let pixels = 0;
-  for (let i = 0; i < Math.max(left.length, right.length); i++) {
-    const a = left[i] ?? null,
-      b = right[i] ?? null;
-    pairs.push({
-      old: a,
-      new: b,
-      before_marks: analysis.old_marks[i] ?? [],
-      after_marks: analysis.new_marks[i] ?? [],
-    });
-    if (!analysis.text_changed)
-      pixels += pixelDifference(
-        a ? old.document.page(a.page).raster(a.clip) : null,
-        b ? next.document.page(b.page).raster(b.clip) : null,
-      );
+  let textChanged = false;
+  for (const [index, group] of (
+    groups ?? [{ left: own0.left, right: own0.right }]
+  ).entries()) {
+    const { left, right } = group,
+      analysis = groups
+        ? aligned(left, right, al!)
+        : textChanges(old.document, next.document, left, right);
+    textChanged ||= analysis.text_changed;
+    for (let i = 0; i < Math.max(left.length, right.length); i++) {
+      const at = left[i] ?? null,
+        context: Mark[] =
+          "faded" in group && at
+            ? (group.faded ?? [])
+                .filter(
+                  (f) => f.page === at.page && containsCenter(at.clip, f.rect),
+                )
+                .map((f) => ({ kind: "context", rect: f.rect }))
+            : [];
+      pairs.push({
+        old: at,
+        new: right[i] ?? null,
+        before_marks: [...(analysis.old_marks[i] ?? []), ...context],
+        after_marks: analysis.new_marks[i] ?? [],
+        ...(groups ? { group: index } : {}),
+      });
+    }
   }
+  const pixels = textChanged
+    ? 0
+    : pairs.reduce(
+        (sum, { old: a, new: b }) =>
+          sum +
+          pixelDifference(
+            a ? old.document.page(a.page).raster(a.clip, 2, false, true) : null,
+            b
+              ? next.document.page(b.page).raster(b.clip, 2, false, true)
+              : null,
+            1,
+          ),
+        0,
+      );
   const own = {
       old:
-        left.length && !whole
+        own0.left.length && !whole
           ? old.locator.boxes(name, unit.old_start, unit.old_end)
           : [],
       new:
-        right.length && !whole
+        own0.right.length && !whole
           ? next.locator.boxes(name, unit.new_start, unit.new_end)
           : [],
     },
-    moved = left.some(
-      (a, i) =>
-        right[i] &&
-        (a.page !== right[i].page ||
-          a.label !== right[i].label ||
-          a.clip.some((v, j) => Math.abs(v - right[i].clip[j]) > 1)),
+    moved = pairs.some(
+      ({ old: a, new: b }) =>
+        a &&
+        b &&
+        (a.page !== b.page ||
+          a.label !== b.label ||
+          a.clip.some((v, j) => Math.abs(v - b.clip[j]) > 1)),
     );
   return {
     pairs,
     comparison: !pairs.length
       ? "unmapped"
-      : analysis.text_changed
+      : textChanged
         ? "text"
         : pixels
           ? "layout"
@@ -125,44 +168,56 @@ export function classify(
             ? "position"
             : "identical",
     own,
+    ...(groups ? { aligned: true } : {}),
   };
 }
-function looseBlock(
-  card: Card,
-  strips: Strips,
-  old: Build,
-  next: Build,
-): ChangeBlock {
-  const before: Strip[] = [],
-    after: Strip[] = [];
-  for (const pair of card.pairs)
-    for (const [side, build, images, marks] of [
-      ["old", old, before, pair.before_marks],
-      ["new", next, after, pair.after_marks],
-    ] as const) {
-      const position = pair[side];
-      if (position) {
-        const image = strips.write(
-          build.document,
-          position.page,
-          ...snap(
-            build.document,
-            position.page,
-            position.clip[1],
-            position.clip[3],
-          ),
-          marks,
-          side,
-        );
-        if (image) images.push(image);
-      }
-    }
+// Which edit each changed line belongs to. A line that some edits' source
+// printed belongs to those edits, so a rewritten section next door does not
+// lend its lines to an edit whose SyncTeX crops reach into it; for a line
+// no edit printed, such as a renumbered reference, it says nothing (see
+// changedLines in align.ts).
+function owners(old: Build, next: Build, units: Unit[], body: Set<string>) {
+  const al = alignment(old, next);
+  const records = (build: Build, unit: Unit, start: number, end: number) => {
+      const file = build.path(unit.file);
+      if (
+        !unit.file.endsWith(".tex") ||
+        !body.has(unit.file) ||
+        !fs.existsSync(file)
+      )
+        return [];
+      const result: SourceBox[] = [];
+      for (let line = Math.max(1, start); line <= end; line++)
+        result.push(...build.locator.lookup(file, line));
+      return result;
+    },
+    printed = {
+      old: printers(
+        al,
+        "old",
+        units.map((u) => records(old, u, u.old_start, u.old_end)),
+      ),
+      new: printers(
+        al,
+        "new",
+        units.map((u) => records(next, u, u.new_start, u.new_end)),
+      ),
+    };
+  return (index: number) => ({
+    old: (line: number) => printed.old.get(line)?.includes(index),
+    new: (line: number) => printed.new.get(line)?.includes(index),
+  });
+}
+// The marks of aligned crops: the words the whole comparison changed.
+function aligned(left: Position[], right: Position[], al: Alignment) {
+  const old_marks = left.map((at) => marksIn(al, "old", at)),
+    new_marks = right.map((at) => marksIn(al, "new", at));
   return {
-    kind: "change",
-    units: [card.id],
-    identical: card.comparison === "identical",
-    before,
-    after,
+    old_marks,
+    new_marks,
+    text_changed: [...old_marks, ...new_marks].some((marks) =>
+      marks.some((m) => m.kind !== "moved"),
+    ),
   };
 }
 // Places rendered with the round; the rest render when asked for.
@@ -185,13 +240,14 @@ export function renderRound(
       ),
       cards: Card[] = [],
       result: RenderedRound = { units: {}, sections: [], loose: [] };
+    const mine = request.cards ? null : owners(old, next, request.units, body);
     for (const [index, unit] of request.units.entries()) {
       // The pass after variant builds reuses the first pass's cards rather
       // than asking SyncTeX again.
       const card: Card = request.cards?.[index] ?? {
           id: unit.id,
           file: unit.file,
-          ...classify(old, next, unit, body, figureFiles),
+          ...classify(old, next, unit, body, figureFiles, mine?.(index)),
         },
         node = card.pairs.length
           ? unit.status === "deleted"
@@ -223,7 +279,7 @@ export function renderRound(
       request.indirect &&
       request.units.length > 1 &&
       !request.causes &&
-      (silent.length > 0 || changes.some((c) => !c.within.length))
+      changes.length > 0
     ) {
       writeJson(path.join(out, "attribute.json"), {
         changes,
@@ -249,6 +305,7 @@ export function renderRound(
     for (const [id, list] of Object.entries(places))
       result.units[id].effects = {
         total: list.length,
+        verified: true,
         shown: list
           .slice(0, SHOWN)
           .map((place) => renderPlace(place, strips, old, next)),
@@ -261,40 +318,10 @@ export function renderRound(
         new: request.new,
         units: places,
       });
-    const placed = new Set<number>();
-    for (const node of next.outline.filter((n) =>
-      cards.some((c) => c.context_node === n.id),
-    )) {
-      const members = cards.flatMap((c, i): [number, Card][] =>
-        c.context_node === node.id ? [[i, c]] : [],
-      );
-      let rendered: ReturnType<typeof renderSection>;
-      try {
-        rendered = renderSection(old, next, node, members, strips, figureFiles);
-      } catch (error) {
-        if (
-          !(error as Error).message.includes("PDF outline") &&
-          !(error as Error).message.includes("outside this PDF")
-        )
-          throw error;
-        continue;
-      }
-      const [blocks, unlocated] = rendered;
-      if (!blocks.some((b) => b.kind === "change")) continue;
-      result.sections.push({
-        node: node.id,
-        number: node.number,
-        title: node.title,
-        blocks,
-      });
-      members.forEach(([i]) => {
-        if (!unlocated.includes(i)) placed.add(i);
-      });
-    }
-    cards.forEach((card, index) => {
-      if (!placed.has(index))
-        result.loose.push(looseBlock(card, strips, old, next));
-    });
+    Object.assign(
+      result,
+      renderDocument(old, next, cards, strips, figureFiles),
+    );
     try {
       const references = referenceChanges(request.units, old, next);
       if (references) result.references = references;

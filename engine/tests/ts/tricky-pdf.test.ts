@@ -3,12 +3,14 @@ import path from "node:path";
 import { it, expect } from "vitest";
 import { Fixture } from "./helpers.ts";
 import { run, which } from "../../src/core/process.ts";
-import { containsCenter } from "../../src/render/pdf.ts";
+import { containsCenter, PdfDocument } from "../../src/render/pdf.ts";
 import { ROOT } from "../../src/runtime.ts";
 import type { ChangeBlock, Strip, Rect } from "../../src/types.ts";
 const tex = Boolean(which("latexmk") && which("pdflatex"));
 const paragraph =
   "A replicated state machine records commands in a durable log. Each replica applies committed commands in order. The invariant remains valid while leadership changes. ";
+const CUT =
+  "This obsolete passage explains an earlier design that the revision drops entirely, together with its long justification about timeouts, retries and the order of acknowledgements. ";
 interface Case {
   name: string;
   body: string;
@@ -23,8 +25,59 @@ interface Case {
   visual?: string;
   minimumPages?: number;
   relocated?: boolean;
+  completeDisplay?: boolean;
+  outside?: string[];
 }
 const cases: Case[] = [
+  {
+    name: "a frame does not join separate paragraphs into one text change",
+    body: String.raw`\section{Framed text}
+\noindent\fbox{\begin{minipage}{300pt}
+Opening sentinel stays in the context.\par
+${paragraph.repeat(3)}\par
+\medskip
+The protocol keeps oldvalue before committing.\par
+\medskip
+${paragraph.repeat(3)}\par
+Closing sentinel stays in the context.
+\end{minipage}}`,
+    from: "oldvalue",
+    to: "newvalue",
+    removed: "oldvalue",
+    added: "newvalue",
+    outside: ["Opening sentinel", "Closing sentinel"],
+  },
+  {
+    name: "matrix outlines stay whole when a word on the middle row changes",
+    packages: "amsmath",
+    body: String.raw`\section{Matrix}
+Above sentinel stays in the context.
+\[
+ V = \begin{pmatrix}
+ s & 0 & 0 \\
+ 0 & -s & 0 \\
+ -s x_0 & s y_1 & 1
+ \end{pmatrix},\qquad
+ (u\ v\ 1) = (x\ y\ 1)V.
+\]
+Below sentinel stays in the context.`,
+    from: "(x\\ y\\ 1)",
+    to: "(z\\ y\\ 1)",
+    completeDisplay: true,
+  },
+  {
+    name: "large operators and their limits stay whole around a changed relation",
+    packages: "amsmath",
+    body: String.raw`\section{Operators}
+Above sentinel stays in the context.
+\[
+ \sum_{i=0}^{\infty} x_i = \int_0^{\pi+2} f
+\]
+Below sentinel stays in the context.`,
+    from: "x_i =",
+    to: "x_i \\leq",
+    completeDisplay: true,
+  },
   {
     name: "two columns with a repeated sentence",
     options: "twocolumn",
@@ -188,6 +241,66 @@ if ready:
     visual: "layout",
   },
   {
+    name: "restyled table keeps the sentence above it out of the crop",
+    packages: "booktabs",
+    body: String.raw`\section{Experiments}
+We evaluate on three benchmarks: NarrativeQA, Qasper and a synthetic needle-in-a-haystack task.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\hline
+Method & NarrativeQA & Qasper & Needle \\
+\hline
+Dense & 24.1 & 41.3 & 99.8 \\
+Longformer & 21.7 & 38.9 & 92.1 \\
+\hline
+\end{tabular}
+\caption{Results on three benchmarks.}
+\end{table}
+
+As shown in Table~1, our method is close to dense attention.`,
+    from: String.raw`\hline
+Method & NarrativeQA & Qasper & Needle \\
+\hline
+Dense & 24.1 & 41.3 & 99.8 \\
+Longformer & 21.7 & 38.9 & 92.1 \\
+\hline`,
+    to: String.raw`\toprule
+Method & NarrativeQA & Qasper & Needle \\
+\midrule
+Dense & \textbf{24.1} & \textbf{41.3} & \textbf{99.8} \\
+Longformer & 21.7 & 38.9 & 92.1 \\
+\bottomrule`,
+    visual: "layout",
+  },
+  {
+    name: "shortened paragraph leaves the next page",
+    body: String.raw`\section{Break}
+Opening sentinel line.
+
+\vspace{580pt}
+
+Final sentinel begins. ${paragraph.repeat(2)}${CUT.repeat(3)}Ending sentinel concludes.`,
+    from: CUT.repeat(3),
+    to: "",
+  },
+  {
+    name: "swapped paragraphs show the moved one on both sides",
+    body: String.raw`\section{Order}
+${paragraph.repeat(2)}
+
+Moved paragraph sentinel explains why replicas vote before they apply a command, and why the leader waits for a quorum.
+
+Staying paragraph sentinel describes how followers acknowledge entries and how terms increase across elections.
+
+${paragraph.repeat(2)}`,
+    from: "Moved paragraph sentinel explains why replicas vote before they apply a command, and why the leader waits for a quorum.\n\nStaying paragraph sentinel describes how followers acknowledge entries and how terms increase across elections.",
+    to: "Staying paragraph sentinel describes how followers acknowledge entries and how terms increase across elections.\n\nMoved paragraph sentinel explains why replicas vote before they apply a command, and why the leader waits for a quorum.",
+    before: "Moved paragraph sentinel",
+    after: "Moved paragraph sentinel",
+  },
+  {
     name: "paragraph boundary is not a no-op",
     body: String.raw`\section{Paragraphs}
 The first paragraph states the invariant.
@@ -284,6 +397,10 @@ ${scenario.body}
           folder = path.join(app.state, "rounds/tricky/001");
         if (scenario.before) expect(text(before)).toContain(scenario.before);
         if (scenario.after) expect(text(after)).toContain(scenario.after);
+        for (const outside of scenario.outside ?? []) {
+          expect(text(before)).not.toContain(outside);
+          expect(text(after)).not.toContain(outside);
+        }
         if (scenario.removed)
           expect(
             normalized(before.map((s) => marked(s, folder)).join("\n")),
@@ -299,6 +416,32 @@ ${scenario.body}
           expect(
             normalized(after.map((s) => marked(s, folder)).join("\n")),
           ).toBe("a stronger");
+          // A page with two columns is cropped one column at a time.
+          const context = detail.sections.flatMap((s) =>
+            s.blocks.flatMap((b) => (b.kind === "context" ? [b.image] : [])),
+          );
+          for (const strip of [...before, ...after, ...context])
+            expect(strip.width).toBeLessThan(320);
+          for (const strip of after) expect(strip.left).toBeGreaterThan(280);
+        }
+        if (scenario.name.startsWith("swapped paragraphs")) {
+          // Text that moved is shown where it was and where it is now; it
+          // is not a reflow, which would hide the old side.
+          for (const strips of [before, after]) {
+            expect(text(strips)).toContain("Moved paragraph sentinel");
+            expect(text(strips)).toContain("Staying paragraph sentinel");
+          }
+          expect(blocks.some((b) => "reflow" in b && b.reflow)).toBe(false);
+          // It is drawn in blue on both sides, and the block says it moved.
+          const blue = (strips: Strip[]) =>
+            strips.some((s) =>
+              fs
+                .readFileSync(path.join(folder, s.src), "utf8")
+                .includes('fill="#2563c9"'),
+            );
+          expect(blue(before)).toBe(true);
+          expect(blue(after)).toBe(true);
+          expect(blocks.some((b) => "moved" in b && b.moved)).toBe(true);
         }
         if (scenario.relocated)
           expect(before.some((a) => after.some((b) => a.page !== b.page))).toBe(
@@ -320,8 +463,91 @@ ${scenario.body}
           expect(text(before)).not.toContain("First sentinel");
           expect(text(after)).not.toContain("First sentinel");
         }
+        if (scenario.name.startsWith("restyled table")) {
+          expect(text(before)).not.toContain("We evaluate");
+          expect(text(after)).not.toContain("We evaluate");
+          // Restyled cells are the same words: no removed or added marks.
+          expect(
+            normalized(before.map((s) => marked(s, folder)).join("")),
+          ).toBe("");
+          expect(normalized(after.map((s) => marked(s, folder)).join(""))).toBe(
+            "",
+          );
+        }
+        if (scenario.name.startsWith("shortened paragraph")) {
+          // The old paragraph ends on the next page; its review shows that
+          // part too, though the new paragraph fits on one page.
+          expect(before.some((s) => s.page === 2)).toBe(true);
+          expect(after.every((s) => s.page === 1)).toBe(true);
+          expect(text(before)).toContain("Ending sentinel concludes.");
+          const removed = normalized(
+            before.map((s) => marked(s, folder)).join("\n"),
+          );
+          expect(removed).toContain("obsolete");
+          expect(removed).not.toContain("Ending");
+        }
         if (scenario.name.includes("deletion"))
           expect(text(after)).not.toContain("obsolete");
+        if (scenario.completeDisplay) {
+          const builds = app.review.round(task.name, 1).summary.builds;
+          for (const [key, strips] of [
+            [builds[0], before],
+            [builds.at(-1)!, after],
+          ] as const) {
+            const info = JSON.parse(
+                fs.readFileSync(
+                  path.join(app.state, "cache/builds", key, "result.json"),
+                  "utf8",
+                ),
+              ),
+              document = new PdfDocument(info.pdf);
+            try {
+              const page = document.page(0),
+                above = page.lines.find((l) =>
+                  l.text.includes("Above sentinel"),
+                )!,
+                below = page.lines.find((l) =>
+                  l.text.includes("Below sentinel"),
+                )!,
+                top = above.rect[3] + 1,
+                bottom = below.rect[1] - 1,
+                scale = 4,
+                image = page.raster(
+                  [0, top, page.width, bottom],
+                  scale,
+                  true,
+                  true,
+                );
+              // Count the actual painted pixels of the complete display,
+              // independently of text boxes and the alignment's crop rules.
+              let ink = 0,
+                shown = 0;
+              for (let y = 0; y < image.height; y++)
+                for (let x = 0; x < image.width; x++) {
+                  if (image.pixels[y * image.stride + x] >= 100) continue;
+                  ink++;
+                  const px = (x + 0.5) / scale,
+                    py = top + (y + 0.5) / scale;
+                  if (
+                    strips.some(
+                      (s) =>
+                        s.page === 1 &&
+                        px >= (s.left ?? 0) &&
+                        px < (s.left ?? 0) + s.width &&
+                        py >= (s.top ?? 0) &&
+                        py < (s.top ?? 0) + s.height,
+                    )
+                  )
+                    shown++;
+                }
+              expect(ink).toBeGreaterThan(0);
+              expect(shown / ink).toBeGreaterThan(0.995);
+              expect(text(strips)).not.toContain("sentinel");
+            } finally {
+              document.close();
+            }
+          }
+        }
         // Independently extract both complete PDFs with Poppler, so an extraction mistake
         // in our MuPDF text layer cannot make a wrong expected phrase pass unnoticed.
         if (which("pdftotext")) {
