@@ -622,6 +622,67 @@ it.each([false, true])(
       }
   },
 );
+it.each([false, true])(
+  "keeps both documents complete when continuation rows share words (chained %s)",
+  (chained) => {
+    const prefix = Array.from(
+        { length: 4 },
+        (_, i) => `Stable opening context ${i}`,
+      ),
+      suffix = Array.from(
+        { length: 4 },
+        (_, i) => `Stable closing context ${i}`,
+      ),
+      old = pdf([
+        ...prefix,
+        "Opening old interoperability",
+        "extraordinary balance remains",
+        ...suffix,
+      ]),
+      next = pdf([
+        ...prefix,
+        "Opening new inter-",
+        ...(chained
+          ? ["operability extraor-", "dinary balance remains"]
+          : ["operability extraordinary balance remains"]),
+        ...suffix,
+      ]),
+      al = alignment(build(old), build(next))!,
+      at = (doc: PdfDocument, text: string): Position[] => {
+        const w = printed(doc).find((w) => w.text === text)!;
+        return [{ page: w.page, clip: w.rect, label: "" }];
+      },
+      groups = alignedCrops(al, at(old, "old"), at(next, "new"), false)!,
+      right = groups.flatMap((g) => g.right),
+      left = groups.flatMap((g) => g.left),
+      visible = (name: "old" | "new", t: number, crops: Position[]) => {
+        const w = al[name].words,
+          token = w.tokens[t];
+        return w.glyphs
+          .slice(token.start, token.end)
+          .some((g) => inside(g, crops));
+      };
+    for (const [t, token] of al.new.words.tokens.entries()) {
+      if (!visible("new", t, right)) continue;
+      // A shared physical row cannot end halfway through another word.
+      for (const g of al.new.words.glyphs.slice(token.start, token.end))
+        expect(
+          right.some(
+            (p) =>
+              p.page === g.page &&
+              p.clip[0] <= g.rect[0] &&
+              p.clip[1] <= g.rect[1] &&
+              p.clip[2] >= g.rect[2] &&
+              p.clip[3] >= g.rect[3],
+          ),
+          token.text,
+        ).toBe(true);
+      const other = al.tokens.new[t];
+      if (other >= 0)
+        expect(visible("old", other, left), token.text).toBe(true);
+    }
+  },
+);
 it("fades the words of an old row that the context shows, and only those", () => {
   const around = (n: number) =>
       Array.from({ length: 6 }, (_, i): [number, string][] => [

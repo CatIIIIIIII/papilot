@@ -705,6 +705,26 @@ function linesCrops(
     side.parts[last + 1]?.[0] ?? null,
   );
 }
+// Words touched by the actual footprint, including words sharing a row
+// with a continuation from an earlier logical line.
+function visibleTokens(side: Side, crops: Position[]): Set<number> {
+  const shown = new Set<number>(),
+    w = side.words;
+  for (const at of crops)
+    for (const line of side.byPage.get(at.page) ?? []) {
+      const [start, end] = w.lines[line];
+      for (let t = start; t < end; t++)
+        for (let g = w.tokens[t].start; g < w.tokens[t].end; g++)
+          if (
+            w.glyphs[g].page === at.page &&
+            containsCenter(at.clip, w.glyphs[g].rect)
+          ) {
+            shown.add(t);
+            break;
+          }
+    }
+  return shown;
+}
 // A region is cut at its words. Its new crop holds the lines from its first
 // changed word to its last, and where only one side changed, the words on
 // either side of the change, so that both crops show where it is; a region
@@ -758,9 +778,20 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
     [first, last] = [gap.new[0] + 1, gap.new[1] - 1];
     if (first > last) return null;
   }
-  const lines = al.new.words.lines,
-    above = equal("new", lines[first][0], -1),
-    below = equal("new", lines[last][1] - 1, 1);
+  // Close the footprint over whole words before selecting its counterpart.
+  // A continuation row may share another word that continues in turn.
+  let right: Position[], shownNew: Set<number>;
+  for (;;) {
+    right = linesCrops(al, "new", first, last);
+    shownNew = visibleTokens(al.new, right);
+    if (!shownNew.size) return null;
+    const lo = Math.min(first, al.new.tokenLine[Math.min(...shownNew)]),
+      hi = Math.max(last, al.new.tokenLine[Math.max(...shownNew)]);
+    if (lo === first && hi === last) break;
+    [first, last] = [lo, hi];
+  }
+  const above = equal("new", Math.min(...shownNew), -1),
+    below = equal("new", Math.max(...shownNew), 1);
 
   if (below - above < 2) return null;
   let oldFirst = al.old.tokenLine[above + 1],
@@ -773,26 +804,15 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
   // the new crop, fades: the context strips show it. Any other word is
   // read in the old crop.
   const w = al.old.words,
-    nw = al.new.words,
     left = linesCrops(al, "old", oldFirst, oldLast),
-    right = linesCrops(al, "new", first, last),
-    shownNew = (t: number) => {
-      for (let g = nw.tokens[t].start; g < nw.tokens[t].end; g++) {
-        const { page, rect } = nw.glyphs[g];
-        if (
-          right.some((at) => at.page === page && containsCenter(at.clip, rect))
-        )
-          return true;
-      }
-      return false;
-    },
     faded = new Map<number, Rect[]>();
   for (const at of left)
     for (const line of al.old.byPage.get(at.page) ?? []) {
       const [i, j] = w.lines[line];
       for (let t = i; t < j; t++) {
         const other = al.tokens.old[t];
-        if ((t > above && t < below) || other < 0 || shownNew(other)) continue;
+        if ((t > above && t < below) || other < 0 || shownNew.has(other))
+          continue;
         for (let g = w.tokens[t].start; g < w.tokens[t].end; g++) {
           const { page, rect } = w.glyphs[g];
           if (page === at.page && containsCenter(at.clip, rect))
