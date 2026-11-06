@@ -61,7 +61,11 @@ try {
   await page.getByRole('button', { name: /^(Hide task list|隐藏任务列表)$/ }).click();
   const restoreSidebar = page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ });
   await expect(restoreSidebar).toBeVisible();
-  assert.ok((await restoreSidebar.boundingBox()).x >= (process.platform === 'linux' ? 112 : 92), 'Controls never overlap the window buttons when the sidebar is hidden');
+  // Loading the paper can briefly replace this button after the visibility check.
+  // Keep the same geometry requirement, but wait for the new element to settle.
+  await expect.poll(async () => (await restoreSidebar.boundingBox())?.x ?? -Infinity, {
+    message: 'Controls never overlap the window buttons when the sidebar is hidden',
+  }).toBeGreaterThanOrEqual(process.platform === 'linux' ? 112 : 92);
   await restoreSidebar.click();
   if (process.platform === 'linux') {
     const maximize = page.getByRole('button', { name: /^(Maximize or restore window|最大化或还原窗口)$/ });

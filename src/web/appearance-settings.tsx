@@ -38,6 +38,15 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
   </div>;
 }
 
+function PaperAppearanceOptions<T extends Appearance['review']>({ label, name, value, options, onChange }: { label: string; name: string; value: T; options: readonly T[]; onChange: (value: T) => void }) {
+  return <div className="segmented appearance-paper-options" role="radiogroup" aria-label={label}>
+    {options.map(mode => <label key={mode} className={value === mode ? 'checked' : undefined}>
+      <input type="radio" name={name} value={mode} checked={value === mode} onChange={() => onChange(mode)}/>
+      <span>{mode === 'pdf' ? 'PDF' : mode === 'theme' ? t('Auto') : t('Original')}</span>
+    </label>)}
+  </div>;
+}
+
 export function AppearanceSettings({ theme, onTheme, resolved, appearance, onAppearance }: AppearanceSettingsProps) {
   const colors = appearanceColors(appearance, resolved);
   const customized = Object.values(appearance.colors).some(colors => colors.background || colors.foreground);
@@ -64,6 +73,16 @@ export function AppearanceSettings({ theme, onTheme, resolved, appearance, onApp
           </div>
         </div>
       </div>
+      <div className="settings-card appearance-paper-card">
+        <div className="settings-row settings-choice appearance-paper-row">
+          <div className="settings-text"><span className="settings-name">{t('PDF appearance')}</span><p>{t('Auto matches the interface mode.')}</p></div>
+          <PaperAppearanceOptions label={t('PDF appearance')} name="pdf-appearance" value={appearance.pdf} options={['theme', 'light']} onChange={pdf => onAppearance({ ...appearance, pdf })}/>
+        </div>
+        <div className="settings-row settings-choice appearance-paper-row">
+          <div className="settings-text"><span className="settings-name">{t('Review appearance')}</span><p>{t('PDF uses the setting above.')}</p></div>
+          <PaperAppearanceOptions label={t('Review appearance')} name="review-appearance" value={appearance.review} options={['pdf', 'theme', 'light']} onChange={review => onAppearance({ ...appearance, review })}/>
+        </div>
+      </div>
       <div className="settings-card appearance-colors-card">
         <div className="settings-row">
           <span className="settings-name">{t('Theme')}</span>
@@ -81,12 +100,6 @@ export function AppearanceSettings({ theme, onTheme, resolved, appearance, onApp
       </div>
       <p className="appearance-hint">{resolved === 'light' ? t('Editing light mode colors. Changes are saved automatically.') : t('Editing dark mode colors. Changes are saved automatically.')}</p>
     </section>
-    <details className="appearance-advanced">
-      <summary>{t('Advanced')}<Icon name="chevronRight" size={15}/></summary>
-      <div className="settings-card">
-        <div className="settings-row settings-choice"><div className="settings-text"><span className="settings-name">{t('PDF appearance')}</span><p>{t('Choose how paper pages look in dark mode.')}</p></div><ChipSelect label={t('PDF appearance')} value={appearance.pdf} options={[{ value: 'theme', label: t('Follow mode') }, { value: 'light', label: t('Always light') }]} onChange={value => onAppearance({ ...appearance, pdf: value as Appearance['pdf'] })}/></div>
-      </div>
-    </details>
     <button type="button" className="appearance-reset" onClick={() => { onAppearance(DEFAULT_APPEARANCE); onTheme('system'); }}><Icon name="restore" size={15}/>{t('Reset appearance')}</button>
   </div>;
 }
