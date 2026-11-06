@@ -43,6 +43,8 @@ jobs:
       - run: npm run setup:review
       - run: npm run typecheck
       - run: npm test
+      - name: PDF diff engine tests
+        run: npm --prefix engine test
       - run: npm run i18n -- check
       - run: npm run i18n:check-app
       - run: npm run build
