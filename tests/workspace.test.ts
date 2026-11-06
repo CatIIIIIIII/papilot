@@ -65,6 +65,31 @@ function uncertainRun(f: ReturnType<typeof fixture>, active = true) {
   return run;
 }
 
+test('comparison progress reaches workspace snapshots and clears when the build finishes', async () => {
+  const progress = { baseline: { step: 'tex', pass: 2, pages: 23, total: 180 } };
+  let finished = false;
+  const f = fixture(async (_method, route) => {
+    if (route.endsWith('/publish')) return { job: 'job' };
+    if (route.includes('/jobs/')) return finished ? { status: 'done', phase: 'render', round: 1 } : { status: 'running', phase: 'build', createdAt: 1234, progress };
+    if (route.includes('/feedback')) return feedback;
+    return summary;
+  });
+  try {
+    const updated = new Promise<void>(resolve => f.workspace.on('change', () => {
+      if (f.store.task(f.task.id).review?.job?.progress) resolve();
+    }));
+    const published = f.workspace.publish(f.task.id);
+    await updated;
+    assert.equal(f.workspace.snapshot().tasks[0].status, 'building');
+    assert.deepEqual(f.workspace.snapshot().tasks[0].review?.job, { id: 'job', status: 'running', phase: 'build', createdAt: 1234, progress });
+    finished = true;
+    await published;
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.store.task(f.task.id).pendingBuild, null);
+    assert.equal(f.store.task(f.task.id).review?.job?.progress, undefined);
+  } finally { f.close(); }
+});
+
 function identifiedTurn(run: Run, status = 'inProgress') {
   return { id: 'turn-confirmed', status, items: [{ type: 'userMessage', clientId: run.id }] };
 }

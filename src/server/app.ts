@@ -9,7 +9,7 @@ import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
 import { reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
-import { fullPaperPdf, nextPaperPass, paperPassPdf, preparePaper } from './pdf.ts';
+import { fullPaperPdf, nextPaperPass, paperPassPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
@@ -127,12 +127,11 @@ export async function buildApp(options: AppOptions) {
       void manuscripts.refresh(project.id, project.path).catch(() => undefined);
     } catch { /* The paper or task is gone. */ }
   });
-  // A deferred task is applied as a whole once it is reviewed, so after each
-  // new round and each decision the manuscript it will produce compiles in
-  // the background.
+  // Prepare the manuscript only after the author has decided the proposal.
+  // Pending chapter edits must not trigger speculative full-paper builds.
   const predict = async (taskId: string) => {
     const task = store.task(taskId), project = store.project(task.projectId);
-    if (!task.deferred || task.mode === 'review' || task.delivery?.pending || task.status === 'deleting') return;
+    if (!task.deferred || task.mode === 'review' || task.delivery?.pending || task.status === 'deleting' || (task.review?.counts.pending ?? 0) > 0) return;
     const client = await connectReview(project.path);
     const preview = await client.get<{ files: Record<string, string | null> | null }>(`${taskRoute(task.name)}/preview`);
     if (preview.files) await manuscripts.predict(project.id, project.path, Object.fromEntries(Object.entries(preview.files).map(([file, data]) => [file, data === null ? null : Buffer.from(data, 'base64')])));
@@ -140,12 +139,7 @@ export async function buildApp(options: AppOptions) {
   if (!predicting.has(workspace)) {
     predicting.add(workspace);
     workspace.on('reviewed', (taskId: string) => void predict(taskId).catch(() => undefined));
-    // While a round compiles its changed chapters, the whole new version
-    // compiles too, for the review's full paper and often for the commit.
-    workspace.on('publishing', (taskId: string, revision: string) => {
-      try { preparePaper(store.project(store.task(taskId).projectId).path, revision, 'background'); }
-      catch { /* The task is gone. */ }
-    });
+    // The review's complete PDF is compiled on demand when opened.
   }
   app.addHook('onError', async request => { projectRequests.get(request)?.(); });
   await app.register(compress);

@@ -1077,7 +1077,7 @@ test('inline source writes use the review token and reserve the task while its P
   } finally { finish({ status: 'done' }); engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); await f.close(); }
 });
 
-test('writing a paper compiles its manuscript at once, and a reviewed deferred task compiles what applying it will write', async () => {
+test('writing a paper compiles its manuscript, while pending chapter proposals do not precompile the whole paper', async () => {
   const f = await fixture();
   try {
     const refreshed: string[][] = [], predicted: [string, string, Record<string, string | null>][] = [];
@@ -1105,6 +1105,11 @@ test('writing a paper compiles its manuscript at once, and a reviewed deferred t
     } finally { engine.close(); }
     f.store.updateTask('thesis-task', { deferred: true, review: { state: 'reviewing', round: 1, counts: { pending: 1 }, unsent: 0 } } as any);
     f.review.get = async (route: string) => (route.endsWith('/preview') ? { files: { 'main.tex': Buffer.from('Applied.\n').toString('base64'), 'old.tex': null } } : {}) as any;
+    f.workspace.emit('publishing', 'thesis-task', 'proposed-revision');
+    f.workspace.emit('reviewed', 'thesis-task');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(predicted, [], 'undecided proposals do not start a speculative full manuscript build');
+    f.store.updateTask('thesis-task', { review: { state: 'done', round: 1, counts: { accepted: 1 }, unsent: 0 } });
     f.workspace.emit('reviewed', 'thesis-task');
     for (let i = 0; i < 20 && !predicted.length; i++) await new Promise(resolve => setTimeout(resolve, 5));
     assert.deepEqual(predicted, [['thesis', '/unused/thesis', { 'main.tex': 'Applied.\n', 'old.tex': null }]], 'once, though two listeners serve the workspace');

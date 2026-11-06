@@ -1285,5 +1285,8 @@
   "{n} review update": "{n} observação de revisão",
   "{n} review update included": "{n} observação de revisão incluída",
   "{n} review updates": "{n} observações de revisão",
-  "{n} review updates included": "{n} observações de revisão incluídas"
+  "{n} review updates included": "{n} observações de revisão incluídas",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "Preparando as duas versões para comparação. Documentos longos podem levar alguns minutos.",
+  "Comparing the typeset pages…": "Comparando as páginas diagramadas…",
+  "Elapsed: {time}": "Tempo decorrido: {time}"
 }

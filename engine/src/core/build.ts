@@ -32,6 +32,14 @@ const AUXILIARY = new Set([
   ".out",
   ".thm",
 ]);
+// Only generated-state diagnostics justify rebuilding a cached seed. Source
+// errors and interrupted compilers must keep their original failure.
+export function auxiliaryBuildError(error: unknown): error is BuildError {
+  return error instanceof BuildError && error.details.some((line) => {
+    const file = /(?:^|[/\\\s(])(?:\.\/)?build[/\\]([^:\r\n]+):\d+:/.exec(line)?.[1];
+    return file !== undefined && AUXILIARY.has(path.extname(file));
+  });
+}
 // Output that TeX writes for this folder: SyncTeX data and the log name its
 // absolute path.
 const OUTPUT = /\.(?:pdf|xdv|dvi|log|synctex(?:\.gz)?)$/i;
@@ -76,12 +84,13 @@ interface Active {
   // Who is shown each pass, and the latest pass that more work followed.
   watchers: Set<(preview: PassPreview) => void>;
   followed?: () => void;
+  progress?: BuildProgress;
 }
 const active = new Set<Active>();
 // Everyone in this process who waits for each build key. A build runs at the
 // highest priority among them and shows its passes to all of them, also to
 // those who asked before it started compiling.
-interface Waiter { priority: BuildPriority; pass?: (preview: PassPreview) => void }
+interface Waiter { priority: BuildPriority; pass?: (preview: PassPreview) => void; progress?: (progress: BuildProgress) => void }
 const waiting = new Map<string, Set<Waiter>>();
 const building = new Map<string, Promise<BuildInfo>>();
 // A background build's compiler stops while any other build of this process
@@ -338,6 +347,42 @@ export class Builder {
         selected.add(dependency);
     return targets.filter((t) => selected.has(t));
   }
+  /** A chapter comparison needs the fixed baseline's auxiliary files, not a
+   *  freshly dated full PDF. Reuse that exact snapshot even across days and
+   *  app upgrades, with the same compatibility checks as incremental builds. */
+  async buildSeed(rev: string, options: { force?: boolean; progress?: (progress: BuildProgress) => void } = {}): Promise<BuildInfo> {
+    if (options.force) return this.build(rev, ["full"], null, options);
+    let version: string;
+    try { version = await commandVersion(this.project.engine); }
+    catch { return this.build(rev, ["full"], null, options); }
+    const tree = await this.repo.treeIdAsync(rev, this.project.source_dir),
+      context = hash(JSON.stringify([signature(this.project), version]));
+    let incomplete = false;
+    for (const entry of this.recent(["full"])) {
+      if (entry.context !== context || (entry.tree && entry.tree !== tree)
+        || (process.env.SOURCE_DATE_EPOCH && entry.date !== process.env.SOURCE_DATE_EPOCH)) continue;
+      let matched = false;
+      try {
+        const folder = path.join(this.cache, entry.key), info = await this.finished(folder);
+        if (!info || info.tree !== tree || JSON.stringify(info.targets) !== '["full"]') continue;
+        matched = true;
+        const main = path.posix.basename(this.project.main), out = path.dirname(info.pdf),
+          auxiliary = new Set([path.basename(main, ".tex") + ".aux"]);
+        await fs.promises.access(path.join(info.cwd, main));
+        // A PDF alone is not a seed: the omitted chapters need their labels
+        // and counters. An incomplete cache falls back to a normal build.
+        for (const file of auxiliary) {
+          const text = await fs.promises.readFile(path.join(out, file), "utf8");
+          for (const match of text.matchAll(/\\@input\{([^}]+\.aux)\}/g)) auxiliary.add(match[1]);
+        }
+        await this.remember(["full"], { ...entry, tree });
+        return info;
+      } catch { incomplete ||= matched; }
+    }
+    // A cached PDF with missing auxiliary state must not be returned again
+    // by the normal build cache, even if it was made earlier today.
+    return this.build(rev, ["full"], null, { ...options, ...(incomplete ? { force: true } : {}) });
+  }
   async build(
     rev: string,
     targets = ["full"],
@@ -379,15 +424,17 @@ export class Builder {
       folder = path.join(this.cache, key);
     // Someone now waits for a build of this key that may already be running,
     // and sees its passes from now on, starting with the latest one.
-    const waiter: Waiter = { priority, pass: options.pass };
+    const waiter: Waiter = { priority, pass: options.pass, progress: options.progress };
     let waiters = waiting.get(key);
     if (!waiters) waiting.set(key, (waiters = new Set()));
     waiters.add(waiter);
     try {
       promote(key, priority);
-      if (options.pass)
-        for (const build of active)
-          if (build.key === key) { build.watchers.add(options.pass); build.followed?.(); }
+      for (const build of active) {
+        if (build.key !== key) continue;
+        if (options.pass) { build.watchers.add(options.pass); build.followed?.(); }
+        if (build.progress) options.progress?.(build.progress);
+      }
       // A build of this key under way in this process is awaited directly,
       // rather than by polling its lock, so its result arrives the moment it
       // is ready. The lock keeps other processes from building it twice.
@@ -434,13 +481,19 @@ export class Builder {
       priority = waiters.reduce<BuildPriority>((top, w) => (RANK[w.priority] > RANK[top] ? w.priority : top), "background");
     const run: Active = { key, priority, paused: false, watchers: new Set(waiters.flatMap((w) => (w.pass ? [w.pass] : []))) };
     active.add(run);
+    // Keep the latest update even when nobody initially requested progress:
+    // another task or PDF view can join this shared compilation later.
+    const progress = (value: BuildProgress) => {
+      run.progress = value;
+      for (const waiter of waiting.get(key) ?? []) waiter.progress?.(value);
+    };
     let result: BuildInfo;
     try {
       try {
-        result = await this.compile(rev, tree, key, targets, seed, date, start, options.progress, run);
+        result = await this.compile(rev, tree, key, targets, seed, date, start, progress, run);
       } catch (error) {
         if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
-        result = await this.compile(rev, tree, key, targets, seed, date, null, options.progress, run);
+        result = await this.compile(rev, tree, key, targets, seed, date, null, progress, run);
       }
     } finally {
       active.delete(run);

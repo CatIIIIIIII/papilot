@@ -1,12 +1,30 @@
 import fs from "node:fs";
 import path from "node:path";
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { which } from "../../src/core/process.ts";
+import { Builder, BuildError } from "../../src/core/build.ts";
 import { view } from "../../src/core/view.ts";
 import { Fixture, METHOD } from "./helpers.ts";
 const tex = Boolean(which("latexmk") && which("pdflatex") && which("synctex"));
 const png = (page: { file: string }) =>
   fs.readFileSync(page.file).subarray(1, 4).toString();
+it.each([
+  ["build/main.aux:2: Undefined control sequence", 2],
+  ["sections/method.tex:2: Undefined control sequence", 1],
+] as const)("bounds seed recovery for preview diagnostics: %s", async (diagnostic, attempts) => {
+  const f = new Fixture(), app = f.app();
+  try {
+    const task = app.tasks.create("seed-recovery");
+    vi.spyOn(Builder.prototype, "planAsync").mockResolvedValue(["sections/method"]);
+    const seed = vi.spyOn(Builder.prototype, "buildSeed").mockResolvedValue({ key: "seed" } as any);
+    const build = vi.spyOn(Builder.prototype, "build").mockRejectedValue(new BuildError("Compilation failed", [diagnostic]));
+    const result = await view(app, task.name, { locations: [`${METHOD}:3`] });
+    expect(result.details).toEqual([diagnostic]);
+    expect(build).toHaveBeenCalledTimes(attempts);
+    expect(seed).toHaveBeenCalledTimes(attempts);
+    if (attempts === 2) expect(seed).toHaveBeenLastCalledWith(task.base, { force: true });
+  } finally { vi.restoreAllMocks(); await f.close(); }
+});
 it.skipIf(!tex)(
   "draws the pages where source lines and printed page numbers are typeset",
   async () => {
