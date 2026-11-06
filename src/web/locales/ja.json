@@ -1285,5 +1285,8 @@
   "{n} review update": "レビューのフィードバック {n} 件",
   "{n} review update included": "レビューのフィードバック {n} 件を添付",
   "{n} review updates": "レビューのフィードバック {n} 件",
-  "{n} review updates included": "レビューのフィードバック {n} 件を添付"
+  "{n} review updates included": "レビューのフィードバック {n} 件を添付",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "比較するために変更前後の版を準備しています。長い文書では数分かかることがあります。",
+  "Comparing the typeset pages…": "組版済みのページを比較しています…",
+  "Elapsed: {time}": "経過時間：{time}"
 }

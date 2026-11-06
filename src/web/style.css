@@ -255,6 +255,15 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .review-placeholder h2{font:400 21px/1.3 var(--serif);margin:0 0 6px;color:var(--text)}
 .review-placeholder p{font-size:14px;line-height:1.6;max-width:360px;margin:0;color:var(--text-2)}
 .review-placeholder>.button{margin-top:18px}
+.comparison-progress{width:min(100%,420px);font-size:13px;margin-top:18px}
+.comparison-build{margin-bottom:14px;text-align:start}
+.comparison-build-label,.comparison-pages{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.comparison-build-label strong{font-weight:500;color:var(--text);flex-shrink:0}
+.comparison-pages{margin-top:8px;font-size:12px;font-variant-numeric:tabular-nums}
+.comparison-pages progress{flex:1;min-width:0;height:5px;border:0;border-radius:3px;overflow:hidden;accent-color:var(--accent)}
+.comparison-pages progress::-webkit-progress-bar{background:var(--bg-active)}
+.comparison-pages progress::-webkit-progress-value{background:var(--accent)}
+.comparison-elapsed{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .review-build-error{border-bottom-color:var(--red-line);background:var(--red-soft);color:var(--red)}
 .review-build-error>span{color:var(--text)}
 /* Review feedback the agent has not received, under the review or at the end of the chat. */

@@ -39,5 +39,8 @@
   "Papilot could not show the notification. Check your system notification settings.": "Papilot 无法显示通知。请检查系统通知设置。",
   "Notification sound": "通知提示音",
   "Notification sounds are managed by your system settings.": "通知提示音由系统设置管理。",
-  "Workflow": "工作流"
+  "Workflow": "工作流",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "正在编译修改前后的版本。长篇论文可能需要几分钟。",
+  "Comparing the typeset pages…": "正在对比排版后的页面…",
+  "Elapsed: {time}": "已用时间：{time}"
 }

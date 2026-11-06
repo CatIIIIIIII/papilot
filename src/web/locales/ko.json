@@ -1285,5 +1285,8 @@
   "{n} review update": "검토 의견 {n}개",
   "{n} review update included": "검토 의견 {n}개 포함",
   "{n} review updates": "검토 의견 {n}개",
-  "{n} review updates included": "검토 의견 {n}개 포함"
+  "{n} review updates included": "검토 의견 {n}개 포함",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "비교할 두 버전을 준비하고 있습니다. 긴 문서는 몇 분 정도 걸릴 수 있습니다.",
+  "Comparing the typeset pages…": "조판된 페이지를 비교하는 중…",
+  "Elapsed: {time}": "경과 시간: {time}"
 }

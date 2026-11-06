@@ -62,6 +62,7 @@ import { forgetBrowserState, isSignedOut, setSignedOut, useSignedOut } from './s
 import { errorText, locale, t, tn, useLanguage } from './i18n.ts';
 import { notificationState, notify, notifying, subscribeNotifications, taskAlerts } from './notifications.ts';
 import { Markdown } from './markdown.tsx';
+import { ComparisonProgress } from './comparison-progress.tsx';
 import logo from './logo.svg';
 import { AgentConnectionNotice, AgentPicker } from './agent-picker.tsx';
 import { taskEffort } from './task-effort.ts';
@@ -882,11 +883,23 @@ function TaskNotes({ notes, currentKey, actions, onShow, controller, cards }: { 
 
 function PendingComparison({ task, busy, onBuild }: { task: Task; busy: boolean; onBuild: () => void }) {
   const answered = noManuscriptChanges(task);
+  // A new publication may still have the previous round's job until its
+  // first poll. Never display that job's progress or elapsed time.
+  const job = task.review?.job && ['queued', 'running'].includes(task.review.job.status)
+    && (!task.pendingBuild || task.pendingBuild.job === task.review.job.id) ? task.review.job : null;
   let title = answered ? t('No manuscript changes') : t('PDF comparison');
   let detail = answered ? t('This task did not change the manuscript. Read the answer in the chat.') : t('Only manuscript changes need a PDF comparison. Answers to questions are in the chat.');
   if (task.status === 'building') {
     title = t('Preparing task results…');
     detail = t('Checking for manuscript changes. A PDF comparison is generated only when needed.');
+    if (job?.status === 'queued') title = t('Queued');
+    else if (job?.phase === 'build') {
+      title = t('Compiling the PDF…');
+      detail = t('Preparing both versions for comparison. Large documents can take several minutes.');
+    } else if (job?.phase === 'render') {
+      title = t('PDF comparison');
+      detail = t('Comparing the typeset pages…');
+    }
   } else if (task.status === 'running' || task.status === 'queued') {
     title = task.status === 'running' ? t('{agent} is working', { agent: agentName(task) }) : t('Queued');
     detail = t('If the task changes the manuscript, a PDF comparison will appear here. Otherwise, read the answer in the chat.');
@@ -900,6 +913,7 @@ function PendingComparison({ task, busy, onBuild }: { task: Task; busy: boolean;
   return <div className="review-placeholder">
     <div className="placeholder-icon">{task.status === 'building' ? <span className="spinner large"/> : <Icon name={answered ? 'chat' : 'diff'} size={22}/>}</div>
     <h2>{title}</h2><p>{detail}</p>
+    {task.status === 'building' && <ComparisonProgress job={job}/>}
     {!answered && ['idle', 'interrupted', 'failed', 'reviewing'].includes(task.status) && <button type="button" className="button secondary" disabled={busy} onClick={onBuild}>{t('Generate PDF comparison')}</button>}
   </div>;
 }

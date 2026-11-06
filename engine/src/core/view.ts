@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { Builder, BuildError } from "./build.ts";
+import { Builder, BuildError, auxiliaryBuildError } from "./build.ts";
 import { cleanPath, within } from "./git.ts";
 import { capture } from "./process.ts";
 import { mupdf } from "../render/pdf.ts";
@@ -115,8 +115,14 @@ export async function view(
     ]);
   let build: BuildInfo;
   try {
-    const seed = targets[0] !== "full" ? await builder.build(task.base) : null;
-    build = await builder.build(request.accepted ? before : after, targets, seed);
+    let seed = targets[0] !== "full" ? await builder.buildSeed(task.base) : null;
+    try {
+      build = await builder.build(request.accepted ? before : after, targets, seed);
+    } catch (error) {
+      if (!seed || !auxiliaryBuildError(error)) throw error;
+      seed = await builder.buildSeed(task.base, { force: true });
+      build = await builder.build(request.accepted ? before : after, targets, seed);
+    }
   } catch (error) {
     if (!(error instanceof BuildError)) throw error;
     return {
