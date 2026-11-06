@@ -134,8 +134,10 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .bar .ghost.undo{flex-shrink:0;white-space:nowrap}
     /* A single compact row: location yields space to the change's controls. */
     .change-head{flex-wrap:nowrap;align-items:center;gap:4px;padding:4px 8px;min-height:36px}
+    :root:not([data-papilot-phone]) .change-head{container:change-tools/inline-size}
     .change-head .dock,.change-head .actions{display:contents}
     .change-head .actions>.nav:first-child{order:1}.change-head .change-number{order:2}.change-head .actions>.nav:not(:first-child){order:3}
+    .change-head .change-number{min-width:0;overflow:hidden;text-overflow:ellipsis}
     .change-head .change-where{order:4;flex:1 1 0;min-width:0;margin-left:4px;color:var(--text-3);font-size:10px}
     .change-head .change-kind,.change-head .badge{order:5;font-size:11px;color:var(--text-3)}
     .change-head .change-kind,.change-head .badge{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
@@ -143,9 +145,13 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .change-head .link{order:7}
     :root:not([data-papilot-phone]) .change-head .position,:root:not([data-papilot-phone]) .change-head .complete{display:none}
     .change-head .actions .undo:disabled{display:none}
-    .change-head .actions .nav{width:28px;height:28px;font-size:18px}
-    .change-head .copy-reference{width:28px;padding:0;justify-content:center;font-size:0}
+    .change-head .actions .nav{flex:none;width:28px;height:28px;font-size:18px}
+    .change-head .copy-reference{flex:none;width:28px;padding:0;justify-content:center;font-size:0}
     .change-head .copy-reference::before{content:"";width:15px;height:15px;background:currentColor;-webkit-mask:var(--icon-copy) center/contain no-repeat;mask:var(--icon-copy) center/contain no-repeat}
+    @container change-tools (max-width:360px){
+      .change-number-full{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+      .change-number-short{display:inline}
+    }
     #paper{--paper-top:14px;padding-top:14px}
     .review-body>#paper{padding-right:34px;overscroll-behavior:contain}
     .change-map{top:10px;bottom:10px;right:8px;width:14px;border:0;border-radius:0;background:none;box-shadow:none}

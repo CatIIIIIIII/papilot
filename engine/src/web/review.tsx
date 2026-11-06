@@ -1003,8 +1003,9 @@ export function ReviewApp({
         <header className="change-head">
           {/* The English number and location are kept for tools that quote
               them to an agent, whatever the interface language. */}
-          <span className="change-number" data-change={index + 1}>
-            {t("Change {n}", { n: index + 1 })}
+          <span className="change-number" data-change={index + 1} title={t("Change {n}", { n: index + 1 })}>
+            <span className="change-number-full">{t("Change {n}", { n: index + 1 })}</span>
+            <span className="change-number-short" aria-hidden="true">#{index + 1}</span>
           </span>
           <span
             className="change-where"

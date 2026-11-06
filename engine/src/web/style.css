@@ -370,6 +370,9 @@ kbd {
   color: var(--ink);
   white-space: nowrap;
 }
+.change-number-short {
+  display: none;
+}
 .change-where {
   flex: 1;
   min-width: 0;

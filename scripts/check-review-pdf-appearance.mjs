@@ -108,7 +108,7 @@ try {
         const bounds = head.getBoundingClientRect();
         return bounds.left >= 0 && bounds.right <= window.innerWidth && bounds.height <= 40 && [...head.querySelectorAll('button')].every(button => {
           const box = button.getBoundingClientRect();
-          return box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
+          return box.width >= 28 && box.height >= 28 && box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
         });
       })).toBe(true);
     }
@@ -117,8 +117,30 @@ try {
   await frame.getByRole('button', { name: 'Next undecided', exact: true }).click();
   await expect(frame.locator('.change.current')).toHaveAttribute('data-stop', '1');
   await checkWidths();
+  // Longer translations and multiple-digit change numbers must not steal
+  // the pointer targets' space in a narrow desktop review pane.
+  const ids = Array.from({ length: 12 }, (_, i) => `change-${i}`);
+  decisions = Object.fromEntries(ids.map(id => [id, 'pending']));
+  detail.units = ids.map((id, i) => ({ ...detail.units[0], id, old_start: i + 1, old_end: i + 1, new_start: i + 1, new_end: i + 1 }));
+  detail.sections[0].blocks = ids.map(id => block(id)); detail.loose = [];
+  for (const language of ['en', 'fr', 'de']) {
+    await page.evaluate(language => localStorage.setItem('papilot:language', language), language);
+    await page.reload();
+    await frame.locator('.change-map-mark').nth(9).click();
+    await expect(frame.locator('.change.current')).toHaveAttribute('data-stop', '9');
+    await checkWidths();
+  }
+  await page.evaluate(() => localStorage.setItem('papilot:language', 'en'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
+  await expect(frame.locator('html')).toHaveAttribute('data-papilot-phone', '');
+  await expect.poll(() => frame.locator('.change.current .dock').evaluate(dock => {
+    const box = dock.getBoundingClientRect();
+    return box.bottom <= innerHeight && box.bottom >= innerHeight - 16 && box.left >= 0 && box.right <= innerWidth;
+  })).toBe(true);
   assert.deepEqual(errors, []);
-  console.log('PASS: all 12 UI/PDF/review appearance combinations, inline and standalone changes, preview filters, controls, LaTeX colors, per-edit action hover states, and pending/decided toolbars at 320/500/700 px.');
+  console.log('PASS: all 12 UI/PDF/review appearance combinations, inline and standalone changes, preview filters, controls, LaTeX colors, per-edit action hover states, pending/decided toolbars at 320/500/700 px, localized two-digit numbers, pointer target sizes, and phone dock positioning.');
 } catch (error) {
   await page.screenshot({ path: 'test-results/review-appearance-failure.png' });
   throw error;
