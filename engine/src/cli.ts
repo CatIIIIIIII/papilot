@@ -28,11 +28,11 @@ class Failure extends Error {
 }
 export const emit = (value: unknown) => console.log(JSON.stringify(value));
 function openBrowser(url: string) {
-  const child = spawn(
-    process.platform === "darwin" ? "open" : "xdg-open",
-    [url],
-    { detached: true, stdio: "ignore" },
-  );
+  // Windows has no open/xdg-open; start hands the URL to the default browser.
+  const command =
+    process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", `"${url}"`] : [url];
+  const child = spawn(command, args, { detached: true, stdio: "ignore" });
   child.on("error", () => {});
   child.unref();
 }
@@ -40,16 +40,18 @@ export async function doctor() {
   const texHint =
     process.platform === "darwin"
       ? "Install MacTeX, or BasicTeX with latexmk."
-      : "Install TeX Live, e.g. apt install latexmk texlive-latex-recommended.";
+      : process.platform === "win32"
+        ? "Install MiKTeX or TeX Live, and add its binaries to PATH."
+        : "Install TeX Live, e.g. apt install latexmk texlive-latex-recommended.";
   const checks: { name: string; ok: boolean; detail: string; hint?: string }[] =
     [];
   const check = (name: string, ok: boolean, detail: string, hint: string) =>
     checks.push({ name, ok, detail, ...(ok ? {} : { hint }) });
   check(
     "platform",
-    process.platform !== "win32",
+    ["darwin", "linux", "win32"].includes(process.platform),
     process.platform,
-    "Use macOS, Linux or WSL.",
+    "Use macOS, Linux or Windows.",
   );
   check(
     "node",

@@ -118,7 +118,10 @@ export class Repo {
     try {
       return run(
         gitBinary(),
-        ["-c", "core.quotepath=off", "--literal-pathspecs", ...args],
+        // Papilot compares working-tree bytes with Git blobs. Windows Git
+        // defaults to converting line endings, which would make a checkout
+        // differ from its own blob; every operation here treats files as-is.
+        ["-c", "core.quotepath=off", "-c", "core.autocrlf=false", "--literal-pathspecs", ...args],
         { cwd: this.root, ...options },
       ).stdout;
     } catch (error) {
@@ -133,7 +136,7 @@ export class Repo {
     try {
       return (await capture(
         gitBinary(),
-        ["-c", "core.quotepath=off", "--literal-pathspecs", ...args],
+        ["-c", "core.quotepath=off", "-c", "core.autocrlf=false", "--literal-pathspecs", ...args],
         { cwd: this.root, ...options },
       )).stdout;
     } catch (error) {
@@ -561,7 +564,17 @@ export class Repo {
       if (!(await output.next()).done) throw new GitError("Git snapshot export returned unexpected output.");
       const failure = await finished;
       if (failure) throw failure;
-      for (const [target, link] of links) await fs.promises.symlink(link, target);
+      for (const [target, link] of links) {
+        try { await fs.promises.symlink(link, target); }
+        catch (error) {
+          // Windows needs Developer Mode or elevation for file links. Git
+          // checks such links out as plain files holding the target, so a
+          // snapshot stays complete without them.
+          if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM")
+            await fs.promises.writeFile(target, link, "utf8");
+          else throw error;
+        }
+      }
     } finally {
       clearTimeout(timer);
       if (child.exitCode === null) child.kill("SIGKILL");

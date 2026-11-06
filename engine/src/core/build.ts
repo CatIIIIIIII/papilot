@@ -92,6 +92,8 @@ function schedule() {
   for (const build of active) {
     const pause = build.priority === "background" && top > RANK.background;
     if (pause === build.paused || !build.child?.pid || build.child.exitCode !== null) continue;
+    // Windows has no SIGSTOP: a background build simply runs at full speed.
+    if (process.platform === "win32") continue;
     try {
       process.kill(-build.child.pid, pause ? "SIGSTOP" : "SIGCONT");
       build.paused = pause;
