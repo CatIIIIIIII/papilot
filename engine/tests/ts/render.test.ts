@@ -12,6 +12,8 @@ import {
   changedLineBounds,
   foldContext,
   renderDocument,
+  snap,
+  trimmed,
 } from "../../src/render/inline.ts";
 import type { Build } from "../../src/render/locate.ts";
 import { byReading, laneAt, readingKey } from "../../src/render/locate.ts";
@@ -65,6 +67,18 @@ export function document(pages: string[]) {
   documents.push(result);
   return result;
 }
+function drawing(content: string) {
+  const raw = new mupdf.PDFDocument(),
+    page = raw.addPage([0, 0, 200, 200], 0, {}, content);
+  raw.insertPage(-1, page);
+  const buffer = raw.saveToBuffer(""),
+    doc = new PdfDocument(buffer.asUint8Array().slice());
+  documents.push(doc);
+  buffer.destroy();
+  page.destroy();
+  raw.destroy();
+  return doc;
+}
 const positions = (doc: PdfDocument): Position[] =>
   Array.from({ length: doc.length }, (_, page) => ({
     page,
@@ -78,24 +92,28 @@ it("retains faint coloured drawings while omitting truly blank strips", () => {
   folders.push(folder);
   const strips = new Strips(folder);
   for (const color of ["1 0.99 0.99", "0.99 0.99 1", "1 1 1"]) {
-    const raw = new mupdf.PDFDocument(),
-      page = raw.addPage(
-        [0, 0, 200, 200],
-        0,
-        {},
-        `${color} rg 40 40 20 20 re f`,
-      );
-    raw.insertPage(-1, page);
-    const buffer = raw.saveToBuffer(""),
-      doc = new PdfDocument(buffer.asUint8Array().slice());
-    documents.push(doc);
-    buffer.destroy();
-    page.destroy();
-    raw.destroy();
+    const doc = drawing(`${color} rg 40 40 20 20 re f`);
     const strip = strips.write(doc, 0, 139, 161, [], "", [39, 61]);
     if (color === "1 1 1") expect(strip).toBeNull();
     else expect(strip).not.toBeNull();
   }
+});
+it("keeps faint ink at both crop edges while trimming only blank rows", () => {
+  const doc = drawing(
+    "1 0.99 0.99 rg 40 158 20 2 re f " +
+      "0 0 0 rg 40 148 20 2 re f " +
+      "0.99 0.99 1 rg 40 138 20 2 re f",
+  );
+  // The three printed bands occupy y=40..42, 50..52, and 60..62.
+  expect(trimmed(doc, 0, 35, 65, [35, 65])).toEqual([39, 63]);
+  expect(snap(doc, 0, 41, 61, [35, 65])).toEqual([40, 62]);
+  expect(trimmed(doc, 0, 70, 80, [35, 65])).toEqual([70, 80]);
+});
+it("keeps the raster scale when a fractional crop reaches the page edge", () => {
+  const doc = drawing("0 0 0 rg 40 .7 20 10 re f");
+  // Ink ends at y=199.3. A partial final raster row must not compress all
+  // the preceding rows and move the bottom boundary back into that ink.
+  expect(snap(doc, 0, 190, 195.3, [35, 65])[1]).toBeCloseTo(199.3);
 });
 afterEach(() => {
   documents.splice(0).forEach((d) => d.close());

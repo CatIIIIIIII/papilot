@@ -29,7 +29,13 @@ import {
   sectionIntervals,
   type Intervals,
 } from "./locate.ts";
-import { containsCenter, intersect, intersects, PdfDocument } from "./pdf.ts";
+import {
+  containsCenter,
+  intersect,
+  intersects,
+  PdfDocument,
+  type Raster,
+} from "./pdf.ts";
 import { textChanges } from "./pdfdiff.ts";
 import { partition, regions } from "./plan.ts";
 const RUN_GAP = 3,
@@ -389,6 +395,18 @@ export function changedLineBounds(
       ]
     : [position.clip[1], position.clip[3]];
 }
+// White is the page background. A contrast threshold would discard faint
+// coloured ink at a crop edge even though the PDF comparison can see it.
+function inkRows(image: Raster): boolean[] {
+  return Array.from({ length: image.height }, (_, row) =>
+    image.pixels
+      .subarray(
+        row * image.stride,
+        row * image.stride + image.width * image.channels,
+      )
+      .some((channel) => channel !== 255),
+  );
+}
 export function snap(
   document: PdfDocument,
   number: number,
@@ -402,25 +420,17 @@ export function snap(
       y0 = Math.max(0, y0);
       y1 = Math.min(page.height, y1);
       if (y1 - y0 < 1) return [[y0, y1], []];
-      const image = page.raster([x0, y0, x1, y1], 2, true);
-      return [
-        [y0, y1],
-        Array.from({ length: image.height }, (_, r) =>
-          image.pixels
-            .subarray(r * image.stride, r * image.stride + image.width)
-            .some((p) => p < 200),
-        ),
-      ];
+      return [[y0, y1], inkRows(page.raster([x0, y0, x1, y1], 2, false, true))];
     };
   let [clip, rows] = ink(bottom, bottom + limit),
     index = rows.findIndex((filled) => !filled);
   if (index >= 0)
-    bottom = clip[0] + (index * (clip[1] - clip[0])) / rows.length;
+    bottom = Math.min(clip[1], clip[0] + index / 2);
   else if (rows.length) bottom = clip[1];
   [clip, rows] = ink(top - limit, top);
   index = rows.findLastIndex((filled) => !filled);
   if (index >= 0)
-    top = clip[0] + ((index + 1) * (clip[1] - clip[0])) / rows.length;
+    top = Math.min(clip[1], clip[0] + (index + 1) / 2);
   else if (rows.length) top = clip[0];
   return [top, bottom];
 }
@@ -438,20 +448,14 @@ export function trimmed(
   top = Math.max(0, top);
   bottom = Math.min(page.height, bottom);
   if (bottom - top < 1) return [top, bottom];
-  const image = page.raster([x0, top, x1, bottom], 2, true),
-    rows = Array.from({ length: image.height }, (_, r) =>
-      image.pixels
-        .subarray(r * image.stride, r * image.stride + image.width)
-        .some((p) => p < 200),
-    ),
-    scale = (bottom - top) / rows.length,
+  const rows = inkRows(page.raster([x0, top, x1, bottom], 2, false, true)),
     first = rows.indexOf(true),
     last = rows.lastIndexOf(true);
   return first < 0
     ? [top, bottom]
     : [
-        Math.max(top, top + first * scale - 1),
-        Math.min(bottom, top + (last + 1) * scale + 1),
+        Math.max(top, top + first / 2 - 1),
+        Math.min(bottom, top + (last + 1) / 2 + 1),
       ];
 }
 export function foldContext<T extends Piece>(
