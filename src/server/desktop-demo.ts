@@ -10,11 +10,14 @@ import { findExecutable } from '../../bin/agent-paths.mjs';
 
 // A source fingerprint without Git lets the bundled preview remain readable
 // before installation, without claiming an edited paper matches that PDF.
-function sourceTree(root: string) {
+function sourceTree(root: string, legacy = false) {
   const hash = createHash('sha256');
   const walk = (directory: string) => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       if (entry.name === '.git' || entry.name === 'preview') continue;
+      // npm omits this metadata from the bundle; Git initialization recreates
+      // it without changing the paper that produced the bundled PDF.
+      if (!legacy && directory === root && entry.name === '.gitignore') continue;
       const file = path.join(directory, entry.name);
       hash.update(JSON.stringify(path.relative(root, file).split(path.sep)));
       if (entry.isDirectory()) walk(file);
@@ -71,7 +74,12 @@ export async function desktopDemo(root: string, data: string, store: Store, work
     for (const tree of new Set([saved.source, saved.tree])) if (tree) await manuscripts.rememberPreview(project.path, tree, pdf);
   }
   let previewOnly = false;
-  const unchanged = () => { try { return Boolean(saved.source) && sourceTree(project!.path) === saved.source; } catch { return false; } };
+  const unchanged = () => {
+    try {
+      // Keep fingerprints written before Git metadata was excluded readable.
+      return Boolean(saved.source) && (sourceTree(project!.path) === saved.source || sourceTree(project!.path, true) === saved.source);
+    } catch { return false; }
+  };
   const seed = async () => {
     if (!project || !fs.existsSync(pdf)) return;
     if (!hasGit()) {

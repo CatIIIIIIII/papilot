@@ -4,11 +4,69 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { Store } from '../src/server/store.ts';
 import { Workspace } from '../src/server/workspace.ts';
 import { Manuscripts } from '../src/server/manuscript.ts';
 import { desktopDemo } from '../src/server/desktop-demo.ts';
 import { mupdf } from '../engine/src/render/pdf.ts';
+
+for (const installed of [true, false]) test(`packaged demo remains ready when Git is ${installed ? 'already installed' : 'installed later'}`, async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-demo-packaged-'));
+  const root = path.join(directory, 'bundle'), data = path.join(directory, 'data');
+  fs.mkdirSync(data);
+  const source = path.join(root, 'examples/papilot-paper');
+  fs.cpSync(path.join(process.cwd(), 'examples/papilot-paper'), source, { recursive: true });
+  // npm pack omits .gitignore; repository initialization adds one to the copy.
+  fs.rmSync(path.join(source, '.gitignore'));
+  const store = new Store(path.join(data, 'papilot.sqlite')), workspace = new Workspace(store), manuscripts = new Manuscripts();
+  let git = installed, seeds = 0;
+  const seed = manuscripts.seedPreview.bind(manuscripts);
+  manuscripts.seedPreview = async (...args) => { seeds++; return seed(...args); };
+  try {
+    const enable = await desktopDemo(root, data, store, workspace, manuscripts, () => git);
+    assert.equal(seeds, 1, 'A packaged sample must use its bundled PDF');
+    if (!git) { git = true; await enable(); assert.equal(seeds, 2, 'Installing Git keeps the preview current'); }
+    const [project] = store.projects();
+    const state = await manuscripts.state(project.id, project.path);
+    assert.equal(state.build.status, 'ready'); assert.equal(state.build.current, true);
+    assert.ok(fs.existsSync(path.join(project.path, '.gitignore')));
+    assert.equal(fs.existsSync(path.join(source, '.gitignore')), false, 'The bundle stays unchanged');
+    const restarted = new Manuscripts();
+    await desktopDemo(root, data, store, workspace, restarted, () => true);
+    assert.equal((await restarted.state(project.id, project.path)).build.key, state.build.key);
+  } finally { workspace.close(); store.close(); fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
+});
+
+test('a saved source fingerprint that includes Git metadata stays readable without Git', async () => {
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-demo-old-source-'));
+  const store = new Store(path.join(data, 'papilot.sqlite')), workspace = new Workspace(store);
+  try {
+    await desktopDemo(process.cwd(), data, store, workspace, new Manuscripts(), () => false);
+    const [project] = store.projects();
+    // Reproduce the persisted fingerprint used before packaged-source support.
+    const hash = createHash('sha256');
+    const walk = (directory: string) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+        if (entry.name === '.git' || entry.name === 'preview') continue;
+        const file = path.join(directory, entry.name);
+        hash.update(JSON.stringify(path.relative(project.path, file).split(path.sep)));
+        if (entry.isDirectory()) walk(file);
+        else hash.update(entry.isSymbolicLink() ? fs.readlinkSync(file) : fs.readFileSync(file));
+      }
+    };
+    walk(project.path);
+    const marker = path.join(data, 'desktop-demo.json'), saved = JSON.parse(fs.readFileSync(marker, 'utf8'));
+    saved.source = hash.digest('hex'); fs.writeFileSync(marker, JSON.stringify(saved));
+    const restarted = new Manuscripts();
+    await desktopDemo(process.cwd(), data, store, workspace, restarted, () => false);
+    const before = await restarted.state(project.id, project.path);
+    assert.equal(before.build.status, 'ready'); assert.equal(before.build.current, true);
+    fs.appendFileSync(path.join(project.path, 'main.tex'), '\n% A real source edit\n');
+    assert.equal((await restarted.state(project.id, project.path)).build.current, false);
+    assert.equal(fs.readFileSync(restarted.pdf(project.id, before.build.key!)).subarray(0, 5).toString(), '%PDF-');
+  } finally { workspace.close(); store.close(); fs.rmSync(data, { recursive: true, force: true, maxRetries: 5 }); }
+});
 
 test('demo notes survive installing Git across restarts, including later restarts', async () => {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-demo-notes-'));
