@@ -1318,5 +1318,11 @@
   "Other requests denied": "Otras solicitudes denegadas",
   "Ask before commands": "Confirmar los comandos",
   "Fixed ACP preset": "Preajuste ACP fijo",
-  "Plan first": "Planificar primero"
+  "Plan first": "Planificar primero",
+  "Changes apply to the next turn.": "Los cambios se aplican en el siguiente turno.",
+  "Faster responses; may use more of your limit.": "Respuestas más rápidas; puede consumir más de tu límite.",
+  "PDF uses the setting above.": "PDF usa el ajuste de arriba.",
+  "Review appearance": "Apariencia de la revisión",
+  "Auto matches the interface mode.": "Auto usa el modo de la interfaz.",
+  "Original": "Original"
 }

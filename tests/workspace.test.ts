@@ -13,6 +13,7 @@ import { reviewInstructions } from '../src/conversation.ts';
 import { RpcResponseError, Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
 import { AGENT_IDS, type PendingReview, type Run, type Task } from '../src/shared.ts';
+import { visibleTimeline } from '../src/web/refresh.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -111,6 +112,37 @@ test('late agent events after shutdown never touch the closed database', async (
   assert.doesNotThrow(() => f.codex.emit('disconnected', new Error('Process exited after shutdown')));
   assert.doesNotThrow(() => f.codex.emit('request', { id: 'late', method: 'item/commandExecution/requestApproval', params: { threadId: 'thread' } }));
   await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'late', status: 'interrupted' } } });
+});
+
+test('Claude streamed replies keep explicit state through completion, recovery and interruption', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-stream-state-')), file = path.join(dir, 'state.db');
+  const f = fixture(undefined, { file, claude: new FakeCodex() });
+  const notify = (method: string, params: object) => (f.workspace as any).notification({ method, params: { threadId: 'thread', turnId: 'turn-new', ...params } }, 'claude');
+  const flush = () => (f.workspace as any).flush();
+  try {
+    f.store.updateTask(f.task.id, { agent: 'claude', status: 'running', turnId: 'turn-new' });
+    await notify('item/agentMessage/delta', { itemId: 'msg_reply:1', delta: 'Checking the table.' });
+    flush();
+    assert.equal(f.store.items(f.task.id)[0].status, 'inProgress');
+    await notify('item/completed', { item: { id: 'msg_reply:1', type: 'agentMessage', text: 'Checking the table.' } });
+    const first = f.store.items(f.task.id)[0];
+    assert.equal(first.status, 'completed');
+    // A resumed block can already exist in storage without the new status.
+    const second = { ...first, id: `${f.task.id}:turn-new:msg_reply:2`, text: 'Checking', status: undefined, createdAt: first.createdAt + 1 };
+    f.store.saveItem(second);
+    await notify('item/agentMessage/delta', { itemId: 'msg_reply:2', delta: ' the table.' });
+    // Late deltas must not turn a completed item back into an unfinished one.
+    await notify('item/agentMessage/delta', { itemId: 'msg_reply:1', delta: '' });
+    flush();
+    const items = f.store.items(f.task.id);
+    assert.deepEqual(items.map(item => item.status), ['completed', 'inProgress']);
+    assert.deepEqual(items.map(item => item.text), [first.text, first.text]);
+    assert.deepEqual(visibleTimeline(items), items);
+    f.store.updateTask(f.task.id, { status: 'interrupted', turnId: null });
+    const reloaded = new Store(file);
+    try { assert.deepEqual(visibleTimeline(reloaded.items(f.task.id)), items, 'interrupted replies remain visible from persisted data'); }
+    finally { reloaded.close(); }
+  } finally { f.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Codex defaults come from configuration, including profiles and models outside the catalog', async () => {

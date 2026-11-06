@@ -1318,5 +1318,11 @@
   "Other requests denied": "その他の要求は拒否",
   "Ask before commands": "コマンド実行前に確認",
   "Fixed ACP preset": "固定 ACP 設定",
-  "Plan first": "まず計画"
+  "Plan first": "まず計画",
+  "Changes apply to the next turn.": "変更は次のターンから適用されます。",
+  "Faster responses; may use more of your limit.": "応答が速くなりますが、利用上限をより多く消費する場合があります。",
+  "PDF uses the setting above.": "PDF は上の設定を使用します。",
+  "Review appearance": "レビューの外観",
+  "Auto matches the interface mode.": "自動ではインターフェースのモードに合わせます。",
+  "Original": "元の色"
 }

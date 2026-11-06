@@ -1299,7 +1299,7 @@
   "Bypass sandbox and approvals": "Sandbox und Freigaben umgehen",
   "Sandboxed; other requests denied": "Sandbox; andere Anfragen abgelehnt",
   "Plan": "Plan",
-  "Auto": "Auto",
+  "Auto": "Automatisch",
   "YOLO": "YOLO",
   "Auto edit": "Auto-Bearbeitung",
   "Allow all": "Alles erlauben",
@@ -1318,5 +1318,11 @@
   "Other requests denied": "Andere Anfragen abgelehnt",
   "Ask before commands": "Befehle vorher bestätigen",
   "Fixed ACP preset": "Feste ACP-Vorgabe",
-  "Plan first": "Zuerst planen"
+  "Plan first": "Zuerst planen",
+  "Changes apply to the next turn.": "Änderungen gelten für den nächsten Durchgang.",
+  "Faster responses; may use more of your limit.": "Schnellere Antworten; verbraucht möglicherweise mehr von Ihrem Limit.",
+  "PDF uses the setting above.": "PDF verwendet die obige Einstellung.",
+  "Review appearance": "Darstellung der Überprüfung",
+  "Auto matches the interface mode.": "Automatisch übernimmt den Modus der Oberfläche.",
+  "Original": "Original"
 }

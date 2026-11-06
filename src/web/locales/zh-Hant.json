@@ -1318,5 +1318,11 @@
   "Other requests denied": "其他請求拒絕",
   "Ask before commands": "命令執行前核准",
   "Fixed ACP preset": "固定 ACP 預設",
-  "Plan first": "先規劃"
+  "Plan first": "先規劃",
+  "Changes apply to the next turn.": "變更將套用至下一輪對話。",
+  "Faster responses; may use more of your limit.": "回應速度更快，但可能會消耗較多額度。",
+  "PDF uses the setting above.": "PDF 使用上方的設定。",
+  "Review appearance": "審閱外觀",
+  "Auto matches the interface mode.": "自動使用目前的介面模式。",
+  "Original": "原始"
 }

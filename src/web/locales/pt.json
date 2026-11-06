@@ -1299,7 +1299,7 @@
   "Bypass sandbox and approvals": "Ignorar sandbox e aprovações",
   "Sandboxed; other requests denied": "Sandbox; outros pedidos recusados",
   "Plan": "Plano",
-  "Auto": "Auto",
+  "Auto": "Automático",
   "YOLO": "YOLO",
   "Auto edit": "Edição automática",
   "Allow all": "Permitir tudo",
@@ -1318,5 +1318,11 @@
   "Other requests denied": "Outras solicitações negadas",
   "Ask before commands": "Confirmar os comandos",
   "Fixed ACP preset": "Predefinição ACP fixa",
-  "Plan first": "Planejar primeiro"
+  "Plan first": "Planejar primeiro",
+  "Changes apply to the next turn.": "As alterações se aplicam ao próximo turno.",
+  "Faster responses; may use more of your limit.": "Respostas mais rápidas; pode consumir mais do seu limite.",
+  "PDF uses the setting above.": "PDF usa a configuração acima.",
+  "Review appearance": "Aparência da revisão",
+  "Auto matches the interface mode.": "Automático usa o modo da interface.",
+  "Original": "Original"
 }

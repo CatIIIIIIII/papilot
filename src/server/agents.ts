@@ -12,6 +12,7 @@ import type { AccountInfo, ModelInfo, Options, PermissionResult, SDKMessage, SDK
 import { AGENT_NAMES, type TaskPermissions, type TaskPermissionOption } from '../shared.ts';
 import { DATA, ROOT } from './paths.ts';
 import { imageType } from './attachments.ts';
+import { ClaudeText } from './claude-text.ts';
 
 // Papilot drives every agent through the request and notification surface of
 // the Codex app-server: thread/start, thread/resume, turn/start,
@@ -329,7 +330,7 @@ export class ClaudeAgent extends Adapter {
   private async print(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
     let stopped = false, error = '', stderr = '', denied: string[] = [];
     let promptDirectory: string | undefined;
-    const tools = new Map<string, Item>(), texts = new Map<string, string>();
+    const tools = new Map<string, Item>(), texts = new ClaudeText();
     try {
       const content: Record<string, unknown>[] = [{ type: 'text', text }];
       for (const file of images) {
@@ -382,7 +383,7 @@ export class ClaudeAgent extends Adapter {
   private async execute(turn: Turn, thread: Thread, text: string, effort: string | null, images: string[]) {
     const abort = new AbortController();
     turn.stop = () => abort.abort();
-    const tools = new Map<string, Item>(), texts = new Map<string, string>();
+    const tools = new Map<string, Item>(), texts = new ClaudeText();
     let error = '';
     try {
       const query = await this.load();
@@ -427,18 +428,18 @@ export class ClaudeAgent extends Adapter {
     }
   }
   protected explain(error: string) { return explain(error); }
-  private translate(turn: Turn, thread: Thread, message: SDKMessage, tools: Map<string, Item>, texts: Map<string, string>, fail: (error: string) => void) {
+  private translate(turn: Turn, thread: Thread, message: SDKMessage, tools: Map<string, Item>, texts: ClaudeText, fail: (error: string) => void) {
     if (message.type === 'system' && message.subtype === 'init') {
       if (message.effort && thread.model) this.defaults.set(thread.model, message.effort);
     } else if (message.type === 'stream_event' && !message.parent_tool_use_id) {
       const event = message.event as { type: string; index?: number; message?: { id: string }; delta?: { type: string; text?: string } };
-      if (event.type === 'message_start' && event.message) texts.set('current', event.message.id);
+      if (event.type === 'message_start' && event.message) texts.current = event.message.id;
       if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
-        this.notify('item/agentMessage/delta', { threadId: turn.threadId, turnId: turn.id, itemId: `${texts.get('current')}:${event.index}`, delta: event.delta.text });
+        this.notify('item/agentMessage/delta', { threadId: turn.threadId, turnId: turn.id, itemId: texts.delta(event.index ?? 0, event.delta.text), delta: event.delta.text });
       }
     } else if (message.type === 'assistant' && !message.parent_tool_use_id) {
       message.message.content.forEach((block, index) => {
-        if (block.type === 'text' && block.text.trim()) this.item(turn, { id: `${message.message.id}:${index}`, type: 'agentMessage', text: block.text });
+        if (block.type === 'text' && block.text.trim()) this.item(turn, { id: texts.complete(message.message.id, index, block.text, message.uuid), type: 'agentMessage', text: block.text });
         else if (block.type === 'tool_use') { const item = toolItem(block.id, block.name, block.input as Record<string, any>); tools.set(block.id, item); this.item(turn, item, false); }
       });
     } else if (message.type === 'user' && !message.parent_tool_use_id && Array.isArray(message.message.content)) {

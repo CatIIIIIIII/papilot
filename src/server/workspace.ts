@@ -548,7 +548,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     const id = `${task.id}:${params.turnId}:${params.itemId}`;
     const item = this.liveItems.get(id) || this.store.items(task.id).find(item => item.id === id) || { id, taskId: task.id, type, text: '', createdAt: Date.now() };
     if (type === 'command') item.detail = ((item.detail || '') + (params.delta || '')).slice(-40000);
-    else item.text += params.delta || '';
+    else {
+      item.text += params.delta || '';
+      // Explicit state distinguishes live replies (including interrupted ones)
+      // from the unmarked stream copies left by old Claude adapters.
+      if (type === 'assistant' && item.status === undefined) item.status = 'inProgress';
+    }
     this.liveItems.set(id, item);
     this.flushTimer ??= setTimeout(() => this.flush(), 350);
   }

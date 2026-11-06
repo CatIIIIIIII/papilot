@@ -1318,5 +1318,11 @@
   "Other requests denied": "Övriga förfrågningar nekas",
   "Ask before commands": "Fråga före kommandon",
   "Fixed ACP preset": "Fast ACP-inställning",
-  "Plan first": "Planera först"
+  "Plan first": "Planera först",
+  "Changes apply to the next turn.": "Ändringar tillämpas vid nästa tur.",
+  "Faster responses; may use more of your limit.": "Snabbare svar; kan förbruka mer av din gräns.",
+  "PDF uses the setting above.": "PDF använder inställningen ovan.",
+  "Review appearance": "Granskningens utseende",
+  "Auto matches the interface mode.": "Auto använder gränssnittets läge.",
+  "Original": "Original"
 }
