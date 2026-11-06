@@ -47,7 +47,6 @@
   "Added {n} patterns to .gitignore.": "{n} 件のパターンを .gitignore に追加しました。",
   "Address reviewers": "査読者への対応",
   "Address {n} PDF notes": "{n} 件のPDF注釈に対応",
-  "Advanced": "詳細設定",
   "After": "変更後",
   "After you mark text with the magic pen, its wheel offers these notes, clockwise from the top. Each is sent to the agent as the instruction for that text.": "マジックペンでテキストをマークすると、ホイールの上部から時計回りにこれらの注釈が表示されます。選択した注釈は、そのテキストに対する指示としてエージェントに送信されます。",
   "Agent configuration": "エージェントの構成",
@@ -59,7 +58,6 @@
   "Allow this action": "この操作を許可",
   "Already set up?": "設定済みですか？",
   "Already used for {action}. Choose another shortcut.": "すでに「{action}」で使用されています。別のショートカットを選択してください。",
-  "Always light": "常にライト",
   "An environment variable set in a new terminal does not reach an already running server. Restart Papilot with the credentials; Reconnect alone cannot change its environment.": "新しいターミナルで設定した環境変数は、すでに実行中のサーバーには反映されません。認証情報を設定した状態でPapilotを再起動してください。再接続だけでは環境変数は変更されません。",
   "Annotation group color": "注釈グループの色",
   "Annotation groups": "注釈グループ",
@@ -155,7 +153,6 @@
   "Choose attachments": "添付ファイルを選択",
   "Choose different files": "別のファイルを選択",
   "Choose folder": "フォルダを選択",
-  "Choose how paper pages look in dark mode.": "ダークモードでの論文ページの表示方法を選択します。",
   "Choose on the wheel": "ホイールで選択",
   "Choose the papers to share, then send a personal invite link.": "共有する論文を選択し、個別の招待リンクを送信します。",
   "Choose up to 5,000 files, totaling less than 64 MB.": "合計64 MB未満、最大5,000個のファイルを選択してください。",
@@ -387,7 +384,6 @@
   "Flag": "フラグ",
   "Folder": "フォルダ",
   "Folder path": "フォルダーのパス",
-  "Follow mode": "追従モード",
   "For the SDK instead, start Papilot with ANTHROPIC_API_KEY or a supported cloud provider configured. Restart Papilot after changing its environment.": "代わりに SDK を使用する場合は、ANTHROPIC_API_KEY または対応しているクラウドプロバイダーを設定した状態で Papilot を起動してください。環境を変更した後は Papilot を再起動してください。",
   "Foreground": "前面表示",
   "Full PDF": "PDF 全体",
@@ -1290,5 +1286,10 @@
   "Preparing both versions for comparison. Large documents can take several minutes.": "比較するために変更前後の版を準備しています。長い文書では数分かかることがあります。",
   "Comparing the typeset pages…": "組版済みのページを比較しています…",
   "Elapsed: {time}": "経過時間：{time}",
-  "Install Git in this environment to use version management.": "バージョン管理を使うには、この環境に Git をインストールしてください。"
+  "Install Git in this environment to use version management.": "バージョン管理を使うには、この環境に Git をインストールしてください。",
+  "Auto": "自動",
+  "PDF uses the setting above.": "PDF は上の設定を使用します。",
+  "Review appearance": "レビューの外観",
+  "Auto matches the interface mode.": "自動ではインターフェースのモードに合わせます。",
+  "Original": "元の色"
 }

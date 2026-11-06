@@ -732,3 +732,33 @@ for (const provider of ['claude', 'antigravity']) test(`${provider} reports sync
     if (promptFile) assert.equal(fs.existsSync(promptFile), false);
   } finally { agent.close(); }
 });
+
+for (const transport of ['sdk', 'cli'] as const) test(`Claude ${transport} matches streamed text blocks after thinking to their final messages`, async () => {
+  const stream = (event: unknown) => ({ type: 'stream_event', parent_tool_use_id: null, event });
+  const final = (uuid: string, text: string) => ({ type: 'assistant', uuid, parent_tool_use_id: null, message: { id: 'msg_reply', content: [{ type: 'text', text }] } });
+  const lines = [
+    stream({ type: 'message_start', message: { id: 'msg_reply' } }),
+    stream({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }),
+    stream({ type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } }),
+    stream({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Checking the table.' } }),
+    final('first', 'Checking the table.'),
+    stream({ type: 'content_block_start', index: 2, content_block: { type: 'text', text: '' } }),
+    stream({ type: 'content_block_delta', index: 2, delta: { type: 'text_delta', text: 'Checking the table.' } }),
+    final('second', 'Checking the table.'),
+    final('second', 'Checking the table.'), // Replayed final event keeps its identity.
+    { type: 'result', subtype: 'success', is_error: false },
+  ];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-claude-blocks-'));
+  const fake = fakeClaudeCli(dir, { loggedIn: true }, [lines]);
+  const agent = transport === 'cli'
+    ? new ClaudeAgent(async () => { throw Error('unused SDK'); }, () => fake.bin, fake.launch as any)
+    : new ClaudeAgent(fakeClaude(async function* () { yield* lines; }).load, () => null);
+  try {
+    await agent.start(); const seen = events(agent);
+    const { thread } = await agent.request('thread/start', { cwd: dir });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Check table' }] });
+    await completed(seen);
+    assert.deepEqual(seen.filter(e => e.method === 'item/agentMessage/delta').map(e => e.params.itemId), ['msg_reply:1', 'msg_reply:2']);
+    assert.deepEqual(seen.filter(e => e.method === 'item/completed' && e.params.item.type === 'agentMessage').map(e => e.params.item.id), ['msg_reply:1', 'msg_reply:2', 'msg_reply:2']);
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

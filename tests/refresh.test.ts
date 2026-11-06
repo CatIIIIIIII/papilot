@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ReadRequest, canStreamUpdates, mergeTimeline } from '../src/web/refresh.ts';
+import { ReadRequest, canStreamUpdates, mergeTimeline, visibleTimeline } from '../src/web/refresh.ts';
 import { Store } from '../src/server/store.ts';
 
 function deferred<T>() {
@@ -105,4 +105,64 @@ test('removing a paper or deleting a task forgets its timeline revisions', () =>
   assert.deepEqual(tracked(), ['kept', 'removed']);
   store.removeProject('paper');
   assert.deepEqual(tracked(), ['removed'], "another paper's task keeps its revisions");
+});
+
+test('old Claude streamed duplicates disappear without hiding legitimate repeated replies', () => {
+  const stream = { id: 'task:turn:msg_reply:1', type: 'assistant', text: 'Checking the table.', createdAt: 1 };
+  const final = { ...stream, id: 'task:turn:msg_reply:0', status: 'completed', createdAt: 2 };
+  const again = { ...final, id: 'task:turn:msg_next:0', createdAt: 3 };
+  const otherTurn = { ...stream, id: 'task:other:msg_reply:1' };
+  const tool = { ...stream, type: 'command' };
+  const different = { ...stream, id: 'task:turn:msg_reply:3', text: 'Different reply' };
+  const full = [stream, final, again, otherTurn, tool, different];
+  assert.deepEqual(visibleTimeline(full), [final, again, otherTurn, tool, different]);
+  assert.equal(full.length, 6, 'historical data is not modified');
+  assert.deepEqual(visibleTimeline([stream]), [stream], 'live streaming remains visible');
+  assert.deepEqual(visibleTimeline(mergeTimeline([stream], [final])), [final]);
+  assert.deepEqual(visibleTimeline([{ ...stream, status: 'completed' }, final]).length, 2, 'real repeated completed blocks are retained');
+  const live = { ...stream, id: 'task:turn:msg_reply:2', status: 'inProgress', createdAt: 4 };
+  assert.deepEqual(visibleTimeline([...full, live]), [final, again, otherTurn, tool, different, live], 'a later block is not a legacy duplicate');
+});
+
+test('legacy duplicates stay hidden when a later final overwrote an earlier record', () => {
+  const store = new Store(':memory:');
+  try {
+    const first = { id: 'task:turn:msg_reply:1', taskId: 'task', type: 'assistant', text: 'Checking the table.', createdAt: 1 };
+    const final = { ...first, id: 'task:turn:msg_reply:0', status: 'completed', createdAt: 2 };
+    const second = { ...first, id: 'task:turn:msg_reply:2', text: 'It is too wide.', createdAt: 3 };
+    store.saveItem(first); store.saveItem(final); store.saveItem(second);
+    // Workspace preserves the original createdAt when the old adapter reuses :0.
+    store.saveItem({ ...final, text: second.text });
+    const items = store.items('task');
+    assert.deepEqual(items.map(item => item.id), [first.id, final.id, second.id]);
+    assert.deepEqual(visibleTimeline(items), [first, { ...final, text: second.text }]);
+  } finally { store.close(); }
+});
+
+for (const createdAt of [1, 2]) test(`a repeated Claude block stays visible while streaming, including timestamp ${createdAt}`, () => {
+  const store = new Store(':memory:');
+  try {
+    const first = { id: 'task:turn:msg_reply:1', taskId: 'task', type: 'assistant', text: 'Checking the table.', status: 'completed', createdAt: 1 };
+    const second = { id: 'task:turn:msg_reply:2', taskId: 'task', type: 'assistant', text: 'Checking', status: 'inProgress', createdAt };
+    store.saveItem(first);
+    const initial = store.itemsSince('task');
+    store.saveItem(second);
+    let revision = initial.revision, items = initial.items;
+    const refresh = () => {
+      const next = store.itemsSince('task', revision);
+      revision = next.revision;
+      items = mergeTimeline(items, next.items);
+      assert.deepEqual(visibleTimeline(items), items, 'both distinct blocks remain visible after a partial read');
+    };
+    refresh();
+    second.text = first.text;
+    store.saveItem(second);
+    refresh();
+    assert.deepEqual(visibleTimeline(store.items('task')), items, 'reloading without a final event retains the unfinished block');
+    second.text += ' It is too wide.';
+    store.saveItem(second);
+    refresh();
+    store.saveItem({ ...second, status: 'completed' });
+    refresh();
+  } finally { store.close(); }
 });

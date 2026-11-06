@@ -47,7 +47,6 @@
   "Added {n} patterns to .gitignore.": "{n} padrões adicionados ao .gitignore.",
   "Address reviewers": "Responder aos revisores",
   "Address {n} PDF notes": "Resolver {n} anotações do PDF",
-  "Advanced": "Avançado",
   "After": "Depois",
   "After you mark text with the magic pen, its wheel offers these notes, clockwise from the top. Each is sent to the agent as the instruction for that text.": "Depois de marcar o texto com a caneta mágica, a roda oferece estas anotações, em sentido horário a partir do topo. Cada uma é enviada ao agente como a instrução para esse texto.",
   "Agent configuration": "Configuração do agente",
@@ -59,7 +58,6 @@
   "Allow this action": "Permitir esta ação",
   "Already set up?": "Já configurado?",
   "Already used for {action}. Choose another shortcut.": "Já usado para {action}. Escolha outro atalho.",
-  "Always light": "Sempre claro",
   "An environment variable set in a new terminal does not reach an already running server. Restart Papilot with the credentials; Reconnect alone cannot change its environment.": "Uma variável de ambiente definida em um novo terminal não alcança um servidor já em execução. Reinicie o Papilot com as credenciais; apenas reconectar não altera seu ambiente.",
   "Annotation group color": "Cor do grupo de anotações",
   "Annotation groups": "Grupos de anotações",
@@ -155,7 +153,6 @@
   "Choose attachments": "Escolher anexos",
   "Choose different files": "Escolher outros arquivos",
   "Choose folder": "Escolher pasta",
-  "Choose how paper pages look in dark mode.": "Escolha a aparência das páginas do artigo no modo escuro.",
   "Choose on the wheel": "Escolher na roda",
   "Choose the papers to share, then send a personal invite link.": "Escolha os artigos para compartilhar e envie um link de convite pessoal.",
   "Choose up to 5,000 files, totaling less than 64 MB.": "Escolha até 5.000 arquivos, totalizando menos de 64 MB.",
@@ -387,7 +384,6 @@
   "Flag": "Sinalizar",
   "Folder": "Pasta",
   "Folder path": "Caminho da pasta",
-  "Follow mode": "Modo de acompanhamento",
   "For the SDK instead, start Papilot with ANTHROPIC_API_KEY or a supported cloud provider configured. Restart Papilot after changing its environment.": "Para usar o SDK, inicie o Papilot com ANTHROPIC_API_KEY ou um provedor de nuvem compatível configurado. Reinicie o Papilot após alterar seu ambiente.",
   "Foreground": "Primeiro plano",
   "Full PDF": "PDF completo",
@@ -1290,5 +1286,10 @@
   "Preparing both versions for comparison. Large documents can take several minutes.": "Preparando as duas versões para comparação. Documentos longos podem levar alguns minutos.",
   "Comparing the typeset pages…": "Comparando as páginas diagramadas…",
   "Elapsed: {time}": "Tempo decorrido: {time}",
-  "Install Git in this environment to use version management.": "Instale o Git neste ambiente para usar o gerenciamento de versões."
+  "Install Git in this environment to use version management.": "Instale o Git neste ambiente para usar o gerenciamento de versões.",
+  "Auto": "Automático",
+  "PDF uses the setting above.": "PDF usa a configuração acima.",
+  "Review appearance": "Aparência da revisão",
+  "Auto matches the interface mode.": "Automático usa o modo da interface.",
+  "Original": "Original"
 }

@@ -68,9 +68,13 @@ try {
   await page.getByRole('button', { name: /^(Hide task list|隐藏任务列表)$/ }).click();
   const restoreSidebar = page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ });
   await expect(restoreSidebar).toBeVisible();
-  const sidebarLeft = (await restoreSidebar.boundingBox()).x;
-  if (process.platform === 'win32') assert.ok(sidebarLeft < 92, 'Windows leaves no unused window-button space on the left');
-  else assert.ok(sidebarLeft >= (process.platform === 'linux' ? 112 : 92), 'Controls never overlap the window buttons when the sidebar is hidden');
+  // Loading the paper can briefly replace this button after the visibility check.
+  // Wait for the replacement while preserving each platform's window controls.
+  const sidebarLeft = () => restoreSidebar.boundingBox().then(box => box?.x ?? null);
+  if (process.platform === 'win32') await expect.poll(async () => await sidebarLeft() ?? Infinity).toBeLessThan(92);
+  else await expect.poll(async () => await sidebarLeft() ?? -Infinity, {
+    message: 'Controls never overlap the window buttons when the sidebar is hidden',
+  }).toBeGreaterThanOrEqual(process.platform === 'linux' ? 112 : 92);
   await restoreSidebar.click();
   if (process.platform === 'win32') {
     const buttons = page.locator('.desktop-window-buttons button');
