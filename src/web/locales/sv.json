@@ -1239,6 +1239,6 @@
   "Task permissions": "Uppgiftsbehörigheter",
   "Workspace access": "Åtkomst till arbetsytan",
   "Edit the task workspace with network access; other actions may need approval.": "Redigera uppgiftens arbetsyta med nätverksåtkomst; andra åtgärder kan kräva godkännande.",
-  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "Ingen sandlåda eller kommandogodkännanden. Kan använda SSH och nå filer utanför artikeln.",
+  "Access files, use the network, and run commands without individual approval.": "Kom åt filer, använd nätverket och kör kommandon utan enskilda godkännanden.",
   "Pause the task before changing permissions.": "Pausa uppgiften innan du ändrar behörigheterna."
 }

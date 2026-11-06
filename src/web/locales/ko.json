@@ -1239,6 +1239,6 @@
   "Task permissions": "작업 권한",
   "Workspace access": "작업 공간 접근",
   "Edit the task workspace with network access; other actions may need approval.": "네트워크를 사용하며 작업 공간을 편집합니다. 다른 작업은 승인이 필요할 수 있습니다.",
-  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "샌드박스와 명령 승인을 사용하지 않습니다. SSH 및 논문 폴더 밖의 파일에 접근할 수 있습니다.",
+  "Access files, use the network, and run commands without individual approval.": "개별 승인 없이 파일 접근, 네트워크 사용 및 명령 실행을 허용합니다.",
   "Pause the task before changing permissions.": "권한을 변경하기 전에 작업을 일시 중지하세요."
 }

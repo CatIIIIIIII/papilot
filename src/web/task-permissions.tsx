@@ -7,7 +7,7 @@ export function PermissionPicker({ agent, value, disabled, onChange }: { agent: 
   if (!supportsFullTaskAccess(agent)) return null;
   return <ChipSelect label={t('Task permissions')} value={value} disabled={disabled} onChange={value => onChange(value as TaskPermissions)} options={[
     { value: 'workspace', label: t('Workspace access'), detail: t('Edit the task workspace with network access; other actions may need approval.') },
-    { value: 'full', label: t('Full access'), detail: t('No sandbox or command approvals. Can use SSH and access files outside the paper.') },
+    { value: 'full', label: t('Full access'), detail: t('Access files, use the network, and run commands without individual approval.') },
   ]}/>;
 }
 

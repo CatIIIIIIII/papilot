@@ -1,6 +1,6 @@
 # Ning’s Papilot Preview
 
-Personal distribution: **0.8.9-preview.11**, branch `custom/ning-preview`.
+Personal distribution: **0.8.9-preview.12**, branch `custom/ning-preview`.
 
 Based on official Papilot 0.8.9 and upstream main as of 2026-11-05, including the merged editing-network feature (#54). Integrates paper Q&A with saved conversations (#38), aligned PDF comparison (#40), and the compact reasoning slider (#37). The official note editing/deletion feature (#36) is retained.
 

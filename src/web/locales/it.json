@@ -1239,6 +1239,6 @@
   "Task permissions": "Permessi dell’attività",
   "Workspace access": "Accesso all’area di lavoro",
   "Edit the task workspace with network access; other actions may need approval.": "Modifica l’area di lavoro con accesso alla rete; altre azioni potrebbero richiedere approvazione.",
-  "No sandbox or command approvals. Can use SSH and access files outside the paper.": "Senza sandbox né approvazione dei comandi. Consente SSH e accesso ai file esterni all’articolo.",
+  "Access files, use the network, and run commands without individual approval.": "Accedi ai file, usa la rete ed esegui comandi senza approvazioni individuali.",
   "Pause the task before changing permissions.": "Metti in pausa l’attività prima di modificare i permessi."
 }
