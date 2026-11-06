@@ -56,7 +56,7 @@ try {
   await expect(taskSettings).toContainText('Fast model');
   await expect(taskSettings).toContainText('Medium');
   await taskSettings.click();
-  await taskModelMenu.getByText('Changes apply to the next turn.', { exact: true }).waitFor();
+  await taskModelMenu.getByText('Next turn', { exact: true }).waitFor();
   assert.ok((await taskModelMenu.getByRole('option').allTextContents()).every(name => !/Opus/.test(name)), 'recent choices cannot switch the task agent');
   await taskModelMenu.getByRole('combobox').fill('opus');
   await expect(taskModelMenu.getByRole('option')).toHaveCount(0);

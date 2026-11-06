@@ -539,11 +539,6 @@
     "textHash": "d87f589ae68c6da22a852b15c450af904b8939aeb9017fc0ad54aaaed020d885",
     "model": "gemini-4-argon-medium"
   },
-  "Changes apply to the next turn.": {
-    "revision": "6dd95f036b2f58ea805f414ec8d3ed38174ea4d1dd8a8fd4ecc04e911f080c02",
-    "textHash": "c2fea0b0fb628a342fa6c34d79c0332cbc1708f317a78a9ac5e4ecb288802bdc",
-    "model": "gemini-4-argon-high"
-  },
   "Changes in {path}": {
     "revision": "f633a5ba4e5a936c59011301c34c5835f0a99fd32a080dc12a8d4d1d64a1fdaa",
     "textHash": "5eb3035aebbd8a8df14bf30354184f54a7317a9d3b46e3f2d20fefbb15707b5f",
@@ -1727,11 +1722,6 @@
   "Fast mode": {
     "revision": "c101b804075b5c259a341f1d4ad4cbc305cfa8f691066ee1aca4adac38376ac6",
     "textHash": "102d83e2550d191f27cb43fde0a8c4b74c5cec67c3e0a5afa531a490558ff9c9",
-    "model": "gemini-4-argon-medium"
-  },
-  "Faster responses; may use more of your limit.": {
-    "revision": "c4dbeebbc1f98e62a5306374230363371546a2f4b207a21c644617d89e061cf4",
-    "textHash": "4515cb66f80cfa339190b60547d7c941673cdfc3dd03412b4cc9a5567ed7e143",
     "model": "gemini-4-argon-medium"
   },
   "Feedback & issues": {

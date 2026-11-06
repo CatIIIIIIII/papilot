@@ -37,7 +37,7 @@ export function TaskModelPicker({ task, runtime, disabled, reconnecting, onRecon
     permissionMode={task.mode !== 'review' ? task.permissions || 'workspace' : undefined}
     allowUnknownDefault={!choice.model}
     model={choice.model || ''} effort={choice.effort || ''} fast={Boolean(choice.serviceTier && choice.serviceTier !== 'default')}
-    disabled={disabled} reconnecting={reconnecting} onReconnect={onReconnect} description={pending.current ? t('Saving…') : t('Changes apply to the next turn.')}
+    disabled={disabled} reconnecting={reconnecting} onReconnect={onReconnect} description={pending.current ? t('Saving…') : t('Next turn')}
     onSelect={(_agent, id) => {
       const model = runtime?.models.find(model => model.id === id), previous = current.current;
       change({ model: id, effort: model?.efforts.includes(previous.effort || '') ? previous.effort : null,

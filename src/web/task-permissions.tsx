@@ -10,13 +10,20 @@ export function permissionText(text: string) {
     "Full access": t("Full access"),
     "Sandboxed edits": t("Sandboxed edits"),
     "Bypass permissions": t("Bypass permissions"),
-    "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": t("Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions."),
-    "Disable the sandbox and run tools without approval, subject to managed settings.": t("Disable the sandbox and run tools without approval, subject to managed settings."),
-    "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": t("Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode."),
-    "Automatically approve edits and sandboxed commands. Ask before other actions.": t("Automatically approve edits and sandboxed commands. Ask before other actions."),
-    "Disable the command sandbox and bypass tool approvals, subject to managed settings.": t("Disable the command sandbox and bypass tool approvals, subject to managed settings."),
   };
   return messages[text] || text;
+}
+
+// Keep the provider's approval behavior explicit without displaying long tool descriptions.
+function permissionDetail(detail: string) {
+  const messages: Record<string, string> = {
+    "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": t("Sandboxed; exceptions need approval"),
+    "Disable the sandbox and run tools without approval, subject to managed settings.": t("Bypass sandbox and approvals"),
+    "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": t("Sandboxed; other requests denied"),
+    "Automatically approve edits and sandboxed commands. Ask before other actions.": t("Sandboxed; exceptions need approval"),
+    "Disable the command sandbox and bypass tool approvals, subject to managed settings.": t("Bypass sandbox and approvals"),
+  };
+  return messages[detail] || '';
 }
 
 export function PermissionOptions({ runtime, value, disabled, hint, onChange }: { runtime?: RuntimeStatus; value: TaskPermissions; disabled?: boolean; hint?: string; onChange: (value: TaskPermissions) => void }) {
@@ -25,12 +32,12 @@ export function PermissionOptions({ runtime, value, disabled, hint, onChange }: 
   if (!options.length) return null;
   const selected = options.find(option => option.value === value);
   return <div className="task-permissions"><fieldset disabled={disabled} aria-describedby={`${id}-detail${hint ? ` ${id}-hint` : ''}`}>
-    <legend title={t('Applies to the next message.')}>{t('Task permissions')}</legend>
-    <div className="task-permission-choices">{options.map(option => <label key={option.value} className="task-permission-option" title={permissionText(option.detail)}>
-      <input type="radio" name={id} value={option.value} checked={value === option.value} aria-labelledby={`${id}-${option.value}-label`} aria-description={permissionText(option.detail)} onChange={() => onChange(option.value)}/>
+    <legend>{t('Permissions')}</legend>
+    <div className="task-permission-choices">{options.map(option => <label key={option.value} className="task-permission-option" title={permissionDetail(option.detail)}>
+      <input type="radio" name={id} value={option.value} checked={value === option.value} aria-labelledby={`${id}-${option.value}-label`} aria-description={permissionDetail(option.detail)} onChange={() => onChange(option.value)}/>
       <Icon name="check" size={13}/><span id={`${id}-${option.value}-label`}>{permissionText(option.label)}</span>
     </label>)}</div>
-    <p id={`${id}-detail`} className="task-permission-detail">{selected && permissionText(selected.detail)}</p>
+    <p id={`${id}-detail`} className="task-permission-detail">{selected && permissionDetail(selected.detail)}</p>
     {hint && <p id={`${id}-hint`} className="task-permissions-hint">{hint}</p>}
   </fieldset></div>;
 }
@@ -42,7 +49,7 @@ export function TaskPermissionOptions({ task, runtime, disabled, save, onSaving,
   const [saving, setSaving] = useState(false);
   const busy = ['running', 'waiting_input', 'building', 'uncertain', 'queued', 'deleting'].includes(task.status);
   if (task.mode === 'review') return null;
-  return <PermissionOptions runtime={runtime} value={task.permissions || 'workspace'} disabled={disabled || busy || saving} hint={busy ? t('Pause the task before changing permissions.') : undefined}
+  return <PermissionOptions runtime={runtime} value={task.permissions || 'workspace'} disabled={disabled || busy || saving} hint={busy ? t('Pause to change') : undefined}
     onChange={async permissions => {
       setSaving(true); onSaving(true);
       try { await save(permissions); }

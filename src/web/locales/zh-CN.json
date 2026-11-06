@@ -43,16 +43,13 @@
   "Preparing both versions for comparison. Large documents can take several minutes.": "正在编译修改前后的版本。长篇论文可能需要几分钟。",
   "Comparing the typeset pages…": "正在对比排版后的页面…",
   "Elapsed: {time}": "已用时间：{time}",
-  "Task permissions": "任务权限",
+  "Permissions": "权限",
   "Workspace access": "工作区权限",
   "Full access": "完全访问",
-  "Pause the task before changing permissions.": "请先暂停任务，再修改权限。",
+  "Pause to change": "暂停后修改",
   "Sandboxed edits": "沙箱内编辑",
   "Bypass permissions": "跳过权限检查",
-  "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": "可写入工作区及配置的可写目录，允许联网。超出沙箱限制前请求批准。",
-  "Disable the sandbox and run tools without approval, subject to managed settings.": "关闭沙箱并无需逐项批准即可运行工具，仍受管理设置约束。",
-  "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": "自动批准编辑和沙箱内命令。命令行非交互模式会拒绝其他权限请求。",
-  "Automatically approve edits and sandboxed commands. Ask before other actions.": "自动批准编辑和沙箱内命令。其他操作需请求批准。",
-  "Disable the command sandbox and bypass tool approvals, subject to managed settings.": "关闭命令沙箱并跳过工具批准，仍受管理设置约束。",
-  "Applies to the next message.": "对下一条消息生效。"
+  "Sandboxed; exceptions need approval": "沙箱内执行，例外需审批",
+  "Bypass sandbox and approvals": "绕过沙箱与审批",
+  "Sandboxed; other requests denied": "沙箱内执行，其他请求拒绝"
 }
