@@ -254,5 +254,6 @@
   "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot.",
   "Invalid task permissions.": "Ogiltiga uppgiftsbehörigheter.",
   "Full access is only available for Codex, Claude and GLM editing tasks.": "Full åtkomst är endast tillgänglig för redigeringsuppgifter med Codex, Claude och GLM.",
-  "Pause the task and wait for it to finish before changing permissions.": "Pausa uppgiften och vänta tills den har stannat innan du ändrar behörigheterna."
+  "Pause the task and wait for it to finish before changing permissions.": "Pausa uppgiften och vänta tills den har stannat innan du ändrar behörigheterna.",
+  "Codex could not apply workspace permissions.": "Codex kunde inte tillämpa arbetsytans behörigheter."
 }

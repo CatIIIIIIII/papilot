@@ -254,5 +254,6 @@
   "npm is unavailable to Papilot.": "Papilot 无法使用 npm。",
   "Invalid task permissions.": "无效的任务权限。",
   "Full access is only available for Codex, Claude and GLM editing tasks.": "完整权限仅适用于 Codex、Claude 和 GLM 的论文修改任务。",
-  "Pause the task and wait for it to finish before changing permissions.": "请先暂停任务，等待停止后再修改权限。"
+  "Pause the task and wait for it to finish before changing permissions.": "请先暂停任务，等待停止后再修改权限。",
+  "Codex could not apply workspace permissions.": "Codex 无法应用工作区权限。"
 }

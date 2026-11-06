@@ -254,5 +254,6 @@
   "npm is unavailable to Papilot.": "npm no está disponible para Papilot.",
   "Invalid task permissions.": "Permisos de tarea no válidos.",
   "Full access is only available for Codex, Claude and GLM editing tasks.": "El acceso completo solo está disponible para tareas de edición con Codex, Claude y GLM.",
-  "Pause the task and wait for it to finish before changing permissions.": "Pausa la tarea y espera a que se detenga antes de cambiar los permisos."
+  "Pause the task and wait for it to finish before changing permissions.": "Pausa la tarea y espera a que se detenga antes de cambiar los permisos.",
+  "Codex could not apply workspace permissions.": "Codex no pudo aplicar los permisos del espacio de trabajo."
 }

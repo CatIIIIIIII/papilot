@@ -254,5 +254,6 @@
   "npm is unavailable to Papilot.": "Papilot から npm を利用できません。",
   "Invalid task permissions.": "タスクの権限が無効です。",
   "Full access is only available for Codex, Claude and GLM editing tasks.": "フルアクセスは Codex、Claude、GLM の編集タスクでのみ利用できます。",
-  "Pause the task and wait for it to finish before changing permissions.": "タスクを一時停止し、停止してから権限を変更してください。"
+  "Pause the task and wait for it to finish before changing permissions.": "タスクを一時停止し、停止してから権限を変更してください。",
+  "Codex could not apply workspace permissions.": "Codex はワークスペースの権限を適用できませんでした。"
 }

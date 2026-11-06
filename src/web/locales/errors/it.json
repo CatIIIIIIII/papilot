@@ -254,5 +254,6 @@
   "npm is unavailable to Papilot.": "npm non è disponibile per Papilot.",
   "Invalid task permissions.": "Permessi dell’attività non validi.",
   "Full access is only available for Codex, Claude and GLM editing tasks.": "L’accesso completo è disponibile solo per attività di modifica con Codex, Claude e GLM.",
-  "Pause the task and wait for it to finish before changing permissions.": "Metti in pausa l’attività e attendi che si arresti prima di modificare i permessi."
+  "Pause the task and wait for it to finish before changing permissions.": "Metti in pausa l’attività e attendi che si arresti prima di modificare i permessi.",
+  "Codex could not apply workspace permissions.": "Codex non ha potuto applicare i permessi dello spazio di lavoro."
 }
