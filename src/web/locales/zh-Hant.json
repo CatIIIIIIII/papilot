@@ -1285,5 +1285,11 @@
   "{n} review update": "{n} 項審閱意見",
   "{n} review update included": "將附帶 {n} 項審閱意見",
   "{n} review updates": "{n} 項審閱意見",
-  "{n} review updates included": "將附帶 {n} 項審閱意見"
+  "{n} review updates included": "將附帶 {n} 項審閱意見",
+  "Task permissions": "任務權限",
+  "Workspace access": "工作區權限",
+  "Full access": "完整存取",
+  "Edit the task workspace with network access; other actions may need approval.": "可編輯任務工作區並連網；其他操作可能需要批准。",
+  "Access files, use the network, and run commands without individual approval.": "允許存取檔案、連網查找並執行命令，無需逐項批准。",
+  "Pause the task before changing permissions.": "請先暫停任務，再修改權限。"
 }

@@ -1285,5 +1285,11 @@
   "{n} review update": "{n} Rückmeldung",
   "{n} review update included": "{n} Rückmeldung wird mitgesendet",
   "{n} review updates": "{n} Rückmeldungen",
-  "{n} review updates included": "{n} Rückmeldungen werden mitgesendet"
+  "{n} review updates included": "{n} Rückmeldungen werden mitgesendet",
+  "Task permissions": "Aufgabenberechtigungen",
+  "Workspace access": "Arbeitsbereichszugriff",
+  "Full access": "Vollzugriff",
+  "Edit the task workspace with network access; other actions may need approval.": "Bearbeitet den Aufgabenarbeitsbereich mit Netzwerkzugriff; andere Aktionen benötigen eventuell eine Genehmigung.",
+  "Access files, use the network, and run commands without individual approval.": "Dateizugriff, Netzwerknutzung und Befehlsausführung ohne einzelne Genehmigungen.",
+  "Pause the task before changing permissions.": "Pausiere die Aufgabe, bevor du die Berechtigungen änderst."
 }

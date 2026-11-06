@@ -2209,3 +2209,68 @@ test('review threads use normal network access and inherit the resolved sandbox'
     assert.equal(f.codex.calls.find(c => c.method === 'turn/start')?.params.sandboxPolicy, undefined);
   } finally { f.close(); }
 });
+
+for (const permissions of ['full', 'workspace'] as const) {
+  test(`task permission selector resumes the same conversation with ${permissions} access`, async () => {
+    const f = fixture();
+    try {
+      f.store.updateTask(f.task.id, { permissions: permissions === 'full' ? 'workspace' : 'full' });
+      const changed = f.workspace.updateTaskPermissions(f.task.id, permissions);
+      assert.equal(changed.permissions, permissions);
+      assert.equal(changed.threadId, 'thread');
+      assert.equal((f.workspace as any).loaded.has('thread'), false);
+      f.codex.ready = true;
+      await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `permissions-${permissions}`, false);
+      await tick(); await tick();
+      const resume = f.codex.calls.find(call => call.method === 'thread/resume');
+      assert.equal(resume?.params.threadId, 'thread');
+      assert.equal(resume?.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
+      assert.equal(resume?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+      if (permissions === 'full') assert.match(resume?.params.developerInstructions, /authorized commands including SSH/);
+      assert.ok(f.codex.calls.some(call => call.method === 'turn/start'));
+    } finally { f.close(); }
+  });
+}
+
+test('task permission selector refuses active turns, unsupported providers, reviews and invalid values', () => {
+  const f = fixture();
+  try {
+    for (const status of ['running', 'waiting_input', 'queued', 'uncertain', 'building', 'deleting'] as const) {
+      f.store.updateTask(f.task.id, { status });
+      assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Pause the task/);
+    }
+    f.store.updateTask(f.task.id, { status: 'reviewing', agent: 'cursor' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /only available/);
+    f.store.updateTask(f.task.id, { agent: 'codex', mode: 'review' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /only available/);
+    f.store.updateTask(f.task.id, { mode: 'edit' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'unrestricted'), /Invalid task permissions/);
+    assert.equal(f.store.task(f.task.id).permissions, undefined);
+  } finally { f.close(); }
+});
+
+test('task permission selector persists the choice across reopening the task store', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-permissions-'));
+  const file = path.join(dir, 'state.sqlite'), f = fixture(undefined, { file });
+  try {
+    f.workspace.updateTaskPermissions(f.task.id, 'full');
+    const reopened = new Store(file);
+    try { assert.equal(reopened.task(f.task.id).permissions, 'full'); } finally { reopened.close(); }
+  } finally { f.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const permissions of ['workspace', 'full'] as const) {
+  test(`new task permission selector starts with the chosen ${permissions} policy`, async () => {
+    const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/unused' } : summary);
+    try {
+      const created = await f.workspace.createTask({ id: `permission-task-${permissions}`, projectId: 'paper', title: 'Revise', instructions: 'Inspect results.', permissions });
+      assert.equal(created.permissions, permissions);
+      const run = f.store.runs().find(run => run.taskId === created.id)!;
+      f.codex.ready = true;
+      (f.workspace as any).active.set(created.id, run);
+      await (f.workspace as any).startRun(run);
+      const start = f.codex.calls.find(call => call.method === 'thread/start' && !call.params.ephemeral);
+      assert.equal(start?.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
+    } finally { f.close(); }
+  });
+}

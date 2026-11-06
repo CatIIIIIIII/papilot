@@ -1285,5 +1285,11 @@
   "{n} review update": "{n} granskningssynpunkt",
   "{n} review update included": "{n} granskningssynpunkt bifogas",
   "{n} review updates": "{n} granskningssynpunkter",
-  "{n} review updates included": "{n} granskningssynpunkter bifogas"
+  "{n} review updates included": "{n} granskningssynpunkter bifogas",
+  "Task permissions": "Uppgiftsbehörigheter",
+  "Workspace access": "Åtkomst till arbetsytan",
+  "Full access": "Full åtkomst",
+  "Edit the task workspace with network access; other actions may need approval.": "Redigera uppgiftens arbetsyta med nätverksåtkomst; andra åtgärder kan kräva godkännande.",
+  "Access files, use the network, and run commands without individual approval.": "Kom åt filer, använd nätverket och kör kommandon utan enskilda godkännanden.",
+  "Pause the task before changing permissions.": "Pausa uppgiften innan du ändrar behörigheterna."
 }

@@ -251,5 +251,8 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Aguarde a conclusão da tarefa e das ações de revisão antes de escolher um destino.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Aguarde a conclusão da compilação do PDF deste artigo antes de alterar o caminho ou removê-lo.",
   "ZIP links and special files are not supported.": "Links e arquivos especiais em ZIP não são suportados.",
-  "npm is unavailable to Papilot.": "O npm não está disponível para o Papilot."
+  "npm is unavailable to Papilot.": "O npm não está disponível para o Papilot.",
+  "Invalid task permissions.": "Permissões de tarefa inválidas.",
+  "Full access is only available for Codex, Claude and GLM editing tasks.": "O acesso completo só está disponível para tarefas de edição com Codex, Claude e GLM.",
+  "Pause the task and wait for it to finish before changing permissions.": "Pause a tarefa e aguarde sua interrupção antes de alterar as permissões."
 }

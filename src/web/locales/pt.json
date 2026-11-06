@@ -1285,5 +1285,11 @@
   "{n} review update": "{n} observação de revisão",
   "{n} review update included": "{n} observação de revisão incluída",
   "{n} review updates": "{n} observações de revisão",
-  "{n} review updates included": "{n} observações de revisão incluídas"
+  "{n} review updates included": "{n} observações de revisão incluídas",
+  "Task permissions": "Permissões da tarefa",
+  "Workspace access": "Acesso ao espaço de trabalho",
+  "Full access": "Acesso completo",
+  "Edit the task workspace with network access; other actions may need approval.": "Edita o espaço de trabalho com acesso à rede; outras ações podem exigir aprovação.",
+  "Access files, use the network, and run commands without individual approval.": "Acesse arquivos, use a rede e execute comandos sem aprovação individual.",
+  "Pause the task before changing permissions.": "Pause a tarefa antes de alterar as permissões."
 }

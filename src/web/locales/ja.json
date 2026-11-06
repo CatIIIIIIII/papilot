@@ -1285,5 +1285,11 @@
   "{n} review update": "レビューのフィードバック {n} 件",
   "{n} review update included": "レビューのフィードバック {n} 件を添付",
   "{n} review updates": "レビューのフィードバック {n} 件",
-  "{n} review updates included": "レビューのフィードバック {n} 件を添付"
+  "{n} review updates included": "レビューのフィードバック {n} 件を添付",
+  "Task permissions": "タスクの権限",
+  "Workspace access": "ワークスペースへのアクセス",
+  "Full access": "フルアクセス",
+  "Edit the task workspace with network access; other actions may need approval.": "ネットワークを使用してタスクのワークスペースを編集できます。その他の操作には承認が必要な場合があります。",
+  "Access files, use the network, and run commands without individual approval.": "個別の承認なしに、ファイルへのアクセス、ネットワークの使用、コマンドの実行を許可します。",
+  "Pause the task before changing permissions.": "権限を変更する前にタスクを一時停止してください。"
 }

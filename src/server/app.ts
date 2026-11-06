@@ -295,7 +295,7 @@ export async function buildApp(options: AppOptions) {
     if (existing) { if (existing.projectId !== projectId) throw new Error('Invalid task ID.'); return existing; }
     // AI review compiles the task's own copy of the manuscript, so it does not wait for the preview.
     const reviewing = Boolean(skill && findSkill(store.project(projectId).path, skill).output === 'annotations');
-    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
+    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
   });
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
@@ -348,6 +348,7 @@ export async function buildApp(options: AppOptions) {
     const task = store.task(request.params.id);
     return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: task.agent, fresh: (request.body as any)?.fresh === true });
   });
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/permissions', task, request => workspace.updateTaskPermissions(request.params.id, (request.body as any)?.permissions));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/model', task, request => {
     const b = (request.body || {}) as Record<string, unknown>;
     if (Object.keys(b).some(key => !['model', 'effort', 'serviceTier'].includes(key))) throw new Error('Only the model and its settings can be changed.');
@@ -500,7 +501,7 @@ export async function buildApp(options: AppOptions) {
     const notes = [...new Set<string>(b.annotations)].map(id => store.annotation(project.id, id));
     if (notes.some(note => note.taskId || isTaskReviewNote(note) || note.deletedAt !== undefined)) throw new Error('Select unsent PDF notes for this task.');
     const { title } = annotationTask(notes);
-    return workspace.createTask({ id, projectId: project.id, title, instructions: '', annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
+    return workspace.createTask({ id, projectId: project.id, title, instructions: '', permissions: b.permissions, annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
   });
   // What the last build reported, placed on its PDF, and the TeX log itself.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));

@@ -251,5 +251,8 @@
   "Wait for the task and review actions to finish before choosing a destination.": "选择目标位置前，请先等待任务和审阅操作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "请等待此论文的 PDF 构建完成后，再更改其路径或将其移除。",
   "ZIP links and special files are not supported.": "不支持 ZIP 链接和特殊文件。",
-  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。",
+  "Invalid task permissions.": "无效的任务权限。",
+  "Full access is only available for Codex, Claude and GLM editing tasks.": "完整权限仅适用于 Codex、Claude 和 GLM 的论文修改任务。",
+  "Pause the task and wait for it to finish before changing permissions.": "请先暂停任务，等待停止后再修改权限。"
 }
