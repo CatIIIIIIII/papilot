@@ -13,13 +13,12 @@ import {
   printers,
   type Alignment,
 } from "./align.ts";
-import { Build, laneAt, laneX } from "./locate.ts";
-import { drawn, renderSection, snap, Strips, trimmed } from "./inline.ts";
+import { Build } from "./locate.ts";
+import { renderDocument, Strips } from "./inline.ts";
 import { pixelDifference, textChanges } from "./pdfdiff.ts";
 import { containsCenter } from "./pdf.ts";
 import type {
   Card,
-  ChangeBlock,
   Mark,
   Pair,
   Place,
@@ -28,7 +27,6 @@ import type {
   RenderedRound,
   RenderRequest,
   SourceBox,
-  Strip,
   Unit,
 } from "../types.ts";
 export function typesetWords(text: string) {
@@ -224,57 +222,6 @@ function aligned(left: Position[], right: Position[], al: Alignment) {
     ),
   };
 }
-function looseBlock(
-  card: Card,
-  strips: Strips,
-  old: Build,
-  next: Build,
-): ChangeBlock {
-  const before: Strip[] = [],
-    after: Strip[] = [];
-  for (const pair of card.pairs)
-    for (const [side, build, images, marks] of [
-      ["old", old, before, pair.before_marks],
-      ["new", next, after, pair.after_marks],
-    ] as const) {
-      const position = pair[side];
-      if (position) {
-        const x = laneX(
-            build.document,
-            laneAt(build.document, position.page, position.clip),
-          ),
-          image = strips.write(
-            build.document,
-            position.page,
-            ...(card.aligned ? trimmed : snap)(
-              build.document,
-              position.page,
-              position.clip[1],
-              position.clip[3],
-              x,
-            ),
-            drawn(card, marks),
-            side,
-            x,
-          );
-        if (image) images.push(image);
-      }
-    }
-  return {
-    kind: "change",
-    units: [card.id],
-    identical: card.comparison === "identical",
-    ...(card.pairs.some((p) =>
-      drawn(card, [...p.before_marks, ...p.after_marks]).some(
-        (m) => m.kind === "moved",
-      ),
-    )
-      ? { moved: true }
-      : {}),
-    before,
-    after,
-  };
-}
 // Places rendered with the round; the rest render when asked for.
 export const SHOWN = 3;
 // Renders the round. With more than one edit, when some edit prints nothing
@@ -372,40 +319,10 @@ export function renderRound(
         new: request.new,
         units: places,
       });
-    const placed = new Set<number>();
-    for (const node of next.outline.filter((n) =>
-      cards.some((c) => c.context_node === n.id),
-    )) {
-      const members = cards.flatMap((c, i): [number, Card][] =>
-        c.context_node === node.id ? [[i, c]] : [],
-      );
-      let rendered: ReturnType<typeof renderSection>;
-      try {
-        rendered = renderSection(old, next, node, members, strips, figureFiles);
-      } catch (error) {
-        if (
-          !(error as Error).message.includes("PDF outline") &&
-          !(error as Error).message.includes("outside this PDF")
-        )
-          throw error;
-        continue;
-      }
-      const [blocks, unlocated] = rendered;
-      if (!blocks.some((b) => b.kind === "change")) continue;
-      result.sections.push({
-        node: node.id,
-        number: node.number,
-        title: node.title,
-        blocks,
-      });
-      members.forEach(([i]) => {
-        if (!unlocated.includes(i)) placed.add(i);
-      });
-    }
-    cards.forEach((card, index) => {
-      if (!placed.has(index))
-        result.loose.push(looseBlock(card, strips, old, next));
-    });
+    Object.assign(
+      result,
+      renderDocument(old, next, cards, strips, figureFiles),
+    );
     try {
       const references = referenceChanges(request.units, old, next);
       if (references) result.references = references;
