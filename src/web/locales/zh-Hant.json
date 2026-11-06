@@ -1285,5 +1285,8 @@
   "{n} review update": "{n} 項審閱意見",
   "{n} review update included": "將附帶 {n} 項審閱意見",
   "{n} review updates": "{n} 項審閱意見",
-  "{n} review updates included": "將附帶 {n} 項審閱意見"
+  "{n} review updates included": "將附帶 {n} 項審閱意見",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "正在編譯修改前後的版本。長篇論文可能需要幾分鐘。",
+  "Comparing the typeset pages…": "正在比對排版後的頁面…",
+  "Elapsed: {time}": "已用時間：{time}"
 }

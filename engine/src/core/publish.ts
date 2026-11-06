@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { ROOT, codeVersion } from "../runtime.ts";
-import { Builder, BuildError } from "./build.ts";
+import { Builder, BuildError, auxiliaryBuildError } from "./build.ts";
 import { diffUnitsAsync, scopeViolationsAsync, withUnits } from "./changes.ts";
 import { isFigure } from "./config.ts";
 import { now, readJson, writeJson } from "./files.ts";
@@ -10,6 +10,7 @@ import { runAsync } from "./process.ts";
 import type { App } from "../server.ts";
 import type {
   BuildInfo,
+  BuildProgress,
   Effect,
   Job,
   JobResult,
@@ -193,6 +194,22 @@ export class Publisher {
   // its chapters: a host may compile the whole paper meanwhile, without
   // waiting for or competing with a build of the same files here.
   private revisions = new Map<string, string>();
+  // Page updates are transient, like revisions; polling must not write SQLite
+  // for every page of a long baseline or either parallel comparison build.
+  private builds = new Map<string, Partial<Record<"baseline" | "revised", BuildProgress>>>();
+  progress(id: string) { return this.builds.get(id); }
+  private async compile(job: Pick<Job, "id">, side: "baseline" | "revised", builder: Builder, rev: string, targets = ["full"], seed: BuildInfo | null = null, { asSeed = false, force = false } = {}) {
+    const progress = this.builds.get(job.id) ?? {};
+    this.builds.set(job.id, progress);
+    progress[side] = { step: "tex", pass: 0, pages: 0, total: null };
+    try {
+      const options = { force, progress: (value: BuildProgress) => { progress[side] = value; } };
+      return await (asSeed ? builder.buildSeed(rev, options) : builder.build(rev, targets, seed, options));
+    } finally {
+      delete progress[side];
+      if (!Object.keys(progress).length) this.builds.delete(job.id);
+    }
+  }
   // Whether each job lists indirect changes, and each task's latest choice:
   // a request that does not say, such as an inline source edit or the CLI
   // without --indirect, keeps the task's choice.
@@ -348,6 +365,7 @@ export class Publisher {
       this.update(job.id, { status: "failed", result, finished: now() });
     } finally {
       this.revisions.delete(job.id);
+      this.builds.delete(job.id);
       this.indirect.delete(job.id);
       this.running.delete(job.task);
       if (this.pending.get(job.task) === job.id) this.pending.delete(job.task);
@@ -415,7 +433,7 @@ export class Publisher {
       // wording for acceptance after it has disappeared from the worktree.
       if (latest && app.store.one("SELECT id FROM build_requests WHERE job=? AND id LIKE 'source-%'", job.id)) {
         this.phase(job, "build");
-        const built = await new Builder(project, app.repo).build(before), number = latest.number + 1;
+        const built = await this.compile(job, "baseline", new Builder(project, app.repo), before), number = latest.number + 1;
         await app.exclusive(async () => {
           if (app.review.lastChange(name) !== decided) throw new Stale();
           app.store.execute("INSERT INTO rounds(task,number,before,after,units,summary,created) VALUES(?,?,?,?,?,?,?)", name, number, before, after, "[]", JSON.stringify({ renderer: codeVersion(), indirect, warnings: [], targets: ["full"], builds: [built.key] }), now());
@@ -442,13 +460,24 @@ export class Publisher {
         );
       throw error;
     };
-    const seed = targets[0] !== "full" ? await builder.build(task.base).catch(failed("The comparison baseline could not be compiled.")) : null;
+    let seed = targets[0] !== "full" ? await this.compile(job, "baseline", builder, task.base, ["full"], null, { asSeed: true }).catch(failed("The comparison baseline could not be compiled.")) : null;
     // Both versions compile at once: each needs only the seed.
-    const baseline = builder.build(before, targets, seed).catch(failed("The comparison baseline could not be compiled.")),
-      revised = builder.build(after, targets, seed).catch(failed("The revised document could not be compiled."));
+    const versions = () => Promise.allSettled([
+      this.compile(job, "baseline", builder, before, targets, seed),
+      this.compile(job, "revised", builder, after, targets, seed),
+    ]);
+    let builds = await versions();
+    if (!this.stopping && seed && builds.some((built) => built.status === "rejected" && auxiliaryBuildError(built.reason))) {
+      // An external package can invalidate readable aux files without
+      // changing the source tree or engine version. Rebuild the seed once,
+      // after both attempts finish, then use it for both comparison sides.
+      seed = await this.compile(job, "baseline", builder, task.base, ["full"], null, { asSeed: true, force: true }).catch(failed("The comparison baseline could not be compiled."));
+      builds = await versions();
+    }
     // A failure of either is reported once both have settled, the baseline's first.
-    await Promise.allSettled([baseline, revised]);
-    const old = await baseline, next = await revised;
+    const [baseline, revised] = builds,
+      old = baseline.status === "fulfilled" ? baseline.value : failed("The comparison baseline could not be compiled.")(baseline.reason),
+      next = revised.status === "fulfilled" ? revised.value : failed("The revised document could not be compiled.")(revised.reason);
     if (app.review.lastChange(name) !== decided) throw new Stale();
     const warnings = next.warnings.filter((w) => !old.warnings.includes(w));
     this.phase(job, "render");

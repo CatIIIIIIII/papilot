@@ -1285,5 +1285,8 @@
   "{n} review update": "{n} retour de révision",
   "{n} review update included": "{n} retour de révision joint",
   "{n} review updates": "{n} retours de révision",
-  "{n} review updates included": "{n} retours de révision joints"
+  "{n} review updates included": "{n} retours de révision joints",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "Préparation des deux versions pour la comparaison. Les documents longs peuvent prendre plusieurs minutes.",
+  "Comparing the typeset pages…": "Comparaison des pages mises en forme…",
+  "Elapsed: {time}": "Temps écoulé : {time}"
 }

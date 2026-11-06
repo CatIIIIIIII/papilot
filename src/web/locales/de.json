@@ -1285,5 +1285,8 @@
   "{n} review update": "{n} Rückmeldung",
   "{n} review update included": "{n} Rückmeldung wird mitgesendet",
   "{n} review updates": "{n} Rückmeldungen",
-  "{n} review updates included": "{n} Rückmeldungen werden mitgesendet"
+  "{n} review updates included": "{n} Rückmeldungen werden mitgesendet",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "Beide Versionen werden für den Vergleich vorbereitet. Bei langen Dokumenten kann dies einige Minuten dauern.",
+  "Comparing the typeset pages…": "Die gesetzten Seiten werden verglichen…",
+  "Elapsed: {time}": "Vergangene Zeit: {time}"
 }

@@ -1285,5 +1285,8 @@
   "{n} review update": "{n} granskningssynpunkt",
   "{n} review update included": "{n} granskningssynpunkt bifogas",
   "{n} review updates": "{n} granskningssynpunkter",
-  "{n} review updates included": "{n} granskningssynpunkter bifogas"
+  "{n} review updates included": "{n} granskningssynpunkter bifogas",
+  "Preparing both versions for comparison. Large documents can take several minutes.": "Förbereder båda versionerna för jämförelse. Långa dokument kan ta flera minuter.",
+  "Comparing the typeset pages…": "Jämför de satta sidorna…",
+  "Elapsed: {time}": "Förfluten tid: {time}"
 }
