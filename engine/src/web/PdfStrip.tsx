@@ -1,6 +1,7 @@
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -30,6 +31,30 @@ function style(glyph: TextGlyph, image: Strip): CSSProperties {
     transform: `scaleX(${scaleX})`,
   };
 }
+// A line wrapper survives changes between line and glyph text. Save selection
+// endpoints relative to that wrapper so native Find can receive precise boxes
+// without losing the selected text or the direction of the selection.
+function selectionPoint(node: Node, offset: number): () => [Node, number] {
+  const line = (
+    node.nodeType === 1 ? (node as Element) : node.parentElement
+  )?.closest(".pdf-text-line");
+  if (!line) return () => [node, offset];
+  const prefix = document.createRange();
+  prefix.selectNodeContents(line);
+  prefix.setEnd(node, offset);
+  const length = prefix.toString().length;
+  return () => {
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let remaining = length,
+      text: Node | null;
+    while ((text = walker.nextNode())) {
+      const size = text.textContent!.length;
+      if (remaining <= size) return [text, remaining];
+      remaining -= size;
+    }
+    return [line, line.childNodes.length];
+  };
+}
 export const PdfStrip = memo(function PdfStrip({
   image,
   base,
@@ -45,20 +70,36 @@ export const PdfStrip = memo(function PdfStrip({
   // glyph boxes used for accurate pointer selection over the PDF image.
   const box = useRef<HTMLDivElement>(null),
     [detailed, setDetailed] = useState(false);
+  const rendered = useRef(detailed),
+    restoreSelection = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    rendered.current = detailed;
+    restoreSelection.current?.();
+    restoreSelection.current = null;
+  }, [detailed]);
   useEffect(() => {
     const element = box.current!;
     let nearby = false;
     const update = () => {
+      if (nearby === rendered.current) return;
       const selected = window.getSelection();
-      // Keep the selected DOM intact, including a browser Find result, until
-      // selection ends. Scrolling must never discard a quote being copied.
       if (
         selected &&
         !selected.isCollapsed &&
         (element.contains(selected.anchorNode) ||
           element.contains(selected.focusNode))
-      )
-        return;
+      ) {
+        // Keep precise selected glyphs alive outside the viewport. A Find
+        // result in a compact line must instead expand as it comes into view.
+        if (rendered.current) return;
+        const anchor = selectionPoint(
+            selected.anchorNode!,
+            selected.anchorOffset,
+          ),
+          focus = selectionPoint(selected.focusNode!, selected.focusOffset);
+        restoreSelection.current = () =>
+          selected.setBaseAndExtent(...anchor(), ...focus());
+      }
       setDetailed(nearby);
     };
     const observer = new IntersectionObserver(

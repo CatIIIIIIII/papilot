@@ -775,6 +775,7 @@ export function ReviewApp({
             <button
               className="skip"
               aria-keyshortcuts={shortcuts.pending.join(' ')}
+              title={[changes ? t("Next unstaged") : t("Next undecided"), shortcuts.pending.map(bindingLabel).join(' / ')].filter(Boolean).join(' · ')}
               onClick={() => select(nextPending(stops, decisions, current))}
             >
               {changes ? t("Next unstaged") : t("Next undecided")}
@@ -1015,7 +1016,7 @@ export function ReviewApp({
           {actionBar(index)}
           {kindLabel && <span className="change-kind" title={kindLabel}>{kindLabel}</span>}
           {status !== "pending" && (
-            <span className="badge">{stateLabel(status)}</span>
+            <span className="badge" title={stateLabel(status)}>{stateLabel(status)}</span>
           )}
           <button
             className="link copy-reference"

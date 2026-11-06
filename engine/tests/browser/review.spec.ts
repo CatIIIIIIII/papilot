@@ -34,7 +34,7 @@ test("long reviews keep searchable text and preserve selections while limiting g
     const blocks = Array.from({ length: 80 }, (_, page) => ({ kind: "context", image: {
       src: "viewport-fixture.svg", clean: "viewport-fixture.svg", width: 600, height: 220, page: page + 1, label: `fixture-${page}`,
       text: Array.from({ length: 10 }, (_, row) => {
-        const text = `ViewportFindAnchor${page} row ${row}: This synthetic paragraph remains readable and selectable.`;
+        const text = `ViewportFindAnchor${page} row ${row}: Text with Ω, 字, and 🧪 remains readable and selectable.`;
         return { text, chars: Array.from(text, (text, x) => ({ text, rect: [20 + x * 6, 10 + row * 20, 26 + x * 6, 24 + row * 20] })) };
       }),
     } }));
@@ -64,7 +64,30 @@ test("long reviews keep searchable text and preserve selections while limiting g
   expect(await allText()).toEqual(original);
   const found = await page.evaluate(() => (window as unknown as { find(text: string, caseSensitive: boolean, backwards: boolean, wrap: boolean): boolean }).find("ViewportFindAnchor40", false, false, true));
   expect(found).toBe(true);
+  await page.locator('.pdf-strip[data-page="fixture-40"]').evaluate(strip => strip.scrollIntoView({ block: "center" }));
+  await expect(page.locator('.pdf-strip[data-page="fixture-40"] .pdf-glyph').first()).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("ViewportFindAnchor40");
+  expect(await allText()).toEqual(original);
+  const alignment = await page.locator('.pdf-strip[data-page="fixture-40"]').evaluate(strip => {
+    const box = strip.getBoundingClientRect(), selected = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+    return { left: (selected.left - box.left) * 600 / box.width, right: (selected.right - box.left) * 600 / box.width };
+  });
+  expect(alignment.left).toBeCloseTo(20, 0);
+  expect(alignment.right).toBeCloseTo(20 + "ViewportFindAnchor40".length * 6, 0);
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  const backwards = await page.locator('.pdf-strip[data-page="fixture-20"]').evaluate(strip => {
+    const lines = strip.querySelectorAll('.pdf-line-preview'), from = lines[0].firstChild!, to = lines[1].firstChild!;
+    const selected = window.getSelection()!;
+    selected.setBaseAndExtent(to, to.textContent!.length - 2, from, 5);
+    return selected.toString();
+  });
+  await page.locator('.pdf-strip[data-page="fixture-20"]').evaluate(strip => strip.scrollIntoView({ block: "center" }));
+  await expect(page.locator('.pdf-strip[data-page="fixture-20"] .pdf-glyph').first()).toBeVisible();
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(backwards);
+  expect(await page.evaluate(() => {
+    const selected = window.getSelection()!;
+    return Boolean(selected.anchorNode!.compareDocumentPosition(selected.focusNode!) & Node.DOCUMENT_POSITION_PRECEDING);
+  })).toBe(true);
   expect(await allText()).toEqual(original);
 });
 test("ordinary copy returns selected PDF text and shortcuts do not decide it", async ({

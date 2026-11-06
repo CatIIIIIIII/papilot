@@ -138,7 +138,7 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .change-head .actions>.nav:first-child{order:1}.change-head .change-number{order:2}.change-head .actions>.nav:not(:first-child){order:3}
     .change-head .change-where{order:4;flex:1 1 0;min-width:0;margin-left:4px;color:var(--text-3);font-size:10px}
     .change-head .change-kind,.change-head .badge{order:5;font-size:11px;color:var(--text-3)}
-    .change-head .change-kind{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+    .change-head .change-kind,.change-head .badge{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
     .change-head .actions>*{order:6}
     .change-head .link{order:7}
     :root:not([data-papilot-phone]) .change-head .position,:root:not([data-papilot-phone]) .change-head .complete{display:none}
@@ -196,12 +196,13 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     }
     /* Keep readable names and shortcut hints while drawing only the icons. */
     :root{--icon-source:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16'/></svg>")}
-    :root .change-head .actions button:is(.accept,.reject,.comment,.unstage){width:28px;padding:0;gap:0;font-size:0;flex:none}
-    .change-head .actions button:is(.accept,.reject,.comment,.unstage)::before{width:15px;height:15px}
+    :root .change-head .actions button:is(.accept,.reject,.comment,.unstage,.skip){width:28px;padding:0;gap:0;font-size:0;flex:none}
+    .change-head .actions button:is(.accept,.reject,.comment,.unstage,.skip)::before{width:15px;height:15px}
+    .change-head .actions .skip::before{content:"";background:currentColor;--skip-icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m5 5 7 7-7 7M19 5v14'/></svg>");-webkit-mask:var(--skip-icon) center/contain no-repeat;mask:var(--skip-icon) center/contain no-repeat}
     .change-head .source-toggle{width:28px;padding:0;flex:none;justify-content:center;font-size:0}
     .change-head .source-toggle::before{content:"";width:16px;height:16px;background:currentColor;-webkit-mask:var(--icon-source) center/contain no-repeat;mask:var(--icon-source) center/contain no-repeat}
-    :root[data-papilot-phone] .change-head .actions button:is(.accept,.reject,.comment,.unstage){width:44px;flex:1 1 auto}
-    :root[data-papilot-phone] .change-head .actions button:is(.accept,.reject,.comment,.unstage)::before{width:18px;height:18px}
+    :root[data-papilot-phone] .change-head .actions button:is(.accept,.reject,.comment,.unstage,.skip){width:44px;flex:1 1 auto}
+    :root[data-papilot-phone] .change-head .actions button:is(.accept,.reject,.comment,.unstage,.skip)::before{width:18px;height:18px}
     /* History shares the PDF tools' size. Shortcut settings live in Papilot. */
     /* Papilot shows the full paper switch with its own controls. */
     .view-switch{display:none}
