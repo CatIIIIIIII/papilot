@@ -10,7 +10,7 @@ import { Store } from '../src/server/store.ts';
 import { Workspace, accountUsage, acceptedFiles, agentModel, lightModel } from '../src/server/workspace.ts';
 import { findSkill } from '../src/server/skills.ts';
 import { reviewInstructions } from '../src/conversation.ts';
-import { RpcResponseError, type Codex } from '../src/server/codex.ts';
+import { RpcResponseError, Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
 import { AGENT_IDS, type PendingReview, type Run, type Task } from '../src/shared.ts';
 import { visibleTimeline } from '../src/web/refresh.ts';
@@ -25,6 +25,11 @@ const feedback = { cursor: 7, feedback: [{ body: 'Preserve the boundary conditio
 const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 
 class FakeCodex extends EventEmitter {
+  permissionOptions = Codex.prototype.permissionOptions;
+  async taskPermissionConfig(value: 'workspace' | 'full') {
+    return { thread: { sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write', approvalPolicy: value === 'full' ? 'never' : 'on-request' },
+      turn: { sandboxPolicy: { type: value === 'full' ? 'dangerFullAccess' : 'workspaceWrite' }, approvalPolicy: value === 'full' ? 'never' : 'on-request' } };
+  }
   ready = false;
   calls: { method: string; params: any }[] = [];
   replies: { id: string | number; result: unknown }[] = [];
@@ -1446,14 +1451,14 @@ test('a task runs on its own agent: turns, approvals and pausing go to that agen
   } finally { f.close(); }
 });
 
-test('Antigravity is told to edit with its file tools, since it cannot run commands', () => {
+test('Antigravity instructions defer to its current native permission policy', () => {
   const f = fixture();
   try {
     const codex = (f.workspace as any).instructions(f.task) as string;
     const antigravity = (f.workspace as any).instructions({ ...f.task, agent: 'antigravity' }) as string;
     assert.match(codex, /You may run tools in the task worktree/);
     assert.match(antigravity, /^You are Antigravity running inside Papilot/);
-    assert.match(antigravity, /Shell commands are not available to you here.*file tools only/);
+    assert.match(antigravity, /Shell commands follow the current native permission policy/);
     assert.doesNotMatch(antigravity, /You may run tools/);
   } finally { f.close(); }
 });
@@ -2244,8 +2249,8 @@ for (const lifecycle of ['start', 'resume', 'loaded', 'fallback'] as const) {
       }
       const turn = f.codex.calls.find(c => c.method === 'turn/start');
       assert.ok(turn);
-      assert.equal(Object.hasOwn(turn.params, 'sandboxPolicy'), false,
-        'inherit the resolved thread sandbox, including configured writable roots and temporary-directory exclusions');
+      assert.equal(turn.params.sandboxPolicy.type, 'workspaceWrite', 'apply the runtime policy even to a loaded conversation');
+      assert.equal(turn.params.approvalPolicy, 'on-request');
     } finally { f.close(); }
   });
 }
@@ -2266,3 +2271,101 @@ test('review threads use normal network access and inherit the resolved sandbox'
     assert.equal(f.codex.calls.find(c => c.method === 'turn/start')?.params.sandboxPolicy, undefined);
   } finally { f.close(); }
 });
+
+for (const permissions of ['full', 'workspace'] as const) {
+  test(`task permission selector keeps the loaded conversation with ${permissions} access`, async () => {
+    const f = fixture();
+    try {
+      f.store.updateTask(f.task.id, { permissions: permissions === 'full' ? 'workspace' : 'full' });
+      const changed = f.workspace.updateTaskPermissions(f.task.id, permissions);
+      assert.equal(changed.permissions, permissions);
+      assert.equal(changed.threadId, 'thread');
+      assert.equal((f.workspace as any).loaded.has('thread'), true);
+      f.codex.ready = true;
+      await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `permissions-${permissions}`, false);
+      await tick(); await tick();
+      const resume = f.codex.calls.find(call => call.method === 'thread/resume');
+      assert.equal(resume, undefined, 'changing permissions does not reload a conversation with unchanged instructions');
+      const turn = f.codex.calls.find(call => call.method === 'turn/start');
+      assert.equal(turn?.params.sandboxPolicy.type, permissions === 'full' ? 'dangerFullAccess' : 'workspaceWrite');
+      assert.equal(turn?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
+    } finally { f.close(); }
+  });
+}
+
+
+for (const permissions of ['full', 'workspace'] as const) test(`loaded native conversations receive updated access context for ${permissions}`, async () => {
+  const f = fixture();
+  try {
+    (f.workspace as any).agents.antigravity = f.codex;
+    f.store.updateTask(f.task.id, { agent: 'antigravity', permissions });
+    f.workspace.runtimes.antigravity.authenticated = true;
+    f.codex.ready = true;
+    const run = await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `native-context-${permissions}`, false);
+    await tick(); await tick();
+    assert.equal(f.codex.calls.some(call => call.method === 'thread/resume'), false);
+    const text = f.codex.calls.find(call => call.method === 'turn/start')?.params.input[0].text;
+    assert.match(text, /supersedes earlier Papilot messages fixing the access mode/);
+    assert.match(text, /Keep manuscript edits in this isolated task worktree/);
+    assert.match(text, permissions === 'full' ? /current permissions are Full access/ : /current permissions are Workspace access/);
+    assert.ok(text.endsWith(run.prompt));
+    assert.doesNotMatch(run.prompt, /Papilot settings update/, 'internal context must not alter the author’s stored message');
+  } finally { f.close(); }
+});
+
+test('editing instructions keep manuscript boundaries without pinning mutable access permissions', () => {
+  const f = fixture();
+  try {
+    for (const agent of ['codex', 'claude', 'glm', 'cursor', 'grok', 'antigravity'] as const) {
+      const instructions = (permissions: 'workspace' | 'full') => (f.workspace as any).instructions({ ...f.task, agent, permissions });
+      assert.equal(instructions('workspace'), instructions('full'));
+      assert.match(instructions('workspace'), /Keep manuscript edits in this isolated task worktree/);
+      assert.match(instructions('workspace'), /runtime's current sandbox and approval requirements/);
+      assert.doesNotMatch(instructions('workspace'), /Only edit this isolated task worktree|The user selected full access/);
+      assert.match(instructions('full'), /Never edit the manuscript checkout, other task worktrees, or Papilot's own source\/state/);
+    }
+  } finally { f.close(); }
+});
+
+test('task permission selector refuses active turns, unsupported providers, reviews and invalid values', () => {
+  const f = fixture();
+  try {
+    for (const status of ['running', 'waiting_input', 'queued', 'uncertain', 'building', 'deleting'] as const) {
+      f.store.updateTask(f.task.id, { status });
+      assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Pause the task/);
+    }
+    f.store.updateTask(f.task.id, { status: 'reviewing', agent: 'kimi' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /Invalid task permissions/);
+    f.store.updateTask(f.task.id, { agent: 'codex', mode: 'review' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'full'), /only available/);
+    f.store.updateTask(f.task.id, { mode: 'edit' });
+    assert.throws(() => f.workspace.updateTaskPermissions(f.task.id, 'unrestricted'), /Invalid task permissions/);
+    assert.equal(f.store.task(f.task.id).permissions, undefined);
+  } finally { f.close(); }
+});
+
+test('task permission selector persists the choice across reopening the task store', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-permissions-'));
+  const file = path.join(dir, 'state.sqlite'), f = fixture(undefined, { file });
+  try {
+    f.workspace.updateTaskPermissions(f.task.id, 'full');
+    const reopened = new Store(file);
+    try { assert.equal(reopened.task(f.task.id).permissions, 'full'); } finally { reopened.close(); }
+  } finally { f.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const permissions of ['workspace', 'full'] as const) {
+  test(`new task permission selector starts with the chosen ${permissions} policy`, async () => {
+    const f = fixture(async (_method, route) => route === '/api/tasks' ? { worktree: '/unused' } : summary);
+    try {
+      const created = await f.workspace.createTask({ id: `permission-task-${permissions}`, projectId: 'paper', title: 'Revise', instructions: 'Inspect results.', permissions });
+      assert.equal(created.permissions, permissions);
+      const run = f.store.runs().find(run => run.taskId === created.id)!;
+      f.codex.ready = true;
+      (f.workspace as any).active.set(created.id, run);
+      await (f.workspace as any).startRun(run);
+      const start = f.codex.calls.find(call => call.method === 'thread/start' && !call.params.ephemeral);
+      assert.equal(start?.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
+    } finally { f.close(); }
+  });
+}

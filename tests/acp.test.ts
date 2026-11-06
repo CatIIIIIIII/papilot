@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ACP_PROFILES, AcpAgent, KimiAgent, opencodeConfig } from '../src/server/acp.ts';
+import { GrokAgent } from '../src/server/grok.ts';
+import { RpcResponseError } from '../src/server/codex.ts';
 
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 const configOptions = [
@@ -295,6 +297,199 @@ const copilotSession = {
 };
 const copilotCapabilities = { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { close: {} } };
 
+for (const provider of ['kimi', 'qwen', 'copilot', 'opencode'] as const) {
+  test(`${provider} applies native permission changes before prompts and after reconnecting`, async () => {
+    const modes = provider === 'opencode' ? ['papilot-default', 'papilot-full'] : ['default', 'auto-edit', 'plan', 'auto', 'yolo'];
+    const session = provider === 'copilot' ? copilotSession : { modes: { availableModes: modes.map(id => ({ id })) } };
+    const active = new Map<string, string>(), prompted: { id: string; mode: string | undefined }[] = [];
+    const f = profileFixture(ACP_PROFILES[provider], session, (m, rpc) => {
+      const setter = [...f.calls].reverse().find(call => call.params?.sessionId === m.params.sessionId && (provider === 'copilot'
+        ? call.method === 'session/set_config_option' && call.params.configId === 'allow_all' : call.method === 'session/set_mode'));
+      active.set(m.params.sessionId, setter.params.modeId || setter.params.value);
+      prompted.push({ id: m.params.sessionId, mode: active.get(m.params.sessionId) });
+      rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } });
+      rpc.reply(m.id, { stopReason: 'end_turn' });
+    }, copilotCapabilities);
+    try {
+      await f.agent.start();
+      assert.ok(f.agent.permissionOptions().some(option => option.value === 'full'));
+      assert.ok(!f.agent.permissionOptions().some(option => option.value === 'mystery'));
+      const id = (await f.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+      for (const value of ['full', 'workspace', 'full', 'workspace']) {
+        const policy = await f.agent.taskPermissionConfig(value);
+        assert.equal((await run(f.agent, id, policy.turn)).status, 'completed');
+      }
+      f.agent.close(); await f.agent.start();
+      await f.agent.request('thread/resume', { threadId: id, cwd: '/paper', taskPermissions: 'workspace' });
+      assert.equal((await run(f.agent, id)).status, 'completed');
+      const full = provider === 'copilot' ? 'on' : provider === 'opencode' ? 'papilot-full' : 'yolo';
+      const restricted = provider === 'copilot' ? 'off' : provider === 'opencode' ? 'papilot-default' : provider === 'qwen' ? 'auto-edit' : 'default';
+      assert.deepEqual(prompted, [full, restricted, full, restricted, restricted].map(mode => ({ id, mode })));
+      await assert.rejects(f.agent.taskPermissionConfig('mystery'), /does not support/);
+      const rejected = await run(f.agent, id, { taskPermissions: 'mystery' });
+      assert.equal(rejected.status, 'failed');
+      assert.equal(prompted.length, 5, 'unsupported permissions must fail before a prompt');
+    } finally { f.agent.close(); }
+  });
+}
+
+test('Kimi advertises only installed modes and keeps explicit approvals in YOLO', async () => {
+  const f = profileFixture(ACP_PROFILES.kimi, { modes: { availableModes: ['default', 'plan', 'auto', 'yolo'].map(id => ({ id })) } }, (m, rpc) => {
+    rpc.send({ id: 'managed-approval', method: 'session/request_permission', params: { sessionId: m.params.sessionId,
+      toolCall: { title: 'Managed action', kind: 'execute' }, options: [{ optionId: 'yes', kind: 'allow_once' }, { optionId: 'no', kind: 'reject_once' }] } });
+  });
+  try {
+    await f.agent.start();
+    assert.deepEqual(f.agent.permissionOptions().map(option => option.value), ['workspace', 'plan', 'auto', 'full']);
+    const id = (await f.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+    const requested = new Promise<any>(resolve => f.agent.once('request', resolve));
+    const done = run(f.agent, id, { taskPermissions: 'full' });
+    const request = await requested;
+    assert.equal(f.calls.some(call => call.id === 'managed-approval' && !call.method), false);
+    f.agent.respond(request.id, { decision: 'decline' }); await tick();
+    assert.deepEqual(f.calls.find(call => call.id === 'managed-approval' && !call.method).result.outcome, { outcome: 'selected', optionId: 'no' });
+    f.rpc().reply(f.calls.find(call => call.method === 'session/prompt').id, { stopReason: 'cancelled' }); await done;
+    const older = profileFixture(ACP_PROFILES.kimi, { modes: { availableModes: [{ id: 'default' }] } }, () => {});
+    try { await older.agent.start(); assert.deepEqual(older.agent.permissionOptions().map(option => option.value), ['workspace']); }
+    finally { older.agent.close(); }
+  } finally { f.agent.close(); }
+});
+
+test('OpenCode owns its permission personas without overriding unrelated native or legacy configuration', () => {
+  const own = { model: 'provider/model', permission: { webfetch: 'deny' },
+    agent: { custom: { prompt: 'Keep me' }, 'papilot-default': { permission: 'allow' } },
+    agents: { custom2: { mode: 'primary' }, 'papilot-default': { permissions: [{ action: '*', resource: '*', effect: 'allow' }] }, 'papilot-full': { mode: 'subagent' } } };
+  const merged = JSON.parse(opencodeConfig(JSON.stringify(own)));
+  assert.deepEqual(merged.agents, { custom2: own.agents.custom2 });
+  assert.deepEqual(merged.agent.custom, own.agent.custom);
+  assert.equal(merged.agent['papilot-default'].permission.bash, 'ask');
+  assert.equal(merged.agent['papilot-default'].permission.external_directory, 'ask');
+  assert.equal(merged.agent['papilot-full'].permission, 'allow');
+  assert.equal(merged.permission.webfetch, 'deny');
+});
+
+test('Grok isolates concurrent tasks and restores the same native session with reduced permissions', async () => {
+  const peers: ReturnType<typeof peer>[] = [], calls: any[][] = [], prompts: { process: number; id: string; full: boolean; request: number }[] = [];
+  let serial = 0;
+  const launch = () => {
+    const index = peers.length, log: any[] = [], modes = new Map<string, boolean>(); calls.push(log);
+    const rpc = peer(m => {
+      log.push(m); const { id, method, params } = m;
+      if (method === 'initialize') rpc.reply(id, { protocolVersion: 1, authMethods: [{ id: 'cached_token' }], agentCapabilities: { sessionCapabilities: { resume: {}, close: {} } } });
+      else if (method === 'session/new' || method === 'session/resume') {
+        const sessionId = params.sessionId || `grok-${++serial}`;
+        // Like Grok, a resident session cannot be downgraded with metadata alone.
+        modes.set(sessionId, modes.get(sessionId) || Boolean(params._meta.yoloMode));
+        assert.equal(params._meta.autoMode, false);
+        rpc.reply(id, { sessionId });
+      } else if (method === 'session/prompt') prompts.push({ process: index, id: params.sessionId, full: modes.get(params.sessionId)!, request: id });
+      else if (id !== undefined) rpc.reply(id, {});
+    });
+    peers.push(rpc); return rpc.child;
+  };
+  const agent = new GrokAgent('fake-grok', launch as any);
+  const finish = async (prompt: typeof prompts[number]) => {
+    const done = completion(agent as any), rpc = peers[prompt.process];
+    rpc.update(prompt.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } });
+    rpc.reply(prompt.request, { stopReason: 'end_turn' });
+    assert.equal((await done).status, 'completed');
+  };
+  const waitPrompts = async (count: number) => { for (let i = 0; i < 100 && prompts.length < count; i++) await tick(); assert.equal(prompts.length, count); };
+  try {
+    await agent.start();
+    const first = (await agent.request('thread/start', { cwd: '/first', taskPermissions: 'full' })).thread.id;
+    const second = (await agent.request('thread/start', { cwd: '/second', taskPermissions: 'workspace' })).thread.id;
+    await agent.request('turn/start', { threadId: first });
+    await agent.request('turn/start', { threadId: second }); await waitPrompts(2);
+    assert.deepEqual(prompts.map(p => [p.id, p.full]), [[first, true], [second, false]]);
+    assert.notEqual(prompts[0].process, prompts[1].process);
+    await finish(prompts[0]);
+    await agent.request('turn/start', { threadId: first, taskPermissions: 'workspace' }); await waitPrompts(3);
+    assert.equal(prompts[2].id, first); assert.equal(prompts[2].full, false);
+    assert.notEqual(prompts[2].process, prompts[0].process);
+    assert.ok(calls[prompts[2].process].some(call => call.method === 'session/resume' && call.params.sessionId === first));
+    await finish(prompts[1]); await finish(prompts[2]);
+  } finally { agent.close(); }
+});
+
+function grokLifecycleFixture() {
+  const peers: { rpc: ReturnType<typeof peer>; kills: number; prompt?: any; held?: () => void }[] = [];
+  let serial = 0, hold = false, failResume = false;
+  const launch = () => {
+    const state = { kills: 0 } as typeof peers[number];
+    const rpc = peer(m => {
+      const { id, method, params } = m;
+      if (method === 'initialize') rpc.reply(id, { protocolVersion: 1, authMethods: [{ id: 'cached_token' }], agentCapabilities: { loadSession: true, sessionCapabilities: { close: {} } } });
+      else if (method === 'session/new' || method === 'session/load') {
+        if (failResume && method === 'session/load') return rpc.send({ id, error: { code: -32000, message: 'resume unavailable' } });
+        const result = { sessionId: params.sessionId || `session-${++serial}` };
+        if (hold && peers.length === 2) { hold = false; state.held = () => rpc.reply(id, result); }
+        else rpc.reply(id, result);
+      } else if (method === 'session/prompt') state.prompt = m;
+      else if (id !== undefined) rpc.reply(id, {});
+    });
+    state.rpc = rpc; peers.push(state);
+    const kill = rpc.child.kill; rpc.child.kill = () => { state.kills++; return kill(); };
+    return rpc.child;
+  };
+  return { agent: new GrokAgent('fake-grok', launch as any), peers, hold: () => { hold = true; }, failResume: () => { failResume = true; } };
+}
+
+test('Grok closes active and starting workers when the runtime disconnects', async () => {
+  const f = grokLifecycleFixture();
+  try {
+    await f.agent.start();
+    const id = (await f.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+    await f.agent.request('turn/start', { threadId: id });
+    for (let i = 0; i < 30 && !f.peers[1].prompt; i++) await tick();
+    assert.ok(f.peers[1].prompt);
+    const disconnected = new Promise(resolve => f.agent.once('disconnected', resolve));
+    f.peers[0].rpc.child.emit('close', 1); await disconnected;
+    assert.ok(f.peers[1].kills > 0, 'a disconnected runtime must not leave a YOLO worker running');
+  } finally { f.agent.close(); }
+  const pending = grokLifecycleFixture();
+  try {
+    await pending.agent.start(); pending.hold();
+    const starting = pending.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' });
+    const rejected = assert.rejects(starting, /disconnected/);
+    for (let i = 0; i < 30 && !pending.peers[1]?.held; i++) await tick();
+    assert.ok(pending.peers[1].held);
+    pending.agent.close(); await rejected;
+    assert.ok(pending.peers[1].kills > 0, 'workers must be tracked before session creation completes');
+  } finally { pending.agent.close(); }
+});
+
+test('Grok resume failures have a definite outcome before sending a new prompt', async () => {
+  const f = grokLifecycleFixture();
+  try {
+    await f.agent.start();
+    const id = (await f.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+    const done = completion(f.agent as any);
+    await f.agent.request('turn/start', { threadId: id, clientUserMessageId: 'first' });
+    for (let i = 0; i < 30 && !f.peers[1].prompt; i++) await tick();
+    const worker = f.peers[1]; assert.ok(worker.prompt);
+    worker.rpc.update(id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } });
+    worker.rpc.reply(worker.prompt.id, { stopReason: 'end_turn' }); await done;
+    f.failResume();
+    await assert.rejects(f.agent.request('turn/start', { threadId: id, taskPermissions: 'workspace', clientUserMessageId: 'second' }), error => error instanceof RpcResponseError && /resume unavailable/.test(error.message));
+    assert.equal(f.peers[2].prompt, undefined);
+    assert.ok(f.peers[2].kills > 0);
+  } finally { f.agent.close(); }
+});
+
+test('Grok restores idle threads after reconnect without an extra thread/resume from Workspace', async () => {
+  const f = grokLifecycleFixture();
+  try {
+    await f.agent.start();
+    const id = (await f.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' })).thread.id;
+    f.peers[0].rpc.child.emit('close', 1); await tick();
+    await f.agent.start();
+    await f.agent.request('turn/start', { threadId: id, taskPermissions: 'workspace' });
+    for (let i = 0; i < 30 && !f.peers.at(-1)?.prompt; i++) await tick();
+    assert.equal(f.peers.at(-1)?.prompt.params.sessionId, id);
+  } finally { f.agent.close(); }
+});
+
 for (const legacy of [false, true]) {
   test(`ACP reports each session's current model instead of the probe default (${legacy ? 'legacy' : 'config options'})`, async () => {
     const session: any = legacy
@@ -350,8 +545,8 @@ test('Copilot pins agent mode and manual approvals on new and resumed sessions, 
     await f.agent.request('thread/resume', { threadId: thread.id, cwd: '/paper', model: 'model-b' });
     assert.equal((await run(f.agent, thread.id)).status, 'completed');
     assert.ok(f.calls.some(call => call.method === 'session/load' && call.params.sessionId === thread.id));
-    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_mode').map(call => call.params.modeId), Array(2).fill('https://agentclientprotocol.com/protocol/session-modes#agent'));
-    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'allow_all').map(call => call.params.value), ['off', 'off']);
+    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_mode').map(call => call.params.modeId), Array(4).fill('https://agentclientprotocol.com/protocol/session-modes#agent'));
+    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'allow_all').map(call => call.params.value), ['off', 'off', 'off', 'off']);
     assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'reasoning_effort' && call.params.value === 'low'));
     assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'model' && call.params.value === 'model-b'));
     assert.equal(f.calls.filter(call => call.method === 'session/prompt').at(-1).params.prompt[0].text, 'Fix it.');
@@ -405,11 +600,11 @@ test('Copilot refuses versions without a way to disable automatic approvals', { 
   } finally { f.agent.close(); }
 });
 
-test('OpenCode is set to its build mode option and asked to request approval before commands', { timeout: 5000 }, async () => {
+test('OpenCode is set to its dedicated default mode and asked to request approval before commands', { timeout: 5000 }, async () => {
   const session = { configOptions: [
     { id: 'model', category: 'model', currentValue: 'deepseek/deepseek-v4-pro', options: [{ value: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro' }] },
     { id: 'effort', category: 'thought_level', currentValue: 'default', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }, { value: 'default', name: 'Default' }] },
-    { id: 'mode', category: 'mode', currentValue: 'plan', options: [{ value: 'build', name: 'Build' }, { value: 'plan', name: 'Plan' }] },
+    { id: 'mode', category: 'mode', currentValue: 'plan', options: [{ value: 'papilot-default', name: 'Default' }, { value: 'papilot-full', name: 'Full' }] },
   ] };
   const f = profileFixture(ACP_PROFILES.opencode, session, (m, rpc) => { rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } }); rpc.reply(m.id, { stopReason: 'end_turn' }); });
   try {
@@ -422,7 +617,7 @@ test('OpenCode is set to its build mode option and asked to request approval bef
     assert.equal(models[0].defaultReasoningEffort, null);
     const id = (await f.agent.request('thread/start', { cwd: '/paper', developerInstructions: 'Only edit this paper.' })).thread.id;
     assert.equal((await run(f.agent as unknown as KimiAgent, id)).status, 'completed');
-    assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'mode' && call.params.value === 'build'));
+    assert.ok(f.calls.some(call => call.method === 'session/set_config_option' && call.params.configId === 'mode' && call.params.value === 'papilot-default'));
     assert.equal(f.calls.some(call => call.method === 'session/set_mode'), false);
   } finally { f.agent.close(); }
   // The user's own OpenCode configuration is kept, with Papilot's approvals on top.
@@ -439,7 +634,7 @@ test('Qwen prefers its auto-edit mode, and an agent without any accepted mode is
     assert.deepEqual(f.launches[0].args, ['--acp']);
     const id = (await f.agent.request('thread/start', { cwd: '/paper' })).thread.id;
     assert.equal((await run(f.agent as unknown as KimiAgent, id)).status, 'completed');
-    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_mode').map(call => call.params.modeId), ['auto-edit']);
+    assert.deepEqual(f.calls.filter(call => call.method === 'session/set_mode').map(call => call.params.modeId), ['auto-edit', 'auto-edit']);
   } finally { f.agent.close(); }
   const yolo = profileFixture(ACP_PROFILES.qwen, { modes: { availableModes: [{ id: 'yolo' }] } }, () => {});
   try { await assert.rejects(yolo.agent.start(), /Qwen does not offer manual approvals/); } finally { yolo.agent.close(); }

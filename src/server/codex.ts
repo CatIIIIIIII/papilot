@@ -2,18 +2,46 @@ import { agentPath } from '../../bin/agent-paths.mjs';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
+import type { TaskPermissions, TaskPermissionOption } from '../shared.ts';
 import { CODEX, ROOT, VERSION } from './paths.ts';
+import { taskAccessInstructions } from './task-permissions.ts';
 
 export class RpcResponseError extends Error {}
 
 export class Codex extends EventEmitter {
+  permissionOptions(): TaskPermissionOption[] {
+    return [
+      { value: 'workspace', label: 'Workspace access', detail: 'Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.' },
+      { value: 'full', label: 'Full access', detail: 'Disable the sandbox and run tools without approval, subject to managed settings.' },
+    ];
+  }
+  async taskPermissionConfig(value: TaskPermissions, cwd: string) {
+    const thread = { approvalPolicy: value === 'full' ? 'never' : 'on-request', sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write' };
+    // Resuming even a cold thread retains its original developer instructions.
+    // Application context supplies a later developer message on every turn,
+    // including after restart, without discarding the conversation's history.
+    const additionalContext = { 'papilot-task-access': { kind: 'application', value: `These are Papilot's current task access instructions. They replace earlier Papilot instructions about access outside the task worktree; manuscript review scope and protected-path rules still apply.\n${taskAccessInstructions}` } };
+    if (value === 'full') return { thread, turn: { approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' }, additionalContext } };
+    // A loaded thread/resume can keep the previous policy (including full access).
+    // Resolve a fresh native policy to retain configured roots and tmp exclusions,
+    // then apply it atomically to the next turn, even on an already-loaded thread.
+    const resolved = await this.request('thread/start', { ...thread, cwd, ephemeral: true, config: { 'sandbox_workspace_write.network_access': true } });
+    try {
+      if (resolved.sandbox?.type !== 'workspaceWrite' || resolved.approvalPolicy !== 'on-request') {
+        throw new RpcResponseError('Codex could not apply workspace permissions.');
+      }
+      return { thread, turn: { approvalPolicy: resolved.approvalPolicy, sandboxPolicy: resolved.sandbox, additionalContext } };
+    } finally {
+      if (resolved.thread?.id) await this.request('thread/unsubscribe', { threadId: resolved.thread.id }).catch(() => {});
+    }
+  }
   child: ChildProcessWithoutNullStreams | null = null;
   private sequence = 0;
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   private starting: Promise<void> | null = null;
   ready = false;
   stderr = '';
-  constructor(private binary = CODEX, private args = ['app-server', '--listen', 'stdio://']) { super(); }
+  constructor(private binary = CODEX, private args = ['app-server', '--listen', 'stdio://'], private env: NodeJS.ProcessEnv = process.env) { super(); }
   start(): Promise<void> {
     if (this.ready) return Promise.resolve();
     if (this.starting) return this.starting;
@@ -22,7 +50,7 @@ export class Codex extends EventEmitter {
   }
   private async launch() {
     this.stderr = '';
-    const child = spawn(this.binary, this.args, { cwd: ROOT, env: { ...process.env, PATH: agentPath() }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(this.binary, this.args, { cwd: ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     const lines = createInterface({ input: child.stdout });
     lines.on('line', line => { try { this.receive(JSON.parse(line)); } catch { /* non-protocol stdout is ignored */ } });
