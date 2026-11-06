@@ -80,7 +80,7 @@ jobs:
       - name: Require every tested desktop installer and the update layer
         run: |
           version="${GITHUB_REF_NAME#v}"
-          for suffix in mac-arm64.dmg mac-arm64.zip mac-x64.dmg mac-x64.zip linux-x86_64.AppImage linux-amd64.deb; do
+          for suffix in mac-arm64.dmg mac-arm64.zip mac-x64.dmg mac-x64.zip linux-x86_64.AppImage linux-amd64.deb win-x64.exe win-x64-portable.exe; do
             test -s "release/desktop/Papilot-$version-$suffix"
           done
           test -s "release/desktop/papilot-app-$version.tgz"
@@ -113,5 +113,5 @@ jobs:
           shopt -s nullglob
           # Apps discover a release by its desktop.json, so it goes last: by
           # then the installers and the update layer it names are uploaded.
-          gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb release/desktop/papilot-app-*.tgz --clobber
+          gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb release/desktop/*.exe release/desktop/papilot-app-*.tgz --clobber
           gh release upload "$GITHUB_REF_NAME" release/desktop/desktop.json --clobber

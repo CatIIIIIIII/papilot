@@ -32,7 +32,7 @@ permissions:
 jobs:
   build:
     name: ${{ matrix.target }}
-    runs-on: ${{ fromJSON('{"mac-arm64":"macos-15","mac-x64":"macos-15-intel","linux-x64":"ubuntu-22.04"}')[matrix.target] }}
+    runs-on: ${{ fromJSON('{"mac-arm64":"macos-15","mac-x64":"macos-15-intel","linux-x64":"ubuntu-22.04","win-x64":"windows-latest"}')[matrix.target] }}
     timeout-minutes: 45
     env:
       # Dev builds: their server and update layer report the commit.
@@ -42,7 +42,7 @@ jobs:
       matrix:
         # Intel Macs run the same code on the slowest runner, so quick checks
         # leave them to full builds.
-        target: ${{ fromJSON(inputs.quick && '["mac-arm64","linux-x64"]' || '["mac-arm64","mac-x64","linux-x64"]') }}
+        target: ${{ fromJSON(inputs.quick && '["mac-arm64","linux-x64"]' || '["mac-arm64","mac-x64","linux-x64","win-x64"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -79,6 +79,12 @@ jobs:
         env:
           PAPILOT_DESKTOP_EXECUTABLE: ${{ github.workspace }}/release/desktop/${{ matrix.target == 'mac-x64' && 'mac' || 'mac-arm64' }}/Papilot.app/Contents/MacOS/Papilot
         run: npm run test:desktop
+      - name: Launch the Windows app and check its backend
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        env:
+          PAPILOT_DESKTOP_EXECUTABLE: ${{ github.workspace }}\release\desktop\win-unpacked\Papilot.exe
+        run: npm run test:desktop
       - name: Test the Linux directory${{ !inputs.quick && ', AppImage and installed deb' || '' }}
         if: runner.os == 'Linux'
         timeout-minutes: 15
@@ -93,6 +99,7 @@ jobs:
             release/desktop/*.zip
             release/desktop/*.AppImage
             release/desktop/*.deb
+            release/desktop/*.exe
           if-no-files-found: error
           retention-days: 7
       - name: Save the update layer
