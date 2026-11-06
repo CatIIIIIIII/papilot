@@ -591,6 +591,26 @@ function flow(build: Build, start: Spot, end: Spot | null): Intervals {
   }
   return intervals;
 }
+/** Display sections partition reading order at every heading. Source sections
+ * remain hierarchical (sectionIntervals); using those nested ranges to place
+ * display fragments lets a parent steal a child's changes and context. */
+export function readingSections(build: Build) {
+  const located = build.outline
+    .flatMap((node) => {
+      const at = headingAt(build, node);
+      return at ? [{ node, at }] : [];
+    })
+    .sort((a, b) =>
+      byReading(
+        readingKey(build.document, lane(a.at[0], a.at[2]), a.at[1]),
+        readingKey(build.document, lane(b.at[0], b.at[2]), b.at[1]),
+      ),
+    );
+  return located.map(({ node, at }, i) => ({
+    node,
+    intervals: flow(build, at, located[i + 1]?.at ?? null),
+  }));
+}
 export function sectionIntervals(
   build: Build,
   node: Heading,

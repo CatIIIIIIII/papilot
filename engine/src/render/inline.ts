@@ -23,6 +23,7 @@ import {
   lanePage,
   laneX,
   readingKey,
+  readingSections,
   sectionIntervals,
   type Intervals,
 } from "./locate.ts";
@@ -684,23 +685,22 @@ export function renderDocument(
   strips: Strips,
   figureFiles: (file: string) => boolean,
 ): Pick<RenderedRound, "sections" | "loose"> {
-  const cards = structuredClone(inputCards),
-    sections = next.outline.flatMap((node) => {
-      const members = cards.filter((c) => c.context_node === node.id);
-      if (!members.length) return [];
-      try {
-        const [intervals] = sectionIntervals(next, node, figureFiles);
-        balanceSection(old, next, node, members, intervals, figureFiles);
-        return [{ node, intervals }];
-      } catch (error) {
-        if (
-          !(error as Error).message.includes("PDF outline") &&
-          !(error as Error).message.includes("outside this PDF")
-        )
-          throw error;
-        return [];
-      }
-    });
+  const cards = structuredClone(inputCards);
+  for (const node of next.outline) {
+    const members = cards.filter((c) => c.context_node === node.id);
+    if (!members.some((c) => c.comparison === "text" && !c.aligned)) continue;
+    try {
+      const [intervals] = sectionIntervals(next, node, figureFiles);
+      balanceSection(old, next, node, members, intervals, figureFiles);
+    } catch (error) {
+      if (
+        !(error as Error).message.includes("PDF outline") &&
+        !(error as Error).message.includes("outside this PDF")
+      )
+        throw error;
+    }
+  }
+  const sections = readingSections(next);
   // Set the final footprint before resolving ownership. No later snap or
   // margin expansion may make independently owned crops overlap again.
   for (const card of cards)
@@ -730,7 +730,7 @@ export function renderDocument(
         readingKey(document, laneAt(document, b.page, b.clip), b.clip[1]),
       ) || a.clip[0] - b.clip[0],
     areas = regions(cards),
-    context = sections.flatMap(({ intervals }, value) =>
+    sectionAreas = sections.flatMap(({ intervals }, value) =>
       [...intervals].flatMap(([id, spans]) =>
         spans.map(([top, bottom]) => {
           const [left, right] = laneX(next.document, id);
@@ -742,8 +742,21 @@ export function renderDocument(
         }),
       ),
     ),
-    // Child sections take their share of a parent's context. Change regions
-    // take precedence over all context, including floating figures.
+    affected = new Set(
+      sectionAreas
+        .filter((section) =>
+          areas.some((area) =>
+            area.new.some(
+              (p) =>
+                p.page === section.page && intersects(p.clip, section.rect),
+            ),
+          ),
+        )
+        .map((section) => section.value),
+    ),
+    context = sectionAreas.filter((section) => affected.has(section.value)),
+    // Display sections are disjoint. Change regions take precedence over
+    // all context, including floating figures.
     background = partition(
       [
         ...context,
@@ -751,22 +764,22 @@ export function renderDocument(
           area.new.map((p) => ({ page: p.page, rect: p.clip, value: -1 })),
         ),
       ],
-      (values) =>
-        values.includes(-1)
-          ? undefined
-          : values.reduce((a, b) =>
-              sections[b].node.level > sections[a].node.level ? b : a,
-            ),
+      (values) => (values.includes(-1) ? undefined : Math.min(...values)),
     );
   interface Display extends Piece {
     page: number;
     rect: Rect;
     region?: number;
+    section: number;
   }
   const plans: Display[][] = sections.map(() => []),
     loosePlan: Display[] = [],
     oldShown = new Set<number>(),
-    display = (position: Position, region?: number): Display => ({
+    display = (
+      position: Position,
+      section: number,
+      region?: number,
+    ): Display => ({
       kind: region === undefined ? "context" : "change",
       page: position.page,
       rect: position.clip,
@@ -774,10 +787,11 @@ export function renderDocument(
       top: position.clip[1],
       bottom: position.clip[3],
       region,
+      section,
     });
   for (const tile of background)
     plans[tile.value].push(
-      display({ page: tile.page, clip: tile.rect, label: "" }),
+      display({ page: tile.page, clip: tile.rect, label: "" }, tile.value),
     );
   areas.forEach((area, region) => {
     area.old.sort((a, b) => order(old.document, a, b));
@@ -785,22 +799,12 @@ export function renderDocument(
     for (const position of area.new) {
       // A fragment reads where it prints; its region keeps the complete
       // correspondence and source ownership, even when it spans sections.
-      const at = context
-        .filter((c) => c.page === position.page)
-        .map((c) => {
-          const r = intersect(c.rect, position.clip);
-          return {
-            section: c.value,
-            area: Math.max(0, r[2] - r[0]) * Math.max(0, r[3] - r[1]),
-          };
-        })
-        .filter((c) => c.area > 0)
-        .sort(
-          (a, b) =>
-            b.area - a.area ||
-            sections[b.section].node.level - sections[a.section].node.level,
-        )[0];
-      (at ? plans[at.section] : loosePlan).push(display(position, region));
+      const at = context.find(
+        (c) => c.page === position.page && intersects(c.rect, position.clip),
+      );
+      (at ? plans[at.value] : loosePlan).push(
+        display(position, at?.value ?? -1, region),
+      );
     }
   });
   const change = (index: number, positions: Position[]): ChangeBlock => {
@@ -868,17 +872,25 @@ export function renderDocument(
       after: images("new", next, positions),
     };
   };
-  const render = (pieces: Display[]): Block[] => {
-    pieces.sort(
-      (a, b) =>
-        byReading(
-          readingKey(next.document, a.lane, a.top),
-          readingKey(next.document, b.lane, b.top),
-        ) || a.rect[0] - b.rect[0],
-    );
+  const compare = (a: Display, b: Display) =>
+      byReading(
+        readingKey(next.document, a.lane, a.top),
+        readingKey(next.document, b.lane, b.top),
+      ) || a.rect[0] - b.rect[0],
+    plan = plans.flat().sort(compare),
+    kept: (Display | { kind: "gap" })[][] = sections.map(() => []);
+  let section = -1;
+  // Fold once in document order, so context can continue through a heading
+  // without a second copy or a jump over a child section.
+  if (plan.some((p) => p.kind === "change"))
+    for (const piece of foldContext(plan)) {
+      if (piece.kind !== "gap") section = piece.section;
+      if (section >= 0) kept[section].push(piece);
+    }
+  const render = (pieces: (Display | { kind: "gap" })[]): Block[] => {
     const blocks: Block[] = [];
     let previous: number | undefined;
-    for (const piece of foldContext(pieces)) {
+    for (const piece of pieces) {
       if (piece.kind === "gap") {
         blocks.push({ kind: "gap" });
         previous = undefined;
@@ -912,17 +924,17 @@ export function renderDocument(
     return blocks;
   };
   const rendered = sections.flatMap(({ node }, index) => {
-      if (!plans[index].some((p) => p.kind === "change")) return [];
+      if (!kept[index].some((p) => p.kind !== "gap")) return [];
       return [
         {
           node: node.id,
           number: node.number,
           title: node.title,
-          blocks: render(plans[index]),
+          blocks: render(kept[index]),
         },
       ];
     }),
-    loose = render(loosePlan).filter(
+    loose = render(loosePlan.sort(compare)).filter(
       (b): b is ChangeBlock => b.kind === "change",
     );
   areas.forEach((area, index) => {

@@ -276,6 +276,91 @@ it("keeps separated fragments and intervening context in reading order", () => {
       .join(" "),
   ).toContain("Line 6 remains readable");
 });
+it("partitions nested headings without losing child context or jumping back in reading order", () => {
+  const doc = document([
+      Array.from({ length: 12 }, (_, i) => `Line ${i} remains readable`).join(
+        "\n",
+      ),
+    ]),
+    build = sectioned(doc, [0, 5, 10]);
+  build.outline[0].level = 0;
+  build.outline[1].parent = build.outline[2].parent = "0";
+  const cards: Card[] = [
+      ["parent", "0", 54, 75],
+      ["child", "1", 180, 237],
+    ].map(([id, section, top, bottom]) => ({
+      id: String(id),
+      file: "paper.tex",
+      context_node: String(section),
+      comparison: "text",
+      aligned: true,
+      pairs: [
+        {
+          old: {
+            page: 0,
+            clip: [0, Number(top), 600, Number(bottom)],
+            label: "1",
+          },
+          new: {
+            page: 0,
+            clip: [0, Number(top), 600, Number(bottom)],
+            label: "1",
+          },
+          group: 0,
+          before_marks: [],
+          after_marks: [],
+        },
+      ],
+    })),
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-headings-"));
+  folders.push(folder);
+  const result = renderDocument(
+      build,
+      build,
+      cards,
+      new Strips(folder),
+      () => false,
+    ),
+    child = result.sections.find((s) => s.node === "1")!,
+    strips = result.sections.flatMap((s) =>
+      s.blocks.flatMap((b) =>
+        b.kind === "context" ? [b.image] : b.kind === "change" ? b.after : [],
+      ),
+    );
+  expect(
+    child.blocks.some((b) => b.kind === "change" && b.units.includes("child")),
+  ).toBe(true);
+  expect(
+    child.blocks
+      .flatMap((b) => (b.kind === "context" ? (b.image.text ?? []) : []))
+      .map((l) => l.text)
+      .join(" "),
+  ).toContain("Line 6 remains readable");
+  expect(strips.map((s) => s.top)).toEqual(
+    strips.map((s) => s.top).sort((a, b) => a! - b!),
+  );
+  for (const word of doc.page(0).words)
+    expect(
+      strips.filter((s) =>
+        containsCenter(
+          [s.left ?? 0, s.top!, (s.left ?? 0) + s.width, s.top! + s.height],
+          word.rect,
+        ),
+      ),
+    ).toHaveLength(1);
+  // Unaffected preceding sections must not push the first edit out of view.
+  const onlyChild = structuredClone(cards.slice(1));
+  for (const side of ["old", "new"] as const)
+    onlyChild[0].pairs[0][side]!.clip = [0, 162, 600, 183];
+  const scoped = renderDocument(
+    build,
+    build,
+    onlyChild,
+    new Strips(folder),
+    () => false,
+  );
+  expect(scoped.sections.map((s) => s.node)).toEqual(["1"]);
+});
 it("marks whole words including deleted suffixes", () => {
   const old = document([
       "Since a type variable's meaning now depends on its bound,\nour two new guards must also be context-aware.",
