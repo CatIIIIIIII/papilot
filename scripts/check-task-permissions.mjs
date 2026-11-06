@@ -38,7 +38,10 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/ai-review')) return json({ notes: [] });
   if (url.pathname.endsWith('/manuscript')) return json({ git: { files: [] }, annotations: [], build: { status: 'building', current: false } });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
-  if (url.pathname.endsWith('/items')) return json({ items: [] });
+  if (url.pathname.endsWith('/items')) return json({ items: [
+    { id: 'fixture-task:turn:msg_legacy:1', taskId: task.id, type: 'assistant', text: 'Checking the table width.', createdAt: 1 },
+    { id: 'fixture-task:turn:msg_legacy:0', taskId: task.id, type: 'assistant', text: 'Checking the table width.', createdAt: 2, status: 'completed' },
+  ] });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
   if (url.pathname.endsWith('/git')) return json({ files: [], branch: 'main', ahead: 0, behind: 0 });
   if (url.pathname.endsWith('/permissions')) {
@@ -59,6 +62,7 @@ await page.route('**/api/**', async route => {
 
 try {
   await page.goto(origin);
+  await expect(page.getByText('Checking the table width.', { exact: true })).toHaveCount(1);
   const picker = page.locator('.activity-panel').getByRole('combobox', { name: 'Task permissions', exact: true });
   await expect(picker).toBeDisabled();
   task.status = 'reviewing'; await page.reload();

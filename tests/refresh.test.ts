@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ReadRequest, canStreamUpdates, mergeTimeline } from '../src/web/refresh.ts';
+import { ReadRequest, canStreamUpdates, mergeTimeline, visibleTimeline } from '../src/web/refresh.ts';
 import { Store } from '../src/server/store.ts';
 
 function deferred<T>() {
@@ -105,4 +105,19 @@ test('removing a paper or deleting a task forgets its timeline revisions', () =>
   assert.deepEqual(tracked(), ['kept', 'removed']);
   store.removeProject('paper');
   assert.deepEqual(tracked(), ['removed'], "another paper's task keeps its revisions");
+});
+
+test('old Claude streamed duplicates disappear without hiding legitimate repeated replies', () => {
+  const stream = { id: 'task:turn:msg_reply:1', type: 'assistant', text: 'Checking the table.', createdAt: 1 };
+  const final = { ...stream, id: 'task:turn:msg_reply:0', status: 'completed', createdAt: 2 };
+  const again = { ...final, id: 'task:turn:msg_next:0', createdAt: 3 };
+  const otherTurn = { ...stream, id: 'task:other:msg_reply:1' };
+  const tool = { ...stream, type: 'command' };
+  const different = { ...stream, id: 'task:turn:msg_reply:3', text: 'Different reply' };
+  const full = [stream, final, again, otherTurn, tool, different];
+  assert.deepEqual(visibleTimeline(full), [final, again, otherTurn, tool, different]);
+  assert.equal(full.length, 6, 'historical data is not modified');
+  assert.deepEqual(visibleTimeline([stream]), [stream], 'live streaming remains visible');
+  assert.deepEqual(visibleTimeline(mergeTimeline([stream], [final])), [final]);
+  assert.deepEqual(visibleTimeline([{ ...stream, status: 'completed' }, final]).length, 2, 'real repeated completed blocks are retained');
 });
