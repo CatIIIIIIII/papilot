@@ -73,6 +73,30 @@ const positions = (doc: PdfDocument): Position[] =>
   }));
 const compare = (a: PdfDocument, b: PdfDocument) =>
   textChanges(a, b, positions(a), positions(b));
+it("retains faint coloured drawings while omitting truly blank strips", () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-faint-"));
+  folders.push(folder);
+  const strips = new Strips(folder);
+  for (const color of ["1 0.99 0.99", "0.99 0.99 1", "1 1 1"]) {
+    const raw = new mupdf.PDFDocument(),
+      page = raw.addPage(
+        [0, 0, 200, 200],
+        0,
+        {},
+        `${color} rg 40 40 20 20 re f`,
+      );
+    raw.insertPage(-1, page);
+    const buffer = raw.saveToBuffer(""),
+      doc = new PdfDocument(buffer.asUint8Array().slice());
+    documents.push(doc);
+    buffer.destroy();
+    page.destroy();
+    raw.destroy();
+    const strip = strips.write(doc, 0, 139, 161, [], "", [39, 61]);
+    if (color === "1 1 1") expect(strip).toBeNull();
+    else expect(strip).not.toBeNull();
+  }
+});
 afterEach(() => {
   documents.splice(0).forEach((d) => d.close());
   folders

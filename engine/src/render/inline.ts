@@ -529,7 +529,7 @@ export class Strips {
       !page.lines.some((line) =>
         line.chars.some((char) => containsCenter(clip, char.rect)),
       ) &&
-      page.raster(clip, 1, true).pixels.every((p) => p >= 250)
+      page.raster(clip, 2, false, true).pixels.every((p) => p === 255)
     )
       return null;
     // Red and green say that words were removed or added; a light blue,
@@ -806,7 +806,8 @@ export function renderDocument(
       const pieces = partition(
         [
           ...boundaries.filter(
-            (c) => c.page === position.page && intersects(c.rect, position.clip),
+            (c) =>
+              c.page === position.page && intersects(c.rect, position.clip),
           ),
           { page: position.page, rect: position.clip, value: sections.length },
         ],
