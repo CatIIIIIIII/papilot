@@ -25,6 +25,7 @@ const snapshot = { version: 'test', csrf: 'test', projects: [{ id: 'paper', name
 const modelChanges = [], messages = [];
 let modelFailure = false, holdModel, releaseModel;
 let permissionFailure = false, holdPermission, releasePermission; const permissionChanges = [];
+let holdState, releaseState, stateFailure = false, stateReads = 0, stateFailures = 0;
 await context.addInitScript(() => {
   localStorage.setItem('papilot:task', 'fixture-task');
   localStorage.setItem('papilot:recent-models', JSON.stringify([{ agent: 'claude', model: 'opus' }]));
@@ -32,7 +33,13 @@ await context.addInitScript(() => {
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   if (url.pathname.endsWith('/indirect-changes')) return json({ indirectChanges: false });
-  if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname === '/api/state') {
+    stateReads++;
+    const captured = structuredClone(snapshot);
+    if (stateFailure) { stateFailures++; return route.fulfill({ status: 503, json: { error: 'State unavailable.' } }); }
+    if (holdState) await holdState;
+    return json(captured);
+  }
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', canUpdate: false });
   if (url.pathname.endsWith('/ai-review')) return json({ notes: [] });
@@ -45,16 +52,16 @@ await page.route('**/api/**', async route => {
     const body = route.request().postDataJSON(); permissionChanges.push(body);
     if (holdPermission) await holdPermission;
     if (permissionFailure) return route.fulfill({ status: 503, json: { error: 'Permission change failed.' } });
-    Object.assign(task, body); return json(task);
+    Object.assign(task, body, { updatedAt: task.updatedAt + 1 }); return json(task);
   }
   if (url.pathname.endsWith('/model')) {
     const body = route.request().postDataJSON(); modelChanges.push(body);
     if (holdModel) await holdModel;
     if (modelFailure) return route.fulfill({ status: 503, json: { error: 'Model settings could not be saved.' } });
-    Object.assign(task, body, { model: body.model || null, effort: body.effort || null });
+    Object.assign(task, body, { model: body.model || null, effort: body.effort || null, updatedAt: task.updatedAt + 1 });
     return json(task);
   }
-  if (url.pathname.endsWith('/messages')) { messages.push(route.request().postDataJSON()); return json({ ok: true }); }
+  if (url.pathname.endsWith('/messages')) { messages.push({ body: route.request().postDataJSON(), effectivePermissions: task.permissions }); return json({ ok: true }); }
   throw new Error(`Unexpected fixture request: ${url.pathname}`);
 });
 
@@ -101,6 +108,38 @@ try {
   await expect(workspace).toBeChecked();
   await expect(trigger.locator('.agent-permission-label')).toHaveText('Workspace access');
   permissionFailure = false;
+  // The save response confirms the mode even when the separate state refresh
+  // is slow or fails. Both controls must agree before another message can send.
+  for (const refreshMode of ['delayed', 'failed']) {
+    const beforeReads = stateReads, beforeFailures = stateFailures, beforeChanges = permissionChanges.length;
+    if (refreshMode === 'delayed') holdState = new Promise(resolve => { releaseState = resolve; });
+    else stateFailure = true;
+    await choose(full);
+    await expect.poll(() => stateReads).toBeGreaterThan(beforeReads);
+    if (stateFailure) await expect.poll(() => stateFailures).toBeGreaterThan(beforeFailures);
+    await expect(full).toBeChecked();
+    await expect(trigger.locator('.agent-permission-label')).toHaveText('Full access');
+    // A failed downgrade keeps the last confirmed Full mode in both places.
+    permissionFailure = true;
+    await choose(workspace);
+    await expect(full).toBeChecked();
+    await expect(trigger.locator('.agent-permission-label')).toHaveText('Full access');
+    permissionFailure = false;
+    await choose(workspace);
+    await expect(workspace).toBeChecked();
+    await expect(trigger.locator('.agent-permission-label')).toHaveText('Workspace access');
+    assert.deepEqual(permissionChanges.slice(beforeChanges), [{ permissions: 'full' }, { permissions: 'workspace' }, { permissions: 'workspace' }]);
+    await menu.press('Escape');
+    await page.getByRole('textbox', { name: 'Instructions for Codex' }).fill(`Continue after a ${refreshMode} state refresh.`);
+    const beforeMessages = messages.length;
+    await page.getByRole('button', { name: 'Send instructions', exact: true }).click();
+    await expect.poll(() => messages.length).toBe(beforeMessages + 1);
+    assert.equal(messages.at(-1).effectivePermissions, 'workspace', 'sent messages must use the displayed permission mode');
+    stateFailure = false; holdState = null; releaseState?.();
+    await Promise.all([page.waitForResponse(response => response.url().endsWith('/state') && response.status() === 200), page.evaluate(() => window.dispatchEvent(new Event('online')))]);
+    await expect(trigger.locator('.agent-permission-label')).toHaveText('Workspace access');
+    await open(); await expect(workspace).toBeChecked();
+  }
   // Sending and model changes wait for a permission save; permission changes
   // also wait for the existing model-save queue.
   await menu.press('Escape');
@@ -195,5 +234,5 @@ try {
   await page.emulateMedia({ colorScheme: 'dark' }); await open(fresh);
   await page.screenshot({ animations: 'disabled', path: 'test-results/task-permissions-dark.png' });
   assert.deepEqual(errors, []);
-  console.log('PASS: shared agent menu, native permission options, busy/save locks, persistence, error recovery, provider/review restrictions, creation, keyboard and narrow-screen layout.');
-} finally { await browser.close(); await server.close(); }
+  console.log('PASS: shared agent menu, native permission options, busy/save locks, delayed/failed refresh consistency, persistence, error recovery, provider/review restrictions, creation, keyboard and narrow-screen layout.');
+} finally { releaseState?.(); await browser.close(); await server.close(); }

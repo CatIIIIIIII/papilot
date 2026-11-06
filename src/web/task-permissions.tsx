@@ -42,9 +42,9 @@ export function PermissionOptions({ runtime, value, disabled, hint, onChange }: 
   </fieldset></div>;
 }
 
-export function TaskPermissionOptions({ task, runtime, disabled, save, onSaving, refresh, reportError }: {
+export function TaskPermissionOptions({ task, runtime, disabled, save, onSaved, onSaving, refresh, reportError }: {
   task: Task; runtime?: RuntimeStatus; disabled: boolean; save: (permissions: TaskPermissions) => Promise<Task>;
-  onSaving: (value: boolean) => void; refresh: () => void; reportError: (error: unknown) => void;
+  onSaved: (task: Task) => void; onSaving: (value: boolean) => void; refresh: () => void; reportError: (error: unknown) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const busy = ['running', 'waiting_input', 'building', 'uncertain', 'queued', 'deleting'].includes(task.status);
@@ -52,7 +52,7 @@ export function TaskPermissionOptions({ task, runtime, disabled, save, onSaving,
   return <PermissionOptions runtime={runtime} value={task.permissions || 'workspace'} disabled={disabled || busy || saving} hint={busy ? t('Pause to change') : undefined}
     onChange={async permissions => {
       setSaving(true); onSaving(true);
-      try { await save(permissions); }
+      try { onSaved(await save(permissions)); }
       catch (error) { reportError(error); }
       finally { refresh(); setSaving(false); onSaving(false); }
     }}/>;
