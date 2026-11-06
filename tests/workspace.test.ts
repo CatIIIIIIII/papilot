@@ -2241,28 +2241,40 @@ test('review threads use normal network access and inherit the resolved sandbox'
 });
 
 for (const permissions of ['full', 'workspace'] as const) {
-  test(`task permission selector resumes the same conversation with ${permissions} access`, async () => {
+  test(`task permission selector keeps the loaded conversation with ${permissions} access`, async () => {
     const f = fixture();
     try {
       f.store.updateTask(f.task.id, { permissions: permissions === 'full' ? 'workspace' : 'full' });
       const changed = f.workspace.updateTaskPermissions(f.task.id, permissions);
       assert.equal(changed.permissions, permissions);
       assert.equal(changed.threadId, 'thread');
-      assert.equal((f.workspace as any).loaded.has('thread'), false);
+      assert.equal((f.workspace as any).loaded.has('thread'), true);
       f.codex.ready = true;
       await f.workspace.enqueue(f.task.id, 'Inspect the remote results.', `permissions-${permissions}`, false);
       await tick(); await tick();
       const resume = f.codex.calls.find(call => call.method === 'thread/resume');
-      assert.equal(resume?.params.threadId, 'thread');
-      assert.equal(resume?.params.sandbox, permissions === 'full' ? 'danger-full-access' : 'workspace-write');
-      assert.equal(resume?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
-      if (permissions === 'full') assert.match(resume?.params.developerInstructions, /authorized commands including SSH/);
+      assert.equal(resume, undefined, 'changing permissions does not reload a conversation with unchanged instructions');
       const turn = f.codex.calls.find(call => call.method === 'turn/start');
       assert.equal(turn?.params.sandboxPolicy.type, permissions === 'full' ? 'dangerFullAccess' : 'workspaceWrite');
       assert.equal(turn?.params.approvalPolicy, permissions === 'full' ? 'never' : 'on-request');
     } finally { f.close(); }
   });
 }
+
+test('editing instructions keep manuscript boundaries without pinning mutable access permissions', () => {
+  const f = fixture();
+  try {
+    for (const agent of ['codex', 'claude', 'glm'] as const) {
+      const instructions = (permissions: 'workspace' | 'full') => (f.workspace as any).instructions({ ...f.task, agent, permissions });
+      assert.equal(instructions('workspace'), instructions('full'));
+      assert.match(instructions('workspace'), /Keep manuscript edits in this isolated task worktree/);
+      assert.match(instructions('workspace'), /runtime's current sandbox and approval requirements/);
+      assert.doesNotMatch(instructions('workspace'), /Only edit this isolated task worktree|The user selected full access/);
+      assert.match(instructions('full'), /Never edit the manuscript checkout, other task worktrees, or Papilot's own source\/state/);
+    }
+    assert.match((f.workspace as any).instructions({ ...f.task, agent: 'antigravity' }), /Only edit this isolated task worktree/);
+  } finally { f.close(); }
+});
 
 test('task permission selector refuses active turns, unsupported providers, reviews and invalid values', () => {
   const f = fixture();

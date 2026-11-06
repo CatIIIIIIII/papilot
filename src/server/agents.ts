@@ -194,7 +194,7 @@ export class ClaudeAgent extends Adapter {
     const full = !thread.readOnly && thread.permissions === 'full';
     return { permissionMode: full ? 'bypassPermissions' as const : 'acceptEdits' as const,
       ...(full ? { allowDangerouslySkipPermissions: true } : {}),
-      sandbox: full ? { enabled: false } : { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
+      sandbox: full ? { enabled: false } : { enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
         ...(thread.webSearch ? { network: { allowedDomains: ['*'] } } : {}) } };
   }
   protected name = 'Claude';
@@ -390,10 +390,9 @@ export class ClaudeAgent extends Adapter {
         settingSources: thread.readOnly ? [] : ['project'], ...this.nativePermissions(thread), ...(thread.readOnly ? { tools: [] } : {}),
         ...(thread.webSearch ? { allowedTools: ['WebSearch', 'WebFetch'] } : {}),
         canUseTool: (name, input, { signal, title, decisionReason }) => new Promise<PermissionResult>(resolve => {
-          if (!thread.readOnly && ((thread.permissions === 'full' && name !== 'AskUserQuestion') || (thread.webSearch && ['WebSearch', 'WebFetch'].includes(name)))) {
-            resolve({ behavior: 'allow', updatedInput: input });
-            return;
-          }
+          // Native permissionMode/allowedTools handle automatic approvals.
+          // Calls still reaching this callback require a decision, including
+          // explicit ask rules and managed approvals in bypassPermissions mode.
           const id = randomUUID(), question = name === 'AskUserQuestion' && Array.isArray(input.questions);
           const questions = question ? (input.questions as { question: string; header?: string; options?: { label: string; description?: string }[] }[]) : [];
           this.approvals.set(id, { resolve, input, kind: question ? 'question' : 'tool', questions: questions.map(q => q.question) });

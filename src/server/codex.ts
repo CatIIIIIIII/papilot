@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import type { TaskPermissions, TaskPermissionOption } from '../shared.ts';
 import { CODEX, ROOT, VERSION } from './paths.ts';
+import { taskAccessInstructions } from './task-permissions.ts';
 
 export class RpcResponseError extends Error {}
 
@@ -16,7 +17,11 @@ export class Codex extends EventEmitter {
   }
   async taskPermissionConfig(value: TaskPermissions, cwd: string) {
     const thread = { approvalPolicy: value === 'full' ? 'never' : 'on-request', sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write' };
-    if (value === 'full') return { thread, turn: { approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' } } };
+    // Resuming even a cold thread retains its original developer instructions.
+    // Application context supplies a later developer message on every turn,
+    // including after restart, without discarding the conversation's history.
+    const additionalContext = { 'papilot-task-access': { kind: 'application', value: `These are Papilot's current task access instructions. They replace earlier Papilot instructions about access outside the task worktree; manuscript review scope and protected-path rules still apply.\n${taskAccessInstructions}` } };
+    if (value === 'full') return { thread, turn: { approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' }, additionalContext } };
     // A loaded thread/resume can keep the previous policy (including full access).
     // Resolve a fresh native policy to retain configured roots and tmp exclusions,
     // then apply it atomically to the next turn, even on an already-loaded thread.
@@ -25,7 +30,7 @@ export class Codex extends EventEmitter {
       if (resolved.sandbox?.type !== 'workspaceWrite' || resolved.approvalPolicy !== 'on-request') {
         throw new RpcResponseError('Codex could not apply workspace permissions.');
       }
-      return { thread, turn: { approvalPolicy: resolved.approvalPolicy, sandboxPolicy: resolved.sandbox } };
+      return { thread, turn: { approvalPolicy: resolved.approvalPolicy, sandboxPolicy: resolved.sandbox, additionalContext } };
     } finally {
       if (resolved.thread?.id) await this.request('thread/unsubscribe', { threadId: resolved.thread.id }).catch(() => {});
     }
