@@ -279,7 +279,7 @@ export function renderRound(
       request.indirect &&
       request.units.length > 1 &&
       !request.causes &&
-      (silent.length > 0 || changes.some((c) => !c.within.length))
+      changes.length > 0
     ) {
       writeJson(path.join(out, "attribute.json"), {
         changes,

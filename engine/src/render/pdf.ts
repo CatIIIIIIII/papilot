@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import * as mupdf from "mupdf";
+import { glyphShapes } from "./glyphs.ts";
 import type { Rect, Span } from "../types.ts";
 export { mupdf };
 export const union = (a: Rect, b: Rect): Rect => [
@@ -24,6 +25,10 @@ export const containsCenter = (a: Rect, b: Rect) =>
 export interface Character {
   text: string;
   rect: Rect;
+  /** Translation-independent glyph appearance, before text normalization. */
+  appearance?: string;
+  origin?: [number, number];
+  baseline?: number;
 }
 export interface Word {
   text: string;
@@ -111,6 +116,7 @@ export class PdfPage {
   constructor(
     document: mupdf.Document,
     public number: number,
+    shapeCache = new Map<string, string>(),
   ) {
     this.raw = document.loadPage(number);
     this.bounds = this.raw.getBounds();
@@ -118,7 +124,10 @@ export class PdfPage {
     const text = this.raw.toStructuredText(
       "preserve-whitespace,preserve-ligatures,vectors,preserve-images",
     );
+    const shapes = glyphShapes(this.raw, shapeCache);
     let block: TextBlock, line: Line;
+    let appearance: { shape: unknown[]; baseline: number }[] = [];
+    const rounded = (n: number) => Math.round(n * 1000) / 1000;
     walkText(text, {
       onVector: (rect, _flags, color) => {
         if (luminance(color) < 0.8) this.drawings.push([...rect] as Rect);
@@ -129,15 +138,28 @@ export class PdfPage {
         this.blocks.push(block);
       },
       beginLine: (rect) => {
+        appearance = [];
+        shapes.line();
         line = { rect, text: "", chars: [] };
         block.lines.push(line);
         this.lines.push(line);
       },
-      onChar: (c, _origin, _font, _size, quad) => {
+      onChar: (c, origin, font, size, quad, color) => {
+        appearance.push({
+          shape: [
+            c.normalize("NFC"),
+            shapes.char(c, origin, font) ??
+              font.getName().replace(/^[A-Z]{6}\+/, ""),
+            rounded(size),
+            Array.from(color).map(rounded),
+          ],
+          baseline: rounded(origin[1]),
+        });
         const xs = [quad[0], quad[2], quad[4], quad[6]],
           ys = [quad[1], quad[3], quad[5], quad[7]];
         line.chars.push({
           text: c,
+          origin: [origin[0], origin[1]],
           rect: [
             Math.min(...xs),
             Math.min(...ys),
@@ -148,6 +170,22 @@ export class PdfPage {
         line.text += c;
       },
       endLine: () => {
+        const counts = new Map<number, number>();
+        appearance.forEach(({ baseline }, i) => {
+          if (line.chars[i].text.trim())
+            counts.set(baseline, (counts.get(baseline) ?? 0) + 1);
+        });
+        const baseline = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+        line.chars.forEach((char, i) => {
+          const a = appearance[i];
+          char.baseline =
+            line.chars.find((c) => rounded(c.origin![1]) === baseline)
+              ?.origin![1] ?? baseline;
+          char.appearance = JSON.stringify([
+            ...a.shape,
+            rounded(a.baseline - baseline),
+          ]);
+        });
         block.text += line.text + "\n";
         let word: Word | null = null;
         for (const char of line.chars) {
@@ -299,6 +337,7 @@ export class PdfPage {
   // With `origin`, the clip's corner is pixel (0, 0) exactly, so the same
   // content renders to the same pixels wherever it sits on the page; else
   // the page's own pixel grid, which shifts content by a fraction of a pixel.
+  private displayList?: mupdf.DisplayList;
   raster(clip: Rect, scale = 2, gray = false, origin = false): Raster {
     const matrix: mupdf.Matrix = origin
         ? [scale, 0, 0, scale, -clip[0] * scale, -clip[1] * scale]
@@ -323,7 +362,7 @@ export class PdfPage {
       );
     pixmap.clear(255);
     const device = new mupdf.DrawDevice(mupdf.Matrix.identity, pixmap);
-    this.raw.run(device, matrix);
+    (this.displayList ??= this.raw.toDisplayList()).run(device, matrix);
     device.close();
     device.destroy();
     const result = {
@@ -354,6 +393,7 @@ export class PdfPage {
     return svg;
   }
   close() {
+    this.displayList?.destroy();
     this.raw.destroy();
   }
 }
@@ -390,9 +430,10 @@ export class PdfDocument {
   get length() {
     return this.raw.countPages();
   }
+  private shapeCache = new Map<string, string>();
   page(number: number) {
     if (!this.pages.has(number))
-      this.pages.set(number, new PdfPage(this.raw, number));
+      this.pages.set(number, new PdfPage(this.raw, number, this.shapeCache));
     return this.pages.get(number)!;
   }
   destination(uri: string) {

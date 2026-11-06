@@ -9,6 +9,9 @@ export interface Glyph {
   pair: number;
   page: number;
   space: boolean;
+  appearance?: string;
+  origin?: [number, number];
+  baseline?: number;
 }
 interface Word {
   text: string;
@@ -41,6 +44,9 @@ export function extract(
               space,
               pair,
               page: position.page,
+              appearance: char.appearance,
+              origin: char.origin,
+              baseline: char.baseline,
             });
             space = false;
           }
@@ -77,8 +83,21 @@ export function extract(
   });
   return [joined, words];
 }
+export interface Token {
+  text: string;
+  start: number;
+  end: number;
+  /** Explicit footprint for a word joined across intervening page furniture. */
+  glyphs?: number[];
+  semanticGlyphs?: number[];
+  flow?: "body" | "edge";
+}
+export const tokenGlyphs = (t: Token, semantic = false): number[] =>
+  (semantic ? t.semanticGlyphs : t.glyphs) ??
+  t.glyphs ??
+  Array.from({ length: t.end - t.start }, (_, k) => t.start + k);
 export function tokens(glyphs: Glyph[]) {
-  const result: { text: string; start: number; end: number }[] = [];
+  const result: Token[] = [];
   let previousWord = false;
   glyphs.forEach((glyph, i) => {
     const word = /[\p{L}\p{N}_]/u.test(glyph.text);
@@ -258,6 +277,7 @@ export function pixelDifference(
   old: Raster | null,
   next: Raster | null,
   stop = Infinity,
+  threshold = 24,
 ) {
   const width = Math.max(old?.width ?? 0, next?.width ?? 0),
     height = Math.max(old?.height ?? 0, next?.height ?? 0),
@@ -283,7 +303,8 @@ export function pixelDifference(
               : 255;
         difference += Math.abs(u - v) * weights[c];
       }
-      if (difference >= 24 && ++count >= stop) return count;
+      if (difference > 0 && difference >= threshold && ++count >= stop)
+        return count;
     }
   }
   return count;

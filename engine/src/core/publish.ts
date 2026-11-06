@@ -59,8 +59,6 @@ async function work(output: string, request: object) {
     fs.rmSync(file, { force: true });
   }
 }
-// Variant builds one round may compile to find the edits behind changes.
-const VARIANTS = 16;
 // The edits behind each change of the whole documents, found by compiling.
 // An edit that prints nothing of its own, such as a macro definition, is
 // compiled alone onto the accepted text: the changes that build makes are
@@ -68,37 +66,38 @@ const VARIANTS = 16;
 // builds leave unexplained are found by halving the other edits: each half is
 // compiled alone, and a change one half makes has its cause there. A change
 // neither half makes needs edits from both, so it lists the whole group, as
-// it does when a variant does not compile or cannot be compared, or the limit
-// is reached; a silent edit past the limit joins the halving.
+// it does when a variant does not compile or cannot be compared. Partial
+// singleton effects do not exclude an edit from a jointly required group.
 export async function attribute(
   units: Unit[],
   changes: { within: string[] }[],
   silent: string[],
   shown: (units: Unit[]) => Promise<boolean[] | null>,
 ) {
-  let budget = VARIANTS;
   const causes = changes.map(() => new Set<string>()),
-    pool = units.filter((u) => !silent.includes(u.id)),
+    cache = new Map<string, Promise<boolean[] | null>>(),
     compiled = async (group: Unit[]) => {
-      budget--;
-      try {
-        return await shown(group);
-      } catch (error) {
-        if (error instanceof BuildError) return null;
-        throw error;
-      }
+      const key = JSON.stringify(group.map((u) => u.id));
+      if (!cache.has(key))
+        cache.set(
+          key,
+          shown(group).catch((error) => {
+            if (error instanceof BuildError) return null;
+            throw error;
+          }),
+        );
+      return cache.get(key)!;
     };
   for (const id of silent) {
     const unit = units.find((u) => u.id === id)!,
-      seen = budget > 0 ? await compiled([unit]) : null;
-    if (!seen) pool.push(unit);
-    else seen.forEach((s, i) => s && causes[i].add(id));
+      seen = await compiled([unit]);
+    seen?.forEach((s, i) => s && causes[i].add(id));
   }
   const all = (group: Unit[], indices: number[]) =>
     indices.forEach((i) => group.forEach((u) => causes[i].add(u.id)));
   const split = async (group: Unit[], indices: number[]): Promise<void> => {
     if (!indices.length) return;
-    if (group.length === 1 || budget < 2) return all(group, indices);
+    if (group.length === 1) return all(group, indices);
     const halves = [
         group.slice(0, Math.ceil(group.length / 2)),
         group.slice(Math.ceil(group.length / 2)),
@@ -123,8 +122,8 @@ export async function attribute(
     );
   };
   await split(
-    pool.length ? pool : units,
-    changes.flatMap((c, i) => (!c.within.length && !causes[i].size ? [i] : [])),
+    units,
+    changes.map((_, i) => i),
   );
   return causes.map((set) =>
     units.map((u) => u.id).filter((id) => set.has(id)),
@@ -151,6 +150,7 @@ export async function render(
       ? await attribute(request.units, changes, silent, async (units) => {
           await work(output, {
             ...request,
+            final: request.new,
             new: await variant(units),
             effects,
           });

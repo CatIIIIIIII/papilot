@@ -14,15 +14,17 @@ const out = path.dirname(file);
 if (request.effects) {
   // `new` is a variant build: which of the changes it makes too.
   const old = new Build(request.old, request.main, request.source_dir),
-    variant = new Build(request.new, request.main, request.source_dir);
+    variant = new Build(request.new, request.main, request.source_dir),
+    final = new Build(request.final!, request.main, request.source_dir);
   try {
     fs.writeFileSync(
       path.join(out, "shown.json"),
-      JSON.stringify(shownBy(old, variant, request.effects)),
+      JSON.stringify(shownBy(old, variant, request.effects, final)),
     );
   } finally {
     old.close();
     variant.close();
+    final.close();
   }
 } else if (request.more) renderMore(out, request.more);
 else renderRound(request, out);

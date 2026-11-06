@@ -137,7 +137,7 @@ it("finds the edit behind each change by compiling halves, and lists edits neede
   ).toEqual([["c003"], ["c001", "c002", "c003", "c004"]]);
 });
 
-it("counts the builds of silent edits against the same limit", async () => {
+it("resolves causes beyond sixteen silent edits without an arbitrary build cutoff", async () => {
   const units = Array.from({ length: 21 }, (_, i) =>
     unit(`c${String(i + 1).padStart(3, "0")}`),
   );
@@ -151,8 +151,79 @@ it("counts the builds of silent edits against the same limit", async () => {
       return [group.some((u) => u.id === "c021")];
     },
   );
-  expect(builds).toBeLessThanOrEqual(16);
-  expect(causes[0]).toContain("c021");
+  expect(builds).toBeGreaterThan(16);
+  expect(causes[0]).toEqual(["c021"]);
+});
+
+it("keeps individually ineffective edits available for joint attribution", async () => {
+  const units = ["gate", "value"].map(unit);
+  expect(
+    await attribute(
+      units,
+      [{ within: [] }],
+      ["gate", "value"],
+      async (group) => [
+        group.some((u) => u.id === "gate") &&
+          group.some((u) => u.id === "value"),
+      ],
+    ),
+  ).toEqual([["gate", "value"]]);
+});
+it.each([{ within: [] }, { within: ["A"] }])(
+  "finds every independent cause even when another edit already explains or shows the effect ($within)",
+  async ({ within }) => {
+    const units = ["A", "B"].map(unit);
+    expect(
+      await attribute(units, [{ within }], ["A"], async (group) => [
+        group.some((u) => u.id === "A" || u.id === "B"),
+      ]),
+    ).toEqual([["A", "B"]]);
+  },
+);
+
+it.each([1, 2, 3, 4])(
+  "recognizes unchanged %i-word blocks inside compound moves",
+  (length) => {
+    const blocks = Array.from({ length: 5 }, (_, block) =>
+      Array.from(
+        { length },
+        (_, word) => `block${block}word${word}withenoughletters`,
+      ),
+    );
+    function* permutations(list: number[]): Generator<number[]> {
+      if (!list.length) {
+        yield [];
+        return;
+      }
+      for (const first of list)
+        for (const rest of permutations(list.filter((i) => i !== first)))
+          yield [first, ...rest];
+    }
+    for (const order of permutations([0, 1, 2, 3, 4]))
+      expect(
+        differences(
+          words(blocks.flat().join(" ")),
+          words(order.flatMap((i) => blocks[i]).join(" ")),
+        ),
+      ).toEqual([]);
+  },
+);
+
+it("retains short equal fragments on both sides of an edit inside a moved sentence", () => {
+  const anchor =
+      "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo",
+    a = words(`the cat sat and ate our red ham ${anchor}`),
+    b = words(`${anchor} the cat sat and ate his red ham`);
+  expect(
+    differences(a, b).flatMap((e) =>
+      a.tokens.slice(...e.old).map((t) => t.text),
+    ),
+  ).toEqual(["our"]);
+  expect(
+    differences(a, b).flatMap((e) =>
+      b.tokens.slice(...e.new).map((t) => t.text),
+    ),
+  ).toEqual(["his"]);
 });
 
 it("gives every build of a day the date of that day", () => {

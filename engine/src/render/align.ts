@@ -1,7 +1,13 @@
-import { comparison, words, type Comparison, type Words } from "./effects.ts";
+import {
+  comparison,
+  visualDifferences,
+  words,
+  type Comparison,
+  type Words,
+} from "./effects.ts";
 import { textBounds, type Build } from "./locate.ts";
 import { containsCenter, union } from "./pdf.ts";
-import { mergeRects, pixelDifference } from "./pdfdiff.ts";
+import { mergeRects, pixelDifference, tokenGlyphs } from "./pdfdiff.ts";
 import type { Mark, Position, Rect, SourceBox } from "../types.ts";
 // One comparison of the whole documents decides everything a review shows.
 // A word is marked when that comparison changed it, never because of where
@@ -29,6 +35,8 @@ interface Side {
   byPage: Map<number, number[]>;
   /** The changed glyphs of each page, which marks cover. */
   changed: Map<number, number[]>;
+  /** Equal words with different ink; required in crops, without text marks. */
+  visual: Map<number, number[]>;
   /** The glyphs of each page that changed or moved, which crops show. */
   unpaired: Map<number, number[]>;
   /** The glyphs of each page that only moved. */
@@ -77,10 +85,8 @@ function sideOf(build: Build, w: Words): Side {
   const glyphLine = new Int32Array(w.glyphs.length).fill(-1),
     byPage = new Map<number, number[]>();
   const parts = w.lines.map(([i, j], index): Line[] => {
-    const start = w.tokens[i].start,
-      end = w.tokens[j - 1].end,
-      rows = new Map<number, Line>();
-    for (let g = start; g < end; g++) {
+    const rows = new Map<number, Line>();
+    for (const g of w.tokens.slice(i, j).flatMap((t) => tokenGlyphs(t))) {
       glyphLine[g] = index;
       const { pair, page, rect } = w.glyphs[g],
         row = rows.get(pair);
@@ -108,6 +114,7 @@ function sideOf(build: Build, w: Words): Side {
     glyphLine,
     byPage,
     changed: new Map(),
+    visual: new Map(),
     unpaired: new Map(),
     moved: new Map(),
     changedLine: new Uint8Array(parts.length),
@@ -149,7 +156,7 @@ function build(
     map.forEach((other, t) => {
       if (other >= 0) return;
       side.changedToken[t] = 1;
-      for (let g = w.tokens[t].start; g < w.tokens[t].end; g++) {
+      for (const g of tokenGlyphs(w.tokens[t])) {
         add(side.unpaired, w, g);
         side.changedLine[side.glyphLine[g]] = 1;
       }
@@ -161,7 +168,7 @@ function build(
       ["new", b, effect.new],
     ] as const)
       for (let t = i; t < j; t++)
-        for (let g = w.tokens[t].start; g < w.tokens[t].end; g++)
+        for (const g of tokenGlyphs(w.tokens[t]))
           add(sides[name].changed, w, g);
   for (const side of [sides.old, sides.new]) {
     const changed = new Set([...side.changed.values()].flat());
@@ -172,13 +179,28 @@ function build(
     side.words.lines.forEach(([i, j], line) => {
       let moved = j > i;
       for (let t = i; t < j && moved; t++) {
-        const { start, end } = side.words.tokens[t];
-        moved = side.changedToken[t] === 1;
-        for (let g = start; g < end && moved; g++) moved = !changed.has(g);
+        moved =
+          side.changedToken[t] === 1 &&
+          tokenGlyphs(side.words.tokens[t]).every((g) => !changed.has(g));
       }
       side.movedLine[line] = Number(moved);
     });
   }
+  for (const effect of visualDifferences(a, b))
+    for (const [name, range] of [
+      ["old", effect.old],
+      ["new", effect.new],
+    ] as const) {
+      const side = sides[name],
+        w = side.words;
+      for (let t = range[0]; t < range[1]; t++) {
+        side.changedToken[t] = 1;
+        for (const g of tokenGlyphs(w.tokens[t])) {
+          add(side.visual, w, g);
+          side.changedLine[side.glyphLine[g]] = 1;
+        }
+      }
+    }
   // An equal line may end a change when it pins the documents together: it
   // is unique in both, long, or one of a run of equal lines. A short line
   // that recurs, such as "1" or "Proof.", can pair with another occurrence
@@ -325,6 +347,7 @@ function changedLines(
     lines = new Set<number>();
   for (const [map, strict] of [
     [side.changed, false],
+    [side.visual, false],
     [side.moved, true],
   ] as const)
     for (const at of crops)
@@ -713,7 +736,7 @@ function visibleTokens(side: Side, crops: Position[]): Set<number> {
     for (const line of side.byPage.get(at.page) ?? []) {
       const [start, end] = w.lines[line];
       for (let t = start; t < end; t++)
-        for (let g = w.tokens[t].start; g < w.tokens[t].end; g++)
+        for (const g of tokenGlyphs(w.tokens[t]))
           if (
             w.glyphs[g].page === at.page &&
             containsCenter(at.clip, w.glyphs[g].rect)
@@ -741,7 +764,7 @@ function completeCrops(
     let lo = first,
       hi = last;
     for (const t of required ?? shown)
-      for (let g = w.tokens[t].start; g < w.tokens[t].end; g++) {
+      for (const g of tokenGlyphs(w.tokens[t])) {
         const { page, rect } = w.glyphs[g];
         if (
           !crops.some((p) => p.page === page && containsCenter(p.clip, rect))
@@ -842,7 +865,7 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
         const other = al.tokens.old[t];
         if ((t > above && t < below) || other < 0 || shownNew.has(other))
           continue;
-        for (let g = w.tokens[t].start; g < w.tokens[t].end; g++) {
+        for (const g of tokenGlyphs(w.tokens[t])) {
           const { page, rect } = w.glyphs[g];
           if (page === at.page && containsCenter(at.clip, rect))
             faded.set(page, [...(faded.get(page) ?? []), rect]);

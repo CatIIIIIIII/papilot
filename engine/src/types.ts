@@ -394,6 +394,8 @@ export interface RenderRequest {
   figures: string[];
   old: BuildInfo;
   new: BuildInfo;
+  /** Full edited build when `new` is an attribution variant. */
+  final?: BuildInfo;
   units: Unit[];
   /** The edits that cause each change of the whole documents, found by
    * compiling variants when the round has more than one edit. */
@@ -410,6 +412,8 @@ export interface RenderRequest {
 export interface Effect {
   old: [number, number];
   new: [number, number];
+  /** Equal text whose printed appearance changed. */
+  kind?: "visual";
 }
 export interface History {
   round: number;

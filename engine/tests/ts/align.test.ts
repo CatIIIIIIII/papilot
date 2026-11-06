@@ -57,6 +57,55 @@ function pdf(lines: string[]) {
 }
 // The engine's alignment needs only a build's document.
 const build = (document: PdfDocument) => ({ document }) as unknown as Build;
+it.each(["color", "script"])(
+  "retains a %s change below a separate text edit in the same unit",
+  (kind) => {
+    function mixed(changed: boolean) {
+      const raw = new mupdf.PDFDocument(),
+        font = new mupdf.Font("Helvetica"),
+        ref = raw.addSimpleFont(font),
+        content =
+          "BT /F 12 Tf 40 550 Td (The stable preceding anchor stays in place here) Tj ET " +
+          `BT /F 12 Tf 40 520 Td (The result is ${changed ? "robust" : "stable"}.) Tj ET ` +
+          "BT /F 12 Tf 40 490 Td (An unchanged line separates the two changes.) Tj ET " +
+          (kind === "color"
+            ? `BT /F 12 Tf ${changed ? "1 0 0" : "0 0 0"} rg 40 460 Td (Beacon visual signal) Tj ET `
+            : `BT /F 12 Tf 40 460 Td (Beacon x) Tj /F 8 Tf ${changed ? -3 : 5} Ts (2) Tj 0 Ts /F 12 Tf ( visual signal) Tj ET `) +
+          "0 0 0 rg BT /F 12 Tf 40 430 Td (The stable following anchor stays in place here) Tj ET",
+        page = raw.addPage([0, 0, 600, 600], 0, { Font: { F: ref } }, content);
+      raw.insertPage(-1, page);
+      const buffer = raw.saveToBuffer(""),
+        result = new PdfDocument(buffer.asUint8Array());
+      buffer.destroy();
+      page.destroy();
+      ref.destroy();
+      font.destroy();
+      raw.destroy();
+      documents.push(result);
+      return result;
+    }
+    const old = mixed(false),
+      next = mixed(true),
+      al = alignment(build(old), build(next)),
+      own: Position[] = [{ page: 0, clip: [0, 60, 600, 155], label: "1" }],
+      groups = alignedCrops(al, own, own, false)!;
+    for (const [doc, side] of [
+      [old, "old"],
+      [next, "new"],
+    ] as const) {
+      const crops = groups.flatMap((g) => (side === "old" ? g.left : g.right)),
+        rects = doc.page(0).search("Beacon");
+      expect(
+        rects.every((r) => crops.some((p) => containsCenter(p.clip, r))),
+      ).toBe(true);
+      const changed = [...al[side].changed.values()]
+        .flat()
+        .map((g) => al[side].words.glyphs[g].text)
+        .join("");
+      expect(changed).toBe(side === "old" ? "stable" : "robust");
+    }
+  },
+);
 function wrap(words: string[], width: number) {
   const lines: string[] = [];
   let line: string[] = [];
