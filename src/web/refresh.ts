@@ -33,3 +33,21 @@ export function mergeTimeline<T extends { id: string; createdAt: number }>(items
   const merged = items.map(item => { const next = updates.get(item.id); if (next) updates.delete(item.id); return next || item; });
   return updates.size ? [...merged, ...updates.values()].sort((a, b) => a.createdAt - b.createdAt) : merged;
 }
+
+// Old Claude adapters stored a streamed block and its final envelope under
+// different indexes. Hide only the unfinished copy of the very same message;
+// retain the database, completed repeats, and identical text in other turns.
+export function visibleTimeline<T extends { id: string; type: string; text: string; status?: string }>(items: T[]): T[] {
+  const message = (item: T) => item.type === 'assistant' ? /^(.*:msg_[^:]+):\d+$/.exec(item.id)?.[1] : undefined;
+  const completed = new Map<string, Set<string>>();
+  for (const item of items) {
+    const key = message(item);
+    if (key && item.status === 'completed') {
+      const texts = completed.get(key) || new Set<string>(); texts.add(item.text); completed.set(key, texts);
+    }
+  }
+  return items.filter(item => {
+    const key = message(item);
+    return item.status !== undefined || !key || !completed.get(key)?.has(item.text);
+  });
+}

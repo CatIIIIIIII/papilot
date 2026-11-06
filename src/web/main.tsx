@@ -20,7 +20,7 @@ import { DraftAttachments, MessageAttachments, useAttachmentDraft } from './atta
 import { type AttachmentDraft, type UploadAttachment } from './attachment-draft.ts';
 import type { Attachment } from '../shared.ts';
 import { noteLocation } from './note-location.ts';
-import { ReadRequest, canStreamUpdates, mergeTimeline } from './refresh.ts';
+import { ReadRequest, canStreamUpdates, mergeTimeline, visibleTimeline } from './refresh.ts';
 import { browserStorage } from './storage.ts';
 import { requestId } from './request-id.ts';
 import { readPlace, savePlace } from './places.ts';
@@ -367,7 +367,7 @@ function Activity({ onRevealQuote, task, runtime, reconnecting, onReconnect, ski
   // The draft re-renders this panel on every keystroke; the same elements let
   // React skip the conversation until its items change.
   const agent = agentName(task), review = task.mode === 'review', root = task.worktree;
-  const thread = useMemo(() => timelineEntries(items.filter(item => item.type !== 'reviewOutput').map(item => review && item.type === 'assistant' ? { ...item, text: aiReviewSummary(item.text) } : item))
+  const thread = useMemo(() => timelineEntries(visibleTimeline(items).filter(item => item.type !== 'reviewOutput').map(item => review && item.type === 'assistant' ? { ...item, text: aiReviewSummary(item.text) } : item))
     .map(entry => entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agent} root={root}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agent} root={root}/>), [items, review, agent, root]);
   const hint = task.status === 'deleting' ? t('This task is being deleted') : task.status === 'uncertain' ? t('Check task status before sending') : sending ? t('Sending…')
     : emptyNotes ? canSend ? tn(emptyNotes, '{n} empty comment will stay in drafts', '{n} empty comments will stay in drafts') : t('Write a comment or message to send.') : active ? t('{agent} is working · new instructions run next', { agent: agentName(task) }) : '';
