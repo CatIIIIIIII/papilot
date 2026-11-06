@@ -285,16 +285,30 @@ function slowTeX(base: string) {
   return { runs: () => fs.existsSync(runs) ? fs.readFileSync(runs, 'utf8').trim().split('\n').length : 0, restore: () => { process.env.PATH = previous; } };
 }
 
-test('the manuscript compiles what applying a task will write ahead of time, and shows each pass while it builds', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+test('the manuscript compiles what applying a task will write ahead of time, and shows each pass while it builds', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async t => {
   const { Manuscripts } = await import('../src/server/manuscript.ts');
   const f = paper({ 'main.tex': document('\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n') });
   const teX = slowTeX(f.base);
+  const manuscripts = new Manuscripts(), changes: string[] = [], refreshing = new Set<Promise<void>>();
+  const refresh = manuscripts.refresh.bind(manuscripts);
+  // A stale build schedules refresh before its next build is marked busy.
+  // Track that snapshot too, so teardown cannot remove its working directory.
+  manuscripts.refresh = (...args) => {
+    const pending = refresh(...args); refreshing.add(pending);
+    void pending.then(() => refreshing.delete(pending), () => refreshing.delete(pending));
+    return pending;
+  };
   try {
-    const manuscripts = new Manuscripts(), changes: string[] = [];
     manuscripts.on('change', id => changes.push(id));
-    const settled = async () => {
-      for (let i = 0; i < 600; i++) { const { build } = await manuscripts.state('paper', f.root); if (build.status !== 'building') return build; await new Promise(r => setTimeout(r, 50)); }
-      throw new Error('The build did not finish');
+    const settled = async (current = false) => {
+      const deadline = performance.now() + 60000;
+      let last;
+      while (performance.now() < deadline) {
+        const { build } = await manuscripts.state('paper', f.root); last = build;
+        if (build.status === 'failed' || build.status === 'ready' && (!current || build.current)) return build;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      throw new Error(`The build did not finish: ${JSON.stringify(last)}`);
     };
     const first = await settled();
     assert.equal(first.status, 'ready', first.error);
@@ -312,14 +326,15 @@ test('the manuscript compiles what applying a task will write ahead of time, and
     // An edit needing several passes shows the first while the build goes on.
     fs.writeFileSync(path.join(f.root, 'main.tex'), document('\\section{One}\\label{one}See page~\\pageref{three}.\n\\section{Two}\\label{two}Text.\n\\section{Three}\\label{three}More.\n'));
     await manuscripts.refresh('paper', f.root);
-    let preview: string | undefined;
-    for (let i = 0; i < 600 && !preview; i++) {
-      const { build } = await manuscripts.state('paper', f.root);
+    let preview: string | undefined, observed = ready;
+    const previewDeadline = performance.now() + 60000;
+    while (!preview && performance.now() < previewDeadline) {
+      const { build } = await manuscripts.state('paper', f.root); observed = build;
       if (build.status === 'building' && build.key !== ready.key) preview = build.key;
       else if (build.status !== 'building') break;
       await new Promise(r => setTimeout(r, 25));
     }
-    assert.ok(preview, 'a pass replaced the previous PDF before the build finished');
+    assert.ok(preview, `a pass replaced the previous PDF before the build finished: ${JSON.stringify(observed)}`);
     assert.ok(fs.existsSync(manuscripts.pdf('paper', preview!)));
     const done = await settled();
     assert.equal(done.status, 'ready', done.error);
@@ -329,14 +344,21 @@ test('the manuscript compiles what applying a task will write ahead of time, and
     await manuscripts.refresh('paper', f.root);
     fs.writeFileSync(path.join(f.root, 'main.tex'), document('\\section{One}Second edit.\n'));
     await manuscripts.refresh('paper', f.root);
-    for (let i = 0; i < 600; i++) {
-      const { build } = await manuscripts.state('paper', f.root);
-      if (build.status === 'ready' && build.current) break;
-      await new Promise(r => setTimeout(r, 50));
-    }
-    const final = await manuscripts.state('paper', f.root);
-    assert.ok(final.build.current, 'the second edit was compiled');
-  } finally { teX.restore(); f.close(); }
+    const final = await settled(true);
+    assert.equal(final.status, 'ready', final.error);
+    assert.ok(final.current, `the second edit was compiled: ${JSON.stringify(final)}`);
+  } finally {
+    t.after(async () => {
+      try {
+        const deadline = performance.now() + 90000;
+        while (manuscripts.busyForUpdate || refreshing.size) {
+          if (performance.now() >= deadline) throw new Error(`Manuscript cleanup timed out; retained ${f.base}`);
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        await fs.promises.rm(f.base, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } finally { teX.restore(); }
+    });
+  }
 });
 
 test('someone who starts waiting for a background build sees its passes from the latest one on', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {

@@ -400,6 +400,14 @@ async function freePort() {
   const port = (server.address() as net.AddressInfo).port;
   await new Promise<void>(resolve => server.close(() => resolve())); return port;
 }
+async function stopTestTree(pid: number | undefined) {
+  if (!pid) return;
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  killTree(pid, 'SIGKILL');
+  const deadline = performance.now() + 10000;
+  while (alive() && performance.now() < deadline) await sleep(25);
+  assert.equal(alive(), false, `Test process ${pid} did not exit; its directory was retained`);
+}
 function fakeRelease(root: string, version: string, broken = false) {
   fs.mkdirSync(path.join(root, 'src/server'), { recursive: true });
   writeJson(path.join(root, 'package.json'), { name: 'papilot', version, type: 'module' });
@@ -417,7 +425,7 @@ function fakeRelease(root: string, version: string, broken = false) {
   `);
   fs.writeFileSync(path.join(root, 'src/server/start.ts'), '');
 }
-for (const version of ['0.7.0', devVersion]) for (const broken of [false, true]) test(`detached activation ${version}: ${broken ? 'restores the previous runtime and database when health checks fail' : 'starts the new runtime and retains the data directory'}`, async () => {
+for (const version of ['0.7.0', devVersion]) for (const broken of [false, true]) test(`detached activation ${version}: ${broken ? 'restores the previous runtime and database when health checks fail' : 'starts the new runtime and retains the data directory'}`, async t => {
   const data = temporary(), root = path.join(data, 'updates/releases/next'), previousRoot = path.join(data, 'old'), port = await freePort();
   try {
     fakeRelease(root, version, broken); fakeRelease(previousRoot, '0.6.0');
@@ -425,7 +433,8 @@ for (const version of ['0.7.0', devVersion]) for (const broken of [false, true])
     fs.writeFileSync(path.join(data, 'papilot.sqlite-wal'), 'committed WAL pages');
     writeJson(path.join(data, 'updates/status.json'), { currentVersion: '0.6.0', latestVersion: version, phase: 'restarting' });
     await restartRelease({ id: 'test-instance', root, version, channel: devRevision(version) ? 'dev' : 'stable', previousRoot, previousVersion: '0.6.0', data, port, parent: 2147483647, service: false }, () => {}, broken ? 3 : 30);
-    for (let i = 0; i < 30 && !(await health(port, broken ? '0.6.0' : version)); i++) await sleep(100);
+    const deadline = performance.now() + 15000;
+    while (performance.now() < deadline && !(await health(port, broken ? '0.6.0' : version))) await sleep(100);
     assert.ok(await health(port, broken ? '0.6.0' : version));
     assert.equal(readJson(path.join(data, 'updates/status.json')).phase, broken ? 'failed' : 'updated');
     assert.equal(fs.readFileSync(path.join(data, 'papilot.sqlite'), 'utf8'), 'original database');
@@ -433,11 +442,12 @@ for (const version of ['0.7.0', devVersion]) for (const broken of [false, true])
     assert.equal(fs.existsSync(path.join(data, 'updates/install.lock')), false);
     assert.equal(readJson(path.join(data, 'updates/active.json'))?.version, broken ? undefined : version);
   } finally {
-    const pid = Number(fs.existsSync(path.join(data, 'child.pid')) && fs.readFileSync(path.join(data, 'child.pid'), 'utf8'));
-    // Windows will not remove a directory a process still runs in, so end the
-    // whole tree before cleaning up.
-    if (pid) killTree(pid, 'SIGKILL');
-    fs.rmSync(data, { recursive: true, force: true });
+    // Keep a cleanup failure separate from the original health assertion.
+    t.after(async () => {
+      const pid = Number(fs.existsSync(path.join(data, 'child.pid')) && fs.readFileSync(path.join(data, 'child.pid'), 'utf8'));
+      await stopTestTree(pid);
+      await fs.promises.rm(data, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    });
   }
 });
 test('downloaded releases tolerate a slow isolated startup before activation', async () => {
@@ -451,7 +461,7 @@ test('downloaded releases tolerate a slow isolated startup before activation', a
   finally { fs.closeSync(log); fs.rmSync(stage, { recursive: true, force: true }); }
 });
 
-for (const version of ['0.7.0', devVersion]) test(`a browser install of ${version} restarts the real server and the original launcher keeps the selected version and data`, async () => {
+for (const version of ['0.7.0', devVersion]) test(`a browser install of ${version} restarts the real server and the original launcher keeps the selected version and data`, async t => {
   const folder = temporary(), original = path.join(folder, 'original'), data = path.join(original, '.papilot');
   const candidate = path.join(data, 'updates/releases/next/node_modules/papilot'), port = await freePort();
   const log = fs.openSync(path.join(folder, 'server.log'), 'w');
@@ -471,8 +481,7 @@ for (const version of ['0.7.0', devVersion]) test(`a browser install of ${versio
     const pid = fs.existsSync(file) ? Number(fs.readFileSync(file, 'utf8')) : started?.pid;
     // A server started by the update worker is a different process; Windows
     // keeps the folder locked until the whole tree is gone.
-    if (pid) killTree(pid, 'SIGKILL');
-    await sleep(200);
+    await stopTestTree(pid);
   };
   try {
     copy(original, '0.6.0'); copy(candidate, version);
@@ -507,5 +516,5 @@ for (const version of ['0.7.0', devVersion]) test(`a browser install of ${versio
     for (let i = 0; i < 60 && !(await health(port, version)); i++) await sleep(100);
     assert.ok(await health(port, version));
     assert.deepEqual((await (await fetch(base + '/api/state')).json()).projects.map((project: any) => project.id), ['kept-paper']);
-  } finally { await stop(); fs.closeSync(log); fs.rmSync(folder, { recursive: true, force: true }); }
+  } finally { t.after(async () => { await stop(); fs.closeSync(log); await fs.promises.rm(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }); }
 });
