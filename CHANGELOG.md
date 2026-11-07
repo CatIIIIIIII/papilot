@@ -4,6 +4,19 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-07 — Faster previews and a live demo
+
+Papilot reuses unchanged PDFs across days, adds keyboard switching between recent tasks and the manuscript, and offers a live product demo without installation.
+
+### Added
+
+- **Try Papilot in your browser.** The [live demo](https://papilot.ai/demo/) uses the application's PDF and review interface, with prepared tasks, annotations, PDF comparisons, AI review suggestions and version management. Notes and preferences stay in the browser; custom requests guide you to the installed app. No local LaTeX installation or connected agent is needed to explore it. ([#80](https://github.com/PapilotAI/papilot/pull/80))
+- **Switch between recent tasks and the manuscript from the keyboard.** Hold Ctrl and press the grave-accent key (`) to cycle through the current paper's recently visited views, then release Ctrl to switch. Shift reverses the order and Escape cancels. PDF annotation editors retain unsaved drafts, and delayed saves respect newer navigation. The shortcut uses Ctrl on macOS too, where Command + grave accent switches application windows. ([#81](https://github.com/PapilotAI/papilot/pull/81))
+
+### Changed
+
+- **Unchanged papers keep their compiled PDFs across days.** Opening a paper on a new day no longer triggers a full recompilation just to refresh its date. Explicit recompilation refreshes the preview, while comparisons use one fixed date for their baseline and revision. Successful manual refreshes remain preferred across cache eviction, and missing cached output is rebuilt without replacing PDFs used by existing reviews. ([#79](https://github.com/PapilotAI/papilot/pull/79))
+
 ## [0.9.1] - 2026-11-07 — Windows Desktop
 
 Papilot now runs on Windows, with x64 installers, a portable app and guided Windows or WSL setup. This release also brings the PDF marking tools into Review and improves PDF comparisons, compilation progress and agent permissions.
