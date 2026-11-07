@@ -626,6 +626,159 @@ test('OpenCode is set to its dedicated default mode and asked to request approva
   assert.equal(JSON.parse(opencodeConfig('not json')).permission.shell, 'ask');
 });
 
+// Model-specific options, including grouped choices and a model without efforts.
+function openCodeEffortFixture() {
+  const levels: Record<string, string[]> = { first: ['low', 'high', 'default'], second: ['medium', 'high', 'max', 'default'], plain: [] };
+  const options = (model: string, effort = 'default') => [
+    { id: 'model', category: 'model', currentValue: model, options: [{ group: 'Provider', options: Object.keys(levels).map(value => ({ value, name: value })) }] },
+    ...(levels[model].length ? [{ id: 'effort', category: 'thought_level', currentValue: effort, options: levels[model].map(value => ({ value, name: value })) }] : []),
+  ];
+  const calls: any[] = [], sessions = new Map<string, { model: string; effort: string }>();
+  let serial = 0;
+  const behavior = { stale: 0, missing: false, stalled: false, rejected: '', effortResponse: 'applied', onModel: () => {} };
+  const launch = () => {
+    const rpc = peer(message => {
+      calls.push(message);
+      const { id, method, params } = message;
+      if (method === 'initialize') rpc.reply(id, { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {}, delete: {} } } });
+      else if (method === 'session/new' || method === 'session/resume') {
+        const sessionId = params.sessionId || `session-${++serial}`;
+        const session = { model: 'first', effort: 'default' };
+        sessions.set(sessionId, session);
+        rpc.reply(id, { sessionId, configOptions: options(session.model), modes: { availableModes: [{ id: 'papilot-default' }] } });
+      } else if (method === 'session/set_config_option') {
+        const session = sessions.get(params.sessionId)!;
+        if (params.configId === 'model') {
+          behavior.onModel();
+          if (behavior.stalled) return;
+          if (params.value === behavior.rejected) { rpc.send({ id, error: { code: -32602, message: 'Unavailable model' } }); return; }
+          if (behavior.missing) { rpc.reply(id, {}); return; }
+          if (behavior.stale > 0) behavior.stale--;
+          else if (session.model !== params.value) { session.model = params.value; session.effort = 'default'; }
+        } else {
+          if (behavior.effortResponse === 'missing') { rpc.reply(id, {}); return; }
+          if (behavior.effortResponse === 'applied') session.effort = params.value;
+        }
+        rpc.reply(id, { configOptions: options(session.model, session.effort) });
+      } else if (method === 'session/prompt') {
+        rpc.update(params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } });
+        rpc.reply(id, { stopReason: 'end_turn' });
+      } else if (method && id !== undefined) rpc.reply(id, {});
+    });
+    return rpc.child;
+  };
+  return { agent: new AcpAgent(ACP_PROFILES.opencode, 'fake-opencode', launch as any), calls, sessions, behavior, levels };
+}
+
+test('OpenCode discovers per-model efforts, retries stale responses and preserves defaults across turns', async () => {
+  const { agent, calls, sessions, behavior } = openCodeEffortFixture();
+  behavior.stale = 1;
+  try {
+    await agent.start();
+    const models = structuredClone((await agent.request('model/list')).data);
+    assert.deepEqual(models.map((m: any) => [m.model, m.supportedReasoningEfforts.map((e: any) => e.reasoningEffort), m.defaultReasoningEffort, m.isDefault]), [
+      ['first', ['low', 'high'], null, true], ['second', ['medium', 'high', 'max'], null, false], ['plain', [], null, false],
+    ]);
+    assert.equal(calls.filter(c => c.method === 'session/set_config_option' && c.params.value === 'second').length, 2);
+    assert.ok(calls.some(c => c.method === 'session/delete' && c.params.sessionId === 'session-1'));
+    assert.equal(calls.some(c => c.method === 'session/prompt'), false, 'discovery does not generate');
+    const { thread } = await agent.request('thread/start', { cwd: '/paper', model: 'second' });
+    assert.equal((await run(agent, thread.id, { effort: 'max' })).status, 'completed');
+    assert.deepEqual(sessions.get(thread.id), { model: 'second', effort: 'max' });
+    assert.equal((await run(agent, thread.id)).status, 'completed');
+    assert.equal(sessions.get(thread.id)!.effort, 'default', 'clears the prior override');
+    behavior.stale = 1;
+    assert.equal((await run(agent, thread.id, { model: 'first', effort: 'low' })).status, 'completed');
+    assert.deepEqual(sessions.get(thread.id), { model: 'first', effort: 'low' });
+    assert.equal((await run(agent, thread.id, { model: 'plain' })).status, 'completed');
+    assert.equal(sessions.get(thread.id)!.model, 'plain');
+    assert.deepEqual((await agent.request('model/list')).data, models, 'turn overrides do not change catalog defaults');
+    await agent.request('thread/resume', { cwd: '/paper', threadId: 'restored', model: 'second' });
+    assert.equal((await run(agent, 'restored', { effort: 'max' })).status, 'completed');
+    assert.deepEqual(sessions.get('restored'), { model: 'second', effort: 'max' });
+  } finally { agent.close(); }
+});
+
+for (const missing of [false, true]) test(`OpenCode rejects unconfirmed model changes (${missing ? 'missing' : 'stale'} options) before prompting`, async () => {
+  const { agent, calls, behavior } = openCodeEffortFixture();
+  try {
+    await agent.start();
+    const { thread } = await agent.request('thread/start', { cwd: '/paper', model: 'first' });
+    const before = calls.length;
+    behavior.missing = missing; behavior.stale = 10;
+    const result = await run(agent, thread.id, { model: 'second', effort: 'max' });
+    assert.equal(result.status, 'failed');
+    assert.match(result.error.message, /could not apply model=second/);
+    assert.equal(calls.slice(before).filter(c => c.method === 'session/set_config_option').length, 3);
+    assert.equal(calls.slice(before).some(c => c.method === 'session/prompt' || c.params?.configId === 'effort'), false);
+  } finally { agent.close(); }
+});
+
+test('OpenCode skips failed discovery and bounds the total discovery time', async t => {
+  const { agent, calls, behavior } = openCodeEffortFixture();
+  t.mock.timers.enable({ apis: ['Date'], now: 1000 });
+  behavior.rejected = 'second';
+  behavior.onModel = () => t.mock.timers.tick(10000);
+  try {
+    await agent.start();
+    assert.equal(agent.ready, true);
+    const models = (await agent.request('model/list')).data;
+    assert.deepEqual(models[1].supportedReasoningEfforts, []);
+    assert.equal(calls.filter(c => c.params?.configId === 'model').length, 1, 'deadline stops further probes');
+    assert.ok(calls.some(c => c.method === 'session/delete'));
+  } finally { agent.close(); }
+});
+
+for (const response of ['stale', 'missing']) test(`OpenCode refuses to prompt when effort confirmation is ${response}`, async () => {
+  const { agent, calls, behavior } = openCodeEffortFixture();
+  try {
+    await agent.start();
+    const { thread } = await agent.request('thread/start', { cwd: '/paper', model: 'second' });
+    behavior.effortResponse = response;
+    const result = await run(agent, thread.id, { effort: 'max' });
+    assert.equal(result.status, 'failed');
+    assert.match(result.error.message, /could not apply effort=max/);
+    assert.equal(calls.some(c => c.method === 'session/prompt'), false);
+  } finally { agent.close(); }
+});
+
+test('OpenCode task selection retains the normal RPC timeout outside discovery', async t => {
+  const { agent, behavior } = openCodeEffortFixture();
+  try {
+    await agent.start();
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+    behavior.onModel = () => t.mock.timers.tick(3000);
+    const { thread } = await agent.request('thread/start', { cwd: '/paper', model: 'second' });
+    assert.equal((await run(agent, thread.id, { effort: 'max' })).status, 'completed');
+  } finally { agent.close(); }
+});
+
+test('OpenCode continues discovery after a rejected model without copying another model\'s efforts', async () => {
+  const { agent, calls, behavior } = openCodeEffortFixture();
+  behavior.rejected = 'second';
+  try {
+    await agent.start();
+    assert.deepEqual((await agent.request('model/list')).data[1].supportedReasoningEfforts, []);
+    assert.ok(calls.some(c => c.params?.configId === 'model' && c.params.value === 'plain'));
+  } finally { agent.close(); }
+});
+
+test('OpenCode stops probing a large unresponsive catalog at the discovery deadline', async t => {
+  const { agent, calls, behavior, levels } = openCodeEffortFixture();
+  for (let i = 0; i < 100; i++) levels[`extra-${i}`] = ['low', 'high'];
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  behavior.stalled = true;
+  behavior.onModel = () => t.mock.timers.tick(2000);
+  try {
+    await agent.start();
+    assert.equal(Date.now(), 11000);
+    assert.equal(calls.filter(c => c.params?.configId === 'model').length, 5);
+    assert.equal(agent.ready, true);
+    assert.equal((await agent.request('model/list')).data.length, 103, 'models remain selectable even when their effort discovery times out');
+    assert.ok(calls.some(c => c.method === 'session/delete'));
+  } finally { agent.close(); }
+});
+
 test('Qwen prefers its auto-edit mode, and an agent without any accepted mode is refused', { timeout: 5000 }, async () => {
   const modes = { availableModes: [{ id: 'plan' }, { id: 'default' }, { id: 'auto-edit' }, { id: 'yolo' }] };
   const f = profileFixture(ACP_PROFILES.qwen, { modes }, (m, rpc) => { rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } }); rpc.reply(m.id, { stopReason: 'end_turn' }); });

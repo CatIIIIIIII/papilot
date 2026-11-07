@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- OpenCode now discovers reasoning effort levels for models other than its default, so their effort controls are available before starting a task. Model changes retry stale responses and stop if OpenCode cannot confirm the selected model.
+
 ## [0.9.2] - 2026-11-07 — Faster previews and a live demo
 
 Papilot reuses unchanged PDFs across days, adds keyboard switching between recent tasks and the manuscript, and offers a live product demo without installation.

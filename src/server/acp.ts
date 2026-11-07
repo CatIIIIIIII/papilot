@@ -36,6 +36,7 @@ export interface AcpProfile {
   config?: Record<string, string>;
   authMethods?: string[];
   sessionMeta?: Record<string, unknown>;
+  modelEfforts?: boolean;
   permissionModes?: Record<string, { value?: string; label: string; detail: string }>;
 }
 const permissionModes = {
@@ -70,7 +71,7 @@ export const ACP_PROFILES = {
   // OpenCode runs tools without asking by default. Its highest-precedence
   // config layer makes it ask before shell commands and anything outside the
   // task worktree, while edits in the worktree go ahead for review.
-  opencode: { id: 'opencode', name: 'OpenCode', bin: 'opencode', binEnv: 'PAPILOT_OPENCODE_BIN', args: ['acp'], modes: ['papilot-default'],
+  opencode: { id: 'opencode', name: 'OpenCode', bin: 'opencode', binEnv: 'PAPILOT_OPENCODE_BIN', args: ['acp'], modes: ['papilot-default'], modelEfforts: true,
     permissionModes: {
       'papilot-default': { label: 'Default', detail: 'Ask before commands' },
       'papilot-full': { value: 'full', label: 'Allow all', detail: 'Approve all tools' },
@@ -159,6 +160,7 @@ export class AcpAgent extends Adapter {
       this.config(probe);
       this.availablePermissions = this.permissions(probe).map(({ native: _, ...option }) => option);
       this.readModels(probe, true);
+      if (this.profile.modelEfforts) await this.learnEfforts(probe);
       const sessionCapabilities = this.capabilities.sessionCapabilities || {};
       if (sessionCapabilities.delete) await this.rpc('session/delete', { sessionId: probe.sessionId });
       else if (sessionCapabilities.close) await this.rpc('session/close', { sessionId: probe.sessionId });
@@ -196,8 +198,7 @@ export class AcpAgent extends Adapter {
     if (model) {
       const option = session!.configOptions?.find(option => option.category === 'model' || option.id === 'model');
       if (option) {
-        const result = await this.rpc('session/set_config_option', { sessionId: session!.sessionId, configId: option.id, value: model });
-        if (result.configOptions) session!.configOptions = result.configOptions;
+        await this.chooseModel(session!, option, model);
       } else {
         await this.rpc('session/set_model', { sessionId: session!.sessionId, modelId: model });
         if (session!.models) session!.models.currentModelId = model;
@@ -206,6 +207,37 @@ export class AcpAgent extends Adapter {
     await this.applyPermissions(session!, permissions);
     this.readModels(session!);
     return session!;
+  }
+  // OpenCode reports efforts only for the current model. Visit the catalog in
+  // the disposable probe before publishing it; no prompt or inference is sent.
+  private async learnEfforts(probe: Session) {
+    const option = probe.configOptions?.find(option => option.category === 'model' || option.id === 'model');
+    const deadline = Date.now() + 10000;
+    for (const choice of choices(option)) {
+      if (Date.now() >= deadline) break;
+      if (choice.value === sessionModel(probe)) continue;
+      try {
+        await this.chooseModel(probe, option!, choice.value, deadline);
+        this.readModels(probe);
+      } catch (error) {
+        if (!this.child) throw error;
+        // A broken model must not hide the rest of the catalog. Unconfirmed
+        // choices keep their empty efforts; the total discovery time is bounded.
+      }
+    }
+  }
+  private async chooseModel(session: Session, option: ConfigOption, value: string, deadline?: number) {
+    // OpenCode can acknowledge a change with the previous model's options.
+    // Never apply an effort or prompt against such an unconfirmed selection.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const remaining = deadline === undefined ? 20000 : Math.min(2000, deadline - Date.now());
+      if (remaining <= 0) break;
+      const result = await this.rpc('session/set_config_option', { sessionId: session.sessionId, configId: option.id, value }, remaining);
+      if (this.profile.modelEfforts && result?.configOptions?.find((entry: ConfigOption) => entry.id === option.id)?.currentValue !== value) continue;
+      if (result?.configOptions) session.configOptions = result.configOptions;
+      return;
+    }
+    throw new Error(`${this.name} could not apply ${option.id}=${value}.`);
   }
   private permissions(session: Session): (TaskPermissionOption & { native: string })[] {
     if (this.profile.permissionModes) {
@@ -302,6 +334,7 @@ export class AcpAgent extends Adapter {
       if (chosenEffort) {
         if (!option || !choices(option).some(choice => choice.value === chosenEffort)) throw new Error(`${this.name} does not support reasoning effort ${chosenEffort} for this model.`);
         const result = await this.rpc('session/set_config_option', { sessionId: turn.threadId, configId: option.id, value: chosenEffort });
+        if (this.profile.modelEfforts && result?.configOptions?.find((entry: ConfigOption) => entry.id === option.id)?.currentValue !== chosenEffort) throw new Error(`${this.name} could not apply ${option.id}=${chosenEffort}.`);
         if (result?.configOptions) session.configOptions = result.configOptions;
       }
       const prompt: any[] = [{ type: 'text', text: thread.started ? text : `${thread.instructions}\n\n---\n\n${text}` }];

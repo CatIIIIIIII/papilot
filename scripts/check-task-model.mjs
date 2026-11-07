@@ -203,7 +203,7 @@ try {
   ]) {
     const alternate = `other-${agent}`;
     defaults.runtimes[agent] = { connected: true, authenticated: true, account: null, error: null, models: [
-      { id: alternate, name: 'Other model', isDefault: false, efforts: [], defaultEffort: null },
+      { id: alternate, name: 'Other model', isDefault: false, efforts: agent === 'opencode' ? ['medium', 'high', 'max'] : [], defaultEffort: null },
       { id: model, name, isDefault: true, efforts: [], defaultEffort: null },
     ] };
     await composer.evaluate(() => window.dispatchEvent(new Event('online')));
@@ -217,7 +217,21 @@ try {
     await selectOption(defaultModel, JSON.stringify([agent, alternate]));
     await composer.keyboard.press('Escape');
     await expect(modelName).toHaveText('Other model');
+    if (agent === 'opencode') {
+      await composer.locator('.new-task-panel').getByRole('button', { name: 'Agent settings', exact: true }).click();
+      const picker = composer.getByRole('dialog', { name: 'Agent settings', exact: true });
+      await picker.getByRole('slider', { name: 'Reasoning effort', exact: true }).press('End');
+      await expect(picker.getByRole('slider')).toHaveAttribute('aria-valuetext', 'Max');
+      fs.mkdirSync('test-results', { recursive: true });
+      await composer.screenshot({ path: 'test-results/opencode-effort.png' });
+      await composer.keyboard.press('Escape');
+      await composer.reload();
+      await expect(modelName).toHaveText('Other model');
+      await expect(composer.locator('.new-task-panel .agent-picker-trigger')).toContainText('Max');
+      await composer.getByRole('textbox', { name: 'Describe the revision' }).fill('Revise the introduction.');
+    }
     await submit(alternate, agent);
+    if (agent === 'opencode') assert.equal(creates.at(-1).effort, 'max', 'non-default OpenCode effort survives reload and task submission');
   }
   assert.deepEqual(errors, []);
   await fresh.close();
