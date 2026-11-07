@@ -2,21 +2,8 @@ name: Pages
 
 on:
   push:
+    # The playground shares the app source, so every main update rebuilds it.
     branches: [main]
-    paths:
-      - site/**
-      - docs/assets/**
-      - src/web/fonts/**
-      - public/*.png
-      - scripts/build-site.mjs
-      - i18n/config.json
-      - i18n/languages.json
-      - src/web/brand-icons/**
-      - scripts/site-i18n.mjs
-      - scripts/site-analytics.mjs
-      - package.json
-      - package-lock.json
-      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:

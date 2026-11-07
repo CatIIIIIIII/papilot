@@ -1,0 +1,141 @@
+[
+  {
+    "id": "note-opening",
+    "comment": "Make the opening a workflow: mark the PDF, let the agent edit the LaTeX, then review the typeset change.",
+    "group": "yellow",
+    "page": 0,
+    "rect": [
+      0.629305222455193,
+      0.17806708210646505,
+      0.7541358798157936,
+      0.1919789362435389
+    ],
+    "rects": [
+      [
+        0.629305222455193,
+        0.17806708210646505,
+        0.7541358798157936,
+        0.1919789362435389
+      ]
+    ],
+    "quote": "one workspace."
+  },
+  {
+    "id": "note-claim",
+    "comment": "Make this philosophy actionable: accept, reject, or request another pass.",
+    "group": "purple",
+    "page": 0,
+    "rect": [
+      0.4012659608928207,
+      0.659812002470999,
+      0.5565245883916717,
+      0.6737238566080729
+    ],
+    "rects": [
+      [
+        0.4012659608928207,
+        0.659812002470999,
+        0.5565245883916717,
+        0.6737238566080729
+      ]
+    ],
+    "quote": "The author decides."
+  },
+  {
+    "id": "note-filler",
+    "comment": "",
+    "kind": "delete",
+    "page": 0,
+    "rect": [
+      0.7463642693812551,
+      0.659812002470999,
+      0.8223000819387,
+      0.6737238566080729
+    ],
+    "rects": [
+      [
+        0.7463642693812551,
+        0.659812002470999,
+        0.8223000819387,
+        0.6737238566080729
+      ]
+    ],
+    "quote": "of course,"
+  },
+  {
+    "id": "note-quick",
+    "comment": "Start with the action: “Inspect the LaTeX behind any edit.”",
+    "stamp": "trim",
+    "page": 0,
+    "rect": [
+      0.15139041227452896,
+      0.6769193398832071,
+      0.24757589701733557,
+      0.6908311940202809
+    ],
+    "rects": [
+      [
+        0.15139041227452896,
+        0.6769193398832071,
+        0.24757589701733557,
+        0.6908311940202809
+      ]
+    ],
+    "quote": "At any time,"
+  },
+  {
+    "id": "note-equation",
+    "comment": "This assumes a zero origin. Use explicit page bounds and subtract the origin before normalizing, so cropped pages work too.",
+    "group": "green",
+    "page": 1,
+    "rect": [
+      0.45738399730009194,
+      0.4524554628314394,
+      0.47421110065933925,
+      0.466229564011699
+    ],
+    "rects": [
+      [
+        0.45738399730009194,
+        0.4524554628314394,
+        0.47421110065933925,
+        0.466229564011699
+      ]
+    ],
+    "quote": "𝑊"
+  },
+  {
+    "id": "note-table",
+    "comment": "Show a nonzero page origin, such as (20,40), and shift the selection equally. The normalized box should stay the same.",
+    "kind": "point",
+    "page": 1,
+    "rect": [
+      0.35330256243936375,
+      0.5381089990789241,
+      0.35330256243936375,
+      0.5381089990789241
+    ],
+    "quote": "zero"
+  },
+  {
+    "id": "note-ending",
+    "comment": "Use Download Papilot to run this workflow on a real project. Notes and the prepared reviews work here in the static demo.",
+    "group": "orange",
+    "page": 1,
+    "rect": [
+      0.7611860387465533,
+      0.786217506485756,
+      0.8836837469362745,
+      0.7989222979304766
+    ],
+    "rects": [
+      [
+        0.7611860387465533,
+        0.786217506485756,
+        0.8836837469362745,
+        0.7989222979304766
+      ]
+    ],
+    "quote": "your own project"
+  }
+]

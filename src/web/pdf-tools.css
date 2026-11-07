@@ -58,6 +58,9 @@
 .note-box[data-stamp]{border-color:var(--stamp);background:color-mix(in srgb,var(--stamp) 6%,transparent)}
 .note-tag[data-stamp]{display:inline-flex;align-items:center;gap:5px;background:var(--stamp);color:#fff}
 .note-tag-stamp{font-weight:500}
+/* Keep quick-note markers in the page margin on narrow pages. The note's
+   label and full instruction remain available when its numbered marker opens. */
+.note-tag-stamp[hidden]{display:none}
 .note-point{position:absolute;width:2px;height:18px;margin:-9px 0 0 -1px;border-radius:1px;background:var(--accent);pointer-events:none}
 .note-point::before{content:"";position:absolute;left:-4px;top:-7px;width:10px;height:10px;border-radius:50%;background:inherit;box-shadow:0 0 0 2px var(--pdf-page,#fff)}
 .note-point[data-stamp]{background:var(--stamp)}

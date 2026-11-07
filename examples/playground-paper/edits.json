@@ -1,0 +1,163 @@
+[
+  {
+    "id": "example-clarity",
+    "title": "Put the design philosophy into words",
+    "agent": "codex",
+    "prompt": "Sharpen this illustrated Papilot introduction. Make the opening describe the workflow, spell out the author's review choices, and trim the two filler phrases. Keep the product images and design principles intact.",
+    "answer": "The opening now walks through **PDF notes → LaTeX edits → typeset review**. The philosophy names the author's actual choices: accept, reject, or request another pass. I removed the filler while preserving the illustrations, local-file ownership and agent choice. Use **LaTeX** to inspect the wording, or comment directly on either typeset change.",
+    "edits": [
+      {
+        "old": "Papilot brings PDF notes, coding agents, and typeset review into one workspace.",
+        "new": "Mark the PDF. Let your agent edit the LaTeX. Review every typeset change."
+      },
+      {
+        "old": "The author decides.",
+        "new": "Accept, reject, or request another pass: the author decides."
+      },
+      {
+        "old": "Your manuscript stays, of course, under your control.",
+        "new": "Your manuscript stays under your control."
+      },
+      {
+        "old": "At any time, you can inspect the LaTeX behind an edit.",
+        "new": "Inspect the LaTeX behind any edit."
+      }
+    ],
+    "preset": false,
+    "notes": []
+  },
+  {
+    "id": "example-math",
+    "title": "Keep notes anchored on cropped pages",
+    "agent": "claude",
+    "prompt": "Generalize the annotation-coordinate example to pages whose origin is not (0,0). Use the page bounds, then shift the example origin to (20,40) and the selection by the same amount. Keep the normalized box unchanged and preserve the PDF-review and accepted-edit equations.",
+    "answer": "The original normalization assumes a zero origin. I made the **page bounds explicit**, subtracting the origin before dividing by each page dimension. The example now starts at (20,40), with the selection shifted equally. Its normalized box stays **(0.10, 0.10, 0.30, 0.15)**. Review the formula and table together: the same note should land on the same content after a page offset.",
+    "edits": [
+      {
+        "old": "For an origin at $(0,0)$, let $W,H$ be page width and height and $b=(x_0,y_0,x_1,y_1)$ a selected box.",
+        "new": "For page bounds $(x_{\\min},y_{\\min},x_{\\max},y_{\\max})$, let $b=(x_0,y_0,x_1,y_1)$ be a selected box."
+      },
+      {
+        "old": "  \\widehat b=\\left(\\frac{x_0}{W},\\frac{y_0}{H},\\frac{x_1}{W},\\frac{y_1}{H}\\right).",
+        "new": "  \\widehat b=\\left(\\frac{x_0-x_{\\min}}{x_{\\max}-x_{\\min}},\\frac{y_0-y_{\\min}}{y_{\\max}-y_{\\min}},\\frac{x_1-x_{\\min}}{x_{\\max}-x_{\\min}},\\frac{y_1-y_{\\min}}{y_{\\max}-y_{\\min}}\\right)."
+      },
+      {
+        "old": "zero & $(60,80,180,120)$",
+        "new": "$(20,40)$ & $(80,120,200,160)$"
+      }
+    ],
+    "preset": false,
+    "notes": []
+  },
+  {
+    "id": "example-note-opening",
+    "title": "Lead with the workflow",
+    "agent": "codex",
+    "preset": true,
+    "notes": [
+      "note-opening"
+    ],
+    "prompt": "Make the opening a workflow: mark the PDF, let the agent edit the LaTeX, then review the typeset change.",
+    "answer": "**Prepared demo result — no agent was run.**\n\nThe opening now names the three actions: mark the PDF, let your agent edit the LaTeX, and review each typeset change.",
+    "edits": [
+      {
+        "old": "Papilot brings PDF notes, coding agents, and typeset review into one workspace.",
+        "new": "Mark the PDF. Let your agent edit the LaTeX. Review every typeset change."
+      }
+    ]
+  },
+  {
+    "id": "example-note-choice",
+    "title": "Make the author’s choices explicit",
+    "agent": "codex",
+    "preset": true,
+    "notes": [
+      "note-claim"
+    ],
+    "prompt": "Make this philosophy actionable: accept, reject, or request another pass.",
+    "answer": "**Prepared demo result — no agent was run.**\n\n“The author decides” now says exactly how: accept, reject, or request another pass.",
+    "edits": [
+      {
+        "old": "The author decides.",
+        "new": "Accept, reject, or request another pass: the author decides."
+      }
+    ]
+  },
+  {
+    "id": "example-note-filler",
+    "title": "Delete the filler words",
+    "agent": "codex",
+    "preset": true,
+    "notes": [
+      "note-filler"
+    ],
+    "prompt": "Delete the marked filler words.",
+    "answer": "**Prepared demo result — no agent was run.**\n\nRemoved just “of course,”. The sentence keeps its meaning and reads more directly.",
+    "edits": [
+      {
+        "old": "Your manuscript stays, of course, under your control.",
+        "new": "Your manuscript stays under your control."
+      }
+    ]
+  },
+  {
+    "id": "example-note-quick",
+    "title": "Start with the action",
+    "agent": "codex",
+    "preset": true,
+    "notes": [
+      "note-quick"
+    ],
+    "prompt": "Start with the action: “Inspect the LaTeX behind any edit.”",
+    "answer": "**Prepared demo result — no agent was run.**\n\nChanged “At any time, you can inspect…” to “Inspect the LaTeX behind any edit.”",
+    "edits": [
+      {
+        "old": "At any time, you can inspect the LaTeX behind an edit.",
+        "new": "Inspect the LaTeX behind any edit."
+      }
+    ]
+  },
+  {
+    "id": "example-note-math",
+    "title": "Fix the cropped-page coordinates",
+    "agent": "claude",
+    "preset": true,
+    "notes": [
+      "note-equation",
+      "note-table"
+    ],
+    "prompt": "This assumes a zero origin. Use explicit page bounds and subtract the origin before normalizing, so cropped pages work too. Show a nonzero page origin, such as (20,40), and shift the selection equally. The normalized box should stay the same.",
+    "answer": "**Prepared demo result — no agent was run.**\n\nThe formula now subtracts the page origin. The table shifts the origin and selection together, preserving the normalized box.",
+    "edits": [
+      {
+        "old": "For an origin at $(0,0)$, let $W,H$ be page width and height and $b=(x_0,y_0,x_1,y_1)$ a selected box.",
+        "new": "For page bounds $(x_{\\min},y_{\\min},x_{\\max},y_{\\max})$, let $b=(x_0,y_0,x_1,y_1)$ be a selected box."
+      },
+      {
+        "old": "  \\widehat b=\\left(\\frac{x_0}{W},\\frac{y_0}{H},\\frac{x_1}{W},\\frac{y_1}{H}\\right).",
+        "new": "  \\widehat b=\\left(\\frac{x_0-x_{\\min}}{x_{\\max}-x_{\\min}},\\frac{y_0-y_{\\min}}{y_{\\max}-y_{\\min}},\\frac{x_1-x_{\\min}}{x_{\\max}-x_{\\min}},\\frac{y_1-y_{\\min}}{y_{\\max}-y_{\\min}}\\right)."
+      },
+      {
+        "old": "zero & $(60,80,180,120)$",
+        "new": "$(20,40)$ & $(80,120,200,160)$"
+      }
+    ]
+  },
+  {
+    "id": "example-note-ending",
+    "title": "Make the next step concrete",
+    "agent": "codex",
+    "preset": true,
+    "notes": [
+      "note-ending"
+    ],
+    "prompt": "Use Download Papilot to run this workflow on a real project. Notes and the prepared reviews work here in the static demo.",
+    "answer": "**Prepared demo result — no agent was run.**\n\nThe closing line now spells out the next steps after download: open a local LaTeX project, connect an agent, and review a real edit.",
+    "edits": [
+      {
+        "old": "to open your own project and run real tasks.",
+        "new": "to open a local LaTeX project, connect your agent, and review your first real edit."
+      }
+    ]
+  }
+]

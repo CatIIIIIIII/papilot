@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "寫 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>，<del>得</del>看 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 原始碼<del>，再去翻</del> PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "寫 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>，<ins>何必</ins>看 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 原始碼<ins>？我只看</ins> PDF<ins>！ 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "寫 \\LaTeX{}，<del>得</del><ins>何必</ins>看 \\LaTeX{} 原始碼<del>，再去翻</del><ins>？我只看</ins> PDF<del> 😭</del><ins>！ 😎</ins>",
-  "line 6": "第 6 行"
+  "line 6": "第 6 行",
+  "Try online demo": "體驗線上示範"
 }

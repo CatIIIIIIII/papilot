@@ -141,10 +141,13 @@ export function ReviewApp({
   task,
   pinned,
   changes = false,
+  transport,
 }: {
   task: string;
   pinned: number | null;
   changes?: boolean;
+  /** A host can provide local review data without running the HTTP server. */
+  transport?: <T>(route: string, body?: unknown) => Promise<T>;
 }) {
   const [state, setState] = useState<PageState | null>(null),
     [detail, setDetail] = useState<RoundDetail | null>(null),
@@ -336,6 +339,7 @@ export function ReviewApp({
     return Boolean(reason);
   }
   async function api<T>(route: string, body?: unknown): Promise<T> {
+    if (transport) return transport<T>(route, body);
     const response = await fetch(
       `${changes ? "/api/changes" : `/api/tasks/${encodeURIComponent(task)}`}${route}`,
       body === undefined
@@ -491,7 +495,7 @@ export function ReviewApp({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [task, pinned]);
+  }, [task, pinned, transport]);
   useEffect(() => {
     if (detail && current >= 0)
       requestAnimationFrame(() => {
@@ -556,7 +560,7 @@ export function ReviewApp({
     snapshot.current.busy = true;
     try {
       const next = await api<PageState>("/decide", {
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(20)), byte => byte.toString(16).padStart(2, '0')).join(''),
         action: kind,
         round: detail.round,
         changes: chosen,

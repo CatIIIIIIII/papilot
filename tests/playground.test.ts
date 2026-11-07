@@ -1,0 +1,248 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createPlaygroundData, PlaygroundDownloadRequired, projectId } from '../src/web/playground/data.ts';
+import type { Annotation, Manuscript, Snapshot, Task, TimelineItem, NoteResult, GitStatus, GitHistory, GitDiff, GitOverview } from '../src/shared.ts';
+import { AGENT_IDS } from '../src/shared.ts';
+import { replayDuration } from '../src/web/playground/replay.ts';
+const base = `/projects/${projectId}`;
+const pages: [number, number][] = [[612, 792], [612, 792]];
+function setup(now?: () => number) {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  return { storage, api: createPlaygroundData(storage, 'test', 'paper-hash', pages, now) };
+}
+const note = { key: 'paper-hash', page: 0, rect: [0.1, 0.2, 0.4, 0.3], comment: 'Clarify this claim.', quote: 'Example text', kind: 'point' };
+test('example annotations select short phrases, a single symbol and a table cell', async () => {
+  const { api } = setup();
+  const { annotations } = await api<Manuscript>(`${base}/manuscript`);
+  assert.equal(annotations.find(note => note.id === 'note-equation')?.quote.normalize('NFKC'), 'W');
+  assert.equal(annotations.find(note => note.id === 'note-claim')?.quote, 'The author decides.');
+  assert.equal(annotations.find(note => note.id === 'note-table')?.quote, 'zero');
+  for (const note of annotations) {
+    assert.ok(note.quote.split(' ').length <= 6, `${note.id} must quote only the selected phrase`);
+    for (const rect of note.rects || [note.rect]) assert.ok(rect[2] - rect[0] < 0.25, `${note.id} must not highlight a whole line`);
+  }
+});
+test('playground notes survive reload, editing, deletion and undo without a server', async () => {
+  const { api, storage } = setup();
+  const created = await api<Annotation>(`${base}/annotations`, note);
+  assert.equal(created.source, null);
+  assert.equal(created.kind, 'point');
+  await api(`${base}/annotations/${created.id}`, { comment: 'Add evidence.' });
+  const reload = createPlaygroundData(storage, 'new-version', 'paper-hash', pages);
+  assert.equal((await reload<Manuscript>(`${base}/manuscript`)).annotations.find(note => note.id === created.id)?.comment, 'Add evidence.');
+  await reload(`${base}/annotations/${created.id}/delete`, {});
+  assert.equal((await reload<Manuscript>(`${base}/manuscript`)).annotations.length, 7);
+  const restored = await reload<{ annotations: Annotation[] }>(`${base}/annotations/${created.id}/restore`, {});
+  assert.equal(restored.annotations.at(-1)?.id, created.id);
+  assert.equal((await createPlaygroundData(storage, 'test', 'new-pdf-hash', pages)<Manuscript>(`${base}/manuscript`)).annotations.length, 7);
+});
+test('unsupported actions cannot create, delete, or run the sample tasks', async () => {
+  const { api } = setup();
+  const before = await api<Snapshot>('/state');
+  assert.equal(before.tasks.length, 3);
+  for (const task of before.tasks) {
+    assert.equal(task.status, 'reviewing');
+    assert.ok((await api<{ items: unknown[] }>(`/tasks/${task.id}/items`)).items.length);
+    if (task.mode === 'review') assert.ok((await api<{ notes: unknown[] }>(`/tasks/${task.id}/ai-review`)).notes.length);
+    else {
+      const round = await api<import('../engine/src/types.ts').RoundDetail>(`/playground-reviews/${task.id}/rounds/1`);
+      assert.ok(round.units.length);
+      const blocks = [...round.sections.flatMap(section => section.blocks), ...round.loose].filter(block => block.kind === 'change');
+      const visible = new Set(blocks.flatMap(block => block.before.length || block.after.length ? block.units : []));
+      assert.ok(blocks.every(block => block.before.length || block.after.length || !block.units.every(id => visible.has(id))), 'no empty duplicate source cards');
+    }
+  }
+  for (const route of ['/tasks', `/tasks/${before.tasks[0].id}/messages`, `/tasks/${before.tasks[0].id}/delete`, `${base}/manuscript`, '/projects/open', '/unknown-future-route']) {
+    await assert.rejects(api(route, { instructions: 'Run this' }), PlaygroundDownloadRequired);
+  }
+  await assert.rejects(api('/unknown-future-route'), PlaygroundDownloadRequired);
+  assert.deepEqual(await api('/state'), before);
+  before.tasks.length = 0;
+  assert.equal((await api<Snapshot>('/state')).tasks.length, 3, 'callers cannot mutate the fixture');
+});
+test('the demo offers every supported agent and persists model controls without running tasks', async () => {
+  const { api, storage } = setup();
+  const before = await api<Snapshot>('/state');
+  assert.deepEqual(Object.keys(before.runtimes!), AGENT_IDS);
+  const astra = before.runtimes!.codex!.models.find(model => model.isDefault)!;
+  assert.equal(astra.id, 'gpt-6-astra');
+  assert.equal(astra.defaultEffort, 'xhigh');
+  assert.ok(astra.efforts.includes('ultra'));
+  assert.equal(astra.fastMode?.serviceTier, 'priority');
+  const route = '/tasks/example-clarity/model';
+  const permissions = '/tasks/example-clarity/permissions';
+  await api(permissions, { permissions: 'full' });
+  await api(route, { model: 'gpt-6.1-terra', effort: 'ultra', serviceTier: 'priority' });
+  const reloaded = createPlaygroundData(storage, 'test', 'paper-hash', pages);
+  const changed = (await reloaded<Snapshot>('/state')).tasks.find(task => task.id === 'example-clarity')!;
+  assert.deepEqual([changed.model, changed.effort, changed.serviceTier], ['gpt-6.1-terra', 'ultra', 'priority']);
+  assert.equal(changed.status, 'reviewing');
+  assert.equal(changed.permissions, 'full');
+  await assert.rejects(reloaded(permissions, { permissions: 'made-up' }), /Invalid demo permissions/);
+  assert.equal(changed.review?.counts.pending, 2);
+  assert.equal((await reloaded<Manuscript>(`${base}/manuscript`)).annotations.length, 7);
+  for (const input of [{ model: 'made-up', effort: 'high' }, { model: astra.id, effort: 'made-up' }, { model: astra.id, effort: 'xhigh', serviceTier: 'made-up' }]) await assert.rejects(reloaded(route, input), /Invalid demo model/);
+  await reloaded('/playground/reset', {});
+  const reset = (await reloaded<Snapshot>('/state')).tasks.find(task => task.id === 'example-clarity')!;
+  assert.deepEqual([reset.model, reset.effort, reset.serviceTier], [astra.id, 'xhigh', 'default']);
+  assert.equal(reset.permissions, 'workspace');
+});
+test('blocked storage, corrupted records, invalid pages and cancelled writes are safe', async () => {
+  const broken = { getItem() { throw Error('blocked'); }, setItem() { throw Error('full'); } };
+  const api = createPlaygroundData(broken, 'test', 'paper-hash', pages);
+  await api(`${base}/annotations`, note);
+  assert.equal((await api<Manuscript>(`${base}/manuscript`)).annotations.length, 8);
+  for (const page of [-1, pages.length, 0.5]) await assert.rejects(api(`${base}/annotations`, { ...note, page }), /location/);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(api(`${base}/annotations`, note, controller.signal), { name: 'AbortError' });
+  const corrupt = createPlaygroundData({ getItem: () => '[null,{},42]', setItem() {} }, 'test', 'paper-hash', pages);
+  assert.equal((await corrupt<Manuscript>(`${base}/manuscript`)).annotations.length, 7);
+});
+
+test('real diff decisions persist across frames, count toward task progress, and undo in order', async () => {
+  const { api, storage } = setup();
+  const review = '/playground-reviews/example-clarity';
+  const frame = createPlaygroundData(storage, 'test', 'paper-hash', pages);
+  await frame(review + '/decide', { id: 'a', round: 1, action: 'accept', changes: ['c001'] });
+  let task = (await api<Snapshot>('/state')).tasks.find(task => task.id === 'example-clarity')!;
+  assert.equal(task.review?.counts.accepted, 1);
+  assert.equal(task.review?.counts.pending, 1);
+  await frame(review + '/decide', { id: 'c', round: 1, action: 'comment', changes: ['c002'], body: 'Keep this narrower.' });
+  const state = await api<{ comments: Record<string, string>; state: string }>(review + '/state');
+  assert.equal(state.state, 'revise');
+  assert.equal(state.comments.c002, 'Keep this narrower.');
+  await assert.rejects(frame(review + '/undo', { id: 'a' }), /latest/);
+  await frame(review + '/undo', { id: 'c' });
+  await frame(review + '/undo', { id: 'a' });
+  task = (await api<Snapshot>('/state')).tasks.find(task => task.id === 'example-clarity')!;
+  assert.equal(task.review?.counts.pending, 2);
+  await assert.rejects(frame(review + '/decide', { id: 'bad', round: 1, action: 'accept', changes: ['missing'] }), /Invalid/);
+});
+test('AI suggestions copy to the manuscript once, and reset restores the initial experience', async () => {
+  const { api, storage } = setup();
+  const copy = '/tasks/example-review/ai-review/suggestion-note-claim/copy';
+  await api(copy, {}); await api(copy, {});
+  assert.equal((await api<Manuscript>(`${base}/manuscript`)).annotations.length, 8);
+  storage.setItem('papilot:review-notes:example-clarity', '{"notes":[{}]}');
+  storage.setItem('papilot:draft:example-math', 'Follow up');
+  storage.setItem('papilot:new-task', 'My task');
+  await api('/playground/reset', {});
+  assert.equal(storage.getItem('papilot:review-notes:example-clarity'), '');
+  assert.equal(storage.getItem('papilot:draft:example-math'), '');
+  assert.equal(storage.getItem('papilot:new-task'), '');
+  const manuscript = await api<Manuscript>(`${base}/manuscript`);
+  assert.equal(manuscript.annotations.length, 7);
+  assert.ok(manuscript.annotations.some(note => note.kind === 'delete'));
+  assert.ok(manuscript.annotations.some(note => note.stamp));
+  assert.equal(new Set(manuscript.annotations.map(note => note.group).filter(Boolean)).size, 4);
+});
+test('prepared tasks open once, persist, and link each seeded note to its actual diff', async () => {
+  let clock = 1_000_000;
+  const { api, storage } = setup(() => clock);
+  const plans = (await import('../examples/playground-paper/edits.json', { with: { type: 'json' } })).default.filter(plan => plan.preset);
+  for (const plan of plans) {
+    const task = await api<Task>('/playground/tasks', { preset: plan.id });
+    assert.equal(task.id, plan.id);
+    assert.equal(task.status, 'running');
+    assert.equal(task.review!.round, null);
+    await api('/playground/tasks', { annotations: plan.notes });
+    clock += replayDuration;
+    assert.ok((await api<Snapshot>('/state')).tasks.find(task => task.id === plan.id)!.review!.counts.pending > 0);
+    const { items } = await api<{ items: TimelineItem[] }>(`/tasks/${task.id}/items`);
+    assert.deepEqual(items[0].meta!.notes!.map(note => note.id), plan.notes);
+    assert.match(items.at(-1)!.text, /no agent was run/);
+    const { notes } = await api<{ notes: NoteResult[] }>(`/tasks/${task.id}/note-results`);
+    assert.ok(notes.every(note => note.changes.length > 0), task.id + ' notes must link to a real change');
+  }
+  const reload = createPlaygroundData(storage, 'test', 'paper-hash', pages, () => clock);
+  assert.equal((await reload<Snapshot>('/state')).tasks.length, 3 + plans.length);
+  assert.equal((await reload<Manuscript>(`${base}/manuscript`)).annotations.length, 7);
+  await reload('/playground/reset', {});
+  assert.equal((await reload<Snapshot>('/state')).tasks.length, 3);
+});
+test('demo replay reveals progress and streams the answer before publishing the diff, with pause and reload support', async () => {
+  let clock = 1_000_000;
+  const { api, storage } = setup(() => clock), id = 'example-note-filler';
+  await api('/playground/tasks', { preset: id });
+  const timeline = (request = api) => request<{ items: TimelineItem[] }>(`/tasks/${id}/items`);
+  const task = async (request = api) => (await request<Snapshot>('/state')).tasks.find(task => task.id === id)!;
+  assert.deepEqual((await timeline()).items.map(item => item.type), ['user', 'demo-progress']);
+  assert.equal((await task()).review!.counts.pending, 0);
+  await assert.rejects(api(`/playground-reviews/${id}/rounds/1`), /still preparing/);
+  assert.equal((await api<{ notes: NoteResult[] }>(`/tasks/${id}/note-results`)).notes[0].state, 'waiting');
+  clock += 1000;
+  assert.ok((await timeline()).items[1].detail!.length > 20);
+  await api(`/tasks/${id}/interrupt`, {});
+  clock += 60_000;
+  const reload = createPlaygroundData(storage, 'test', 'paper-hash', pages, () => clock);
+  assert.equal((await task(reload)).status, 'interrupted');
+  assert.equal((await timeline(reload)).items[1].status, 'paused');
+  await reload(`/tasks/${id}/publish`, {});
+  clock += 4500;
+  assert.equal((await task(reload)).status, 'building');
+  assert.ok(!(await timeline(reload)).items.some(item => item.type === 'assistant'));
+  clock += 2500;
+  const partial = (await timeline(reload)).items.at(-1)!;
+  assert.equal(partial.type, 'assistant');
+  assert.equal(partial.status, 'inProgress');
+  assert.equal((await task(reload)).review!.round, null);
+  clock += 2000;
+  const answer = (await timeline(reload)).items.at(-1)!;
+  assert.equal(answer.status, 'completed');
+  assert.ok(answer.text.length > partial.text.length);
+  assert.equal((await task(reload)).review!.round, 1);
+  await reload(`/playground-reviews/${id}/decide`, { id: 'accept-demo', round: 1, action: 'accept', changes: ['c001'] });
+  await reload('/playground/tasks', { preset: id });
+  assert.equal((await task(reload)).status, 'running');
+  clock += replayDuration;
+  assert.equal((await task(reload)).review!.counts.accepted, 1, 'replaying keeps earlier review decisions');
+});
+test('custom or edited notes cannot silently receive an unrelated prepared edit', async () => {
+  const { api } = setup();
+  const created = await api<Annotation>(`${base}/annotations`, note);
+  await assert.rejects(api('/playground/tasks', { annotations: [created.id] }), PlaygroundDownloadRequired);
+  await api(`${base}/annotations/note-filler`, { comment: 'Rewrite the entire section instead.' });
+  await assert.rejects(api('/playground/tasks', { annotations: ['note-filler'] }), PlaygroundDownloadRequired);
+  await assert.rejects(api('/playground/tasks', { preset: 'made-up' }), PlaygroundDownloadRequired);
+  assert.equal((await api<Snapshot>('/state')).tasks.length, 3);
+});
+test('mock Git stages, commits and syncs locally while preserving uncommitted files', async () => {
+  const { api, storage } = setup();
+  const route = `${base}/git`;
+  const before = await api<GitStatus>(route);
+  assert.equal(before.files.length, 3);
+  assert.deepEqual(before.files.filter(file => file.staged).map(file => file.path), ['README.md']);
+  const diff = await api<GitDiff>(route + '/diff?path=main.tex&scope=unstaged');
+  assert.match(diff.diff, /-Papilot connects your manuscript/);
+  assert.match(diff.diff, /\+Papilot brings PDF notes/);
+  await api(route + '/stage', { paths: ['main.tex'], stage: true });
+  assert.equal((await api<GitDiff>(route + '/diff?path=main.tex&scope=unstaged')).diff, '');
+  assert.equal((await api<GitDiff>(route + '/diff?path=main.tex&scope=staged')).diff, diff.diff);
+  const committed = await api<{ git: GitStatus; commit: string }>(route + '/commit', { message: 'Improve the product introduction', staged: true });
+  assert.deepEqual(committed.git.files.map(file => file.path), ['references.bib']);
+  assert.equal(committed.git.ahead, before.ahead + 1);
+  const reload = createPlaygroundData(storage, 'test', 'paper-hash', pages);
+  assert.equal((await reload<GitHistory>(route + '/history')).versions[0].message, 'Improve the product introduction');
+  const historic = await reload<GitDiff>(route + '/history/' + committed.git.head!.hash + '/diff?path=main.tex');
+  assert.equal(historic.diff, diff.diff);
+  const synced = await reload<{ git: GitStatus }>(route + '/sync', {});
+  assert.equal(synced.git.ahead, 0);
+  assert.deepEqual(synced.git.files.map(file => file.path), ['references.bib']);
+  assert.equal((await reload<GitOverview>(route + '/overview')).worktrees.length, 3);
+});
+test('mock Git restores as a new version and refuses to discard unsaved changes', async () => {
+  const { api } = setup(), route = `${base}/git`;
+  const history = await api<GitHistory>(route + '/history');
+  const body = { hash: history.versions[1].hash, head: history.versions[0].hash };
+  await assert.rejects(api(route + '/restore', body), /Commit or discard/);
+  await api(route + '/stage', { paths: ['README.md'], stage: false });
+  await api(route + '/discard', { paths: ['main.tex', 'README.md', 'references.bib'] });
+  assert.equal((await api<GitStatus>(route)).files.length, 0);
+  await api(route + '/restore', body);
+  const restored = await api<GitHistory>(route + '/history');
+  assert.equal(restored.versions.length, history.versions.length + 1);
+  assert.match(restored.versions[0].message, /^Restore:/);
+  assert.deepEqual(restored.versions.slice(1), history.versions);
+  await assert.rejects(api(route + '/restore', body), /Refresh/);
+});

@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "Escrevendo <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>preciso</del> ler código <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><del> e vasculhar</del> o PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "Escrevendo <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>por que</ins> ler código <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><ins>? Só leio</ins> o PDF<ins>! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "Escrevendo \\LaTeX{}, <del>preciso</del><ins>por que</ins> ler código \\LaTeX{}<del> e vasculhar</del><ins>? Só leio</ins> o PDF<del> 😭</del><ins>! 😎</ins>",
-  "line 6": "linha 6"
+  "line 6": "linha 6",
+  "Try online demo": "Demo online"
 }

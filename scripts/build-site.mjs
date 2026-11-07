@@ -1,6 +1,7 @@
 // Builds the static landing page. Only Node is needed: its windows are
 // drawn in HTML and CSS, not screenshots or video.
 import crypto from 'node:crypto';
+import { build } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { translatedSite } from './site-i18n.mjs';
@@ -87,6 +88,9 @@ copy('docs/assets', ['logo.svg', 'social-preview.png'], 'assets');
 // The agents' marks are the app's own icons, with their license.
 copy('src/web/brand-icons', fs.readdirSync(path.join(root, 'src/web/brand-icons')).filter(name => /^(?!git|latex)[a-z]+\.svg$|^LICENSE-LobeHub\.txt$/.test(name)), 'assets/agents');
 copy('src/web/fonts', fs.readdirSync(path.join(root, 'src/web/fonts')).filter(name => /\.(otf|txt)$/.test(name)), 'fonts');
+
+// The try-it app uses the same React entrypoint and components as the desktop.
+await build({ root, mode: 'playground' });
 
 // Resolve each reference against its actual page URL, including nested pages.
 const missing = [];

@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "En <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>leo</del> código <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><del> y busco en</del> el PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "En <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>¿por qué leer</ins> código <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><ins>? ¡Solo leo</ins> el PDF<ins>! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "En \\LaTeX{}, <del>leo</del><ins>¿por qué leer</ins> código \\LaTeX{}<del> y busco en</del><ins>? ¡Solo leo</ins> el PDF<del> 😭</del><ins>! 😎</ins>",
-  "line 6": "línea 6"
+  "line 6": "línea 6",
+  "Try online demo": "Demo en línea"
 }

@@ -1,3 +1,4 @@
+import { isPlayground } from './playground-mode.ts';
 import taskCommitStyles from './task-commit.css?inline';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,7 +20,7 @@ import { ModeSwitch } from './mode-switch.tsx';
 import { readPlace, savePlace } from './places.ts';
 
 // The viewer reads the interface language from its address.
-export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `/review/${task.projectId}/?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
+export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `${isPlayground ? import.meta.env.BASE_URL + 'src/web/playground/review.html' : `/review/${task.projectId}/`}?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
 // The same viewer shows a paper's uncommitted changes against its last commit.
 // The manuscript's own PDF / Changes switch chooses its PDF; its review of the
 // changes shows them alone.

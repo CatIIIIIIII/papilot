@@ -1,0 +1,111 @@
+\documentclass[11pt]{article}
+\usepackage[margin=0.72in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,booktabs,xcolor,graphicx}
+\usepackage{newpxtext,newpxmath}
+\usepackage[hidelinks,pdftitle={Meet Papilot: the page comes first},pdfauthor={Papilot}]{hyperref}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\definecolor{ink}{HTML}{253858}
+\definecolor{accent}{HTML}{356AA0}
+\definecolor{wash}{HTML}{EFF5FF}
+\newcommand{\eyebrow}[1]{{\small\color{accent}#1}\par}
+\begin{document}
+\setlength{\abovedisplayskip}{7pt}
+\setlength{\belowdisplayskip}{7pt}
+\includegraphics[width=138pt]{assets/wordmark.pdf}\hfill
+{\small\color{ink}A guided product tour}\par
+\vspace{5pt}
+{\fontsize{23}{27}\selectfont Write on the page your readers will see.}\par
+\vspace{5pt}
+Papilot brings PDF notes, coding agents, and typeset review into one workspace.
+Point to a phrase, equation, or figure. Your agent finds the source, edits the LaTeX,
+and returns a comparison you can read on the page.
+
+\begin{center}
+\includegraphics[width=\linewidth]{assets/review.png}\par
+{\small\color{ink}Figure 1. A proposed edit, shown as a typeset before-and-after.}
+\end{center}
+
+\section{Philosophy: the page comes first}
+\textbf{Read what your reader sees.}
+Meaning depends on symbols, line breaks, figures and their context.
+Papilot puts the review on the rendered page, so you can judge the actual result
+without mentally compiling a source diff.
+
+\textbf{Delegate the edit. Keep the judgment.}
+The author decides.
+Your manuscript stays, of course, under your control.
+At any time, you can inspect the LaTeX behind an edit.
+
+\textbf{Keep your tools and ownership.}
+Your project remains ordinary local files. Git records the history and supports collaboration.
+Use the coding agent you already have, with its own login or API key.
+Papilot is free and open source, for macOS, Linux and Windows.
+
+\vspace{7pt}
+\colorbox{wash}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\centering\vspace{5pt}
+01 Mark precisely\quad$\longrightarrow$\quad02 Ask your agent\quad$\longrightarrow$\quad03 Review each change
+\vspace{5pt}}}\par
+\vspace{3pt}
+\eyebrow{BRING YOUR AGENT}
+\resizebox{0.96\linewidth}{!}{\input{assets/agents.tex}}\par
+{\small Choose model, effort and Fast mode where supported.}\par
+\vspace{4pt}
+
+
+\newpage
+\eyebrow{PAPILOT / FROM INTENT TO A REVIEWED EDIT}
+{\fontsize{21}{25}\selectfont A small model of responsible editing.}\par
+\vspace{3pt}
+These equations explain the workflow: where a note points, what the review compares,
+and which proposals become part of the manuscript.
+
+\section{A note has a precise address}
+\begin{minipage}[c]{0.50\linewidth}
+Mark a word, a symbol, or a region.
+A note keeps its page and bounding box; an agent can use that location to find the source.
+Normalized coordinates let the same box follow the page as you zoom or resize.
+\end{minipage}\hfill
+\begin{minipage}[c]{0.45\linewidth}
+\includegraphics[width=\linewidth]{assets/notes.png}\par
+{\scriptsize\color{ink}Figure 2. Notes retain the selected text or region.}
+\end{minipage}\par
+\vspace{5pt}
+For an origin at $(0,0)$, let $W,H$ be page width and height and $b=(x_0,y_0,x_1,y_1)$ a selected box.
+Its normalized coordinates are
+\begin{equation}
+  \widehat b=\left(\frac{x_0}{W},\frac{y_0}{H},\frac{x_1}{W},\frac{y_1}{H}\right).
+\end{equation}
+{\small A $600\times800$ page makes the example concrete:}
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Page origin & Selected box & Normalized box \\
+\midrule
+zero & $(60,80,180,120)$ & $(0.10,0.10,0.30,0.15)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Render first. Review. Then apply.}
+Let $S$ be the source, $S'$ an agent's proposal, and $\mathcal R$ the LaTeX renderer.
+The review compares the resulting pages:
+\begin{equation}
+  P=\mathcal R(S),\qquad P'=\mathcal R(S'),\qquad
+  \Delta_{\rm PDF}=\mathcal D(P,P').
+\end{equation}
+Here $\mathcal D$ denotes the visual comparison. Text, equations and layout remain visible together.
+For proposed edits $E$, the author chooses an accepted subset:
+\begin{equation}
+  E_{\rm accepted}=\{e\in E\mid\operatorname{decision}(e)=\mathrm{accept}\},
+  \qquad S_{\rm next}=\operatorname{Apply}(S,E_{\rm accepted}).
+\end{equation}
+Reject an edit, comment for another pass, or undo a decision.
+These equations describe the workflow; editorial judgment remains with the author.
+
+{\small\color{ink}\textbf{Try the notes and diffs in this static demo.}
+Tasks here do not run. \href{https://papilot.ai/\#download}{Download Papilot}
+to open your own project and run real tasks.}
+\end{document}

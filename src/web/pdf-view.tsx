@@ -139,10 +139,20 @@ function textContent({ words }: Words, view: number[]) {
 }
 
 // Number tags sit in the page margin level with the first marked line, on the
-// side nearer the mark, so they never cover text; tags on one line step
-// along by each one's width (a quick note's tag also carries its name).
+// side nearer the mark. Narrow pages stack colliding numbers down the margin;
+// wider pages have room for named quick notes and horizontal groups.
 const tagWidth = (name?: string) => name ? 30 + [...name].reduce((width, letter) => width + (letter.charCodeAt(0) > 0x2e80 ? 12 : 7), 0) : 20;
-function tagSpots(tags: { rect: Rect; name?: string }[]) {
+function tagSpots(tags: { rect: Rect; name?: string }[], narrowHeight?: number) {
+  if (narrowHeight) {
+    const spots = tags.map(({ rect }) => ({ side: (rect[0] + rect[2]) / 2 > 0.5 ? 'right' : 'left', top: (rect[1] + rect[3]) / 2 * narrowHeight }));
+    for (const side of ['left', 'right']) {
+      const column = spots.filter(spot => spot.side === side).sort((a, b) => a.top - b.top);
+      // Keep 20px markers apart, including notes on nearby wrapped lines.
+      for (let i = 0; i < column.length; i++) column[i].top = Math.max(column[i].top, i ? column[i - 1].top + 24 : 10);
+      for (let i = column.length - 1; i >= 0; i--) column[i].top = Math.min(column[i].top, i < column.length - 1 ? column[i + 1].top - 24 : narrowHeight - 10);
+    }
+    return spots.map(spot => ({ [spot.side]: 8, top: `${spot.top / narrowHeight * 100}%` }) as React.CSSProperties);
+  }
   const placed: { side: 'left' | 'right'; top: number; width: number }[] = [];
   return tags.map(({ rect, name }) => {
     const side: 'left' | 'right' = (rect[0] + rect[2]) / 2 > 0.5 ? 'right' : 'left', top = (rect[1] + rect[3]) / 2;
@@ -203,6 +213,14 @@ export const PdfView = forwardRef<PdfHandle, {
   const loaded = useRef<PDFDocumentProxy | null>(null), restore = useRef<{ scale: string; top: number; left: number } | null>(null);
   const layerMap = useRef(new Map<number, HTMLElement>());
   const [layers, setLayers] = useState(new Map<number, HTMLElement>());
+  const [, relayoutTags] = useState(0);
+  // pdf.js resizes page layers after its scale event. Recalculate marker
+  // positions from their final dimensions, including phone rotation.
+  useEffect(() => {
+    const observer = new ResizeObserver(() => relayoutTags(value => value + 1));
+    for (const layer of layers.values()) observer.observe(layer);
+    return () => observer.disconnect();
+  }, [layers]);
   const [pages, setPages] = useState(0), [page, setPage] = useState(1), [pageInput, setPageInput] = useState('1');
   const [zoom, setZoom] = useState({ value: 'page-width', scale: 1 });
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
@@ -766,7 +784,7 @@ export const PdfView = forwardRef<PdfHandle, {
       <div className="pdf-toolbar-spacer"/>
       <div className="pdf-pager">
         <button type="button" className="icon-button" aria-label={t('Previous page')} disabled={page <= 1} onClick={() => tools.current?.viewer.previousPage()}><Icon name="chevronUp" size={16}/></button>
-        <input aria-label={t('Page number')} inputMode="numeric" value={pageInput} onChange={e => setPageInput(e.target.value.replace(/\D/g, ''))} onFocus={e => e.currentTarget.select()} onBlur={() => setPageInput(String(page))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); goToPage(); e.currentTarget.blur(); } }}/>
+        <input aria-label={t('Page number')} inputMode="numeric" value={pageInput} onChange={e => setPageInput(e.target.value.replace(/\D/g, ''))} onFocus={e => e.currentTarget.select()} onBlur={() => setPageInput(String(tools.current?.viewer.currentPageNumber ?? page))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); goToPage(); e.currentTarget.blur(); } }}/>
         <span className="pdf-pages">/ {pages || '–'}</span>
         <button type="button" className="icon-button" aria-label={t('Next page')} disabled={page >= pages} onClick={() => tools.current?.viewer.nextPage()}><Icon name="chevronDown" size={16}/></button>
       </div>
@@ -808,11 +826,12 @@ export const PdfView = forwardRef<PdfHandle, {
       onFree={() => { const target = wheel.target; setWheel(null); openCard(target); }}/>}
     {[...layers].map(([number, layer]) => createPortal(<Fragment>
       {(() => {
-        const notes = props.notes.filter(({ note }) => note.page === number - 1), spots = tagSpots(notes.map(({ note }) => ({ rect: (note.rects?.length ? note.rects : [note.rect])[0], name: note.stamp })));
+        const compact = layer.clientWidth <= 680;
+        const notes = props.notes.filter(({ note }) => note.page === number - 1), spots = tagSpots(notes.map(({ note }) => ({ rect: (note.rects?.length ? note.rects : [note.rect])[0], name: note.stamp })), compact ? layer.clientHeight : undefined);
         return notes.map(({ note, number: label }, index) => <Fragment key={note.id}>
           {note.kind === 'point' ? <div className={'note-point' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-stamp={note.stamp ? true : undefined} style={{ ...center(note.rect), ...groupStyle(note.group) }}/>
             : (note.rects?.length ? note.rects : [note.rect]).map((rect, part) => <div key={part} className={(note.rects?.length ? 'note-mark' : 'note-box') + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
-          <button type="button" className={'note-tag' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...spots[index], ...groupStyle(note.group) }} aria-label={tagLabel(note, label)} aria-expanded={props.noteActions ? props.active === note.id : undefined} title={note.group ? t('Annotation groups') : note.comment} onClick={() => props.onSelect(note)}>{label}{note.stamp && <span className="note-tag-stamp">{note.stamp}</span>}</button>
+          <button type="button" className={'note-tag' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...spots[index], ...groupStyle(note.group) }} aria-label={tagLabel(note, label)} aria-expanded={props.noteActions ? props.active === note.id : undefined} title={note.group ? t('Annotation groups') : note.comment} onClick={() => props.onSelect(note)}>{label}{note.stamp && <span className="note-tag-stamp" hidden={compact}>{note.stamp}</span>}</button>
         </Fragment>);
       })()}
       {activeNote?.note.page === number - 1 && props.noteActions && !editing && !wheel && !props.region && <PdfNoteCard key={activeNote.note.id} note={activeNote.note} number={activeNote.number} index={noteIndex} total={peers.length} selected={props.noteActions.has(activeNote.note.id)} busy={noteLocked} error={noteError}

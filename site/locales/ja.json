@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>を書く時、<del>まず</del><span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>ソースを<del>読んで</del>PDF<del>を探す😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>を書く時、<ins>なぜ</ins><span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>ソースを<ins>読む？</ins>PDF<ins>を読むだけ！😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "\\LaTeX{}を書く時、<del>まず</del><ins>なぜ</ins>\\LaTeX{}ソースを<del>読んで</del><ins>読む？</ins>PDF<del>を探す😭</del><ins>を読むだけ！😎</ins>",
-  "line 6": "6行目"
+  "line 6": "6行目",
+  "Try online demo": "オンラインデモ"
 }

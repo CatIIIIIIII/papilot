@@ -1,3 +1,4 @@
+import { isPlayground, pdfAsset, wordAsset, requestPlaygroundDownload } from './playground-mode.ts';
 import { canonicalGroup, groupsWithoutInstructions, noteGroups, type NoteGroup } from '../note-groups.ts';
 import { GroupCard, GroupInstruction } from './note-groups.tsx';
 import { useNoteSelection } from './note-selection.tsx';
@@ -80,6 +81,9 @@ import { NoteResultsProvider, NoteResultLinks, useNoteResults } from './note-res
 import { usePanelWidth } from './panel-width.tsx';
 import type { OutlineItem, PdfHandle, PdfHistoryActions, Rect } from './pdf-view.tsx';
 // pdf.js is large, so the PDF view loads the first time it opens.
+const PlaygroundNotice = import.meta.env.MODE === 'playground' ? lazy(() => import('./playground/notice.tsx').then(module => ({ default: module.PlaygroundNotice }))) : null;
+const PlaygroundPresets = import.meta.env.MODE === 'playground' ? lazy(() => import('./playground/preset-tasks.tsx').then(module => ({ default: module.PlaygroundPresets }))) : null;
+const PlaygroundProgress = import.meta.env.MODE === 'playground' ? lazy(() => import('./playground/progress.tsx').then(module => ({ default: module.PlaygroundProgress }))) : null;
 const PdfView = lazy(() => import('./pdf-view.tsx').then(module => ({ default: module.PdfView })));
 import './style.css';
 import './note-controls.css';
@@ -87,6 +91,7 @@ import './note-controls.css';
 let token = '';
 const uuid = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(20)), b => b.toString(16).padStart(2, '0')).join('');
 async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal, wait = body === undefined ? 15000 : 30000): Promise<T> {
+  if (import.meta.env.MODE === 'playground') return (await import('./playground/api.ts')).playgroundApi<T>(route, body, signal);
   const timeout = AbortSignal.timeout(wait);
   try { const response = await fetch('/api' + route, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': body instanceof File ? 'application/octet-stream' : 'application/json', 'X-Papilot-Token': token, ...(body instanceof File ? { 'X-Papilot-Filename': encodeURIComponent(body.name) } : {}) }, ...(body === undefined ? {} : { body: body instanceof File ? body : JSON.stringify(body) }), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
     // At the public URL, a lapsed or revoked session shows the sign-in page.
@@ -287,6 +292,7 @@ function UserMessage({ item, agent }: { item: TimelineItem; agent: string }) {
 const TimelineEntry = memo(function TimelineEntry({ item, agent, root }: { item: TimelineItem; agent: string; root: string }) {
   // Memoized, so it follows a language change itself rather than through App.
   useLanguage();
+  if (PlaygroundProgress && item.type === 'demo-progress') return <Suspense fallback={null}><PlaygroundProgress item={item}/></Suspense>;
   if (item.type === 'user') return <UserMessage item={item} agent={agent}/>;
   if (item.type === 'assistant') return <article className="message assistant" aria-label={`${agent}, ${time(item.createdAt)}`}><div className="message-body markdown"><Markdown text={item.text}/></div><div className="message-actions"><CopyButton text={item.text}/><time dateTime={new Date(item.createdAt).toISOString()}>{time(item.createdAt)}</time></div></article>;
   const files = item.type === 'files' ? editedFiles(item, root) : [];
@@ -312,9 +318,10 @@ function ToolGroup({ items, agent, root }: { items: TimelineItem[]; agent: strin
 
 function timelineEntries(items: TimelineItem[]) {
   const entries: TimelineItem[][] = [];
+  const message = (item: TimelineItem) => item.type === 'user' || item.type === 'assistant' || (isPlayground && item.type === 'demo-progress');
   for (const item of items) {
-    const tool = item.type !== 'user' && item.type !== 'assistant', last = entries[entries.length - 1];
-    if (tool && last && last[0].type !== 'user' && last[0].type !== 'assistant') last.push(item); else entries.push([item]);
+    const last = entries[entries.length - 1];
+    if (!message(item) && last && !message(last[0])) last.push(item); else entries.push([item]);
   }
   return entries;
 }
@@ -359,6 +366,7 @@ function Activity({ onRevealQuote, task, runtime, reconnecting, onReconnect, ski
   const canSend = Boolean(draft.trim() || skill || files.files.length || readyReview.notes.length || readyReview.instructions.trim() || feedbackCount);
   async function submit() {
     if (savingPermissions || savingModel || composer.sending || ['uncertain', 'deleting'].includes(task.status) || files.draft.getSnapshot().blocked) return;
+    if (isPlayground && canSend) { requestPlaygroundDownload(); return; }
     const submitted = reviewSubmission(reviewNotes.getSnapshot(), composer.text, skill?.id), attached = files.draft.getSnapshot().files;
     const source = !composer.text.trim() && !skill && !attached.length && !submitted.notes.length && !submitted.instructions.trim() && feedbackCount ? 'feedback' : 'draft';
     reviewNotes.setBusy(true);
@@ -934,10 +942,11 @@ function PendingComparison({ task, busy, onBuild }: { task: Task; busy: boolean;
 
 
 type ManuscriptPanel = 'pdf' | 'task';
-function ManuscriptView({ taskCards, navigationGuard, collapsed, setCollapsed, project, data, error, view, setView, region, setRegion, active, setActive, actions, newTask, tools, share, navigation, onGit, writer, reportError, onFixProblems }: { navigationGuard: React.Ref<NotesHandle>; collapsed: boolean; setCollapsed: React.Dispatch<React.SetStateAction<boolean>>; taskCards: ReturnType<typeof useNoteCards>; onFixProblems?: (request: string) => void; navigation?: React.ReactNode; newTask: (notes: React.ReactNode) => React.ReactNode; tools?: React.ReactNode; share?: React.ReactNode; onGit: (status: GitStatus) => void; writer: CommitWriter; reportError: (error: unknown) => void; project: Project; data: Manuscript | null; error: string; view: ManuscriptPanel; setView: (view: ManuscriptPanel) => void; region: boolean; setRegion: (on: boolean) => void; active: string; setActive: (id: string) => void; actions: NoteActions }) {
+function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, setCollapsed, project, data, error, view, setView, region, setRegion, active, setActive, actions, newTask, tools, share, navigation, onGit, writer, reportError, onFixProblems }: { notesRequest?: number; navigationGuard: React.Ref<NotesHandle>; collapsed: boolean; setCollapsed: React.Dispatch<React.SetStateAction<boolean>>; taskCards: ReturnType<typeof useNoteCards>; onFixProblems?: (request: string) => void; navigation?: React.ReactNode; newTask: (notes: React.ReactNode) => React.ReactNode; tools?: React.ReactNode; share?: React.ReactNode; onGit: (status: GitStatus) => void; writer: CommitWriter; reportError: (error: unknown) => void; project: Project; data: Manuscript | null; error: string; view: ManuscriptPanel; setView: (view: ManuscriptPanel) => void; region: boolean; setRegion: (on: boolean) => void; active: string; setActive: (id: string) => void; actions: NoteActions }) {
   const build = data?.build, notes = data?.annotations || [], git = data?.git;
   const pdf = useRef<PdfHandle>(null);
   const [readingNotes, setReadingNotes] = useState(false);
+  useEffect(() => { if (notesRequest) setReadingNotes(true); }, [notesRequest]);
   const notesPanel = useRef<NotesHandle>(null);
   const taskNotes = useRef<NotesHandle>(null);
   useImperativeHandle(navigationGuard, () => ({ save: async () => {
@@ -960,8 +969,10 @@ function ManuscriptView({ taskCards, navigationGuard, collapsed, setCollapsed, p
   }}><Icon name={hidden ? 'panelExpand' : 'panelCollapse'} size={18}/></button>;
   const pageTools = <>{tools}{!hidden && !sideBySide && share}{hidden && togglePanel}</>;
   // PDF or Changes stays as the author left it when they come back to the paper.
-  const [mode, showMode] = useState<PdfMode>(() => readPlace('mode:' + project.id) === 'changes' ? 'changes' : 'pdf'), [committing, setCommitting] = useState(false);
-  const setMode = (value: PdfMode) => { showMode(value); savePlace('mode:' + project.id, value); };
+  const [mode, showMode] = useState<PdfMode>(() => !isPlayground && readPlace('mode:' + project.id) === 'changes' ? 'changes' : 'pdf'), [committing, setCommitting] = useState(false);
+  const setMode = (value: PdfMode) => {
+    if (isPlayground && value === 'changes') { window.dispatchEvent(new CustomEvent('papilot:playground-open', { detail: 'example-clarity' })); return; }
+    showMode(value); savePlace('mode:' + project.id, value); };
   // The last build's problems sit beside Recompile and open only when asked.
   const problems = useRef<ProblemsHandle>(null);
   const problemsButton = <ProblemsButton ref={problems} counts={build?.problems} status={build?.status} pdfKey={build?.key} logUrl={`/api/projects/${project.id}/manuscript/log`}
@@ -1014,7 +1025,7 @@ function ManuscriptView({ taskCards, navigationGuard, collapsed, setCollapsed, p
         // The previous PDF stays readable; the details wait in the problem list.
         ? <div className="manuscript-note error brief" role="alert"><span>{t('The latest changes did not compile. This is the last PDF that did.')}</span><button type="button" className="note-link" onClick={() => problems.current?.open()}>{t('Show problems')}</button></div>
         : <div className="manuscript-note error" role="alert"><strong>{t('The manuscript did not compile.')}</strong><pre>{build.error}</pre></div>)}
-      {build?.key ? <Suspense fallback={<div className="review-loading"><p role="status">{t('Opening the PDF…')}</p></div>}><PdfView ref={pdf} place={'pdf:' + project.id} url={`/api/projects/${project.id}/manuscript.pdf?key=${build.key}`} words={`/api/projects/${project.id}/manuscript/words?key=${build.key}`} notes={numbered.filter(item => item.note.key === build.key)} active={active} region={region} setRegion={setRegion} group={actions.group} onGroupChange={actions.setGroup} markingDisabled={actions.sending}
+      {build?.key ? <Suspense fallback={<div className="review-loading"><p role="status">{t('Opening the PDF…')}</p></div>}><PdfView ref={pdf} place={'pdf:' + project.id} url={pdfAsset(`/api/projects/${project.id}/manuscript.pdf?key=${build.key}`)} words={wordAsset(`/api/projects/${project.id}/manuscript/words?key=${build.key}`)} notes={numbered.filter(item => item.note.key === build.key)} active={active} region={region} setRegion={setRegion} group={actions.group} onGroupChange={actions.setGroup} markingDisabled={actions.sending}
           history={actions.history} noteActions={{ has: actions.selection.has, toggle: note => actions.selection.set([note.id], !actions.selection.has(note.id)), remove: actions.remove, restore: actions.restore, edit: actions.edit, onEditing: actions.onEditing, onBusy: actions.onReviewBusy, disabled: actions.sending }} onDeselect={() => setActive('')}
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
@@ -1079,7 +1090,7 @@ function App() {
   const [agentPrefs, setAgentPrefs] = useState(() => Object.fromEntries(AGENT_IDS.map(id => [id, {
     model: browserStorage.getItem(`papilot:model:${id}`) ?? (id === 'codex' ? browserStorage.getItem('papilot:model') : null) ?? '',
     // null until an effort is chosen; '' is an explicit choice of the model's default.
-    effort: browserStorage.getItem(`papilot:effort:${id}`) ?? (id === 'codex' ? browserStorage.getItem('papilot:effort') : null),
+    effort: browserStorage.getItem(`papilot:effort:${id}`) ?? (id === 'codex' ? browserStorage.getItem('papilot:effort') : null) ?? (isPlayground && id === 'codex' ? 'xhigh' : null),
     fast: browserStorage.getItem(`papilot:fast:${id}`) === 'true',
   }])) as Record<AgentId, { model: string; effort: string | null; fast: boolean }>);
   const [creating, setCreating] = useState(false), [createError, setCreateError] = useState('');
@@ -1116,6 +1127,7 @@ function App() {
   const [editingPaper, setEditingPaper] = useState<Project | null>(null);
   const [manuscriptView, setManuscriptView] = useState<ManuscriptPanel>(() => window.matchMedia('(max-width: 680px)').matches ? 'pdf' : 'task');
   const manuscriptNavigationGuard = useRef<NotesHandle>(null);
+  const [playgroundNotes, setPlaygroundNotes] = useState(0);
   const [manuscriptCollapsed, setManuscriptCollapsed] = useState(() => browserStorage.getItem('papilot:manuscript-panel') === 'hidden');
   // Without a task, the main area shows the manuscript or a tool from the
   // sidebar's Tools menu, such as the reference check.
@@ -1180,6 +1192,17 @@ function App() {
     sync(); viewport?.addEventListener('resize', sync); viewport?.addEventListener('scroll', sync); window.addEventListener('resize', sync);
     return () => { viewport?.removeEventListener('resize', sync); viewport?.removeEventListener('scroll', sync); window.removeEventListener('resize', sync); document.documentElement.style.removeProperty('--viewport-height'); document.documentElement.style.removeProperty('--viewport-top'); };
   }, []);
+  useEffect(() => {
+    if (!isPlayground) return;
+    const open = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (!['', 'example-clarity', 'example-math', 'example-review'].includes(id)) return;
+      setSelected(id); setPage('manuscript'); setMobileTab('review'); setManuscriptView('pdf'); setSidebar(false);
+      if (!id) setPlaygroundNotes(value => value + 1);
+    };
+    window.addEventListener('papilot:playground-open', open);
+    return () => window.removeEventListener('papilot:playground-open', open);
+  }, []);
   const reportError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
   const acceptSavedTask = useCallback((saved: Task) => {
     // A snapshot requested before the save must not restore the old permissions.
@@ -1227,13 +1250,20 @@ function App() {
         for (const id of answerDrafts.current.keys()) if (!next.requests.some(r => r.id === id)) answerDrafts.current.delete(id);
         if (selection && !next.tasks.some(t => t.id === selection)) setSelected('');
         // An empty saved task is the manuscript, not a missing preference.
-        if (!loaded.current) { loaded.current = true; if (savedTask === null && !selection) setSelected(next.tasks.filter(task => !task.archivedAt).at(-1)?.id || ''); }
+        if (!loaded.current) { loaded.current = true; if (!isPlayground && savedTask === null && !selection) setSelected(next.tasks.filter(task => !task.archivedAt).at(-1)?.id || ''); }
       });
       const selection = selectedRef.current;
       if (!document.hidden && selection && snapshotRef.current?.tasks.some(t => t.id === selection)) await refreshTimeline(selection);
     } catch (e) { setOnline(false); setConnectionError(e instanceof Error ? e.message : String(e)); }
   }, [snapshotRequest, refreshTimeline, savedTask]);
   useEffect(() => {
+    if (isPlayground) {
+      const update = () => { if (!document.hidden) void refresh(); };
+      void refresh();
+      window.addEventListener('papilot:playground-change', update);
+      document.addEventListener('visibilitychange', update);
+      return () => { window.removeEventListener('papilot:playground-change', update); document.removeEventListener('visibilitychange', update); };
+    }
     let generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
     let events: EventSource | undefined;
     const protocol = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.nextHopProtocol || '';
@@ -1271,10 +1301,16 @@ function App() {
     return () => timelineRequest.cancel();
   }, [selected, refreshTimeline, timelineRequest]);
   const task = state?.tasks.find(t => t.id === selected);
+  const demoRunning = isPlayground && state?.tasks.some(task => task.status === 'running' || task.status === 'building');
+  useEffect(() => {
+    if (!demoRunning) return;
+    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 150);
+    return () => clearInterval(timer);
+  }, [demoRunning, refresh]);
   // A new list on every render would scroll the chat to its end each time.
   const taskRequests = useMemo(() => state?.requests.filter(r => r.taskId === selected) || [], [state?.requests, selected]);
   if (task && !composers.current.has(task.id)) composers.current.set(task.id, new ComposerDraft('papilot:draft:' + task.id, browserStorage, uuid));
-  const fullPdfUrl = task?.status !== 'deleting' && task?.review?.round ? `/api/tasks/${task.id}/pdf?round=${task.review.round}` : '';
+  const fullPdfUrl = task?.status !== 'deleting' && task?.review?.round ? pdfAsset(`/api/tasks/${task.id}/pdf?round=${task.review.round}`) : '';
   const project = state?.projects.find(p => p.id === (task?.projectId || projectId)) || state?.projects[0];
   // Remember the paper even when its manuscript is open, and replace stale
   // paper IDs only after the host has returned the accessible papers.
@@ -1288,7 +1324,7 @@ function App() {
   useEffect(() => { if (task) setShowArchived(Boolean(task.archivedAt)); }, [task?.id, Boolean(task?.archivedAt)]);
   // Older servers send no viewer: whoever is looking is the owner.
   const viewer = state?.viewer, owner = !viewer || viewer.role === 'owner';
-  const requirements = useSystemRequirements(Boolean(state) && online, loadRequirements);
+  const requirements = useSystemRequirements(!isPlayground && Boolean(state) && online, loadRequirements);
   const [setupOpen, setSetupOpen] = useState(false);
   const setupPrompted = useRef(false);
   const firstSetupVisit = useRef(!browserStorage.getItem('papilot:setup-seen') && !browserStorage.getItem('papilot:project'));
@@ -1314,7 +1350,7 @@ function App() {
   const running = state?.tasks.filter(t => ['running', 'waiting_input', 'building'].includes(t.status)).length || 0;
   // The desktop app opens a folder the way an editor does: the system picker,
   // then the paper itself. The browser imports a folder or ZIP in a dialog.
-  function openProject() { if (nativeFolders) void openFolder(); else setModal('project'); }
+  function openProject() { if (isPlayground) { requestPlaygroundDownload(); return; } if (nativeFolders) void openFolder(); else setModal('project'); }
   async function openFolder(folder?: string, main?: string) {
     if (folderRequest.current) return;
     folderRequest.current = true;
@@ -1363,12 +1399,29 @@ function App() {
     permissionMode={newSkill?.output !== 'annotations' ? effectivePermissions : undefined}
     permissions={newSkill?.output !== 'annotations' && <PermissionOptions runtime={runtimes[agentChoice]} value={effectivePermissions} disabled={disabled} onChange={setNewPermissions}/>}
     reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} onSelect={chooseModel} onChange={remember}/>;
+  async function openPreparedTask(preset?: string, annotations?: string[]) {
+    if (creating) return;
+    setCreating(true); setCreateError('');
+    try {
+      const created = await api<Task>('/playground/tasks', { preset, annotations });
+      timelineCache.current.delete(created.id); timelineRevisions.current.delete(created.id);
+      await refresh(true);
+      setTaskSearch(''); setShowArchived(false); setSelected(created.id); setPage('manuscript');
+      setMobileTab(created.status === 'reviewing' ? 'review' : 'conversation'); setLayout('split'); setSidebar(false);
+    } catch (e) { if (!(e instanceof Error && e.name === 'PlaygroundDownloadRequired')) setCreateError(e instanceof Error ? e.message : String(e)); }
+    finally { setCreating(false); }
+  }
   async function createTask() {
     const text = newDraft.trim(), target = project?.id || projectId, skill = newSkill;
     const reviewing = skill?.output === 'annotations';
     const attached = reviewing ? [] : noteSelection.selected, files = reviewing ? [] : newFiles.draft.getSnapshot().files;
     const groupInstructions = groupDrafts.forNotes(attached);
     if ((!text && !skill && !files.length && !attached.some(actionable) && !Object.keys(groupInstructions).length) || (!text && !skill && groupsWithoutInstructions(attached, groupInstructions).length > 0) || (!reviewing && newFiles.draft.getSnapshot().blocked) || creating || marking || noteEditing || reviewNoteBusy || history.busy || !target) return;
+    if (isPlayground) {
+      if (!text && !skill && !files.length && !Object.keys(groupInstructions).length && attached.length) await openPreparedTask(undefined, attached.map(note => note.id));
+      else requestPlaygroundDownload();
+      return;
+    }
     const input = newTaskInput.current, submittedNotes = new Set(attached.map(note => note.id));
     const restoreFocus = input?.closest('form')?.contains(document.activeElement);
     setCreating(true); setCreateError('');
@@ -1724,7 +1777,7 @@ function App() {
   useNoteUndo(() => replayAnnotation('undo'), undefined, () => replayAnnotation('redo'));
 
   const waiting = state?.tasks.filter(t => t.status === 'waiting_input').length || 0;
-  useEffect(() => { document.title = (waiting ? `(${waiting}) ` : '') + (task ? `${task.title} · Papilot` : gitOpen && project ? `${t('Version Management')} · ${project.name} · Papilot` : manuscriptOpen && project ? `${project.name} · Papilot` : 'Papilot'); }, [waiting, task?.title, manuscriptOpen, gitOpen, project?.name, uiLanguage]);
+  useEffect(() => { document.title = isPlayground ? 'Papilot Demo' : (waiting ? `(${waiting}) ` : '') + (task ? `${task.title} · Papilot` : gitOpen && project ? `${t('Version Management')} · ${project.name} · Papilot` : manuscriptOpen && project ? `${project.name} · Papilot` : 'Papilot'); }, [waiting, task?.title, manuscriptOpen, gitOpen, project?.name, uiLanguage]);
   const replyNeeded = Boolean(task && state?.requests.some(r => r.taskId === task.id));
   const pending = task?.review?.counts?.pending || 0;
   const localReview = useReviewDraft(task?.id || '');
@@ -1835,12 +1888,12 @@ function App() {
   const pdfKey = manuscriptData.data?.build.key, hasNotes = Boolean(pdfKey && manuscriptData.data?.annotations.some(note => note.key === pdfKey));
   // i18n: menu button, shown as a share icon, for opening or exporting the compiled PDF
   const manuscriptShare = project && pdfKey && <ActionMenu label={t('Share')} className="icon-button" actions={[
-    { label: t('Open PDF'), icon: 'external', href: `/api/projects/${project.id}/manuscript.pdf?key=${pdfKey}` },
-    { label: t('Export PDF'), icon: 'download', href: `/api/projects/${project.id}/manuscript.pdf?key=${pdfKey}&download=1`, download: true },
-    { label: t('Export PDF with notes'), icon: 'notes', href: `/api/projects/${project.id}/manuscript/annotated.pdf?key=${pdfKey}`, download: true, disabled: !hasNotes, title: hasNotes ? undefined : t('No notes on this PDF yet') },
+    { label: t('Open PDF'), icon: 'external', href: pdfAsset(`/api/projects/${project.id}/manuscript.pdf?key=${pdfKey}`) },
+    { label: t('Export PDF'), icon: 'download', href: pdfAsset(`/api/projects/${project.id}/manuscript.pdf?key=${pdfKey}&download=1`), download: true },
+    { label: t('Export PDF with notes'), icon: 'notes', ...(isPlayground ? { select: requestPlaygroundDownload } : { href: `/api/projects/${project.id}/manuscript/annotated.pdf?key=${pdfKey}`, download: true }), disabled: !hasNotes, title: hasNotes ? undefined : t('No notes on this PDF yet') },
   ]}><Icon name="share" size={16}/></ActionMenu>;
   const manuscriptTools = project && <>
-    <CompileButton key={project.id} label={t('Recompile PDF')} status={pendingManuscriptBuilds.has(project.id) ? 'building' : manuscriptData.error ? 'unknown' : manuscriptData.data?.build.status || 'unknown'} disabled={!manuscriptData.data && !manuscriptData.error} onCompile={() => loadManuscript(project.id, true)}/>
+    <CompileButton key={project.id} label={t('Recompile PDF')} status={pendingManuscriptBuilds.has(project.id) ? 'building' : manuscriptData.error ? 'unknown' : manuscriptData.data?.build.status || 'unknown'} disabled={!manuscriptData.data && !manuscriptData.error} onCompile={async () => isPlayground ? requestPlaygroundDownload() : loadManuscript(project.id, true)}/>
   </>;
   const manuscriptNavigation = manuscriptOpen && project && <>
     {manuscriptTools}
@@ -1862,6 +1915,7 @@ function App() {
       </div>}
       action={<button className="send-button" type="submit" aria-label={t('Start task')} title={missingGroupDirections ? t('Add instructions to the selected color groups above.') : t('Start task (Enter)')} disabled={creating || reviewNoteBusy || noteEditing || history.busy || (newSkill?.output !== 'annotations' && (newFiles.blocked || marking > 0 || missingGroupDirections)) || (!newDraft.trim() && !newSkill && !newFiles.files.length && !noteSelection.selected.some(actionable) && !Object.keys(groupDirections).length)} aria-busy={creating}>{creating ? <span className="spinner light"/> : <Icon name="arrowUp" size={18}/>}</button>}/>
     {createError && <p className="inline-error" role="alert">{createError}</p>}
+    {PlaygroundPresets && <Suspense fallback={null}><PlaygroundPresets selected={noteSelection.selected} open={id => openPreparedTask(id)} disabled={creating}/></Suspense>}
     {runtimes[agentChoice]?.usage && <UsageSummary agent={AGENT_LABELS[agentChoice]} usage={runtimes[agentChoice]!.usage!}/>}
     </div>
   </section>;
@@ -1886,7 +1940,7 @@ function App() {
           <button className={'nav-link git-link' + (gitOpen ? ' active' : '')} disabled={!gitAvailable} aria-describedby={!gitAvailable ? 'git-install-hint' : undefined} aria-label={gitAvailable && projectGit?.files?.length ? t('Version Management, {n} changed', { n: projectGit.files.length }) : t('Version Management')} aria-current={gitOpen ? 'page' : undefined} title={gitAvailable ? t('Version management of the manuscript') + '\n' + gitSummary(projectGit) : t('Install Git in this environment to use version management.')} onClick={openGit}><Icon name="restore" size={16}/><span className="nav-label">{t('Version Management')}</span><span className="nav-meta">{gitAvailable && projectGit?.files?.length ? <span className="count">{projectGit.files.length}</span> : null}</span></button>
           {!gitAvailable && <p className="git-install-hint" id="git-install-hint"><a href="https://git-scm.com/install/" target="_blank" rel="noreferrer">{t('Install Git in this environment to use version management.')}</a></p>}
           <ActionMenu label={t('Research Tools')} className="nav-link paper-tools" menuClassName="paper-tools-menu" align="side" actions={[
-            { id: 'references', label: t('Reference check'), icon: 'checklist', detail: t('Citations, entries and their records'), hint: problems ? String(problems) : undefined, checked: referencesOpen || undefined, select: () => { setSelected(''); setPage('references'); setSidebar(false); } },
+            { id: 'references', label: t('Reference check'), icon: 'checklist', detail: t('Citations, entries and their records'), hint: problems ? String(problems) : undefined, checked: referencesOpen || undefined, select: () => { if (isPlayground) { requestPlaygroundDownload(); return; } setSelected(''); setPage('references'); setSidebar(false); } },
           ]}><Icon name="tool" size={16}/><span className="nav-label">{t('Research Tools')}</span><Icon name="more" size={16}/></ActionMenu>
         </>}
       </div>
@@ -1920,7 +1974,7 @@ function App() {
         </div>
         <div className="brand">
           <a href="/" className="brand-home" aria-label="Papilot" onClick={e => { e.preventDefault(); setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><img className="brand-mark" src={logo} alt=""/><span>Papilot</span></a>
-          {state && (owner ? <UpdateNotice api={api} version={state.version}/> : <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>)}
+          {state && (!isPlayground && owner ? <UpdateNotice api={api} version={state.version}/> : <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>)}
         </div>
         <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={() => setSettings('general')}><Icon name="settings" size={18}/></button>
       </div>
@@ -1940,9 +1994,9 @@ function App() {
           <section id="review-panel" className="review-panel" aria-label={t('PDF review')}>
           {!mobile && !chatOnly && task.mode !== 'review' && (!task.review?.round || task.status === 'deleting') && (sidebarToggle || !conversationVisible) && <div className="review-placeholder-toolbar">{sidebarToggle}{!conversationVisible && workspaceViews}<div className="panel-tools">{!conversationVisible && taskStateActions}</div></div>}
           {task.status === 'failed' && task.review?.job?.status === 'failed' && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
-          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : task.review?.round ? <ReviewFrame key={task.id} task={task} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>}
+          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : task.review?.round ? <ReviewFrame key={task.id} task={task} onDecided={() => void refresh(true)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>}
         </section><Activity key={task.id} onRevealQuote={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} onTaskSaved={acceptSavedTask} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
-      : manuscriptOpen && project ? <ManuscriptView taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError}/>
+      : manuscriptOpen && project ? <ManuscriptView notesRequest={playgroundNotes} taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError}/>
       : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
@@ -1953,8 +2007,8 @@ function App() {
       : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button></div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {setupOpen && <RequirementsDialog state={requirements} owner={owner} online={online} onClose={() => setSetupOpen(false)}/>}
-    {settings && <SettingsDialog requirements={{ state: requirements, owner, online }} owner={owner} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={owner ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} people={owner ? { api, projects: state?.projects || [], ago: agoText } : undefined} onSignOut={viewer?.listener === 'account' ? () => { setSettings(false); void signOut(); } : undefined} accountName={viewer?.name} diagnostics={owner ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={owner ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
+    {!isPlayground && setupOpen && <RequirementsDialog state={requirements} owner={owner} online={online} onClose={() => setSetupOpen(false)}/>}
+    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, owner, online }} owner={owner} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground && owner ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} people={!isPlayground && owner ? { api, projects: state?.projects || [], ago: agoText } : undefined} onSignOut={viewer?.listener === 'account' ? () => { setSettings(false); void signOut(); } : undefined} accountName={viewer?.name} diagnostics={!isPlayground && owner ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={!isPlayground && owner ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
     {editingPaper && <PaperDialog key={editingPaper.id} paper={editingPaper} canManage={owner} onClose={() => setEditingPaper(null)} save={async form => {
       const paper = editingPaper, pathChanged = owner && form.path !== paper.path;
@@ -1986,6 +2040,7 @@ function Root() {
   const signedOut = useSignedOut();
   const [inviting, setInviting] = useState(location.pathname === '/invite');
   const signedIn = () => { setInviting(false); setSignedOut(false); };
+  if (PlaygroundNotice) return <Suspense fallback={null}><div className="playground-root"><PlaygroundNotice/><App/></div></Suspense>;
   if (inviting) return <Invite api={api} onDone={signedIn}/>;
   return signedOut ? <SignIn api={api} onSignedIn={signedIn}/> : <App/>;
 }

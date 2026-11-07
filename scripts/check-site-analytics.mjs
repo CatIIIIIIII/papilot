@@ -37,12 +37,18 @@ const output = locale => path.join(fixture, '_site', locale === 'en' ? '' : loca
 const optOutKey = 'papilot-statistics-disabled';
 let browser;
 try {
-  for (const entry of ['site', 'docs/assets', 'src/web/fonts', 'src/web/brand-icons', 'public', 'i18n/config.json', 'i18n/languages.json', 'package.json', 'scripts/build-site.mjs', 'scripts/site-i18n.mjs', 'scripts/site-analytics.mjs']) {
+  for (const entry of [
+    'site', 'docs/assets', 'src', 'public', 'i18n/config.json', 'i18n/languages.json',
+    'package.json', 'index.html', 'vite.config.ts', 'LICENSE', 'engine/src', 'engine/package.json', 'engine/LICENSE',
+    'examples/playground-paper', 'scripts/playground-assets.ts', 'scripts/licenses.ts',
+    'scripts/build-site.mjs', 'scripts/site-i18n.mjs', 'scripts/site-analytics.mjs',
+  ]) {
     const target = path.join(fixture, entry);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.cpSync(path.join(root, entry), target, { recursive: true });
   }
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(fixture, 'node_modules'), 'dir');
+  fs.symlinkSync(path.join(root, 'engine/node_modules'), path.join(fixture, 'engine/node_modules'), 'dir');
   const build = env => execFileSync(process.execPath, ['scripts/build-site.mjs'], { cwd: fixture, env: { ...process.env, ...Object.fromEntries(Object.keys(config).map(key => [key, ''])), ...env }, stdio: 'pipe' });
   build({});
   const privacy = fs.readFileSync(path.join(fixture, '_site/privacy/index.html'), 'utf8');

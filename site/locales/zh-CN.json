@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "用 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 写文档，<del>得看</del> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 源码<del>，去</del> PDF <del>里找对应 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "用 <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 写文档，<ins>与</ins> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 源码<ins>何干？我只看</ins> PDF<ins>！😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "用 \\LaTeX{} 写文档，<del>得看</del><ins>与</ins> \\LaTeX{} 源码<del>，去</del><ins>何干？我只看</ins> PDF<del> 里找对应 😭</del><ins>！😎</ins>",
-  "line 6": "第 6 行"
+  "line 6": "第 6 行",
+  "Try online demo": "体验在线演示"
 }

@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "Skriva <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>först</del> läsa <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>-kod<del>, sen leta i</del> PDF:en<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "Skriva <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>varför</ins> läsa <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>-kod<ins>? Jag läser</ins> PDF:en<ins>! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "Skriva \\LaTeX{}, <del>först</del><ins>varför</ins> läsa \\LaTeX{}-kod<del>, sen leta i</del><ins>? Jag läser</ins> PDF:en<del> 😭</del><ins>! 😎</ins>",
-  "line 6": "rad 6"
+  "line 6": "rad 6",
+  "Try online demo": "Onlinedemo"
 }

@@ -112,10 +112,17 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .ghost{color:var(--text-2)}
 .ghost:hover{background:var(--bg-hover);color:var(--text)}
 
+/* Flat accent text, consistent with the site's other links. */
+.try-demo{position:relative;display:inline-flex;align-items:center;min-height:36px;color:var(--accent);font-size:14px;font-weight:500;line-height:1.4;white-space:nowrap}
+.try-demo:hover,.try-demo:focus-visible{color:var(--accent-hover);text-decoration:none}
+@media(prefers-reduced-motion:no-preference){
+  .try-demo{transition:color .15s ease}
+}
+
 /* Top bar */
 .topbar{position:sticky;top:0;z-index:10;background:var(--glass);-webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px);border-bottom:1px solid transparent;transition:border-color .2s}
 .topbar.scrolled{border-bottom-color:var(--line)}
-.topbar-inner{display:flex;align-items:center;gap:32px;height:64px}
+.topbar-inner{display:flex;align-items:center;gap:20px;height:64px}
 .brand{display:inline-flex;align-items:center;gap:10px;color:var(--text);font:400 21px/1 var(--serif);letter-spacing:-.005em}
 .brand:hover{text-decoration:none}
 .brand-mark{width:26px;height:26px}
@@ -124,6 +131,7 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .nav a:hover{background:var(--bg-hover);color:var(--text);text-decoration:none}
 .nav a[aria-current]{color:var(--text)}
 .topbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.topbar-demo{flex-shrink:0;margin-right:12px}
 .icon-button{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:999px;color:var(--text-2);transition:background-color .15s,color .15s}
 .icon-button:hover,.icon-button[aria-expanded=true]{background:var(--bg-hover);color:var(--text)}
 .theme-button[hidden]{display:none}
@@ -681,6 +689,8 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
   .scene{max-width:640px}
   .get-inner{grid-template-columns:minmax(0,1fr);gap:40px}
 }
+/* Keep the demo action on the right even when section links no longer fit. */
+@media(max-width:1080px){.nav{display:none}}
 @media(max-width:720px){
   .nav{display:none}
   .topbar-inner{gap:10px;height:60px}
@@ -757,3 +767,12 @@ html[lang=ja] .hero h1{overflow-wrap:normal;line-break:strict}
 .privacy-controls{margin-top:24px;padding:20px;border:1px solid var(--line);border-radius:12px}
 .privacy-controls .statistics-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 .privacy-controls[hidden],.privacy-controls [hidden]{display:none}
+
+@media(max-width:560px){
+  .topbar-inner{gap:8px}
+  .topbar .brand-name,.topbar .github-link>span{display:none}
+  .topbar-actions{gap:2px}
+  .topbar .icon-button{width:30px;height:32px}
+  .topbar .github-link{width:30px;height:32px;padding:0;border-color:transparent;background:transparent}
+  .topbar-demo{min-height:34px;margin-right:6px;font-size:13px}
+}

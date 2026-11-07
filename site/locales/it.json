@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "In <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>devo</del> leggere il sorgente <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><del> e cercare nel</del> PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "In <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>perché</ins> leggere il sorgente <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span><ins>? Leggo il</ins> PDF<ins>! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "In \\LaTeX{}, <del>devo</del><ins>perché</ins> leggere il sorgente \\LaTeX{}<del> e cercare nel</del><ins>? Leggo il</ins> PDF<del> 😭</del><ins>! 😎</ins>",
-  "line 6": "riga 6"
+  "line 6": "riga 6",
+  "Try online demo": "Demo online"
 }

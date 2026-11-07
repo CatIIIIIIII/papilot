@@ -62,6 +62,12 @@ jobs:
       - run: npm run build
       # Checks the generated UI demos and local asset links before main.
       - run: npm run site
+      - name: Verify the static playground without a backend
+        run: |
+          engine/node_modules/.bin/playwright install --with-deps chromium
+          node scripts/check-playground.mjs
+        env:
+          PAPILOT_BROWSER_CHANNEL: chromium
       - name: Pack
         run: npm pack --ignore-scripts --dry-run
 

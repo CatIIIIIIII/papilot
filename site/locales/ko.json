@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 쓸 때 <del>늘</del> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 소스 읽<del>고</del> PDF<del>에서 찾는다 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 쓸 때 <ins>왜</ins> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> 소스 읽<ins>나? 그냥</ins> PDF<ins>만 본다! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "\\LaTeX{} 쓸 때 <del>늘</del><ins>왜</ins> \\LaTeX{} 소스 읽<del>고</del><ins>나? 그냥</ins> PDF<del>에서 찾는다 😭</del><ins>만 본다! 😎</ins>",
-  "line 6": "6행"
+  "line 6": "6행",
+  "Try online demo": "온라인 데모"
 }

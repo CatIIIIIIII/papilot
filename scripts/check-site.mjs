@@ -48,10 +48,15 @@ try {
   assert.ok(fold.cue <= fold.inner && fold.agents >= fold.inner - 1, 'the first screen holds the hero');
   assert.equal(await page.locator('video').count(), 0);
 
-  // The navbar leads to this page's own sections.
+  // Section links stay together; the static demo is a separate action on the right.
   const anchors = await page.locator('.nav a').evaluateAll(links => links.map(link => link.getAttribute('href')));
-  assert.ok(anchors.length >= 3 && anchors.every(href => href.startsWith('#')));
-  for (const href of anchors) assert.equal(await page.locator(href).count(), 1, href);
+  assert.ok(anchors.filter(href => href.startsWith('#')).length >= 3);
+  assert.equal(anchors.filter(href => href === '/demo').length, 0);
+  assert.equal(await page.locator('.topbar-actions > .topbar-demo').getAttribute('href'), '/demo');
+  assert.equal(await page.locator('.topbar-demo + #theme-button').count(), 1);
+  assert.equal(await page.locator('.topbar-demo').innerText(), 'Try online demo');
+  assert.equal(await page.locator('.hero .actions a[href="/demo"]').count(), 0);
+  for (const href of anchors.filter(href => href.startsWith('#'))) assert.equal(await page.locator(href).count(), 1, href);
 
   // A round plays by itself: the plain sentence, a boxed note, the diff, and
   // the accepted sentence, without the headline or the window moving.

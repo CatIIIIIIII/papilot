@@ -3,7 +3,7 @@
 // Resolve before the first paint, even while the application bundle is loading.
 (() => {
   let theme;
-  try { theme = localStorage.getItem('papilot:theme'); } catch {}
+  try { theme = localStorage.getItem('%MODE%' === 'playground' ? 'playground:papilot:theme' : 'papilot:theme'); } catch {}
   const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   document.querySelector('meta[name="theme-color"]').content = dark ? '#26272b' : '#ffffff';

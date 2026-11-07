@@ -88,5 +88,6 @@
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <del>I</del> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<del>, then hunt in</del> the PDF<del> 😭</del>": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> schreiben: <del>Ich lese</del> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>-Code<del> und suche im</del> PDF<del> 😭</del>",
   "Writing <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>, <ins>why</ins> read <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> source<ins>? I just read</ins> the PDF<ins>! 😎</ins>": "<span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span> schreiben: <ins>Wozu</ins> <span class=\"latex\">L<sup>a</sup>T<sub>e</sub>X</span>-Code<ins>? Ich lese nur das</ins> PDF<ins>! 😎</ins>",
   "Writing \\LaTeX{}, <del>I</del><ins>why</ins> read \\LaTeX{} source<del>, then hunt in</del><ins>? I just read</ins> the PDF<del> 😭</del><ins>! 😎</ins>": "\\LaTeX{} schreiben: <del>Ich lese</del><ins>Wozu</ins> \\LaTeX{}-Code<del> und suche im</del><ins>? Ich lese nur das</ins> PDF<del> 😭</del><ins>! 😎</ins>",
-  "line 6": "Zeile 6"
+  "line 6": "Zeile 6",
+  "Try online demo": "Online-Demo"
 }

@@ -84,7 +84,11 @@
     "i18n:check-app": "tsx scripts/i18n/app-locales.ts",
     "test:locales": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-locales.mjs",
     "test:review-tools": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-review-tools.mjs",
-    "test:review-comments": "npm run build && npm --prefix engine run build && node --import tsx --test tests/composer.test.ts tests/review-draft.test.ts && node --import tsx scripts/check-unified-review.mjs && node scripts/check-review-notes.mjs"
+    "test:review-comments": "npm run build && npm --prefix engine run build && node --import tsx --test tests/composer.test.ts tests/review-draft.test.ts && node --import tsx scripts/check-unified-review.mjs && node scripts/check-review-notes.mjs",
+    "build:playground": "tsc --noEmit && vite build --mode playground",
+    "build:playground-example": "tsx scripts/build-playground-example.ts",
+    "dev:playground": "vite --mode playground",
+    "test:playground": "npm run build:playground && node --import tsx --test tests/playground.test.ts && node scripts/check-playground.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^9.2.2",
