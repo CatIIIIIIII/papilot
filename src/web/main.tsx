@@ -40,6 +40,8 @@ import { CompileButton } from './compile-button.tsx';
 import { ProblemsButton, fixRequest, type ProblemsHandle } from './build-problems.tsx';
 import { useTheme } from './theme.tsx';
 import { SettingsDialog } from './settings.tsx';
+import { WorkspaceSwitcher } from './workspace-switcher.tsx';
+import { workspaceModifier, workspaceShortcutLabel } from './workspace-switch.ts';
 import { useSystemRequirements, requirementsMissing, RequirementsBanner, RequirementsDialog } from './system-requirements.tsx';
 import { connectStamps } from './stamps.ts';
 import { connectIndirectChanges } from './effect-preferences.ts';
@@ -1481,6 +1483,24 @@ function App() {
   const manuscriptOpen = !task && Boolean(project) && (page === 'manuscript' || page === 'git' && !gitAvailable);
   const referencesOpen = !task && Boolean(project) && page === 'references';
   const gitOpen = !task && Boolean(project) && page === 'git' && gitAvailable;
+  const switchContext = useRef({ project: project?.id, path: project?.path, task: task?.id, page });
+  if (switchContext.current.project !== project?.id || switchContext.current.path !== project?.path || switchContext.current.task !== task?.id || switchContext.current.page !== page) {
+    switchContext.current = { project: project?.id, path: project?.path, task: task?.id, page };
+  }
+  const switchRequest = useRef(0);
+  async function switchWorkspace(id: string) {
+    try {
+      const request = ++switchRequest.current, context = switchContext.current;
+      if (id === (task?.id ?? (manuscriptOpen ? '' : null))) return;
+      if (manuscriptNavigationGuard.current && !await manuscriptNavigationGuard.current.save()) return;
+      // A later shortcut or mouse navigation supersedes a slow note save.
+      if (request !== switchRequest.current || context !== switchContext.current) return;
+      // Saving a note can take time; recheck the destination before navigating.
+      if (id && !snapshotRef.current?.tasks.some(next => next.id === id && next.projectId === project?.id && next.status !== 'deleting' && !next.archivedAt)) return;
+      setSelected(id); setPage('manuscript'); setRegion(false); setSidebar(false); setTaskSearch('');
+      if (!id && mobile) setManuscriptView('pdf');
+    } catch (error) { reportError(error); }
+  }
   async function openGit() {
     if (!gitAvailable) return;
     if (manuscriptNavigationGuard.current && !await manuscriptNavigationGuard.current.save()) return;
@@ -1848,6 +1868,9 @@ function App() {
 
   return <ViewerContext.Provider value={viewer || null}><NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
     <DesktopWindowChrome/>
+    {project && <WorkspaceSwitcher key={project.id} active={task?.id ?? (manuscriptOpen ? '' : null)}
+      items={[{ id: '', title: t('Manuscript') }, ...[...tasks].reverse().filter(item => item.status !== 'deleting' && (!item.archivedAt || item.id === task?.id)).map(item => ({ id: item.id, title: item.title }))]}
+      onSelect={id => void switchWorkspace(id)}/>}
     <aside ref={sidebarRef} role={narrow && sidebar ? 'dialog' : undefined} aria-modal={narrow && sidebar ? true : undefined} onKeyDown={e => { if (!narrow || !sidebar || modal || editingPaper) return; if (e.key === 'Escape') { e.preventDefault(); setSidebar(false); } else keepDialogFocus(e); }} id="task-sidebar" className={'sidebar ' + (sidebar ? 'is-open' : '')} aria-label={t('Papers and tasks')}>
       <div className="sidebar-header">
         {state?.projects.length && project ? <ActionMenu label={t('Paper: {name}', { name: project.name })} className="project-switcher" menuClassName="paper-menu" align="start" actions={[
@@ -1859,7 +1882,7 @@ function App() {
       </div>
       <div className="sidebar-actions">
         {project && <>
-          <button className={'nav-link manuscript-link' + (manuscriptOpen ? ' active' : '')} aria-current={manuscriptOpen ? 'page' : undefined} onClick={() => { setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><Icon name="pdf" size={16}/><span className="nav-label">{t('Manuscript')}</span></button>
+          <button className={'nav-link manuscript-link' + (manuscriptOpen ? ' active' : '')} aria-current={manuscriptOpen ? 'page' : undefined} title={t('Switch tasks and manuscript') + ' (' + workspaceShortcutLabel + ')'} aria-keyshortcuts={workspaceModifier + '+`'} onClick={() => { setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><Icon name="pdf" size={16}/><span className="nav-label">{t('Manuscript')}</span></button>
           <button className={'nav-link git-link' + (gitOpen ? ' active' : '')} disabled={!gitAvailable} aria-describedby={!gitAvailable ? 'git-install-hint' : undefined} aria-label={gitAvailable && projectGit?.files?.length ? t('Version Management, {n} changed', { n: projectGit.files.length }) : t('Version Management')} aria-current={gitOpen ? 'page' : undefined} title={gitAvailable ? t('Version management of the manuscript') + '\n' + gitSummary(projectGit) : t('Install Git in this environment to use version management.')} onClick={openGit}><Icon name="restore" size={16}/><span className="nav-label">{t('Version Management')}</span><span className="nav-meta">{gitAvailable && projectGit?.files?.length ? <span className="count">{projectGit.files.length}</span> : null}</span></button>
           {!gitAvailable && <p className="git-install-hint" id="git-install-hint"><a href="https://git-scm.com/install/" target="_blank" rel="noreferrer">{t('Install Git in this environment to use version management.')}</a></p>}
           <ActionMenu label={t('Research Tools')} className="nav-link paper-tools" menuClassName="paper-tools-menu" align="side" actions={[

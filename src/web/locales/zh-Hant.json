@@ -1340,5 +1340,7 @@
   "Not installed or unavailable": "未安裝或無法使用",
   "Incomplete installation": "安裝不完整",
   "Check failed": "偵測失敗",
-  "Offline": "離線"
+  "Offline": "離線",
+  "Switch tasks and manuscript": "快速切換任務和稿件",
+  "Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.": "按住 {key}，連續按 ` 選擇；加 Shift 反向選擇，放開 {key} 切換，Esc 取消。"
 }

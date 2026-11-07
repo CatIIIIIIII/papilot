@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { t } from './i18n.ts';
 import { ShortcutKeyboard, shortcutTone } from './shortcut-keyboard.tsx';
 import './shortcut-settings.css';
+import { workspaceModifierLabel, workspaceShortcutLabel } from './workspace-switch.ts';
 import { bindingLabel, defaults, keyBinding, reservedBinding, resolveShortcuts, saveShortcutBindings, saveShortcuts, shortcutActions, useShortcutBindings, useShortcuts, type ShortcutAction } from './shortcuts.ts';
 
 export function ShortcutSettings() {
@@ -48,6 +49,11 @@ export function ShortcutSettings() {
     setEditing(action); setError('');
   }
   return <div className="shortcut-settings settings-page">
+    <section className="shortcut-system">
+      <h3 className="settings-section-title">{t('Switch tasks and manuscript')}</h3>
+      <p className="settings-intro">{t('Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.', { key: workspaceModifierLabel })}</p>
+      <dl><div><dt>{t('Switch tasks and manuscript')}</dt><dd><kbd>{workspaceShortcutLabel}</kbd></dd></div></dl>
+    </section>
     <ShortcutKeyboard shortcuts={shortcuts} labels={labels} mac={mac} keyLabel={keyLabel} active={editing || highlighted} onHighlight={setHighlighted} onEdit={edit}/>
     <div className="shortcut-customize-header">
       <h3 className="settings-section-title">{t('Customize shortcuts')}</h3>

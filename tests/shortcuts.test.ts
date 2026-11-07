@@ -20,6 +20,6 @@ test('invalid saved bindings fall back without breaking the other preferences', 
   assert.deepEqual(parseShortcuts('broken'), resolveShortcuts({}));
 });
 test('browser navigation, native undo and text editing cannot be reassigned', () => {
-  for (const value of ['Ctrl+z', 'Meta+z', 'Meta+Shift+z', 'Ctrl+c', 'Ctrl+r', 'Meta+w', 'Escape', 'Enter', 'Tab', 'Alt+ArrowLeft']) assert.equal(reservedBinding(value), true, value);
+  for (const value of ['Ctrl+z', 'Meta+z', 'Meta+Shift+z', 'Ctrl+c', 'Ctrl+r', 'Meta+w', 'Escape', 'Enter', 'Tab', 'Alt+ArrowLeft', 'Ctrl+`', 'Ctrl+Shift+`', 'Meta+`', 'Meta+Shift+`']) assert.equal(reservedBinding(value), true, value);
   for (const value of ['a', 'Shift+a', 'Alt+b', 'Ctrl+b', '?', 'ArrowRight']) assert.equal(reservedBinding(value), false, value);
 });

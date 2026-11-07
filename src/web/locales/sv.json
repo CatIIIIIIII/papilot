@@ -1340,5 +1340,7 @@
   "Not installed or unavailable": "Inte installerat eller otillgängligt",
   "Incomplete installation": "Ofullständig installation",
   "Check failed": "Kontrollen misslyckades",
-  "Offline": "Offline"
+  "Offline": "Offline",
+  "Switch tasks and manuscript": "Växla mellan uppgifter och manuskript",
+  "Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.": "Håll {key} och tryck på ` för att bläddra. Shift byter riktning; släpp {key} för att växla. Esc avbryter."
 }

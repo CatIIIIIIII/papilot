@@ -1340,5 +1340,7 @@
   "Not installed or unavailable": "Non installato o non disponibile",
   "Incomplete installation": "Installazione incompleta",
   "Check failed": "Verifica non riuscita",
-  "Offline": "Offline"
+  "Offline": "Offline",
+  "Switch tasks and manuscript": "Passa tra attività e manoscritto",
+  "Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.": "Tieni premuto {key} e premi ` per scorrere. Shift inverte la direzione; rilascia {key} per passare. Esc annulla."
 }

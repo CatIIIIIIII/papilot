@@ -1,6 +1,8 @@
 // Simplified Chinese for the workspace, keyed by the English text (see i18n.ts).
 // Chinese text keeps a space around numbers and Latin words: "修改 2", "PDF 批注".
 export const zhCN: Record<string, string> = {
+  'Switch tasks and manuscript': '快速切换任务和稿件',
+  'Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.': '按住 {key}，连续按 ` 选择；加 Shift 反向选择，松开 {key} 切换，Esc 取消。',
   'Environment': '运行环境',
   'Comment': '评论', 'Unchanged text': '未修改的文字',
   "Refresh version history": "刷新版本记录",

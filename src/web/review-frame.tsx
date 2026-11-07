@@ -11,6 +11,7 @@ import { language, t, useLanguage } from './i18n.ts';
 import { useNoteResults } from './note-results.tsx';
 import { ReviewNoteConnections } from './review-note-connections.tsx';
 import { SHORTCUT_EVENT, useShortcuts } from './shortcuts.ts';
+import { connectWorkspaceKeys } from './workspace-switch.ts';
 import { installReviewScroll } from './review-scroll.ts';
 import { EFFECTS_EVENT, loadIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
 import { useDefaultReviewView, VIEW_EVENT, type ReviewView } from './review-view.ts';
@@ -299,6 +300,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   useEffect(() => {
     if (document && frame.current) return installReviewScroll(frame.current, document);
   }, [document]);
+  useEffect(() => { if (document) return connectWorkspaceKeys(document); }, [document]);
   useEffect(() => {
     const view = document?.defaultView;
     if (!view) return;

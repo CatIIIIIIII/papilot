@@ -1340,5 +1340,7 @@
   "Not installed or unavailable": "미설치 또는 사용 불가",
   "Incomplete installation": "설치 불완전",
   "Check failed": "확인 실패",
-  "Offline": "오프라인"
+  "Offline": "오프라인",
+  "Switch tasks and manuscript": "작업과 원고 전환",
+  "Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.": "{key}을 누른 채 ` 키로 선택하세요. Shift로 역순 선택, {key}을 놓으면 전환, Esc로 취소합니다."
 }

@@ -24,6 +24,7 @@ export function validBinding(binding: string): boolean {
 // Leave text editing, browser navigation and dialog keys with the browser.
 export function reservedBinding(binding: string): boolean {
   return !validBinding(binding) || /^(?:Ctrl|Meta)\+(?:Shift\+)?[acflnpqrstuvwxz=\-]$/.test(binding)
+    || /^(?:Ctrl|Meta)\+(?:Shift\+)?`$/.test(binding)
     || /^(?:Alt|Meta)\+Arrow(?:Left|Right)$/.test(binding);
 }
 

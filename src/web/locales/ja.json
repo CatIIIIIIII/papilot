@@ -1340,5 +1340,7 @@
   "Not installed or unavailable": "未インストールまたは利用不可",
   "Incomplete installation": "インストールが不完全",
   "Check failed": "確認に失敗",
-  "Offline": "オフライン"
+  "Offline": "オフライン",
+  "Switch tasks and manuscript": "タスクと原稿を切り替える",
+  "Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.": "{key} を押しながら ` で選択。Shift で逆順、{key} を離すと切り替え、Esc でキャンセル。"
 }
