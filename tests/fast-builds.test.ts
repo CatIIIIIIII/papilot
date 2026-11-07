@@ -151,6 +151,62 @@ test('a background build stops while another build compiles, and someone waiting
   } finally { process.env.PATH = previousPath; f.close(); }
 });
 
+test('a foreground waiter promotes recovery of a pruned preferred build and receives its progress', { skip: process.platform === 'win32' && 'uses POSIX signals', timeout: 60000 }, async () => {
+  const f = paper({ 'main.tex': document('Original.\n') });
+  const bin = path.join(f.base, 'bin'), gates = path.join(f.base, 'gates'), previousPath = process.env.PATH, previousGates = process.env.PAPILOT_RECOVERY_GATES;
+  const pending: Promise<unknown>[] = [];
+  fs.mkdirSync(bin); fs.mkdirSync(gates);
+  const pids = () => fs.readdirSync(gates).filter(file => file.endsWith('.pid')).map(file => ({ key: file.slice(0, -4), pid: Number(fs.readFileSync(path.join(gates, file), 'utf8')) }));
+  const state = (pid: number) => execFileSync('ps', ['-o', 'stat=', '-p', String(pid)]).toString().trim();
+  const waitFor = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 25)); assert.ok(check()); };
+  try {
+    fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX recovery test"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh
+key=$(basename "$(dirname "$PWD")")
+echo $$ > "$PAPILOT_RECOVERY_GATES/$key.pid"
+echo "Run number 1 of rule 'pdflatex'"
+if [ -f "$PAPILOT_RECOVERY_GATES/block" ]; then
+  i=0; while [ ! -f "$PAPILOT_RECOVERY_GATES/$key.go" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done
+fi
+mkdir -p build
+echo result > build/main.pdf
+`, { mode: 0o755 });
+    process.env.PATH = `${bin}${path.delimiter}${previousPath}`;
+    process.env.PAPILOT_RECOVERY_GATES = gates;
+    const builder = new Builder(loadProject(f.root), f.repo), rev = f.repo.rev('HEAD');
+    const first = await builder.build(rev), refreshed = await builder.build(rev, ['full'], null, { force: true });
+    const other = f.commit({ 'main.tex': document('Other.\n') });
+    fs.rmSync(path.dirname(refreshed.root), { recursive: true });
+    for (const file of fs.readdirSync(gates)) fs.rmSync(path.join(gates, file));
+    fs.writeFileSync(path.join(gates, 'block'), '');
+    const background = builder.build(rev, ['full'], null, { priority: 'background' }); pending.push(background);
+    await waitFor(() => pids().length === 1);
+    const target = pids()[0];
+    assert.notEqual(target.key, first.key, 'Recovery writes fresh immutable output');
+    const competing = builder.build(other); pending.push(competing);
+    await waitFor(() => pids().length === 2);
+    await waitFor(() => /T/.test(state(target.pid)));
+    const progress: number[] = [];
+    const foreground = builder.build(rev, ['full'], null, { priority: 'foreground', progress: value => progress.push(value.pass) }); pending.push(foreground);
+    await waitFor(() => !/T/.test(state(target.pid)));
+    await waitFor(() => progress.includes(1));
+    fs.writeFileSync(path.join(gates, target.key + '.go'), '');
+    const [recovered, shown] = await Promise.all([background, foreground]);
+    assert.equal(recovered.key, shown.key);
+    assert.equal(shown.key, target.key);
+    assert.equal((await builder.build(rev)).key, recovered.key);
+  } finally {
+    for (const { key, pid } of pids()) {
+      fs.writeFileSync(path.join(gates, key + '.go'), '');
+      if (pid > 0) try { process.kill(-pid, 'SIGCONT'); } catch { /* Already finished. */ }
+    }
+    await Promise.allSettled(pending);
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    if (previousGates === undefined) delete process.env.PAPILOT_RECOVERY_GATES; else process.env.PAPILOT_RECOVERY_GATES = previousGates;
+    f.close();
+  }
+});
+
 test('a build runs at the highest priority of everyone waiting for it, also of those who asked before it started', { skip: process.platform === 'win32' && 'uses POSIX signals', timeout: 60000 }, async () => {
   const f = paper({ 'main.tex': document('Text.\n') });
   const bin = path.join(f.base, 'bin'), previousPath = process.env.PATH;

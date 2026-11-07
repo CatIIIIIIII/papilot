@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { ROOT, codeVersion } from "../runtime.ts";
-import { Builder, BuildError, auxiliaryBuildError } from "./build.ts";
+import { Builder, BuildError, auxiliaryBuildError, buildDate } from "./build.ts";
 import { diffUnitsAsync, scopeViolationsAsync, withUnits } from "./changes.ts";
 import { isFigure } from "./config.ts";
 import { now, readJson, writeJson } from "./files.ts";
@@ -209,12 +209,12 @@ export class Publisher {
   // for every page of a long baseline or either parallel comparison build.
   private builds = new Map<string, Partial<Record<"baseline" | "revised", BuildProgress>>>();
   progress(id: string) { return this.builds.get(id); }
-  private async compile(job: Pick<Job, "id">, side: "baseline" | "revised", builder: Builder, rev: string, targets = ["full"], seed: BuildInfo | null = null, { asSeed = false, force = false } = {}) {
+  private async compile(job: Pick<Job, "id">, side: "baseline" | "revised", builder: Builder, rev: string, targets = ["full"], seed: BuildInfo | null = null, { asSeed = false, force = false, date }: { asSeed?: boolean; force?: boolean; date?: ReturnType<typeof buildDate> } = {}) {
     const progress = this.builds.get(job.id) ?? {};
     this.builds.set(job.id, progress);
     progress[side] = { step: "tex", pass: 0, pages: 0, total: null };
     try {
-      const options = { force, progress: (value: BuildProgress) => { progress[side] = value; } };
+      const options = { force, date, progress: (value: BuildProgress) => { progress[side] = value; } };
       return await (asSeed ? builder.buildSeed(rev, options) : builder.build(rev, targets, seed, options));
     } finally {
       delete progress[side];
@@ -459,6 +459,7 @@ export class Publisher {
     );
     this.phase(job, "build");
     const builder = new Builder(project, app.repo),
+      date = buildDate(),
       targets = await builder.planAsync(before, after, files);
     if (targets[0] !== "full") this.revisions.set(job.id, after);
     const failed = (what: string) => (error: unknown) => {
@@ -474,8 +475,8 @@ export class Publisher {
     let seed = targets[0] !== "full" ? await this.compile(job, "baseline", builder, task.base, ["full"], null, { asSeed: true }).catch(failed("The comparison baseline could not be compiled.")) : null;
     // Both versions compile at once: each needs only the seed.
     const versions = () => Promise.allSettled([
-      this.compile(job, "baseline", builder, before, targets, seed),
-      this.compile(job, "revised", builder, after, targets, seed),
+      this.compile(job, "baseline", builder, before, targets, seed, { date }),
+      this.compile(job, "revised", builder, after, targets, seed, { date }),
     ]);
     let builds = await versions();
     if (!this.stopping && seed && builds.some((built) => built.status === "rejected" && auxiliaryBuildError(built.reason))) {
@@ -524,6 +525,7 @@ export class Publisher {
                 withUnits(app.repo, before, after, subset),
                 targets,
                 seed,
+                { date },
               )
           : undefined,
       );

@@ -12,6 +12,7 @@ import { App } from '../engine/src/server.ts';
 import { view } from '../engine/src/core/view.ts';
 import type { BuildInfo } from '../engine/src/types.ts';
 import { workingTree } from '../src/server/manuscript.ts';
+import { Changes } from '../src/server/changes.ts';
 import * as mupdf from 'mupdf';
 const pdfText = (file: string) => {
   const document = mupdf.Document.openDocument(fs.readFileSync(file), 'application/pdf');
@@ -113,6 +114,69 @@ test('builds export every file and continue like latexmk in the same folder; sta
   } finally { f.close(); }
 });
 
+test('cached PDFs survive a new day; edits, manual rebuilds and explicit dates still compile', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async t => {
+  const f = fixture(), epoch = process.env.SOURCE_DATE_EPOCH, forceDate = process.env.FORCE_SOURCE_DATE;
+  delete process.env.SOURCE_DATE_EPOCH;
+  delete process.env.FORCE_SOURCE_DATE;
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 6, 12) });
+  const build = (rev: string, force = false) => new Builder(loadProject(f.root), new Repo(f.root)).build(rev, ['full'], null, { force });
+  const text = pdfText;
+  try {
+    fs.writeFileSync(path.join(f.root, 'main.tex'), paper('First draft. \\today'));
+    const rev = await workingTree(f.root), first = await build(rev);
+    const bytes = fs.readFileSync(first.pdf);
+    assert.match(text(first.pdf), /November 6, 2026/);
+
+    t.mock.timers.setTime(new Date(2026, 10, 7, 12).getTime());
+    const reopened = await build(rev);
+    assert.equal(reopened.key, first.key, 'A new Builder on the next day reopens the same cached build');
+    assert.deepEqual(fs.readFileSync(reopened.pdf), bytes);
+
+    // A changed file outside TeX's inputs should not turn a new day into a
+    // TeX pass either. Kept SyncTeX paths must still name the new folder.
+    fs.writeFileSync(path.join(f.root, 'materials/notes.txt'), 'Not a TeX input.\n');
+    const unrelated = await build(await workingTree(f.root));
+    assert.notEqual(unrelated.key, first.key);
+    assert.equal(runs(path.dirname(unrelated.root)), 0);
+    assert.deepEqual(fs.readFileSync(unrelated.pdf), bytes);
+    const synctex = zlib.gunzipSync(fs.readFileSync(unrelated.pdf.replace(/\.pdf$/, '.synctex.gz'))).toString().replaceAll('\\', '/');
+    assert.ok(!synctex.includes(path.dirname(first.root).split(path.sep).join('/')));
+    assert.ok(synctex.includes(unrelated.cwd.split(path.sep).join('/')));
+
+    fs.writeFileSync(path.join(f.root, 'main.tex'), paper('Second draft. \\today'));
+    const editedRev = await workingTree(f.root), edited = await build(editedRev);
+    assert.equal(runs(path.dirname(edited.root)), 1);
+    assert.match(text(edited.pdf), /Second draft/);
+    assert.match(text(edited.pdf), /November 7, 2026/);
+
+    t.mock.timers.setTime(new Date(2026, 10, 8, 12).getTime());
+    const manual = await build(editedRev, true);
+    assert.notEqual(manual.key, edited.key);
+    assert.ok(runs(path.dirname(manual.root)) >= 2, 'Manual recompilation still starts clean');
+    assert.match(text(manual.pdf), /November 8, 2026/);
+    assert.equal((await build(editedRev)).key, manual.key, 'Reopening keeps the manually refreshed PDF');
+
+    process.env.FORCE_SOURCE_DATE = '1';
+    process.env.SOURCE_DATE_EPOCH = String(Date.UTC(2026, 10, 9, 12) / 1000);
+    const fixed = await build(editedRev);
+    assert.notEqual(fixed.key, edited.key);
+    assert.match(text(fixed.pdf), /November 9, 2026/);
+    assert.equal((await build(editedRev)).key, fixed.key, 'The explicit date can also be cached');
+    const fixedBuilder = new Builder(loadProject(f.root), new Repo(f.root));
+    t.mock.method(fixedBuilder, 'build', () => { throw new Error('An exact seed should need no build request'); });
+    assert.equal((await fixedBuilder.buildSeed(editedRev)).key, fixed.key, 'Seed lookup uses the same explicit date context');
+    process.env.SOURCE_DATE_EPOCH = String(Date.UTC(2026, 10, 10, 12) / 1000);
+    const changedDate = await build(editedRev);
+    assert.notEqual(changedDate.key, fixed.key);
+    assert.match(text(changedDate.pdf), /November 10, 2026/);
+  } finally {
+    if (epoch === undefined) delete process.env.SOURCE_DATE_EPOCH; else process.env.SOURCE_DATE_EPOCH = epoch;
+    if (forceDate === undefined) delete process.env.FORCE_SOURCE_DATE; else process.env.FORCE_SOURCE_DATE = forceDate;
+    t.mock.timers.reset();
+    f.close();
+  }
+});
+
 test('review builds of a chapter continue from the previous one and take other chapters from their seed', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
   const f = fixture();
   try {
@@ -154,6 +218,7 @@ test('chapter comparisons reuse yesterday’s exact seed without compiling the f
     fs.writeFileSync(path.join(f.root, 'chapters/b.tex'), '\\section{B}\\label{sec:b}\nOther chapter.\n');
     const before = await workingTree(f.root), project = loadProject(f.root), builder = new Builder(project, f.repo);
     const seed = await builder.build(before);
+    const yesterdayBaseline = await builder.build(before, ['chapters/a'], seed);
     const seedLog = fs.readFileSync(path.join(path.dirname(seed.root), 'latexmk.log'));
     t.mock.timers.setTime(yesterday.getTime() + 86400000);
     fs.writeFileSync(path.join(f.root, 'chapters/a.tex'), '\\section{A}\\label{sec:a}\nRevised wording. See Section~\\ref{sec:b}.\n');
@@ -165,6 +230,7 @@ test('chapter comparisons reuse yesterday’s exact seed without compiling the f
     assert.equal(reused.key, seed.key);
     assert.deepEqual(requested, [], 'a cached seed starts no compiler, even on a new day');
     const [old, revised] = await Promise.all([builder.build(before, targets, reused), builder.build(after, targets, reused)]);
+    assert.notEqual(old.key, yesterdayBaseline.key, 'A cached chapter baseline must use the comparison date');
     assert.deepEqual(requested, [['chapters/a'], ['chapters/a']], 'both comparison builds compile only the affected chapter');
     assert.deepEqual(fs.readFileSync(path.join(path.dirname(seed.root), 'latexmk.log')), seedLog);
     const text = (pdf: string) => pdfText(pdf);
@@ -174,18 +240,19 @@ test('chapter comparisons reuse yesterday’s exact seed without compiling the f
     assert.equal(oldText.match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1], 'both comparison sides use the same current date');
     assert.notEqual(text(seed.pdf).match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1], 'the seed’s old date does not leak into the displayed comparison');
 
-    // Ordinary PDF requests still update today, and forced rebuilds still
-    // work. Neither is allowed to change a cached baseline in place.
+    // Ordinary PDF requests also retain the cached date. Only a forced
+    // rebuild refreshes it, without changing the cached baseline in place.
     const full = await builder.build(before);
-    assert.notEqual(full.key, seed.key);
+    assert.equal(full.key, seed.key);
     assert.match(text(full.pdf), /Other chapter\./);
-    assert.equal(text(full.pdf).match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1]);
+    assert.equal(text(full.pdf).match(/Date: ([^.]+)\./)?.[1], text(seed.pdf).match(/Date: ([^.]+)\./)?.[1]);
     const forced = await builder.build(before, ['full'], null, { force: true });
     assert.notEqual(forced.key, full.key);
+    assert.equal(text(forced.pdf).match(/Date: ([^.]+)\./)?.[1], revisedText.match(/Date: ([^.]+)\./)?.[1]);
 
     // Missing chapter auxiliaries cannot masquerade as a usable seed just
     // because the corresponding PDF still exists, including today's cache.
-    for (const built of [seed, full, forced]) fs.rmSync(path.join(path.dirname(built.pdf), 'chapters/b.aux'));
+    for (const pdf of new Set([seed.pdf, full.pdf, forced.pdf])) fs.rmSync(path.join(path.dirname(pdf), 'chapters/b.aux'));
     const repaired = await builder.buildSeed(before);
     assert.ok(![seed.key, full.key, forced.key].includes(repaired.key));
     assert.ok(fs.existsSync(path.join(path.dirname(repaired.pdf), 'chapters/b.aux')));
@@ -198,6 +265,120 @@ test('chapter comparisons reuse yesterday’s exact seed without compiling the f
   } finally {
     t.mock.timers.reset();
     if (epoch === undefined) delete process.env.SOURCE_DATE_EPOCH; else process.env.SOURCE_DATE_EPOCH = epoch;
+    f.close();
+  }
+});
+
+for (const entry of ['task', 'uncommitted']) test(`${entry} full comparisons pin both dates across midnight without replacing ordinary preview caches`, { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async t => {
+  const f = fixture(), epoch = process.env.SOURCE_DATE_EPOCH;
+  delete process.env.SOURCE_DATE_EPOCH;
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 6, 12) });
+  let app: App | undefined;
+  try {
+    fs.writeFileSync(path.join(f.root, 'main.tex'), paper('Original wording. Date: \\today.'));
+    const builder = new Builder(loadProject(f.root), f.repo);
+    await builder.build(await workingTree(f.root));
+    t.mock.timers.setTime(new Date(2026, 10, 7, 23, 59).getTime());
+    fs.writeFileSync(path.join(f.root, 'materials/notes.txt'), 'Not a TeX input.\n');
+    const before = await workingTree(f.root), preview = await builder.build(before);
+    assert.equal(runs(path.dirname(preview.root)), 0);
+    assert.match(pdfText(preview.pdf), /November 6, 2026/);
+    f.repo.run(['add', '-A']);
+    f.repo.run(['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', 'Fixture']);
+    app = entry === 'task' ? new App(f.root) : undefined;
+    const task = app?.tasks.create('dates');
+    fs.writeFileSync(path.join(task?.worktree ?? f.root, 'main.tex'), paper('Revised wording. Date: \\today.'));
+    const compile = Builder.prototype.build, dates: string[] = [], completed: BuildInfo[] = [];
+    t.mock.method(Builder.prototype, 'build', function (this: Builder, ...args: Parameters<Builder['build']>) {
+      const date = args[3]?.date;
+      if (date) {
+        dates.push(date.SOURCE_DATE_EPOCH);
+        if (dates.length === 1) t.mock.timers.setTime(new Date(2026, 10, 8, 0, 1).getTime());
+      }
+      return compile.apply(this, args).then(built => { if (date) completed.push(built); return built; });
+    });
+    if (app && task) {
+      const job = app.publisher.submit(task.name, undefined, true);
+      await app.publisher.join();
+      assert.equal(app.publisher.job(job.id).status, 'done', JSON.stringify(app.publisher.job(job.id).result));
+    } else {
+      const changes = new Changes(path.join(f.base, 'changes'));
+      changes.indirectChanges = () => true;
+      await changes.state('paper', f.root, 'csrf');
+      while (changes.busyForUpdate) await new Promise(resolve => setTimeout(resolve, 25));
+      const state = await changes.state('paper', f.root, 'csrf');
+      assert.equal(state.state, 'reviewing', JSON.stringify(state.job));
+    }
+    assert.ok(dates.length >= 2);
+    assert.equal(new Set(dates).size, 1, 'Baseline, revision and any variants share one date');
+    assert.ok(completed.length >= 2);
+    for (const built of completed) {
+      assert.match(pdfText(built.pdf), /November 7, 2026/);
+    }
+    assert.equal((await builder.build(before)).key, preview.key, 'The ordinary preview remains cached across days');
+  } finally {
+    await app?.close();
+    t.mock.timers.reset();
+    if (epoch === undefined) delete process.env.SOURCE_DATE_EPOCH; else process.env.SOURCE_DATE_EPOCH = epoch;
+    f.close();
+  }
+});
+
+test('manual refresh pointers survive recent eviction, concurrent refreshes and output pruning', { skip: process.platform === 'win32' && 'uses a POSIX compiler stub', timeout: 180000 }, async () => {
+  const f = fixture(), previousPath = process.env.PATH, previousMarker = process.env.PAPILOT_CACHE_MARKER;
+  const bin = path.join(f.base, 'bin'), marker = path.join(f.base, 'marker');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX cache test"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'latexmk'), '#!/bin/sh\nmkdir -p build\nif [ -e "$PAPILOT_CACHE_MARKER.fail" ]; then exit 1; fi\ncat main.tex "$PAPILOT_CACHE_MARKER" > build/main.pdf\n', { mode: 0o755 });
+  process.env.PATH = `${bin}${path.delimiter}${previousPath}`;
+  process.env.PAPILOT_CACHE_MARKER = marker;
+  try {
+    const snapshot = (source: string) => {
+      fs.writeFileSync(path.join(f.root, 'main.tex'), source + '\n');
+      f.repo.run(['add', '-A']);
+      return f.repo.text(['write-tree']);
+    };
+    const rev = snapshot('Source A');
+    const project = loadProject(f.root), builder = new Builder(project, f.repo);
+    fs.writeFileSync(marker, 'original');
+    const first = await builder.build(rev);
+    fs.writeFileSync(marker, 'refreshed');
+    const refreshed = await builder.build(rev, ['full'], null, { force: true });
+    for (let i = 0; i < 16; i++) await builder.build(snapshot('Source ' + i));
+    const recent = JSON.parse(fs.readFileSync(path.join(builder.cache, 'recent.json'), 'utf8')) as { key: string }[];
+    assert.ok(!recent.some(entry => entry.key === refreshed.key));
+    assert.equal((await new Builder(project, f.repo).build(rev)).key, refreshed.key);
+
+    const concurrent = await Promise.all([builder.build(rev, ['full'], null, { force: true }), new Builder(project, f.repo).build(rev, ['full'], null, { force: true })]);
+    const preferred = await builder.build(rev);
+    assert.ok(concurrent.some(built => built.key === preferred.key));
+    fs.writeFileSync(marker + '.fail', '');
+    await assert.rejects(builder.build(rev, ['full'], null, { force: true }), /LaTeX failed/);
+    fs.rmSync(marker + '.fail');
+    assert.equal((await builder.build(rev)).key, preferred.key, 'A failed refresh does not replace a successful one');
+
+    // Evict the refresh from the protected recent entries, then let prune
+    // remove it while an older review keeps the superseded original PDF.
+    await builder.build(snapshot('Other newest 1'));
+    await builder.build(snapshot('Other newest 2'));
+    for (const built of concurrent) fs.utimesSync(path.dirname(built.root), new Date(0), new Date(0));
+    await builder.prune(new Set([first.key]), 0);
+    assert.ok(!fs.existsSync(preferred.pdf));
+    assert.ok(fs.existsSync(first.pdf));
+    fs.writeFileSync(marker, 'rebuilt after pruning');
+    const rebuilt = await new Builder(project, f.repo).build(rev);
+    assert.notEqual(rebuilt.key, first.key);
+    assert.match(fs.readFileSync(rebuilt.pdf, 'utf8'), /rebuilt after pruning/);
+    assert.match(fs.readFileSync(first.pdf, 'utf8'), /original/);
+    assert.equal((await builder.build(rev)).key, rebuilt.key);
+
+    fs.rmSync(path.dirname(first.root), { recursive: true });
+    fs.rmSync(path.dirname(rebuilt.root), { recursive: true });
+    await builder.prune(new Set(), 0);
+    assert.ok(!fs.existsSync(path.join(builder.cache, first.key + '.preferred.json')), 'Orphaned pointers are cleaned up');
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    if (previousMarker === undefined) delete process.env.PAPILOT_CACHE_MARKER; else process.env.PAPILOT_CACHE_MARKER = previousMarker;
     f.close();
   }
 });

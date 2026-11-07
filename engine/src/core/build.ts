@@ -171,7 +171,7 @@ const SAVED = /^Papilot: pass (\d+) output saved/m, NEXT = /^Run number \d+ of r
 export interface PassPreview { pass: number; pdf: string; root: string; cwd: string }
 // Completed builds kept per set of targets, as candidates to continue from.
 const RECENT = 16;
-interface Recent { key: string; context: string; date: unknown; tree?: string }
+interface Recent { key: string; context: string; date: unknown; tree?: string; dated?: boolean }
 const hash = (value: string | Buffer) =>
   createHash("sha256").update(value).digest("hex");
 export const includes = (text: string) =>
@@ -278,10 +278,9 @@ export function warnings(text: string) {
     ),
   ].sort();
 }
-// The date every build of a day prints, so that a build kept from an earlier
-// day differs from today's in its text alone, not in \today. TeX reads it
-// from SOURCE_DATE_EPOCH; noon UTC of the local date shows the local date in
-// every time zone. A SOURCE_DATE_EPOCH set by the user is kept as it is.
+// The date used when TeX actually runs, not an expiry date for cached PDFs.
+// Noon UTC of the local date shows the local date in every time zone.
+// A SOURCE_DATE_EPOCH set by the user is kept as it is.
 export function buildDate(now = new Date(), env = process.env) {
   return env.SOURCE_DATE_EPOCH
     ? { SOURCE_DATE_EPOCH: env.SOURCE_DATE_EPOCH }
@@ -363,7 +362,8 @@ export class Builder {
     try { version = await commandVersion(this.project.engine); }
     catch { return this.build(rev, ["full"], null, options); }
     const tree = await this.repo.treeIdAsync(rev, this.project.source_dir),
-      context = hash(JSON.stringify([signature(this.project), version]));
+      fixedDate = process.env.SOURCE_DATE_EPOCH ? buildDate() : null,
+      context = hash(JSON.stringify([signature(this.project), version, ...(fixedDate ? [fixedDate] : [])]));
     let incomplete = false;
     for (const entry of this.recent(["full"])) {
       if (entry.context !== context || (entry.tree && entry.tree !== tree)
@@ -394,7 +394,7 @@ export class Builder {
     rev: string,
     targets = ["full"],
     seed: BuildInfo | null = null,
-    options: { force?: boolean; progress?: (progress: BuildProgress) => void; priority?: BuildPriority; pass?: (preview: PassPreview) => void } = {},
+    options: { force?: boolean; progress?: (progress: BuildProgress) => void; priority?: BuildPriority; pass?: (preview: PassPreview) => void; date?: ReturnType<typeof buildDate> } = {},
   ): Promise<BuildInfo> {
     const p = this.project,
       partial = JSON.stringify(targets) !== '["full"]',
@@ -412,22 +412,26 @@ export class Builder {
       );
     }
     const tree = await this.repo.treeIdAsync(rev, p.source_dir),
-      date = buildDate(),
-      context = hash(JSON.stringify([signature(p), version])),
-      key = hash(
+      date = options.date ?? buildDate(),
+      // Ordinary previews do not expire each day. Comparisons need one date
+      // for both sides, including a previously cached chapter baseline.
+      fixedDate = process.env.SOURCE_DATE_EPOCH ? buildDate() : null,
+      dated = Boolean(options.date || partial || fixedDate),
+      context = hash(JSON.stringify([signature(p), version, ...(fixedDate ? [fixedDate] : [])])),
+      cacheKey = hash(
         JSON.stringify([
           tree,
           targets,
           seed?.key ?? null,
           signature(p),
           version,
-          date,
+          dated ? date : null,
           SELF,
-          // Manual recompilation gets a fresh output directory. Other previews
-          // and review rounds may still be reading the previous cached PDF.
-          ...(options.force ? [randomUUID()] : []),
         ]),
       ).slice(0, 32),
+      // Manual recompilation gets a fresh output directory. Other previews
+      // and review rounds may still be reading the previous cached PDF.
+      key = options.force ? hash(JSON.stringify([cacheKey, randomUUID()])).slice(0, 32) : cacheKey,
       folder = path.join(this.cache, key);
     // Someone now waits for a build of this key that may already be running,
     // and sees its passes from now on, starting with the latest one.
@@ -450,11 +454,32 @@ export class Builder {
         const result = await ongoing.catch(() => null);
         if (result) return result;
       }
-      const attempt = (async () =>
-        (await this.finished(folder)) ??
-        withLock(path.join(this.cache, key + ".lock"), async () =>
-          (await this.finished(folder)) ?? this.compileOnce(rev, tree, key, context, targets, seed, date, partial, options),
-        ))();
+      const attempt = (async () => {
+        // A refresh has a durable pointer independent of the bounded recent
+        // list. If its output was pruned, rebuild rather than resurrecting
+        // the superseded PDF, which may still belong to an older review.
+        if (!options.force) {
+          const preferred = this.preferred(cacheKey);
+          if (preferred) {
+            const refreshed = await this.finished(path.join(this.cache, preferred));
+            if (refreshed) return refreshed;
+            // Recovery has fresh immutable output, but retains this request's
+            // stable lock and waiters so other processes share it and a later
+            // foreground reader can promote it and receive progress/passes.
+            return withLock(path.join(this.cache, key + ".lock"), async () => {
+              const latest = this.preferred(cacheKey), recovered = latest && await this.finished(path.join(this.cache, latest));
+              if (recovered) return recovered;
+              const recovery = hash(JSON.stringify([cacheKey, randomUUID()])).slice(0, 32);
+              return withLock(path.join(this.cache, recovery + ".lock"), () =>
+                this.compileOnce(rev, tree, recovery, cacheKey, context, targets, seed, date, dated, partial, { ...options, force: true }, key));
+            });
+          }
+        }
+        return (await this.finished(folder)) ??
+          withLock(path.join(this.cache, key + ".lock"), async () =>
+            (await this.finished(folder)) ?? this.compileOnce(rev, tree, key, cacheKey, context, targets, seed, date, dated, partial, options),
+          );
+      })();
       building.set(key, attempt);
       try {
         return await attempt;
@@ -470,12 +495,15 @@ export class Builder {
     rev: string,
     tree: string,
     key: string,
+    cacheKey: string,
     context: string,
     targets: string[],
     seed: BuildInfo | null,
     date: ReturnType<typeof buildDate>,
+    dated: boolean,
     partial: boolean,
     options: { force?: boolean; progress?: (progress: BuildProgress) => void },
+    requestKey = key,
   ) {
     // A build continues from the completed one with the same targets whose
     // sources differ least from this one, or a full build from the author's
@@ -484,30 +512,41 @@ export class Builder {
     // only as often as the edit requires. Manual recompilation starts
     // clean, and so does a retry when leftover state broke a build.
     const start = options.force ? null : (await this.closest(context, targets, tree)) ?? (partial ? null : "author");
-    const waiters = [...(waiting.get(key) ?? [])],
+    const waiters = [...(waiting.get(requestKey) ?? [])],
       priority = waiters.reduce<BuildPriority>((top, w) => (RANK[w.priority] > RANK[top] ? w.priority : top), "background");
-    const run: Active = { key, priority, paused: false, watchers: new Set(waiters.flatMap((w) => (w.pass ? [w.pass] : []))) };
+    const run: Active = { key: requestKey, priority, paused: false, watchers: new Set(waiters.flatMap((w) => (w.pass ? [w.pass] : []))) };
     active.add(run);
     // Keep the latest update even when nobody initially requested progress:
     // another task or PDF view can join this shared compilation later.
     const progress = (value: BuildProgress) => {
       run.progress = value;
-      for (const waiter of waiting.get(key) ?? []) waiter.progress?.(value);
+      for (const waiter of waiting.get(requestKey) ?? []) waiter.progress?.(value);
     };
     let result: BuildInfo;
     try {
       try {
-        result = await this.compile(rev, tree, key, targets, seed, date, start, progress, run);
+        result = await this.compile(rev, tree, key, targets, seed, date, dated, start, progress, run);
       } catch (error) {
         if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
-        result = await this.compile(rev, tree, key, targets, seed, date, null, progress, run);
+        result = await this.compile(rev, tree, key, targets, seed, date, dated, null, progress, run);
       }
     } finally {
       active.delete(run);
       schedule();
     }
-    await this.remember(targets, { key, context, date: date.SOURCE_DATE_EPOCH, tree });
+    await this.remember(targets, { key, context, date: date.SOURCE_DATE_EPOCH, tree, dated });
+    if (options.force) {
+      const preferred = this.preferredFile(cacheKey);
+      await withLock(preferred, () => writeJsonAsync(preferred, { key }));
+    }
     return result;
+  }
+  private preferredFile(key: string) {
+    return path.join(this.cache, key + ".preferred.json");
+  }
+  private preferred(key: string): string | null {
+    const value = readJson<{ key?: string } | null>(this.preferredFile(key), null);
+    return typeof value?.key === "string" && /^[0-9a-f]{32}$/.test(value.key) ? value.key : null;
   }
   // A completed build in this folder, whose PDF is still there.
   private async finished(folder: string) {
@@ -542,7 +581,7 @@ export class Builder {
   private async remember(targets: string[], entry: Recent) {
     const entries = [entry, ...this.recent(targets).filter((r) => r.key !== entry.key)].slice(0, RECENT);
     await writeJsonAsync(this.recentFile(targets), entries);
-    await writeJsonAsync(this.latestFile(targets), { key: entry.key, context: entry.context, date: entry.date });
+    await writeJsonAsync(this.latestFile(targets), entry);
   }
   // Of the recent builds that can be continued, the one whose sources differ
   // in the fewest files from `tree`, preferring the newer: after a review or a
@@ -555,7 +594,9 @@ export class Builder {
         if (JSON.stringify(info.targets) !== JSON.stringify(targets)) return null;
         await Promise.all([fs.promises.access(info.pdf), fs.promises.access(info.root)]);
         const changed = info.tree === tree ? 0 : (await this.repo.runAsync(["diff-tree", "-r", "--name-only", "-z", info.tree, tree])).toString().split("\0").filter(Boolean).length;
-        return { info, date: r.date, changed };
+        // An ordinary preview may have kept an older PDF without running TeX.
+        // Its request date does not prove which date its pages actually show.
+        return { info, date: r.dated ? r.date : null, changed };
       } catch {
         return null;
       }
@@ -571,6 +612,7 @@ export class Builder {
     targets: string[],
     seed: BuildInfo | null,
     date: ReturnType<typeof buildDate>,
+    dated: boolean,
     start: { info: BuildInfo; date: unknown } | "author" | null,
     progress?: (progress: BuildProgress) => void,
     scheduled?: Active,
@@ -592,9 +634,9 @@ export class Builder {
     await fs.promises.mkdir(out, { recursive: true });
     const included = includes(await fs.promises.readFile(path.join(cwd, main), "utf8"));
     await Promise.all(included.map((target) => fs.promises.mkdir(path.join(out, path.dirname(target)), { recursive: true })));
-    // The PDF, SyncTeX data and log carry over only within a day, so that
-    // \today stays current; latexmk then skips TeX when no input changed.
-    const reused = base !== null && start !== "author" && start?.date === date.SOURCE_DATE_EPOCH;
+    // Preview outputs carry across days. A dated comparison can still use
+    // older auxiliary state, but TeX must refresh the date on its pages.
+    const reused = base !== null && (!dated || (start !== "author" && start?.date === date.SOURCE_DATE_EPOCH));
     if (base) {
       const previous = path.dirname(base.pdf);
       await Promise.all((await filesIn(previous))
@@ -792,6 +834,18 @@ export class Builder {
       if (!stat || now() - stat.mtimeMs / 1000 <= maxAge) continue;
       await withLock(path.join(this.cache, entry.name + ".lock"), () => fs.promises.rm(folder, { recursive: true, force: true }));
       await fs.promises.rm(path.join(this.cache, entry.name + ".lock"), { force: true });
+    }
+    // Keep a missing refresh's pointer while its superseded output exists:
+    // readers must rebuild, not silently fall back to that older PDF.
+    for (const entry of entries) {
+      const key = /^([0-9a-f]{32})\.preferred\.json$/.exec(entry.name)?.[1];
+      if (!key) continue;
+      const file = this.preferredFile(key);
+      await withLock(file, async () => {
+        const preferred = this.preferred(key);
+        if (!fs.existsSync(path.join(this.cache, key)) && (!preferred || !fs.existsSync(path.join(this.cache, preferred))))
+          await fs.promises.rm(file, { force: true });
+      });
     }
   }
 }

@@ -28,10 +28,11 @@ const conflict = (message: string) => Object.assign(new Error(message), { status
 
 async function engine() {
   const load = (file: string) => import(pathToFileURL(path.join(ENGINE, file)).href);
-  const [{ Builder, BuildError }, { Repo }, { loadProject, isFigure }, { diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf }, { opcodes }, { render, more }] = await Promise.all(
+  const [{ Builder, BuildError, buildDate }, { Repo }, { loadProject, isFigure }, { diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf }, { opcodes }, { render, more }] = await Promise.all(
     ['src/core/build.ts', 'src/core/git.ts', 'src/core/config.ts', 'src/core/changes.ts', 'src/core/diff.ts', 'src/core/publish.ts'].map(load));
-  return { Builder, BuildError, Repo, loadProject, isFigure, diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf, opcodes, render, more } as {
+  return { Builder, BuildError, buildDate, Repo, loadProject, isFigure, diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf, opcodes, render, more } as {
     Builder: any; BuildError: any; Repo: any; loadProject: (root: string) => any; isFigure: (project: any, file: string) => boolean;
+    buildDate: () => { SOURCE_DATE_EPOCH: string; FORCE_SOURCE_DATE?: string };
     diffUnits: (repo: any, before: string, after: string, isFigure: (file: string) => boolean) => Unit[];
     diffUnitsAsync: (repo: any, before: string, after: string, isFigure: (file: string) => boolean) => Promise<Unit[]>;
     revertUnits: (old: Buffer | null, next: Buffer | null, units: Unit[]) => Buffer | null;
@@ -141,15 +142,15 @@ export class Changes {
     const job: Job = { key, phase: 'build', status: 'running', created: Date.now() };
     comparison.job = job;
     void (async () => {
-      const { Builder, BuildError, Repo, loadProject, withUnits, render } = await engine();
+      const { Builder, BuildError, buildDate, Repo, loadProject, withUnits, render } = await engine();
       const project = loadProject(root), repo = new Repo(root), number = comparison.next++;
       const units = await this.units(projectId, root, snapshot), folder = path.join(this.dir, projectId, String(number));
       let warnings: string[] = [], pdf: string | undefined;
       fs.rmSync(folder, { recursive: true, force: true }); fs.mkdirSync(folder, { recursive: true });
       if (units.length) {
-        const builder = new Builder(project, repo);
+        const builder = new Builder(project, repo), date = buildDate();
         const build = async (tree: string, what: string) => {
-          try { return await builder.build(tree, ['full']); }
+          try { return await builder.build(tree, ['full'], null, { date }); }
           catch (error) { throw error instanceof BuildError ? Object.assign(new Error(what), { details: (error as any).details, log: (error as any).log }) : error; }
         };
         // The two versions compile at once; a failure is reported once both settle.
@@ -161,7 +162,7 @@ export class Changes {
         // some of the changes when it must tell which of them changes the PDF
         // elsewhere, such as a macro's uses.
         await render(folder, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units, indirect },
-          indirect ? (subset: Unit[]) => builder.build(withUnits(repo, snapshot.before!, snapshot.after, subset), ['full']) : undefined);
+          indirect ? (subset: Unit[]) => builder.build(withUnits(repo, snapshot.before!, snapshot.after, subset), ['full'], null, { date }) : undefined);
         warnings = next.warnings.filter((warning: string) => !old.warnings.includes(warning));
         pdf = next.pdf;
       } else fs.writeFileSync(path.join(folder, 'round.json'), JSON.stringify({ units: {}, sections: [], loose: [] }));
