@@ -113,6 +113,11 @@ try {
           return box.width >= 28 && box.height >= 28 && box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
         });
       })).toBe(true);
+      await expect.poll(() => frame.locator('.change.current .change-number').evaluate(number => {
+        const box = number.getBoundingClientRect();
+        return box.width >= 14 && number.scrollWidth <= number.clientWidth;
+      })).toBe(true);
+      if (width === 320) await frame.locator('.change.current .change-head').screenshot({ path: 'test-results/review-toolbar-narrow.png' });
     }
   };
   await checkWidths();

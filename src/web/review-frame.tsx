@@ -18,6 +18,9 @@ import { EFFECTS_EVENT, loadIndirectChanges, useIndirectChanges } from './effect
 import { useDefaultReviewView, VIEW_EVENT, type ReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
 import { readPlace, savePlace } from './places.ts';
+import { PdfContents, PdfPageControls, PdfFind, PdfFindButton } from './pdf-controls.tsx';
+import { PDF_READER_COMMAND, PDF_READER_STATE, type PdfReaderCommand, type PdfReaderState } from '../../engine/src/web/pdf-reader.ts';
+import { VIEW_CHOSEN_EVENT } from '../../engine/src/web/view-preferences.ts';
 
 // The viewer reads the interface language from its address.
 export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `${isPlayground ? import.meta.env.BASE_URL + 'src/web/playground/review.html' : `/review/${task.projectId}/`}?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
@@ -137,10 +140,10 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .bar .ghost.undo{flex-shrink:0;white-space:nowrap}
     /* A single compact row: location yields space to the change's controls. */
     .change-head{flex-wrap:nowrap;align-items:center;gap:4px;padding:4px 8px;min-height:36px}
-    :root:not([data-papilot-phone]) .change-head{container:change-tools/inline-size}
+    :root:not([data-papilot-phone]) .change{container:change-tools/inline-size}
     .change-head .dock,.change-head .actions{display:contents}
     .change-head .actions>.nav:first-child{order:1}.change-head .change-number{order:2}.change-head .actions>.nav:not(:first-child){order:3}
-    .change-head .change-number{min-width:0;overflow:hidden;text-overflow:ellipsis}
+    .change-head .change-number{flex:0 0 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
     .change-head .change-where{order:4;flex:1 1 0;min-width:0;margin-left:4px;color:var(--text-3);font-size:10px}
     .change-head .change-kind,.change-head .badge{order:5;font-size:11px;color:var(--text-3)}
     .change-head .change-kind,.change-head .badge{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
@@ -154,6 +157,11 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     @container change-tools (max-width:360px){
       .change-number-full{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
       .change-number-short{display:inline}
+    }
+    @container change-tools (max-width:280px){
+      .change-head{gap:1px;padding-inline:2px}
+      .change-head .change-where,.change-head .change-kind,.change-head .badge{display:none}
+      .change-head .change-number{flex:1 1 auto;font-size:12px}
     }
     #paper{--paper-top:14px;padding-top:14px}
     .review-body>#paper{padding-right:34px;overscroll-behavior:contain}
@@ -225,6 +233,14 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     :root[data-papilot-toolbar-stacked] .bar{padding:calc(var(--papilot-bar-height,44px) + 4px) 8px 4px;min-height:calc(var(--papilot-bar-height,44px) + 44px)}
     :root[data-papilot-toolbar-stacked] .bar .identity{display:none}
     :root[data-papilot-toolbar-stacked] .bar .bar-end{margin-left:auto}
+    /* The common PDF toolbar owns the first row; review decisions keep a
+       separate row below it. Full pages use the manuscript's fit and margins. */
+    :root[data-papilot-reader] .bar{margin-top:var(--papilot-bar-height,46px);padding:0 8px;min-height:44px}
+    :root[data-papilot-reader] .review-body>#paper{--paper-top:20px;padding:20px 0 56px}
+    :root[data-papilot-reader] .paper-page{margin-bottom:20px;border-radius:2px;box-shadow:0 1px 2px rgb(0 0 0/.06),0 8px 24px rgb(0 0 0/.08)}
+    :root[data-papilot-reader] .paper{--pdf-crop-scale:1;--pdf-crop-shift:0}
+    :root[data-papilot-reader][data-papilot-phone] .review-body>#paper{--paper-top:10px;padding:10px 0 132px}
+    :root[data-papilot-reader][data-papilot-phone] .paper-page{margin-bottom:10px}
     @container review-bar (max-width:340px){.bar .batch-label{display:none}.bar .accept-all,.bar .reject-all{padding:0 8px}.bar .bar-end{gap:4px}}
     :root{--icon-history:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12a9 9 0 1 0 2.6-6.4L3 8'/><path d='M3 3v5h5M12 7v5l3 2'/></svg>")}
   `;
@@ -287,6 +303,45 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   const linkedChange = quoteFocus?.note.stop ?? (linkedRound === task?.review?.round ? noteLinks?.focus?.change.stop : undefined);
   const focusSequence = quoteFocus ? `quote:${quoteFocus.sequence}` : task && noteLinks?.focus ? `result:${noteLinks.focus.sequence}` : undefined;
   const [document, setDocument] = useState<Document | null>(null);
+  const [reader, setReader] = useState<PdfReaderState | null>(null);
+  const [findOpen, setFindOpen] = useState(false), [query, setQuery] = useState('');
+  const findInput = useRef<HTMLInputElement>(null);
+  const currentFind = useRef({ open: findOpen, query }); currentFind.current = { open: findOpen, query };
+  const readingPdf = fullPaper && view === 'paper';
+  const readerCommand = (detail: PdfReaderCommand) => document?.defaultView?.dispatchEvent(new CustomEvent(PDF_READER_COMMAND, { detail }));
+  const closeFind = () => { setFindOpen(false); setQuery(''); readerCommand({ type: 'closeFind' }); };
+  useEffect(() => { if (!readingPdf) { setFindOpen(false); setQuery(''); } }, [readingPdf]);
+  useEffect(() => {
+    if (!readingPdf) return;
+    const key = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.defaultPrevented) return;
+      if (event.key.toLowerCase() === 'f') {
+        event.preventDefault(); if (findInput.current) findInput.current.select(); else setFindOpen(true);
+      } else if (event.view === window) {
+        if (event.key === '0') { event.preventDefault(); readerCommand({ type: 'zoom', value: 'page-width' }); }
+        else if (['+', '=', '-'].includes(event.key)) { event.preventDefault(); readerCommand({ type: 'zoomBy', factor: event.key === '-' ? 1 / 1.1 : 1.1 }); }
+      }
+    };
+    window.addEventListener('keydown', key); document?.defaultView?.addEventListener('keydown', key);
+    return () => { window.removeEventListener('keydown', key); document?.defaultView?.removeEventListener('keydown', key); };
+  }, [document, readingPdf]);
+  useEffect(() => {
+    setReader(null);
+    const target = document?.defaultView;
+    if (!target) return;
+    let active = false;
+    const update = (event: Event) => {
+      const next = (event as CustomEvent<PdfReaderState | null>).detail, starting = Boolean(next) && !active;
+      active = Boolean(next); setReader(next);
+      // A new round or compilation pass replaces the search controller while
+      // the host's search field stays open. Replay its query once per reader.
+      const find = currentFind.current;
+      if (starting && find.open && find.query) target.dispatchEvent(new CustomEvent(PDF_READER_COMMAND, { detail: { type: 'find', query: find.query, again: false, previous: false } }));
+    };
+    target.addEventListener(PDF_READER_STATE, update);
+    target.dispatchEvent(new CustomEvent(PDF_READER_COMMAND, { detail: { type: 'state' } }));
+    return () => target.removeEventListener(PDF_READER_STATE, update);
+  }, [document]);
   const [railSlot, setRailSlot] = useState<HTMLDivElement | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const toolbar = useRef<HTMLDivElement>(null), leading = useRef<HTMLDivElement>(null), hostBar = useRef<HTMLDivElement>(null);
@@ -313,6 +368,13 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   useEffect(() => {
     document?.defaultView?.dispatchEvent(new CustomEvent(VIEW_EVENT, { detail: view }));
   }, [document, view]);
+  useEffect(() => {
+    const target = document?.defaultView;
+    if (!target) return;
+    const chosen = (event: Event) => chooseView((event as CustomEvent).detail === 'paper' ? 'paper' : 'changes');
+    target.addEventListener(VIEW_CHOSEN_EVENT, chosen);
+    return () => target.removeEventListener(VIEW_CHOSEN_EVENT, chosen);
+  }, [document, viewPlace]);
   // The review marks when its round can be shown in the whole paper.
   useEffect(() => {
     if (!document) { setFullPaper(false); return; }
@@ -347,13 +409,14 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   useEffect(() => {
     if (!document || !frame.current || !hostBar.current) return;
     const root = document.documentElement, bar = document.querySelector<HTMLElement>('.bar');
-    const phone = window.matchMedia('(max-width: 520px)');
+    const phone = window.matchMedia('(max-width: 680px)');
     // React clears refs on unmount before this effect's cleanup runs, and a
     // resize can be delivered in between; keep the elements this effect measures.
     const box = frame.current, host = hostBar.current;
     const sync = () => {
       if (!box.isConnected || !host.isConnected) return;
       root.toggleAttribute('data-papilot-phone', phone.matches);
+      root.toggleAttribute('data-papilot-reader', readingPdf);
       root.style.setProperty('--papilot-tools', `${reserve}px`);
       root.style.setProperty('--papilot-rail', `${railSlot?.offsetWidth || 0}px`);
       root.style.setProperty('--papilot-lead', `${leadWidth}px`);
@@ -363,7 +426,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
       if (button) root.style.setProperty('--papilot-button-size', `${button.offsetWidth}px`);
       if (bar) {
         root.style.setProperty('--papilot-review-bar-height', `${bar.offsetHeight}px`);
-        railSlot?.style.setProperty('top', `${bar.offsetHeight}px`);
+        railSlot?.style.setProperty('top', `${bar.offsetHeight + (readingPdf ? host.offsetHeight : 0)}px`);
       }
     };
     const observer = new ResizeObserver(sync);
@@ -372,7 +435,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
     if (railSlot) observer.observe(railSlot);
     phone.addEventListener('change', sync); sync();
     return () => { observer.disconnect(); phone.removeEventListener('change', sync); };
-  }, [reserve, leadWidth, document, railSlot]);
+  }, [reserve, leadWidth, document, railSlot, readingPdf]);
   function loaded() {
     observer.current?.disconnect();
     try {
@@ -458,9 +521,12 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   return <div className={'review-viewport' + (ready ? '' : ' review-pending')} aria-busy={!ready}>
     <iframe ref={frame} key={`${attempt}:${shown}:${linkedRound || ''}:${focusSequence || ''}`} title={task ? t('{title} PDF change review', { title: task.title }) : t('Uncommitted changes in the PDF')} src={task ? reviewUrl(task, linkedRound, linkedChange) : changesUrl(changesOf!)} onLoad={loaded} onError={() => setPhase('error')} className="review-frame" aria-hidden={!ready} tabIndex={ready ? 0 : -1}/>
     {task && ready && <ReviewNoteConnections doc={document} round={linkedRound || task.review?.round || 0}/>}
-    <div ref={hostBar} className="review-host-bar">
-      {(lead || modes) && <div ref={leading} className="review-lead">{lead}{modes}</div>}
+    <div ref={hostBar} className={'review-host-bar' + (readingPdf ? ' pdf-toolbar' : '')} role={readingPdf ? 'toolbar' : undefined} aria-label={readingPdf ? t('PDF controls') : undefined}>
+      {(lead || modes) && <div ref={leading} className="review-lead">{lead}{modes}{readingPdf && <PdfContents outline={reader?.outline || []} section={reader?.section ?? -1} ready={Boolean(reader)} onSelect={item => readerCommand({ type: 'outline', index: reader!.outline.indexOf(item) })}/>}</div>}
+      {readingPdf && <><div className="pdf-toolbar-spacer"/><PdfPageControls page={reader?.page || 1} pages={reader?.pages || 0} zoom={reader?.zoom || { value: 'page-width', scale: 1 }} onPage={page => readerCommand({ type: 'page', page })} onZoom={value => readerCommand({ type: 'zoom', value })} onZoomBy={factor => readerCommand({ type: 'zoomBy', factor })}/></>}
+      {readingPdf && <PdfFindButton open={findOpen} onClick={() => findOpen ? closeFind() : setFindOpen(true)}/>}
       <div ref={toolbar} className="review-tools">{task && onComment && <ReviewNotes railSlot={railSlot} doc={ready ? document : null} task={task} onComment={onComment}/>}{tools}</div>
+      {readingPdf && findOpen && <PdfFind inputRef={findInput} query={query} matches={reader?.find || { current: 0, total: 0 }} notFound={reader?.find?.notFound || false} onQuery={value => { setQuery(value); readerCommand({ type: 'find', query: value, again: false, previous: false }); }} onNext={previous => readerCommand({ type: 'find', query, again: true, previous })} onClose={closeFind}/>}
     </div>
     {task && onComment && <div ref={setRailSlot} className="review-marking-rail"/>}
     {slot && completion ? createPortal(completion, slot) : null}

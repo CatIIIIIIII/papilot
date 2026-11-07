@@ -25,7 +25,7 @@ import { placeable, type PlacedChange } from "./paper.ts";
 // pdf.js loads only when the full paper is shown.
 const FullPaper = lazy(() => import("./FullPaper.tsx").then((module) => ({ default: module.FullPaper })));
 import { EFFECTS_EVENT, EFFECTS_STORAGE, readExpandedEffects } from "./effect-preferences.ts";
-import { readView, VIEW_EVENT, VIEW_STORAGE, type ReviewView } from "./view-preferences.ts";
+import { readView, VIEW_EVENT, VIEW_CHOSEN_EVENT, VIEW_STORAGE, type ReviewView } from "./view-preferences.ts";
 import { STATUS } from "./overview.tsx";
 import { language, locale, t, tn, withLanguage } from "./i18n.ts";
 import {
@@ -188,7 +188,7 @@ export function ReviewApp({
     returning = useRef<{ index: number; offset: number; paper: boolean } | null>(null),
     snapshot = useRef({ state, detail, busy, composer, current });
   // Where each review was left; a host's uncommitted changes are kept per paper.
-  const placeKey = `latex-review:${changes ? `changes:${location.pathname}` : task}`;
+  const placeKey = `latex-review:${location.pathname}:${changes ? 'changes' : task}`;
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   // The whole paper with the changes in place, or the changed sections only.
   // A host may fix the view in the address (Papilot's manuscript chooses its
@@ -497,6 +497,7 @@ export function ReviewApp({
     };
   }, [task, pinned, transport]);
   useEffect(() => {
+    if (paperView) return;
     if (detail && current >= 0)
       requestAnimationFrame(() => {
         const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${current}"]`);
@@ -1202,6 +1203,8 @@ export function ReviewApp({
   useEffect(() => {
     if (shownView.current === paperView) return;
     shownView.current = paperView;
+    // FullPaper restores its own reading position after its pages are sized.
+    if (paperView) return;
     requestAnimationFrame(() => {
       const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${snapshot.current.current}"]`);
       if (article) reveal(article);
@@ -1210,6 +1213,7 @@ export function ReviewApp({
   // The switch changes this review only; the default is a Papilot setting.
   function chooseView(next: ReviewView) {
     setView(next);
+    window.dispatchEvent(new CustomEvent(VIEW_CHOSEN_EVENT, { detail: next }));
   }
   let index = 0;
   return (
@@ -1601,12 +1605,16 @@ export function ReviewApp({
               <>
                 <Suspense fallback={<div className="paper-status" role="status"><div className="pulse" /></div>}>
                 <FullPaper
+                  key={`${placeKey}:pdf:${detail.round}:${detail.pdf}`}
                   url={detail.pdf!}
                   passes={detail.passes}
                   changes={placed}
                   render={(block, at) => change(block, at, true)}
                   scrollRoot={paper}
-                  onReady={() => {
+                  place={`${placeKey}:pdf:${detail.round}`}
+                  restorePlace={linkedChange < 0}
+                  onReady={restored => {
+                    if (restored) return;
                     const article = paper.current?.querySelector<HTMLElement>(
                       `[data-stop="${snapshot.current.current}"]`,
                     );

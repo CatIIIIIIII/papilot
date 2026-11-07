@@ -982,6 +982,8 @@ kbd {
 .paper-slice {
   position: absolute;
 }
+.paper-find-mark{position:absolute;z-index:1;background:rgb(255 210 0 / .35);pointer-events:none}
+.paper-find-mark.selected{background:rgb(255 150 0 / .55);outline:1px solid #b76b00}
 .paper-slice canvas {
   position: absolute;
   inset: 0;

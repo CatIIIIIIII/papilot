@@ -674,12 +674,14 @@ try {
   assert.equal(await page.locator('.topbar').count(), 0);
   assert.equal((await page.locator('.task-grid').boundingBox()).y, 0, 'The task fills the space freed by the header');
   assert.equal(await page.locator('.panel-heading').getByRole('button', { name: 'Delete task', exact: true }).count(), 0);
-  // The review's own tools are direct buttons beside the review toolbar, with no zoom box or menu.
+  // Review actions sit beside the reader controls; wide panes use the shared
+  // marking rail, while narrow panes expose the compact color picker.
   const reviewTools = page.locator('.review-tools');
   assert.equal(await reviewTools.getByRole('link', { name: 'Full PDF', exact: true }).getAttribute('href'), '/api/tasks/fixture-task-0001/pdf?round=1');
   assert.equal(await page.locator('.panel-tools').getByRole('link', { name: 'Open review in new tab', exact: true }).getAttribute('href'), '/review/fixture-paper/?task=p-fixture');
   assert.equal(await reviewTools.getByRole('button', { name: 'Regenerate PDF comparison', exact: true }).isDisabled(), false);
-  assert.equal(await reviewTools.getByRole('button', { name: 'Annotation group color', exact: true }).count(), 1);
+  await expect(page.locator('.review-marking-rail').getByRole('button', { name: 'Note', exact: true })).toBeVisible();
+  await expect(reviewTools.getByRole('button', { name: 'Annotation group color', exact: true, includeHidden: true })).toHaveCount(1);
   assert.equal(await reviewTools.getByRole('button', { name: 'Review options' }).count(), 0);
   // Menus open from the keyboard on the first item and return focus on Escape.
   const taskMenu = page.getByRole('button', { name: `Task actions for ${task.title}`, exact: true });
@@ -704,7 +706,8 @@ try {
   const pdfLink = page.locator('.manuscript-link');
   await expect(page.locator('.git-link')).toHaveAttribute('title', /main · 2 changed · ↑1/);
   await expect(page.locator('.git-link .count')).toHaveText('2');
-  // A previously saved percentage must not prevent the divider from fitting the PDF.
+  // A global zoom change does not replace this manuscript's saved zoom. A
+  // percentage chosen in this reader survives leaving and still fits on resize.
   await page.evaluate(() => localStorage.setItem('papilot:pdf-zoom', '0.95'));
   await pdfLink.click();
   await page.getByRole('heading', { name: 'Manuscript', exact: true }).waitFor();
@@ -716,7 +719,12 @@ try {
   const manuscriptDivider = page.getByRole('separator', { name: 'Resize manuscript panel' });
   const manuscriptSide = page.locator('.manuscript-side');
   const originalSideWidth = Math.round((await manuscriptSide.boundingBox()).width);
-  assert.equal(await selectedValue(page.getByRole('combobox', { name: 'Zoom', exact: true })), '0.95');
+  assert.equal(await selectedValue(page.getByRole('combobox', { name: 'Zoom', exact: true })), 'page-width');
+  await selectOption(page.getByRole('combobox', { name: 'Zoom', exact: true }), '1.25');
+  await page.getByRole('button', { name: /^Clarify the introduction/ }).click();
+  await pdfLink.click();
+  await page.locator('.textLayer span').filter({ hasText: /^Fixture ?$/ }).first().waitFor();
+  assert.equal(await selectedValue(page.getByRole('combobox', { name: 'Zoom', exact: true })), '1.25');
   const originalPdfWidth = await page.locator('.pdf-container').evaluate(box => box.clientWidth);
   await manuscriptDivider.focus(); await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(width => Math.round(document.querySelector('.manuscript-side').getBoundingClientRect().width) === width, originalSideWidth + 24);

@@ -5,6 +5,7 @@
 // frame; storage events bring a new default to reviews already open.
 export const VIEW_STORAGE = "latex-review:default-view";
 export const VIEW_EVENT = "latex-review:view-changed";
+export const VIEW_CHOSEN_EVENT = "latex-review:view-chosen";
 export type ReviewView = "paper" | "changes";
 export function readView(): ReviewView {
   try {

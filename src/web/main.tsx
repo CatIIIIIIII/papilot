@@ -987,19 +987,10 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
     : <button type="button" className="button ghost compact commit-staged" title={t('Commit what is staged')} onClick={() => setCommitting(true)}><Icon name="commit" size={14}/><span>{t('Commit…')}</span></button>);
   const [outline, setOutline] = useState<OutlineItem[]>([]), [section, setSection] = useState(-1);
   const switcher = <>{navigation}<ModeSwitch mode={mode} onMode={async value => { if (await closeReadingNotes()) setMode(value); }}/>
-    {mode === 'pdf' && <ActionMenu label={t('Contents')} className="pdf-contents-trigger" menuClassName="pdf-contents-menu" align="start" actions={outline.length ? outline.map((item, index) => ({
-      id: String(index), label: item.title, hint: String(item.page), indent: Math.min(item.level, 4), checked: index === section, select: () => goTo(item),
-    })) : [{ label: build?.key ? t('This PDF has no bookmarks.') : t('Contents will appear when the PDF is ready.'), disabled: true }]}>
-      <Icon name="list" size={16}/><span>{t('Contents')}</span><Icon name="chevronDown" size={12}/>
-    </ActionMenu>}
   </>;
   const numbered = notes.map((note, index) => ({ note, number: index + 1 }));
   const phone = () => window.matchMedia('(max-width: 680px)').matches;
   const side = view === 'pdf' ? 'task' : view;
-  function goTo(item: OutlineItem) {
-    if (phone()) setView('pdf');
-    requestAnimationFrame(() => pdf.current?.goTo(item));
-  }
   async function show(note: Annotation) {
     if (note.key !== build?.key || !await closeReadingNotes()) return;
     setMode('pdf');

@@ -234,6 +234,10 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .review-pending>.review-frame{visibility:hidden}
 .review-host-bar{position:absolute;z-index:3;inset:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;pointer-events:none}
 .review-host-bar>*{pointer-events:auto}
+.review-host-bar.pdf-toolbar{justify-content:flex-start;pointer-events:auto}
+.review-host-bar.pdf-toolbar .review-lead{min-height:0;padding:0;flex-wrap:wrap}
+.review-host-bar.pdf-toolbar .review-tools{min-height:0;margin-left:0;padding:0}
+.review-host-bar.pdf-toolbar .pdf-find{flex:0 0 100%;min-width:0}
 .review-tools{margin-left:auto;min-height:44px;max-width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px;padding:0 8px 0 0}
 .review-tools .icon-button{width:30px;height:30px}
 .review-tools [aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}

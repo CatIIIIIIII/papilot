@@ -98,6 +98,15 @@ try {
   await expect(page.locator('.message.assistant ol')).toHaveCount(0);
   await expect(page.locator('.ai-review-view .pdfViewer canvas').first()).toBeVisible();
   await expect(page.getByText('Review copy', { exact: true })).toBeVisible();
+  // Every PdfView, including a task's AI review copy, owns the same contents menu.
+  await page.getByRole('button', { name: 'Contents', exact: true }).click();
+  const contents = page.locator('.pdf-contents-menu [role="menuitemradio"]');
+  await expect(contents).toHaveCount(3);
+  await contents.last().click();
+  await expect(page.getByRole('textbox', { name: 'Page number', exact: true })).toHaveValue('2');
+  await page.getByRole('button', { name: 'Contents', exact: true }).click();
+  await contents.first().click();
+  await expect(page.getByRole('textbox', { name: 'Page number', exact: true })).toHaveValue('1');
   await expect(page.getByRole('button', { name: 'Mark region', exact: true })).toHaveCount(0);
   assert.equal(attempts[0].instructions, instructions);
   assert.equal(attempts[1].instructions, instructions);

@@ -11,7 +11,8 @@ import type { Annotation, MarkKind } from '../shared.ts';
 import { loadStamps, useStamps, type Stamp } from './stamps.ts';
 import { StampWheel } from './stamp-wheel.tsx';
 import { PdfToolRail, TOOL_KEYS, type PdfTool } from './pdf-tool-rail.tsx';
-import { ChipSelect } from './chip-select.tsx';
+import { PdfContents, PdfPageControls, PdfFind, PdfFindButton } from './pdf-controls.tsx';
+import { readOutline, pdfZoom, PDF_ZOOM_STORAGE, type OutlineItem } from '../../engine/src/web/pdf-reader.ts';
 import { Icon } from './icons.tsx';
 import { browserStorage } from './storage.ts';
 import { readPlace, savePlace } from './places.ts';
@@ -32,7 +33,7 @@ document.head.append(styles);
 
 export type { PdfTool } from './pdf-tool-rail.tsx';
 export type Rect = [number, number, number, number];
-export interface OutlineItem { title: string; level: number; dest: unknown; page: number; top: number | null }
+export type { OutlineItem } from '../../engine/src/web/pdf-reader.ts';
 export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note: Annotation) => void; showPlace: (page: number, rect: Rect) => void; focus: () => void; fitWidth: () => void }
 // A touch selection also has its ends: the edge of its first and last word, with that line's top and bottom.
 interface Selection { page: number; rects: Rect[]; quote: string; handles?: { from: [number, number, number]; to: [number, number, number] } }
@@ -44,7 +45,7 @@ const percent = ([x0, y0, x1, y1]: Rect): React.CSSProperties => ({ left: `${x0 
 const bounds = (rects: Rect[]): Rect => [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1])), Math.max(...rects.map(r => r[2])), Math.max(...rects.map(r => r[3]))];
 const center = (rect: Rect): React.CSSProperties => ({ left: `${(rect[0] + rect[2]) * 50}%`, top: `${(rect[1] + rect[3]) * 50}%` });
 const typing = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]'));
-const zooms = () => [{ value: 'page-width', label: t('Fit width') }, { value: 'page-fit', label: t('Fit page') }, ...[0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map(scale => ({ value: String(scale), label: `${scale * 100}%` }))];
+
 
 // A point is a small box where the author clicked. Its quote is the line of
 // text at or beside it, with ‸ where the point falls, so the agent can find it.
@@ -162,26 +163,6 @@ function tagSpots(tags: { rect: Rect; name?: string }[], narrowHeight?: number) 
   });
 }
 
-// PDF bookmarks (hyperref writes them) with the page and height each one opens.
-async function readOutline(document: PDFDocumentProxy) {
-  const items: OutlineItem[] = [];
-  async function walk(nodes: Awaited<ReturnType<PDFDocumentProxy['getOutline']>> | undefined, level: number) {
-    for (const node of nodes || []) {
-      const dest = typeof node.dest === 'string' ? await document.getDestination(node.dest).catch(() => null) : node.dest;
-      let page = 0, top: number | null = null;
-      if (Array.isArray(dest) && dest[0] !== undefined && dest[0] !== null) {
-        page = typeof dest[0] === 'number' ? dest[0] + 1 : await document.getPageIndex(dest[0]).then(index => index + 1, () => 0);
-        const kind = (dest[1] as { name?: string } | undefined)?.name;
-        top = kind === 'XYZ' && typeof dest[3] === 'number' ? dest[3] : (kind === 'FitH' || kind === 'FitBH') && typeof dest[2] === 'number' ? dest[2] : null;
-      }
-      if (page) items.push({ title: node.title.trim(), level, dest: node.dest, page, top });
-      await walk(node.items, level + 1);
-    }
-  }
-  await walk(await document.getOutline(), 0);
-  return items;
-}
-
 // A pdf.js viewer that behaves like a local PDF reader: continuous pages,
 // crisp zoom, selectable text, search, links and bookmarks. Notes live in a
 // layer above each page; pdf.js clears unknown children when it redraws a
@@ -221,7 +202,7 @@ export const PdfView = forwardRef<PdfHandle, {
     for (const layer of layers.values()) observer.observe(layer);
     return () => observer.disconnect();
   }, [layers]);
-  const [pages, setPages] = useState(0), [page, setPage] = useState(1), [pageInput, setPageInput] = useState('1');
+  const [pages, setPages] = useState(0), [page, setPage] = useState(1);
   const [zoom, setZoom] = useState({ value: 'page-width', scale: 1 });
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [findOpen, setFindOpen] = useState(false), [query, setQuery] = useState(''), [matches, setMatches] = useState({ current: 0, total: 0 }), [notFound, setNotFound] = useState(false);
@@ -384,7 +365,7 @@ export const PdfView = forwardRef<PdfHandle, {
     // Coming back to this PDF opens it where the author left it, as soon as
     // its pages have a size (a hidden panel has none yet).
     const place = latest.current.place;
-    let returning = place ? readPlace<{ page: number; left: number; top: number }>(place) : undefined;
+    let returning = place ? readPlace<{ page: number; left: number; top: number; scale?: string }>(place) : undefined;
     const goBack = () => {
       if (!returning || !box.clientHeight || !viewer.pagesCount) return;
       const { page, left, top } = returning; returning = undefined;
@@ -392,14 +373,14 @@ export const PdfView = forwardRef<PdfHandle, {
     };
     bus.on('pagesinit', () => {
       const keep = restore.current; restore.current = null;
-      viewer.currentScaleValue = keep?.scale || browserStorage.getItem('papilot:pdf-zoom') || 'page-width';
+      viewer.currentScaleValue = pdfZoom(keep?.scale || returning?.scale || browserStorage.getItem(PDF_ZOOM_STORAGE));
       if (keep) { returning = undefined; box.scrollTop = keep.top; box.scrollLeft = keep.left; }
       else goBack();
     });
-    bus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => { setPage(pageNumber); setPageInput(String(pageNumber)); });
+    bus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => { setPage(pageNumber); });
     bus.on('scalechanging', ({ scale, presetValue }: { scale: number; presetValue?: string }) => {
       setZoom({ value: presetValue || String(scale), scale });
-      if (presetValue) browserStorage.setItem('papilot:pdf-zoom', presetValue); else browserStorage.setItem('papilot:pdf-zoom', String(Math.round(scale * 100) / 100));
+      if (presetValue) browserStorage.setItem(PDF_ZOOM_STORAGE, presetValue); else browserStorage.setItem(PDF_ZOOM_STORAGE, String(Math.round(scale * 100) / 100));
     });
     // Resizing a panel does not resize the window. Reapply fit presets to the
     // viewer's actual bounds, while preserving an explicitly chosen percentage.
@@ -418,7 +399,7 @@ export const PdfView = forwardRef<PdfHandle, {
     // (PDF units grow upwards); at the end of the document it is the last one.
     bus.on('updateviewarea', ({ location }: { location?: { pageNumber: number; top: number; left: number; scale: number } }) => {
       if (!location) return;
-      if (place && !returning) savePlace(place, { page: location.pageNumber, left: location.left, top: location.top });
+      if (place && !returning) savePlace(place, { page: location.pageNumber, left: location.left, top: location.top, scale: viewer.currentScaleValue });
       const items = latest.current.outline, reading = location.top - box.clientHeight * 0.4 / (viewer.currentScale * 96 / 72);
       let current = -1;
       items.forEach((item, index) => { if (item.page < location.pageNumber || (item.page === location.pageNumber && (item.top === null || item.top >= reading))) current = index; });
@@ -678,10 +659,6 @@ export const PdfView = forwardRef<PdfHandle, {
     tools.current?.bus.dispatch('find', { source: null, type: again ? 'again' : '', query: text, caseSensitive: false, entireWord: false, highlightAll: true, findPrevious: previous, matchDiacritics: false });
   }
   function closeFind() { setFindOpen(false); setQuery(''); setMatches({ current: 0, total: 0 }); setNotFound(false); tools.current?.bus.dispatch('findbarclose', { source: null }); }
-  function goToPage() {
-    const viewer = tools.current?.viewer, number = Number.parseInt(pageInput, 10);
-    if (viewer && number >= 1 && number <= pages) viewer.currentPageNumber = number; else setPageInput(String(page));
-  }
   function clearSelection() { document.getSelection()?.removeAllRanges(); picking.current?.reset(); setSelection(null); }
   const selected = (value: Selection): Target => ({ page: value.page, rect: bounds(value.rects), rects: value.rects, quote: value.quote });
   // Saved at once, without a card: a color group's mark, a deletion, a quick note.
@@ -756,9 +733,6 @@ export const PdfView = forwardRef<PdfHandle, {
     } catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); return false; }
     finally { setNoteBusy(false); }
   }
-  const presets = zooms(), zoomLabel = presets.find(option => option.value === zoom.value) ? zoom.value : String(Math.round(zoom.scale * 100) / 100);
-  const zoomOptions = presets.some(option => option.value === zoomLabel) ? presets : [...presets, { value: zoomLabel, label: `${Math.round(zoom.scale * 100)}%` }];
-
   const pillGroup = active === 'note' || active === 'region' ? props.group || null : null;
   // On touch screens the button beside a selection does what the chosen tool does.
   const pillTool = active === 'delete' || active === 'magic' ? active : null;
@@ -781,19 +755,11 @@ export const PdfView = forwardRef<PdfHandle, {
   }}>
     <div className="pdf-toolbar" role="toolbar" aria-label={t('PDF controls')}>
       {props.lead}
+      <PdfContents outline={props.outline} section={props.section} ready={!loading} onSelect={item => { void tools.current?.links.goToDestination(item.dest as string | unknown[]); }}/>
       <div className="pdf-toolbar-spacer"/>
-      <div className="pdf-pager">
-        <button type="button" className="icon-button" aria-label={t('Previous page')} disabled={page <= 1} onClick={() => tools.current?.viewer.previousPage()}><Icon name="chevronUp" size={16}/></button>
-        <input aria-label={t('Page number')} inputMode="numeric" value={pageInput} onChange={e => setPageInput(e.target.value.replace(/\D/g, ''))} onFocus={e => e.currentTarget.select()} onBlur={() => setPageInput(String(tools.current?.viewer.currentPageNumber ?? page))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); goToPage(); e.currentTarget.blur(); } }}/>
-        <span className="pdf-pages">/ {pages || '–'}</span>
-        <button type="button" className="icon-button" aria-label={t('Next page')} disabled={page >= pages} onClick={() => tools.current?.viewer.nextPage()}><Icon name="chevronDown" size={16}/></button>
-      </div>
-      <div className="pdf-zoom">
-        <button type="button" className="icon-button" aria-label={t('Zoom out')} title={t('Zoom out (⌘−)')} onClick={() => tools.current?.viewer.decreaseScale()}><Icon name="minus" size={16}/></button>
-        <ChipSelect className="zoom-chip" label={t('Zoom')} value={zoomLabel} options={zoomOptions} onChange={value => { if (tools.current) tools.current.viewer.currentScaleValue = value; }}/>
-        <button type="button" className="icon-button" aria-label={t('Zoom in')} title={t('Zoom in (⌘+)')} onClick={() => tools.current?.viewer.increaseScale()}><Icon name="plus" size={16}/></button>
-      </div>
-      <button type="button" className={'icon-button' + (findOpen ? ' active' : '')} aria-label={t('Find in PDF')} aria-pressed={findOpen} title={t('Find (⌘F)')} onClick={() => { if (findOpen) closeFind(); else setFindOpen(true); }}><Icon name="search" size={16}/></button>
+      <PdfPageControls page={page} pages={pages} zoom={zoom} onPage={number => { if (tools.current) tools.current.viewer.currentPageNumber = number; }} onZoom={value => { if (tools.current) tools.current.viewer.currentScaleValue = value; }} onZoomBy={factor => tools.current?.viewer.updateScale({ scaleFactor: factor })}/>
+      <PdfFindButton open={findOpen} onClick={() => { if (findOpen) closeFind(); else setFindOpen(true); }}/>
+
       {/* Narrow viewers have no tool rail; their marking tools stay up here. */}
       {markable && <span className="pdf-compact-tools">
         <button type="button" className={'icon-button region-toggle' + (props.region ? ' active' : '')} aria-label={t('Mark region')} aria-pressed={props.region} title={t('Mark a figure or region')} onClick={() => pickTool(props.region ? 'select' : 'region')}><Icon name="region" size={16}/></button>
@@ -802,14 +768,7 @@ export const PdfView = forwardRef<PdfHandle, {
       {suggestions.length > 0 && <button type="button" className="pdf-suggestion-trigger" aria-label={t('AI suggestions')} title={t('AI suggestions')} aria-pressed={Boolean(activeSuggestion)} disabled={noteLocked} onClick={() => activeSuggestion ? closeNote() : props.onSelect(suggestions.find(({ note }) => note.page >= page - 1)?.note || suggestions[0].note)}><Icon name="spark" size={15}/><span>{suggestions.length}</span></button>}
       {props.tools}
     </div>
-    {findOpen && <div className="pdf-find">
-      <Icon name="search" size={15}/>
-      <input ref={findInput} autoFocus aria-label={t('Search the PDF')} placeholder={t('Find in PDF')} value={query} onChange={e => { setQuery(e.target.value); search(false, false, e.target.value); }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); search(true, e.shiftKey); } else if (e.key === 'Escape') { e.preventDefault(); closeFind(); } }}/>
-      <span className="pdf-find-count" aria-live="polite">{query ? notFound ? t('No matches') : matches.total ? t('{current} of {total}', { current: matches.current, total: matches.total }) : '' : ''}</span>
-      <button type="button" className="icon-button" aria-label={t('Previous match')} disabled={!matches.total} onClick={() => search(true, true)}><Icon name="chevronUp" size={16}/></button>
-      <button type="button" className="icon-button" aria-label={t('Next match')} disabled={!matches.total} onClick={() => search(true)}><Icon name="chevronDown" size={16}/></button>
-      <button type="button" className="icon-button" aria-label={t('Close search')} onClick={closeFind}><Icon name="close" size={15}/></button>
-    </div>}
+    {findOpen && <PdfFind inputRef={findInput} query={query} matches={matches} notFound={notFound} onQuery={text => { setQuery(text); search(false, false, text); }} onNext={previous => search(true, previous)} onClose={closeFind}/>}
     <div className="pdf-body">
     {markable && <PdfToolRail tool={tool} onTool={pickTool} group={props.group || null} onGroup={props.onGroupChange} disabled={props.markingDisabled} suspended={props.suspended} editing={Boolean(editing)} stamps={stamps} locked={locked} onLock={slot => slot === null ? setLocked(null) : lock(slot)} history={props.history}/>}
     <div className="pdf-scroll-host">

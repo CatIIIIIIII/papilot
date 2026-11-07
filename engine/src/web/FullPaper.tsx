@@ -15,6 +15,7 @@ import type { ChangeBlock } from "../types.ts";
 import { t } from "./i18n.ts";
 import { paperPlan, type Cut, type PlacedChange } from "./paper.ts";
 import { cMapData } from "./pdf-cmaps.ts";
+import { fullPaperReader } from './full-paper-reader.ts';
 
 // Built assets share one folder, and a host such as Papilot serves the viewer
 // under its own prefix: find the worker and CMaps next to this chunk, not at /assets.
@@ -64,14 +65,18 @@ export function FullPaper({
   scrollRoot,
   onReady,
   onUnavailable,
+  place,
+  restorePlace = true,
 }: {
   url: string;
   passes?: string;
   changes: PlacedChange[];
   render: (block: ChangeBlock, index: number) => ReactNode;
   scrollRoot: RefObject<HTMLElement | null>;
-  onReady: () => void;
+  onReady: (restored: boolean) => void;
   onUnavailable: () => void;
+  place: string;
+  restorePlace?: boolean;
 }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null),
     [error, setError] = useState(""),
@@ -189,10 +194,12 @@ export function FullPaper({
         paper={paper}
         render={render}
         scrollRoot={scrollRoot}
-        onReady={() => {
+        place={place}
+        restorePlace={restorePlace}
+        onReady={restored => {
           if (!announced.current) {
             announced.current = true;
-            onReady();
+            onReady(restored);
             return;
           }
           // Later versions keep the change being reviewed where it was.
@@ -212,11 +219,15 @@ function Pages({
   render,
   scrollRoot,
   onReady,
+  place,
+  restorePlace,
 }: {
   paper: Paper;
   render: (block: ChangeBlock, index: number) => ReactNode;
   scrollRoot: RefObject<HTMLElement | null>;
-  onReady: () => void;
+  onReady: (restored: boolean) => void;
+  place: string;
+  restorePlace: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null),
     ready = useRef(onReady);
@@ -224,7 +235,11 @@ function Pages({
   useEffect(() => paint(box.current!, paper, scrollRoot.current), [paper, scrollRoot]);
   // The pages exist now: the selected change can be scrolled to, before
   // they are painted.
-  useLayoutEffect(() => ready.current(), [paper]);
+  useLayoutEffect(() => {
+    const reader = fullPaperReader(box.current!, scrollRoot.current!, paper.pdf, place, restorePlace);
+    ready.current(reader.restored);
+    return () => reader.dispose();
+  }, [paper, place, restorePlace]);
   const context = (cut: Cut) => cut.context.length > 0 && (
     <div className="paper-context">
       <div
@@ -256,14 +271,14 @@ function Pages({
         <Fragment key={c.index}>{render(c.block, c.index)}</Fragment>
       ))}
       {paper.pages.map((cuts, page) => (
-        <section className="paper-page" data-page={page} key={page}>
+        <section className="paper-page" data-page={page} data-pdf-width={paper.width} data-pdf-height={paper.height} key={page}>
           {cuts.map((cut, i) => (
-            <Fragment key={i}>
+            <div key={i} data-reading-anchor={`${page}:${i}`} data-pdf-top={cut.top} data-pdf-bottom={cut.bottom}>
               {cut.shown.map(c => (
                 <Fragment key={c.index}>{render(c.block, c.index)}</Fragment>
               ))}
               {context(cut)}
-            </Fragment>
+            </div>
           ))}
         </section>
       ))}

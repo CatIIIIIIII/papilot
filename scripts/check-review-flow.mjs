@@ -136,17 +136,17 @@ try {
   // unchanged definitions retain the PDF evidence needed to review them.
   const indirect = () => viewer().locator('.change[data-stop="0"] .effects');
   const macro = () => viewer().locator('.change[data-stop="1"] .effects');
-  await expect(indirect().getByRole('button', { name: 'Affects 2 places' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(indirect().getByRole('button', { name: '2 related PDF changes' })).toHaveAttribute('aria-expanded', 'false');
   await expect(indirect().locator('.place')).toHaveCount(0);
   await expect(macro().locator('.place')).toHaveCount(1);
   await expect(viewer().locator('.change[data-stop="2"] .effects .place')).toHaveCount(1);
   assert.equal(effectRequests, 0);
-  await indirect().getByRole('button', { name: 'Affects 2 places' }).click();
+  await indirect().getByRole('button', { name: '2 related PDF changes' }).click();
   await expect(indirect().locator('.place')).toHaveCount(1);
   await indirect().getByRole('button', { name: 'Show 1 more' }).click();
   await expect(indirect().locator('.place')).toHaveCount(2);
   assert.equal(effectRequests, 1);
-  await indirect().getByRole('button', { name: 'Affects 2 places' }).click();
+  await indirect().getByRole('button', { name: '2 related PDF changes' }).click();
   await expect(indirect().locator('.place')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -166,7 +166,7 @@ try {
   await expandEffects().check();
   await expect(indirect().locator('.place')).toHaveCount(2);
   // Turning them on warns that rounds compile more.
-  await expect(settings().getByRole('note')).toContainText('up to 16 more times');
+  await expect(settings().getByRole('note')).toContainText('requires additional compilations');
   assert.equal(indirectChanges, true, 'The server keeps the setting');
   await page.screenshot({ path: 'test-results/indirect-effects-settings.png', fullPage: true });
   await settings().getByRole('button', { name: 'Close', exact: true }).click();
@@ -315,10 +315,14 @@ try {
   await expect(viewer().locator('[data-stop="0"] .change-head')).toBeHidden();
   await expect(viewer().locator('.change.current button.accept')).toBeEnabled();
   await viewer().locator('.change.current .change-number').click();
+  // Note history takes precedence; after undoing the draft, the same key
+  // falls through to the review's decision history.
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(commentBox).toHaveCount(0);
+  assert.equal(rounds[1].first, 'accepted');
+  await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => rounds[1].first).toBe('pending');
-  // Clean up after checking decision undo; deleting a note has its own undo.
-  await page.getByRole('button', { name: 'Delete review note 1' }).click();
   await viewer().locator('.change.current .change-number').click();
   await page.keyboard.press('?');
   await shortcuts.waitFor();
@@ -350,9 +354,9 @@ try {
     await expect(viewer().getByRole('progressbar')).toBeInViewport();
     await expect.poll(() => viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position)).not.toBe('fixed');
   }
-  // A narrow desktop pane keeps its actions in the card. On a phone the
-  // toolbar can take a second row, preserving progress, navigation and tools.
-  for (const width of [640, 390, 320]) {
+  // The shared reader switches to phone controls at 680px. The toolbar can
+  // take a second row, preserving progress, navigation and tools.
+  for (const width of [680, 640, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
     await expect(viewer().getByRole('progressbar')).toBeInViewport();
@@ -361,12 +365,13 @@ try {
     await expect(viewer().getByRole('button', { name: 'History', exact: true })).toBeInViewport();
     await expect(page.getByRole('link', { name: 'Open review in new tab', exact: true })).toBeInViewport();
     await expect(page.locator('.review-tools .review-rebuild')).toBeInViewport();
-    const position = await viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position);
-    if (width > 520) assert.notEqual(position, 'fixed');
-    else assert.equal(position, 'fixed');
+    await expect.poll(() => viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position)).toBe('fixed');
     assert.equal(await viewer().locator('#paper').evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
+  // Resizing can make a different change the visible navigation target.
+  await viewer().locator('[data-stop="0"] .change-number').click();
+  await expect(viewer().locator('.change.current')).toHaveAttribute('data-stop', '0');
   await viewer().locator('.change.current').getByRole('button', { name: 'Accept', exact: true }).click();
   const accepted = viewer().locator('[data-stop="0"]');
   await expect(accepted.locator('.change-head')).toBeHidden();
