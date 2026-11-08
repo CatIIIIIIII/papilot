@@ -1,4 +1,5 @@
 import type { ReviewSnapshot } from './ai-review.ts';
+import { ReviewSnapshots } from './review-snapshot.ts';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -479,6 +480,7 @@ interface Build {
 
 
 export class Manuscripts extends EventEmitter {
+  private reviewSnapshots = new ReviewSnapshots();
   private builds = new Map<string, Build>();
   private oldPdfs = new Map<string, string | null>();
   private placements = new Map<string, (Pick<Annotation, 'key' | 'page' | 'rect' | 'rects' | 'source'>) | null>();
@@ -497,8 +499,10 @@ export class Manuscripts extends EventEmitter {
   /** Stops every compiler this process started, also paused ones, so that
    *  nothing keeps running after Papilot quits. */
   async stop() {
+    const stopping = this.reviewSnapshots.stop();
     const { stopAll } = await import(pathToFileURL(path.join(ENGINE, 'src/core/process.ts')).href);
     stopAll();
+    await stopping;
   }
   /** Loads the PDF engine and reads Papilot's example paper with it once,
    *  before the server answers requests: compiling its WebAssembly and
@@ -513,7 +517,7 @@ export class Manuscripts extends EventEmitter {
       try { document.page(0); } finally { document.close(); }
     } catch { /* The first build pays for it instead. */ }
   }
-  get busyForUpdate() { return [...this.builds.values()].some(build => build.status === 'building'); }
+  get busyForUpdate() { return this.reviewSnapshots.busy || [...this.builds.values()].some(build => build.status === 'building'); }
   busyForProject(id: string) { return this.builds.get(id)?.status === 'building'; }
   forgetProject(id: string) { this.builds.delete(id); this.stale.delete(id); this.speculation.delete(id); }
 
@@ -800,8 +804,7 @@ export class Manuscripts extends EventEmitter {
     let result;
     try { result = await new Builder(loadProject(root), new Repo(root)).build(tree, ['full']); }
     catch (error) { throw error instanceof BuildError ? new Error('The manuscript could not be compiled for AI review. Fix the errors shown in the manuscript preview, then try again.') : error; }
-    const key = createHash('sha256').update(fs.readFileSync(result.pdf)).digest('hex').slice(0, 16);
-    const snapshot = await this.snapshotPdf(result.pdf, key);
+    const snapshot = await this.snapshotPdf(result.pdf);
     // The task does not exist yet, so a PDF kept by an earlier failed attempt is replaced.
     return { ...snapshot, pdf: await this.preserveReviewPdf(root, taskId, result.pdf, true) };
   }
@@ -816,12 +819,23 @@ export class Manuscripts extends EventEmitter {
     return fs.existsSync(pdf) ? pdf : null;
   }
 
+  private reviewCopies = new Map<string, Promise<string>>();
   async preserveReviewPdf(root: string, taskId: string, source: string, replace = false) {
     const pdf = await this.reviewPdfPath(root, taskId), folder = path.dirname(pdf);
-    fs.mkdirSync(folder, { recursive: true });
-    // A retry always uses the original task copy, even after its build cache is pruned.
-    if (replace || !fs.existsSync(pdf)) { const temporary = path.join(folder, 'review.tmp'); fs.copyFileSync(source, temporary); fs.renameSync(temporary, pdf); }
-    return pdf;
+    // Async copies must still publish in order: a retry retains the original,
+    // and an earlier recovery cannot overwrite a later explicit replacement.
+    const copying = (this.reviewCopies.get(pdf) || Promise.resolve()).catch(() => undefined).then(async () => {
+      await fs.promises.mkdir(folder, { recursive: true });
+      if (replace || !fs.existsSync(pdf)) {
+        const temporary = path.join(folder, `review-${randomUUID()}.tmp`);
+        try { await fs.promises.copyFile(source, temporary); await fs.promises.rename(temporary, pdf); }
+        finally { await fs.promises.rm(temporary, { force: true }); }
+      }
+      return pdf;
+    });
+    this.reviewCopies.set(pdf, copying);
+    try { return await copying; }
+    finally { if (this.reviewCopies.get(pdf) === copying) this.reviewCopies.delete(pdf); }
   }
 
   async cachedPdf(root: string, key: string): Promise<string | null> {
@@ -858,24 +872,8 @@ export class Manuscripts extends EventEmitter {
     } finally { original.close(); current.close(); }
   }
 
-  async snapshotPdf(pdf: string, key: string): Promise<ReviewSnapshot> {
-    const { PdfDocument } = await engine();
-    const document = new PdfDocument(pdf), lines: ReviewSnapshot['lines'] = [];
-    try {
-      for (let index = 0; index < document.length; index++) {
-        const page = document.page(index), [left, top, right, bottom] = page.bounds;
-        for (const [number, line] of page.lines.entries()) {
-          const text = line.chars.map((char: { text: string }) => char.text).join('').trim();
-          if (!text) continue;
-          const [x0, y0, x1, y1] = line.rect;
-          const rect = [(x0 - left) / (right - left), (y0 - top) / (bottom - top), (x1 - left) / (right - left), (y1 - top) / (bottom - top)].map(value => Math.max(0, Math.min(1, value))) as Rect;
-          if (rect[2] <= rect[0] || rect[3] <= rect[1]) continue;
-          lines.push({ id: `p${index + 1}-l${number + 1}`, page: index, text, rect });
-        }
-      }
-      if (!lines.length) throw new Error('This PDF has no selectable text to review.');
-      return { key, lines };
-    } finally { document.close(); }
+  snapshotPdf(pdf: string, key?: string): Promise<ReviewSnapshot> {
+    return this.reviewSnapshots.run(pdf, key);
   }
 
   pdf(projectId: string, key: string) {
