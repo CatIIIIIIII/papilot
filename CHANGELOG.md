@@ -4,13 +4,23 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-08
+
+Papilot shows complete PDF comparisons for Beamer slides and documents without sections, brings the manuscript's PDF controls into task reviews, and simplifies the app to a single-user workspace.
+
+### Changed
+
+- **The same PDF controls in the manuscript and task reviews.** Contents, page navigation, zoom and search now share one interface. Each reader keeps its own place and zoom, searches survive PDF updates, and Fit page accounts for expanded inline changes. Review actions remain usable in narrow panes. ([#83](https://github.com/PapilotAI/papilot/pull/83))
+
 ### Removed
 
-- Multi-user collaboration, including Sharing settings, invitations, passkey sign-in, paper access permissions and the separate public account server. Papilot now runs as a single-user workspace. Existing papers, tasks, conversations, notes and the host’s preferences are preserved; old accounts, invitations and sessions are removed on upgrade. Personal Tailscale access remains available.
+- **Multi-user collaboration.** Sharing settings, invitations, passkey sign-in, paper access permissions and the separate public account server have been removed. Papilot now runs as a single-user workspace. Existing papers, tasks, conversations, notes and the host's preferences are preserved; old accounts, invitations and sessions are removed on upgrade. Personal Tailscale access remains available. ([#85](https://github.com/PapilotAI/papilot/pull/85))
 
 ### Fixed
 
-- OpenCode now discovers reasoning effort levels for models other than its default, so their effort controls are available before starting a task. Model changes retry stale responses and stop if OpenCode cannot confirm the selected model.
+- **PDF review for Beamer slides and documents without sections.** Reviews no longer require section headings to discover the document body. Beamer comparisons retain full slide layouts, keep the correct before-and-after pages for inserted or deleted content, and follow PDF page order across source files. Frame wrappers, included text and literal TeX examples are handled without losing the changed slide. ([#86](https://github.com/PapilotAI/papilot/pull/86))
+- **OpenCode reasoning effort choices.** OpenCode now discovers reasoning effort levels for models other than its default, so their controls are available before starting a task. Model changes retry stale responses and stop if OpenCode cannot confirm the selected model. ([#84](https://github.com/PapilotAI/papilot/pull/84))
+- **Repeated LaTeX setup checks share ongoing detection.** Concurrent requests reuse the same probe, and repeated requests are rate-limited. ([#85](https://github.com/PapilotAI/papilot/pull/85))
 
 ## [0.9.2] - 2026-11-07 — Faster previews and a live demo
 
