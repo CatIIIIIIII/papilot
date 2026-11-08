@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Team Papilot",
+    "back": "Tutti gli articoli",
+    "blog": "Blog",
+    "breadcrumb": "Percorso di navigazione",
+    "category": "Visione del prodotto",
+    "contents": "Indice dell'articolo",
+    "demo": "Prova la demo",
+    "empty": "Nuovi articoli in preparazione.",
+    "figureLabel": "Figura",
+    "footerNavigation": "Piè di pagina",
+    "indexDescription": "Su IA, LaTeX e scrittura accademica.",
+    "indexSeoDescription": "Scopri la scrittura collaborativa con IA e LaTeX centrata sul PDF: annota sul manoscritto, revisiona le modifiche impaginate e lascia il giudizio all'autore.",
+    "indexSeoTitle": "Blog di Papilot: IA e scrittura accademica in LaTeX",
+    "indexTitle": "Blog",
+    "languageLabel": "Lingua",
+    "latest": "Dal team di Papilot",
+    "mainNavigation": "Navigazione principale",
+    "minutes": "min di lettura",
+    "privacy": "Informativa sulla privacy",
+    "product": "Scopri il prodotto",
+    "read": "Leggi l'articolo",
+    "readingTime": "{minutes} min di lettura",
+    "rss": "Iscriviti via RSS",
+    "skip": "Salta al contenuto",
+    "theme": "Modalità scura"
+  },
+  "illustrations": {
+    "again": "Continua con nuove note se serve",
+    "agent": "Agente IA",
+    "agentItems": [
+      "Trova e modifica il sorgente",
+      "Allinea notazione e citazioni",
+      "Ricompila il manoscritto"
+    ],
+    "annotation": "Note a margine",
+    "author": "Autore",
+    "authorItems": [
+      "Le premesse valgono ancora?",
+      "La notazione è coerente?",
+      "Le tesi reggono all'esame?"
+    ],
+    "comparison": "Il dialogo torna sul manoscritto",
+    "comparisonDesc": "A sinistra, codice sorgente e PDF sono divisi; a destra, il PDF è lo spazio principale con le note direttamente sulla pagina.",
+    "flow": "Modifiche dalla pagina alla pagina",
+    "flowDesc": "L'autore annota il manoscritto, l'IA modifica i file LaTeX locali, Papilot compila e l'autore revisiona sul PDF, iterando se necessario.",
+    "newPath": "Leggi · Annota · Revisiona",
+    "now": "Centrato sul manoscritto",
+    "old": "Centrato sul sorgente",
+    "oldPath": "Leggi PDF → Codice → Torna al PDF",
+    "page": "Manoscritto",
+    "preview": "Anteprima PDF",
+    "responsibility": "L'IA modifica, l'autore giudica",
+    "responsibilityDesc": "L'IA può individuare il codice, aggiornare la notazione e ricompilare; l'autore deve verificare premesse, notazione e tesi, rispondendo del testo finale.",
+    "responsibilityFoot": "Chiarezza tipografica non significa correttezza logica.",
+    "source": "Sorgente",
+    "steps": [
+      [
+        "Autore",
+        "Annota sul PDF",
+        "Indica dove e cosa modificare."
+      ],
+      [
+        "Agente IA",
+        "Modifica LaTeX",
+        "Trova e aggiorna il sorgente."
+      ],
+      [
+        "Papilot",
+        "Compila il progetto",
+        "Genera il testo impaginato."
+      ],
+      [
+        "Autore",
+        "Revisiona sul PDF",
+        "Accetta, rifiuta o commenta."
+      ]
+    ],
+    "under": "L'IA modifica i file LaTeX in background"
+  }
+}

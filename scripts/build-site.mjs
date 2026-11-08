@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { translatedSite } from './site-i18n.mjs';
 import { siteAnalytics } from './site-analytics.mjs';
+import { buildBlog, blogRoute } from './site-blog.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 // The build empties this folder first, so it takes no folder argument that
@@ -36,12 +37,14 @@ if (JSON.stringify(Object.keys(names)) !== JSON.stringify(locales)) throw new Er
 const urlFor = locale => site + (locale === 'en' ? '' : `${locale}/`);
 const ogLocales = { en: 'en_US', 'zh-CN': 'zh_CN', 'zh-Hant': 'zh_TW', ja: 'ja_JP', ko: 'ko_KR', de: 'de_DE', fr: 'fr_FR', es: 'es_ES', pt: 'pt_BR', it: 'it_IT', sv: 'sv_SE' };
 const alternates = locales.map(locale => `<link rel="alternate" hreflang="${locale}" href="${urlFor(locale)}">`).join('\n') + `\n<link rel="alternate" hreflang="x-default" href="${site}">`;
+const blogLabels = { en: 'Blog', 'zh-CN': '博客', 'zh-Hant': '部落格', ja: 'ブログ', ko: '블로그', de: 'Blog', fr: 'Blog', es: 'Blog', pt: 'Blog', it: 'Blog', sv: 'Blogg' };
 for (const locale of locales) {
   const translations = locale === 'en' ? {} : JSON.parse(fs.readFileSync(path.join(root, `site/locales/${locale}.json`), 'utf8'));
   const menu = locales.map(code => `<a href="${code === 'en' ? '/' : `/${code}/`}" role="menuitemradio" lang="${code}" aria-checked="${code === locale}" tabindex="-1">${names[code]}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></a>`).join('');
   const translated = translatedSite(source, translations, locale);
   const title = translated.match(/<title>([^<]*)<\/title>/)[1];
   let html = translated
+    .replaceAll('<!-- blog-navigation -->', `<a href="${blogRoute(locale)}">${blogLabels[locale]}</a>`)
     .replace('<!-- analytics -->', analytics)
     .replaceAll('{{version}}', release)
     .replace(/<link rel="alternate"[^>]*>/g, '')
@@ -82,8 +85,9 @@ const privacy = fs.readFileSync(path.join(root, 'site/privacy.html'), 'utf8')
   .replace('href="style.css"', `href="/style.css?v=${version('style.css')}"`);
 fs.mkdirSync(path.join(out, 'privacy'), { recursive: true });
 fs.writeFileSync(path.join(out, 'privacy/index.html'), privacy);
+const blog = buildBlog({ root, out, site, analytics, version });
 const sitemapAlternates = [...locales, 'x-default'].map(locale => `<xhtml:link rel="alternate" hreflang="${locale}" href="${urlFor(locale === 'x-default' ? 'en' : locale)}"/>`).join('');
-fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${locales.map(locale => `<url><loc>${urlFor(locale)}</loc>${sitemapAlternates}</url>`).join('')}<url><loc>${site}privacy/</loc></url></urlset>\n`);
+fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${locales.map(locale => `<url><loc>${urlFor(locale)}</loc>${sitemapAlternates}</url>`).join('')}<url><loc>${site}privacy/</loc></url>${blog.sitemap}</urlset>\n`);
 fs.writeFileSync(path.join(out, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${site}sitemap.xml\n`);
 copy('public', ['favicon.png', 'apple-touch-icon.png']);
 copy('docs/assets', ['logo.svg', 'social-preview.png'], 'assets');
@@ -96,9 +100,10 @@ await build({ root, mode: 'playground' });
 
 // Resolve each reference against its actual page URL, including nested pages.
 const missing = [];
-for (const page of [...locales.map(locale => locale === 'en' ? '' : locale), 'privacy']) {
+for (const page of [...locales.map(locale => locale === 'en' ? '' : locale), 'privacy', ...blog.pages]) {
   const html = fs.readFileSync(path.join(out, page, 'index.html'), 'utf8');
   const refs = [...html.matchAll(/\s(?:src|href|poster)="([^"]*)"/g)].map(match => match[1]);
+  refs.push(...[...html.matchAll(/\ssrcSet="([^"]*)"/g)].map(match => match[1]));
   refs.push(...[...html.matchAll(/\scontent="([^"]*)"/g)].map(match => match[1]).filter(value => value.startsWith(site)));
   for (const ref of refs) {
     const url = new URL(ref, site + (page ? page + '/' : ''));
@@ -107,7 +112,7 @@ for (const page of [...locales.map(locale => locale === 'en' ? '' : locale), 'pr
     if (!fs.existsSync(file)) missing.push(`${page || 'en'}: ${ref}`);
   }
 }
-for (const name of ['style.css']) {
+for (const name of ['style.css', 'blog.css']) {
   const css = fs.readFileSync(path.join(out, name), 'utf8');
   for (const [, ref] of css.matchAll(/url\("?([^"\)]*)"?\)/g)) {
     const url = new URL(ref, site + name);
@@ -115,4 +120,4 @@ for (const name of ['style.css']) {
   }
 }
 if (missing.length) throw new Error(`The page points to files the build does not have: ${[...new Set(missing)].join(', ')}`);
-console.log(`Site built in ${path.relative(process.cwd(), out) || '.'}: ${locales.length} languages`);
+console.log(`Site built in ${path.relative(process.cwd(), out) || '.'}: ${locales.length} languages, ${blog.posts.length} blog articles (${blog.pages.length} blog pages)`);

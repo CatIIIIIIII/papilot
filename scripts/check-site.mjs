@@ -7,6 +7,7 @@ import staticFiles from '@fastify/static';
 import { chromium, webkit } from '../engine/node_modules/playwright/index.mjs';
 import { checkAnnotations } from './site-annotation-checks.mjs';
 import { checkSiteTheme } from './site-theme-checks.mjs';
+import { loadBlogPosts, blogLocales } from './site-blog.mjs';
 
 const languages = JSON.parse(fs.readFileSync('i18n/languages.json', 'utf8'));
 const route = locale => locale === 'en' ? '/' : `/${locale}/`;
@@ -155,7 +156,9 @@ try {
   // Every URL is already localized without JavaScript, with reciprocal SEO links.
   const sitemap = fs.readFileSync('_site/sitemap.xml', 'utf8');
   assert.match(fs.readFileSync('_site/robots.txt', 'utf8'), /Sitemap: https:\/\/papilot.ai\/sitemap.xml/);
-  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length + 1);
+  const blogPages = blogLocales.length + loadBlogPosts(process.cwd()).reduce((count, post) => count + Object.keys(post.locales).length, 0);
+  assert.equal((sitemap.match(/<url>/g) || []).length, Object.keys(languages).length + 1 + blogPages);
+  const homeSitemap = [...sitemap.matchAll(/<url>([\s\S]*?)<\/url>/g)].map(match => match[1]).filter(entry => Object.keys(languages).some(locale => entry.startsWith(`<loc>https://papilot.ai${route(locale)}</loc>`))).join('');
   assert.ok(sitemap.includes('<loc>https://papilot.ai/privacy/</loc>'));
   const staticContext = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   const staticVisitor = await staticContext.newPage();
@@ -170,7 +173,7 @@ try {
     for (const alt of [...Object.keys(languages), 'x-default']) {
       const href = 'https://papilot.ai' + route(alt === 'x-default' ? 'en' : alt);
       assert.equal(await staticVisitor.locator(`link[hreflang="${alt}"]`).getAttribute('href'), href);
-      assert.equal((sitemap.match(new RegExp(`hreflang="${alt}"`, 'g')) || []).length, Object.keys(languages).length);
+      assert.equal((homeSitemap.match(new RegExp(`hreflang="${alt}"`, 'g')) || []).length, Object.keys(languages).length);
       assert.ok(sitemap.includes(`hreflang="${alt}" href="${href}"`));
     }
     assert.deepEqual(await staticVisitor.locator('main [lang]').evaluateAll(nodes => [...new Set(nodes.map(node => node.lang))]), [locale]);

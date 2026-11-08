@@ -1,0 +1,94 @@
+{
+  "published": "2026-11-08",
+  "locales": {
+    "en": {
+      "description": "Papilot makes the rendered PDF the primary workspace for AI and LaTeX writing: annotate revisions on local projects and review typeset changes in place.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Papilot product illustration showing a before-and-after typeset comparison alongside accept, reject, and comment actions.",
+      "heroCaption": "Review before-and-after typeset changes directly on the manuscript page in Papilot.",
+      "lead": "Papilot: Redefining how humans and AI collaborate on LaTeX",
+      "title": "When the PDF becomes our interface for talking with AI"
+    },
+    "zh-CN": {
+      "title": "当 PDF 成为我们与 AI 的对话界面",
+      "description": "Papilot 重新定义人与 AI 协作写 LaTeX 的方式：让渲染后的 PDF 成为主工作区，在真实本地 LaTeX 项目之上直接通过版面批注表达修改意图，并原位审阅修改前后的排版结果。",
+      "lead": "Papilot：重新定义人与 AI 协作写 LaTeX 的方式",
+      "hero": "/assets/blog/review.zh-CN.png",
+      "heroAlt": "Papilot 产品示意图：排版后的修改前后对比，以及接受、拒绝和评论操作。",
+      "heroCaption": "在 Papilot 的论文页面上直接审阅修改前后的排版对比。"
+    },
+    "zh-Hant": {
+      "description": "Papilot 以算繪後的 PDF 為主工作區，支援在本機 LaTeX 專案上直接透過版面批註向 AI 表達修改意圖，並原位審閱修改前後的排版差異。",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Papilot 產品示意圖：排版後的修改前後對比，以及接受、拒絕和留言操作。",
+      "heroCaption": "在 Papilot 的論文頁面上直接審閱修改前後的排版對比。",
+      "lead": "Papilot：重新定義人與 AI 協作寫 LaTeX 的方式",
+      "title": "當 PDF 成為我們與 AI 的對話介面"
+    },
+    "ja": {
+      "description": "Papilot は組版済み PDF を主作業領域とし、ローカルの LaTeX プロジェクト上で紙面の注釈から AI に修正意図を伝え、変更前後の組版結果をその場で確認できます。",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Papilot の製品画面イメージ：組版後の修正前後の比較表示と、承認・却下・コメントの操作。",
+      "heroCaption": "Papilot の論文ページ上で、修正前後の組版結果を直接比較・確認する。",
+      "lead": "Papilot：人間と AI が協業して LaTeX を書く方法を再定義する",
+      "title": "PDF が AI との対話インターフェースになるとき"
+    },
+    "ko": {
+      "description": "Papilot은 렌더링된 PDF를 주 작업 공간으로 삼아, 로컬 LaTeX 프로젝트의 지면 주석으로 AI에 수정 의도를 전달하고 조판된 변경 전후를 제자리에서 검토합니다.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Papilot 제품 화면 예시: 조판된 수정 전후 비교 및 수락, 거절, 코멘트 작업.",
+      "heroCaption": "Papilot의 논문 페이지 위에서 수정 전후의 조판 비교 결과를 바로 검토합니다.",
+      "lead": "Papilot: 인간과 AI가 LaTeX로 협업하는 방식을 새롭게 정의하다",
+      "title": "PDF가 우리가 AI와 대화하는 인터페이스가 될 때"
+    },
+    "de": {
+      "description": "Papilot macht das gerenderte PDF zum Hauptarbeitsbereich für KI und LaTeX: lokale Projekte direkt auf der Seite kommentieren und gesetzte Änderungen vor Ort prüfen.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Papilot-Produktansicht: gesetzter Vorher-Nachher-Vergleich mit Optionen zum Annehmen, Ablehnen und Kommentieren.",
+      "heroCaption": "Gesetzte Änderungen im Vorher-Nachher-Vergleich direkt auf der Manuskriptseite in Papilot prüfen.",
+      "lead": "Papilot: Eine neue Art der Zusammenarbeit von Mensch und KI an LaTeX",
+      "title": "Wenn das PDF zu unserer Schnittstelle für das Gespräch mit der KI wird"
+    },
+    "fr": {
+      "description": "Papilot place le PDF au cœur de la rédaction LaTeX avec l'IA : annotez vos projets locaux directement sur la page et révisez sur place les changements composés.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Aperçu produit de Papilot : comparaison avant/après des modifications composées, avec actions pour accepter, refuser ou commenter.",
+      "heroCaption": "Révisez la comparaison typographique avant/après directement sur la page de l'article dans Papilot.",
+      "lead": "Papilot : redéfinir la façon dont les humains et l'IA collaborent sur LaTeX",
+      "title": "Quand le PDF devient notre interface de dialogue avec l'IA"
+    },
+    "es": {
+      "description": "Papilot convierte el PDF en el espacio principal para escribir en LaTeX con IA: anota cambios en proyectos locales sobre la página y revisa el resultado maquetado.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Ilustración del producto Papilot: comparación maquetada del antes y el después de los cambios, con acciones para aceptar, rechazar y comentar.",
+      "heroCaption": "Revisa directamente sobre la página del artículo en Papilot la comparación tipográfica entre el antes y el después de cada cambio.",
+      "lead": "Papilot: Redefiniendo cómo colaboran humanos e IA en LaTeX",
+      "title": "Cuando el PDF se convierte en nuestra interfaz para hablar con la IA"
+    },
+    "pt": {
+      "description": "O Papilot torna o PDF o espaço principal para escrever em LaTeX com IA: anote mudanças na página em projetos locais e revise no lugar o resultado já diagramado.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Ilustração do produto Papilot: comparação diagramada do antes e depois das alterações, com ações para aceitar, rejeitar e comentar.",
+      "heroCaption": "Revise a comparação diagramada do antes e depois diretamente sobre a página do artigo no Papilot.",
+      "lead": "Papilot: redefinindo como humanos e IA colaboram no LaTeX",
+      "title": "Quando o PDF se torna nossa interface de diálogo com a IA"
+    },
+    "it": {
+      "description": "Papilot rende il PDF lo spazio di lavoro principale per scrivere in LaTeX con l'IA: annota su progetti locali direttamente in pagina e revisiona il testo impaginato.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Illustrazione del prodotto Papilot: confronto tipografico prima e dopo le modifiche, con azioni per accettare, rifiutare e commentare.",
+      "heroCaption": "Revisiona direttamente sulla pagina dell'articolo in Papilot il confronto tipografico prima e dopo le modifiche.",
+      "lead": "Papilot: ridefinire il modo in cui esseri umani e IA collaborano su LaTeX",
+      "title": "Quando il PDF diventa la nostra interfaccia di dialogo con l'IA"
+    },
+    "sv": {
+      "description": "Papilot gör den renderade PDF-sidan till huvudarbetsyta för LaTeX och AI: kommentera direkt på lokala projekt och granska typsatta ändringar före och efter på plats.",
+      "hero": "/assets/blog/review.en.png",
+      "heroAlt": "Produktöversikt av Papilot: typsatt jämförelse före och efter ändringar med knappar för att godta, avvisa och kommentera.",
+      "heroCaption": "Granska typsatta ändringar före och efter direkt på artikelsidan i Papilot.",
+      "lead": "Papilot: Ett nytt sätt för människa och AI att samarbeta i LaTeX",
+      "title": "När PDF-dokumentet blir vårt gränssnitt för samtalet med AI"
+    }
+  },
+  "updated": "2026-11-09"
+}

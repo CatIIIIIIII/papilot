@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "L'équipe Papilot",
+    "back": "Tous les articles",
+    "blog": "Blog",
+    "breadcrumb": "Fil d'Ariane",
+    "category": "Vision produit",
+    "contents": "Sommaire",
+    "demo": "Essayer la démo",
+    "empty": "De nouveaux articles sont en préparation.",
+    "figureLabel": "Figure",
+    "footerNavigation": "Pied de page",
+    "indexDescription": "Sur l'IA, LaTeX et la rédaction scientifique.",
+    "indexSeoDescription": "Découvrez la rédaction LaTeX avec l'IA centrée sur le PDF : annotez votre manuscrit, révisez les changements composés sur place et gardez le jugement d'auteur.",
+    "indexSeoTitle": "Blog Papilot : IA et rédaction scientifique en LaTeX",
+    "indexTitle": "Blog",
+    "languageLabel": "Langue",
+    "latest": "Par l'équipe Papilot",
+    "mainNavigation": "Navigation principale",
+    "minutes": "min de lecture",
+    "privacy": "Confidentialité",
+    "product": "Découvrir le produit",
+    "read": "Lire l'article",
+    "readingTime": "{minutes} min de lecture",
+    "rss": "S'abonner via RSS",
+    "skip": "Aller au contenu",
+    "theme": "Mode sombre"
+  },
+  "illustrations": {
+    "again": "Au besoin, poursuivre avec d'autres notes",
+    "agent": "Agent IA",
+    "agentItems": [
+      "Localiser et modifier le code",
+      "Harmoniser notations et renvois",
+      "Recompiler le manuscrit"
+    ],
+    "annotation": "Notes en marge",
+    "author": "Auteur",
+    "authorItems": [
+      "Les hypothèses tiennent-elles ?",
+      "La notation est-elle cohérente ?",
+      "Les thèses sont-elles solides ?"
+    ],
+    "comparison": "Le dialogue revient au manuscrit",
+    "comparisonDesc": "À gauche, un espace séparant code source et PDF ; à droite, le PDF comme espace principal où les annotations s'attachent directement au manuscrit.",
+    "flow": "Née sur la page, révisée sur la page",
+    "flowDesc": "L'auteur annote le manuscrit, l'IA modifie le code LaTeX local, Papilot compile, puis l'auteur révise sur le PDF et poursuit au besoin.",
+    "newPath": "Lire · Annoter · Réviser",
+    "now": "Centré sur le manuscrit",
+    "old": "Centré sur le code",
+    "oldPath": "Lire PDF → Code → PDF",
+    "page": "Manuscrit",
+    "preview": "Aperçu PDF",
+    "responsibility": "L'IA modifie, l'auteur juge",
+    "responsibilityDesc": "L'IA peut localiser le code, ajuster la notation et recompiler ; l'auteur doit vérifier les prémisses, la notation et les thèses, et répondre du manuscrit final.",
+    "responsibilityFoot": "Un rendu clair ne garantit pas une preuve juste.",
+    "source": "Code source",
+    "steps": [
+      [
+        "Auteur",
+        "Annoter le PDF",
+        "Cibler le lieu et l'intention."
+      ],
+      [
+        "Agent IA",
+        "Éditer le LaTeX",
+        "Cibler et modifier le code local."
+      ],
+      [
+        "Papilot",
+        "Compiler le projet",
+        "Produire le manuscrit composé."
+      ],
+      [
+        "Auteur",
+        "Réviser sur le PDF",
+        "Accepter, refuser ou commenter."
+      ]
+    ],
+    "under": "L'IA modifie le LaTeX local en coulisse"
+  }
+}

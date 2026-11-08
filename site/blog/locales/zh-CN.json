@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "blog": "博客",
+    "product": "了解产品",
+    "demo": "体验演示",
+    "skip": "跳到正文",
+    "theme": "深色模式",
+    "indexTitle": "博客",
+    "indexDescription": "关于 AI、LaTeX 与论文写作。",
+    "category": "产品理念",
+    "latest": "来自 Papilot 团队",
+    "read": "阅读全文",
+    "contents": "本文目录",
+    "back": "所有文章",
+    "minutes": "分钟阅读",
+    "rss": "通过 RSS 订阅",
+    "privacy": "隐私声明",
+    "author": "Papilot 团队",
+    "indexSeoTitle": "Papilot 博客：AI 与 LaTeX 论文写作",
+    "indexSeoDescription": "探索以 PDF 为中心的 AI 与 LaTeX 协作写作：在论文上批注、审阅排版后的修改，并让学术判断留在作者手中。",
+    "languageLabel": "语言",
+    "mainNavigation": "主导航",
+    "footerNavigation": "页脚",
+    "breadcrumb": "面包屑导航",
+    "figureLabel": "图",
+    "readingTime": "{minutes} 分钟阅读",
+    "empty": "新文章正在准备中。"
+  },
+  "illustrations": {
+    "comparison": "对话的重心，回到手稿",
+    "comparisonDesc": "左侧是源码与 PDF 分离的工作区，右侧以 PDF 为主工作区，批注直接附着在文稿上。",
+    "old": "以源码为中心",
+    "now": "以手稿为中心",
+    "source": "源码",
+    "preview": "PDF 预览",
+    "page": "论文手稿",
+    "annotation": "页边批注",
+    "oldPath": "读 PDF → 找源码 → 回 PDF",
+    "newPath": "阅读 · 批注 · 审阅",
+    "under": "AI 在后台修改本地 LaTeX 文件",
+    "flow": "修改始于页面，也归于页面",
+    "flowDesc": "作者批注文稿，AI 修改本地 LaTeX，Papilot 编译，再由作者在 PDF 上审阅；需要时继续修订。",
+    "again": "需要时，带着新的批注继续",
+    "steps": [
+      [
+        "作者",
+        "在 PDF 上批注",
+        "指明位置，说明修改意图。"
+      ],
+      [
+        "AI 智能体",
+        "编辑 LaTeX",
+        "定位并修改本地源码。"
+      ],
+      [
+        "Papilot",
+        "编译项目",
+        "生成实际排版后的文稿。"
+      ],
+      [
+        "作者",
+        "在 PDF 上审阅",
+        "接受、拒绝，或继续评论。"
+      ]
+    ],
+    "responsibility": "修改交给 AI，判断属于作者",
+    "responsibilityDesc": "AI 可以定位源码、修改记号并重新编译；作者仍需核对前提、记号与论断，并为最终稿件负责。",
+    "agent": "AI 智能体",
+    "author": "作者",
+    "agentItems": [
+      "定位与修改源码",
+      "协调记号与引用",
+      "重新编译文稿"
+    ],
+    "authorItems": [
+      "前提仍然成立吗？",
+      "记号是否保持一致？",
+      "论断经得起推敲吗？"
+    ],
+    "responsibilityFoot": "排版的清晰，不等于论证的正确。"
+  }
+}

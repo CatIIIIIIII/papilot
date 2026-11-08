@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Equipo de Papilot",
+    "back": "Todos los artículos",
+    "blog": "Blog",
+    "breadcrumb": "Ruta de navegación",
+    "category": "Visión de producto",
+    "contents": "Contenido",
+    "demo": "Probar la demo",
+    "empty": "Estamos preparando nuevos artículos.",
+    "figureLabel": "Figura",
+    "footerNavigation": "Pie de página",
+    "indexDescription": "Sobre IA, LaTeX y escritura académica.",
+    "indexSeoDescription": "Descubre la escritura colaborativa con IA y LaTeX centrada en el PDF: anota sobre el manuscrito, revisa cambios maquetados y mantén el criterio en manos del autor.",
+    "indexSeoTitle": "Blog de Papilot: escritura académica con IA y LaTeX",
+    "indexTitle": "Blog",
+    "languageLabel": "Idioma",
+    "latest": "Del equipo de Papilot",
+    "mainNavigation": "Navegación principal",
+    "minutes": "min de lectura",
+    "privacy": "Privacidad",
+    "product": "Producto",
+    "read": "Leer artículo",
+    "readingTime": "{minutes} min de lectura",
+    "rss": "Suscribirse por RSS",
+    "skip": "Saltar al contenido",
+    "theme": "Modo oscuro"
+  },
+  "illustrations": {
+    "again": "Seguir con nuevas notas si hace falta",
+    "agent": "Agente de IA",
+    "agentItems": [
+      "Localizar y editar código",
+      "Coordinar notación y citas",
+      "Recompilar el manuscrito"
+    ],
+    "annotation": "Notas al margen",
+    "author": "Autor",
+    "authorItems": [
+      "¿Siguen vigentes las premisas?",
+      "¿Es coherente la notación?",
+      "¿Resiste el argumento?"
+    ],
+    "comparison": "El diálogo vuelve al manuscrito",
+    "comparisonDesc": "A la izquierda, un espacio dividido entre código fuente y PDF; a la derecha, el PDF como espacio principal con anotaciones adheridas directamente al manuscrito.",
+    "flow": "Del manuscrito al manuscrito",
+    "flowDesc": "El autor anota el manuscrito, la IA modifica el LaTeX local, Papilot compila y el autor revisa en el PDF; si hace falta, continúa el ciclo.",
+    "newPath": "Leer · Anotar · Revisar",
+    "now": "Centrado en el manuscrito",
+    "old": "Centrado en el código",
+    "oldPath": "Leer PDF → Buscar código → Volver",
+    "page": "Manuscrito",
+    "preview": "Vista previa PDF",
+    "responsibility": "La IA edita; el autor decide",
+    "responsibilityDesc": "La IA puede localizar código, ajustar la notación y recompilar; el autor debe verificar premisas, notación y afirmaciones, asumiendo la responsabilidad del texto final.",
+    "responsibilityFoot": "Claridad visual no es rigor lógico.",
+    "source": "Código fuente",
+    "steps": [
+      [
+        "Autor",
+        "Anotar en el PDF",
+        "Indica el lugar y el cambio."
+      ],
+      [
+        "Agente de IA",
+        "Editar LaTeX",
+        "Localiza y edita el código."
+      ],
+      [
+        "Papilot",
+        "Compilar proyecto",
+        "Genera el documento maquetado."
+      ],
+      [
+        "Autor",
+        "Revisar en el PDF",
+        "Acepta, rechaza o comenta."
+      ]
+    ],
+    "under": "La IA edita archivos LaTeX locales"
+  }
+}

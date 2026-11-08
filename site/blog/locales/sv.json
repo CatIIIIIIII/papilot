@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Papilot-teamet",
+    "back": "Alla artiklar",
+    "blog": "Blogg",
+    "breadcrumb": "Brödsmulor",
+    "category": "Produktfilosofi",
+    "contents": "Innehåll",
+    "demo": "Prova demon",
+    "empty": "Nya artiklar förbereds.",
+    "figureLabel": "Figur",
+    "footerNavigation": "Sidfot",
+    "indexDescription": "Om AI, LaTeX och vetenskapligt skrivande.",
+    "indexSeoDescription": "Utforska PDF-centrerat samarbete med AI och LaTeX: kommentera direkt i manuskriptet, granska typsatta ändringar på plats och behåll det vetenskapliga omdömet.",
+    "indexSeoTitle": "Papilot-bloggen: AI och vetenskapligt skrivande i LaTeX",
+    "indexTitle": "Blogg",
+    "languageLabel": "Språk",
+    "latest": "Från Papilot-teamet",
+    "mainNavigation": "Huvudnavigering",
+    "minutes": "min läsning",
+    "privacy": "Integritetspolicy",
+    "product": "Om produkten",
+    "read": "Läs artikeln",
+    "readingTime": "{minutes} min läsning",
+    "rss": "Prenumerera via RSS",
+    "skip": "Hoppa till innehållet",
+    "theme": "Mörkt läge"
+  },
+  "illustrations": {
+    "again": "Fortsätt med nya kommentarer vid behov",
+    "agent": "AI-agent",
+    "agentItems": [
+      "Hitta och ändra källkoden",
+      "Samordna notation och referenser",
+      "Kompilera om manuskriptet"
+    ],
+    "annotation": "Kommentar",
+    "author": "Författare",
+    "authorItems": [
+      "Håller förutsättningarna ännu?",
+      "Är notationen konsekvent?",
+      "Håller påståendena vid prövning?"
+    ],
+    "comparison": "Samtalet flyttar åter till sidan",
+    "comparisonDesc": "Till vänster en arbetsyta där källkod och PDF är åtskilda; till höger är PDF-dokumentet huvudarbetsyta med kommentarer direkt på manuskriptet.",
+    "flow": "Ändringar börjar och slutar på sidan",
+    "flowDesc": "Författaren kommenterar manuskriptet, AI:n ändrar lokal LaTeX, Papilot kompilerar och författaren granskar på PDF-sidan samt reviderar vidare vid behov.",
+    "newPath": "Läs · Kommentera · Granska",
+    "now": "Manuskriptcentrerat",
+    "old": "Källkodscentrerat",
+    "oldPath": "Läs PDF → Hitta kod → Till PDF",
+    "page": "Manuskriptsida",
+    "preview": "PDF-vy",
+    "responsibility": "AI:n ändrar, författaren bedömer",
+    "responsibilityDesc": "AI:n kan lokalisera källkod, uppdatera notation och kompilera om, men författaren måste fortfarande kontrollera förutsättningar, notation och påståenden samt ansvara för det färdiga manuskriptet.",
+    "responsibilityFoot": "Snygg typografi är inte detsamma som ett hållbart bevis.",
+    "source": "Källkod",
+    "steps": [
+      [
+        "Författare",
+        "Kommentera i PDF:en",
+        "Ange plats och avsedd ändring."
+      ],
+      [
+        "AI-agent",
+        "Redigera LaTeX",
+        "Hitta och ändra lokal källkod."
+      ],
+      [
+        "Papilot",
+        "Kompilera projektet",
+        "Generera det typsatta dokumentet."
+      ],
+      [
+        "Författare",
+        "Granska i PDF:en",
+        "Godta, avvisa eller kommentera."
+      ]
+    ],
+    "under": "AI redigerar lokal LaTeX i bakgrunden"
+  }
+}

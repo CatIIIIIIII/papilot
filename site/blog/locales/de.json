@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Papilot-Team",
+    "back": "Alle Artikel",
+    "blog": "Blog",
+    "breadcrumb": "Brotkrümelnavigation",
+    "category": "Produktphilosophie",
+    "contents": "Inhalt",
+    "demo": "Demo testen",
+    "empty": "Neue Beiträge sind in Vorbereitung.",
+    "figureLabel": "Abbildung",
+    "footerNavigation": "Fußzeile",
+    "indexDescription": "Über KI, LaTeX und wissenschaftliches Schreiben.",
+    "indexSeoDescription": "Entdecken Sie PDF-zentriertes Schreiben mit KI und LaTeX: direkt im Manuskript kommentieren, gesetzte Änderungen vor Ort prüfen und das eigene Fachurteil wahren.",
+    "indexSeoTitle": "Papilot-Blog: Wissenschaftliches Schreiben mit KI und LaTeX",
+    "indexTitle": "Blog",
+    "languageLabel": "Sprache",
+    "latest": "Vom Papilot-Team",
+    "mainNavigation": "Hauptnavigation",
+    "minutes": "Min. Lesezeit",
+    "privacy": "Datenschutz",
+    "product": "Produkt entdecken",
+    "read": "Artikel lesen",
+    "readingTime": "{minutes} Min. Lesezeit",
+    "rss": "Per RSS abonnieren",
+    "skip": "Zum Inhalt springen",
+    "theme": "Dunkelmodus"
+  },
+  "illustrations": {
+    "again": "Bei Bedarf mit neuen Notizen weiter",
+    "agent": "KI-Agent",
+    "agentItems": [
+      "Quellcode finden und ändern",
+      "Notation & Referenzen abgleichen",
+      "Manuskript neu kompilieren"
+    ],
+    "annotation": "Randnotizen",
+    "author": "Autor",
+    "authorItems": [
+      "Gelten die Prämissen noch?",
+      "Bleibt die Notation konsistent?",
+      "Halten die Aussagen stand?"
+    ],
+    "comparison": "Zurück zum Manuskript als Zentrum",
+    "comparisonDesc": "Links sind Quellcode und PDF getrennt; rechts bildet das PDF mit Randnotizen direkt auf dem Manuskript den Hauptarbeitsbereich.",
+    "flow": "Von der Seite zur Seite",
+    "flowDesc": "Autoren kommentieren das Manuskript, die KI ändert lokales LaTeX, Papilot kompiliert und Autoren prüfen direkt im PDF; bei Bedarf folgt die nächste Runde.",
+    "newPath": "Lesen · Kommentieren · Prüfen",
+    "now": "Manuskript-zentriert",
+    "old": "Quellcode-zentriert",
+    "oldPath": "PDF lesen → Code suchen → zum PDF",
+    "page": "Manuskript",
+    "preview": "PDF-Vorschau",
+    "responsibility": "Die KI ändert, Autoren urteilen",
+    "responsibilityDesc": "Die KI kann Quellcode lokalisieren, Notation anpassen und neu kompilieren; Autoren müssen Prämissen, Notation und Aussagen prüfen und das Werk verantworten.",
+    "responsibilityFoot": "Sauberer Satz ersetzt kein gültiges Argument.",
+    "source": "Quellcode",
+    "steps": [
+      [
+        "Autor",
+        "Im PDF kommentieren",
+        "Stelle zeigen, Absicht erklären."
+      ],
+      [
+        "KI-Agent",
+        "LaTeX bearbeiten",
+        "Lokalen Code finden und ändern."
+      ],
+      [
+        "Papilot",
+        "Projekt kompilieren",
+        "Gesetztes Manuskript erzeugen."
+      ],
+      [
+        "Autor",
+        "Im PDF prüfen",
+        "Annehmen, ablehnen, nachhaken."
+      ]
+    ],
+    "under": "KI ändert lokal LaTeX im Hintergrund"
+  }
+}

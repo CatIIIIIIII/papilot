@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Papilot 團隊",
+    "back": "所有文章",
+    "blog": "部落格",
+    "breadcrumb": "麵包屑導覽",
+    "category": "產品理念",
+    "contents": "本文目錄",
+    "demo": "體驗展示",
+    "empty": "新文章正在準備中。",
+    "figureLabel": "圖",
+    "footerNavigation": "頁尾導覽",
+    "indexDescription": "關於 AI、LaTeX 與論文寫作。",
+    "indexSeoDescription": "探索以 PDF 為中心的 AI 與 LaTeX 協作寫作：在文稿上直接批註、原位審閱排版修改，並將學術判斷留在作者手中。",
+    "indexSeoTitle": "Papilot 部落格：AI 與 LaTeX 論文寫作",
+    "indexTitle": "部落格",
+    "languageLabel": "語言",
+    "latest": "來自 Papilot 團隊",
+    "mainNavigation": "主導覽列",
+    "minutes": "分鐘閱讀",
+    "privacy": "隱私權聲明",
+    "product": "了解產品",
+    "read": "閱讀全文",
+    "readingTime": "{minutes} 分鐘閱讀",
+    "rss": "透過 RSS 訂閱",
+    "skip": "跳至內文",
+    "theme": "深色模式"
+  },
+  "illustrations": {
+    "again": "需要時，帶著新的批註繼續",
+    "agent": "AI 代理",
+    "agentItems": [
+      "定位與修改原始碼",
+      "協調記號與引用",
+      "重新編譯文稿"
+    ],
+    "annotation": "頁邊批註",
+    "author": "作者",
+    "authorItems": [
+      "前提仍然成立嗎？",
+      "記號是否保持一致？",
+      "論斷經得起推敲嗎？"
+    ],
+    "comparison": "對話的重心，回到手稿",
+    "comparisonDesc": "左側是原始碼與 PDF 分離的工作區，右側以 PDF 為主工作區，批註直接附著在文稿上。",
+    "flow": "修改始於頁面，也歸於頁面",
+    "flowDesc": "作者批註文稿，AI 修改本機 LaTeX，Papilot 編譯，再由作者在 PDF 上審閱；需要時繼續修訂。",
+    "newPath": "閱讀 · 批註 · 審閱",
+    "now": "以手稿為中心",
+    "old": "以原始碼為中心",
+    "oldPath": "讀 PDF → 找原始碼 → 回 PDF",
+    "page": "論文手稿",
+    "preview": "PDF 預覽",
+    "responsibility": "修改交給 AI，判斷屬於作者",
+    "responsibilityDesc": "AI 可以定位原始碼、修改記號並重新編譯；作者仍需核對前提、記號與論斷，並為最終稿件負責。",
+    "responsibilityFoot": "排版的清晰，不等於論證的正確。",
+    "source": "原始碼",
+    "steps": [
+      [
+        "作者",
+        "在 PDF 上批註",
+        "指明位置，說明修改意圖。"
+      ],
+      [
+        "AI 代理",
+        "編輯 LaTeX",
+        "定位並修改本機原始碼。"
+      ],
+      [
+        "Papilot",
+        "編譯專案",
+        "產生實際排版後的文稿。"
+      ],
+      [
+        "作者",
+        "在 PDF 上審閱",
+        "接受、拒絕，或繼續留言。"
+      ]
+    ],
+    "under": "AI 在背景修改本機 LaTeX 檔案"
+  }
+}

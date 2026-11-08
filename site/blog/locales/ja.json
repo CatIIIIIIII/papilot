@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Papilot チーム",
+    "back": "すべての記事",
+    "blog": "ブログ",
+    "breadcrumb": "パンくずリスト",
+    "category": "プロダクト理念",
+    "contents": "目次",
+    "demo": "デモを体験",
+    "empty": "新しい記事を準備中です。",
+    "figureLabel": "図",
+    "footerNavigation": "フッターナビゲーション",
+    "indexDescription": "AI、LaTeX、そして論文執筆について。",
+    "indexSeoDescription": "PDF を中心とした AI と LaTeX の協業執筆。原稿に直接注釈を付け、組版後の変更をその場で確認し、学術的な判断を著者の手に取り戻します。",
+    "indexSeoTitle": "Papilot ブログ：AI と LaTeX による論文執筆",
+    "indexTitle": "ブログ",
+    "languageLabel": "言語",
+    "latest": "Papilot チームより",
+    "mainNavigation": "メインナビゲーション",
+    "minutes": "分で読めます",
+    "privacy": "プライバシーポリシー",
+    "product": "製品紹介",
+    "read": "続きを読む",
+    "readingTime": "{minutes} 分で読めます",
+    "rss": "RSS で購読",
+    "skip": "本文へスキップ",
+    "theme": "ダークモード"
+  },
+  "illustrations": {
+    "again": "必要に応じて新たな注釈で改訂を継続",
+    "agent": "AI エージェント",
+    "agentItems": [
+      "ソースの特定と修正",
+      "記法と参照の統一",
+      "原稿の再コンパイル"
+    ],
+    "annotation": "余白の注釈",
+    "author": "著者",
+    "authorItems": [
+      "前提は今も成り立つか？",
+      "記法は一貫しているか？",
+      "主張は推敲に耐えるか？"
+    ],
+    "comparison": "対話の重心を原稿へ戻す",
+    "comparisonDesc": "左側はソースコードと PDF が分離した作業画面、右側は PDF を主作業領域とし、原稿に直接注釈を付ける画面です。",
+    "flow": "修正は紙面に始まり、紙面に還る",
+    "flowDesc": "著者が原稿に注釈を付け、AI がローカルの LaTeX を修正し、Papilot がコンパイルして、著者が PDF 上で確認します。必要に応じて改訂を続けます。",
+    "newPath": "読む・注釈する・確認する",
+    "now": "原稿中心",
+    "old": "ソース中心",
+    "oldPath": "PDF → ソースを探す → PDF に戻る",
+    "page": "論文原稿",
+    "preview": "PDF プレビュー",
+    "responsibility": "修正は AI に、判断は著者に",
+    "responsibilityDesc": "AI はソースの特定、記法の修正、再コンパイルを行えますが、前提や記法、主張を検証し最終原稿に責任を持つのは著者です。",
+    "responsibilityFoot": "組版の明快さは、論証の正しさを意味しない。",
+    "source": "ソースコード",
+    "steps": [
+      [
+        "著者",
+        "PDF に注釈",
+        "箇所を示し、修正意図を伝える。"
+      ],
+      [
+        "AI エージェント",
+        "LaTeX を編集",
+        "ローカルのソースを特定し修正。"
+      ],
+      [
+        "Papilot",
+        "コンパイル",
+        "組版済みの原稿を生成する。"
+      ],
+      [
+        "著者",
+        "PDF 上で確認",
+        "承認、却下、または追加コメント。"
+      ]
+    ],
+    "under": "AI が裏でローカルの LaTeX ファイルを変更"
+  }
+}

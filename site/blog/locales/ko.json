@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Papilot 팀",
+    "back": "전체 글",
+    "blog": "블로그",
+    "breadcrumb": "탐색 경로",
+    "category": "제품 철학",
+    "contents": "목차",
+    "demo": "데모 체험",
+    "empty": "새로운 글을 준비하고 있습니다.",
+    "figureLabel": "그림",
+    "footerNavigation": "바닥글 메뉴",
+    "indexDescription": "AI, LaTeX, 그리고 논문 집필에 관한 이야기입니다.",
+    "indexSeoDescription": "PDF 중심의 AI·LaTeX 협업 집필을 살펴보세요. 원고에 직접 주석을 달고 조판된 수정 사항을 검토하며 학술적 판단을 저자의 손에 남깁니다.",
+    "indexSeoTitle": "Papilot 블로그: AI와 LaTeX 논문 집필",
+    "indexTitle": "블로그",
+    "languageLabel": "언어",
+    "latest": "Papilot 팀의 글",
+    "mainNavigation": "주 메뉴",
+    "minutes": "분 소요",
+    "privacy": "개인정보 처리방침",
+    "product": "제품 소개",
+    "read": "전문 읽기",
+    "readingTime": "읽는 시간 {minutes}분",
+    "rss": "RSS로 구독",
+    "skip": "본문으로 건너뛰기",
+    "theme": "다크 모드"
+  },
+  "illustrations": {
+    "again": "필요할 때 새로운 주석으로 이어가기",
+    "agent": "AI 에이전트",
+    "agentItems": [
+      "소스 코드 탐색 및 수정",
+      "표기 및 인용 조율",
+      "원고 재컴파일"
+    ],
+    "annotation": "여백 주석",
+    "author": "저자",
+    "authorItems": [
+      "전제가 여전히 성립하는가?",
+      "표기가 일관되게 유지되는가?",
+      "주장이 엄밀한 검증을 견디는가?"
+    ],
+    "comparison": "대화의 중심을 다시 원고로",
+    "comparisonDesc": "왼쪽은 소스 코드와 PDF가 분리된 작업 공간이며, 오른쪽은 PDF를 주 작업 공간으로 삼아 원고에 직접 주석을 부착하는 구조입니다.",
+    "flow": "페이지에서 페이지로",
+    "flowDesc": "저자가 원고에 주석을 달면 AI가 로컬 LaTeX를 수정하고, Papilot이 컴파일한 뒤 저자가 다시 PDF 위에서 검토하며 필요시 수정을 이어갑니다.",
+    "newPath": "읽기 · 주석 · 검토",
+    "now": "원고 중심",
+    "old": "소스 코드 중심",
+    "oldPath": "PDF 읽기 → 소스 찾기 → 다시 PDF",
+    "page": "논문 원고",
+    "preview": "PDF 미리보기",
+    "responsibility": "수정은 AI에게, 판단은 저자에게",
+    "responsibilityDesc": "AI는 소스 코드를 찾고 표기를 고치며 다시 컴파일할 수 있지만, 전제와 표기 및 주장을 검증하고 최종 원고에 책임지는 것은 여전히 저자의 몫입니다.",
+    "responsibilityFoot": "조판이 깔끔하다고 해서 논증이 올바른 것은 아닙니다.",
+    "source": "소스 코드",
+    "steps": [
+      [
+        "저자",
+        "PDF에 주석 달기",
+        "위치와 수정 의도를 적습니다."
+      ],
+      [
+        "AI 에이전트",
+        "LaTeX 편집",
+        "로컬 소스를 찾아 수정합니다."
+      ],
+      [
+        "Papilot",
+        "프로젝트 컴파일",
+        "조판된 새 원고를 생성합니다."
+      ],
+      [
+        "저자",
+        "PDF에서 검토",
+        "수락, 거절 또는 추가 주석."
+      ]
+    ],
+    "under": "AI가 백그라운드에서 로컬 LaTeX 파일 수정"
+  }
+}

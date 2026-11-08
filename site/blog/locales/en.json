@@ -1,0 +1,82 @@
+{
+  "ui": {
+    "author": "Papilot Team",
+    "back": "All posts",
+    "blog": "Blog",
+    "breadcrumb": "Breadcrumb",
+    "category": "Product Philosophy",
+    "contents": "On this page",
+    "demo": "Try Demo",
+    "empty": "New posts are on the way.",
+    "figureLabel": "Figure",
+    "footerNavigation": "Footer",
+    "indexDescription": "On AI, LaTeX, and academic writing.",
+    "indexSeoDescription": "Explore PDF-first AI and LaTeX collaborative writing: annotate directly on your manuscript, review typeset changes in place, and keep judgment with the author.",
+    "indexSeoTitle": "Papilot Blog: AI and LaTeX Academic Writing",
+    "indexTitle": "Blog",
+    "languageLabel": "Language",
+    "latest": "From the Papilot Team",
+    "mainNavigation": "Main navigation",
+    "minutes": "min read",
+    "privacy": "Privacy Notice",
+    "product": "Product",
+    "read": "Read article",
+    "readingTime": "{minutes} min read",
+    "rss": "Subscribe via RSS",
+    "skip": "Skip to content",
+    "theme": "Dark mode"
+  },
+  "illustrations": {
+    "again": "Continue with new notes if needed",
+    "agent": "AI Agent",
+    "agentItems": [
+      "Locate and edit source files",
+      "Align notation and citations",
+      "Recompile the manuscript"
+    ],
+    "annotation": "Margin notes",
+    "author": "Author",
+    "authorItems": [
+      "Do the premises still hold?",
+      "Is the notation consistent?",
+      "Do the claims bear scrutiny?"
+    ],
+    "comparison": "Returning the focus to the page",
+    "comparisonDesc": "On the left, a split workspace separates source code from the PDF; on the right, the PDF is the primary workspace, with annotations attached directly to the manuscript.",
+    "flow": "Revisions begin and end on the page",
+    "flowDesc": "The author annotates the manuscript, AI edits the local LaTeX files, Papilot compiles the project, and the author reviews the changes on the PDF, continuing to revise as needed.",
+    "newPath": "Read · Annotate · Review",
+    "now": "Manuscript-centric",
+    "old": "Source-centric",
+    "oldPath": "Read PDF → Find code → Back to PDF",
+    "page": "Manuscript page",
+    "preview": "PDF preview",
+    "responsibility": "AI makes the edits; you judge",
+    "responsibilityDesc": "AI can locate source files, update notation, and recompile, while the author still verifies premises, notation, and claims, taking responsibility for the final manuscript.",
+    "responsibilityFoot": "Clear typesetting does not prove a claim.",
+    "source": "Source code",
+    "steps": [
+      [
+        "Author",
+        "Annotate the PDF",
+        "Mark the spot and state the goal."
+      ],
+      [
+        "AI Agent",
+        "Edit the LaTeX",
+        "Find and edit local source files."
+      ],
+      [
+        "Papilot",
+        "Compile project",
+        "Build the newly typeset document."
+      ],
+      [
+        "Author",
+        "Review on the PDF",
+        "Accept, reject, or add a comment."
+      ]
+    ],
+    "under": "AI edits local LaTeX files in background"
+  }
+}
