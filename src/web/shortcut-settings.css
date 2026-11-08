@@ -39,7 +39,7 @@
 .shortcut-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;min-height:66px;padding:12px 8px;border-bottom:1px solid var(--line);border-radius:6px;transition:background .15s}
 .shortcut-row:last-child{border-bottom:0}
 .shortcut-row.highlighted{background:var(--bg-subtle)}
-.shortcut-label{min-width:0;cursor:pointer}
+.shortcut-label{min-width:0;cursor:pointer;overflow-wrap:anywhere}
 .shortcut-label .settings-name{display:block;font-size:13px;font-weight:400}
 .shortcut-description{display:block;margin-top:2px;font-size:11px;line-height:1.5;color:var(--text-3)}
 .shortcut-row.disabled .settings-name,.shortcut-row.disabled>.shortcut-key{color:var(--text-3)}

@@ -217,7 +217,7 @@ try {
   const windowsContext = await browser.newContext({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36', reducedMotion: 'reduce' });
   const windowsPage = await windowsContext.newPage();
   watch(windowsPage);
-  const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  const version = process.env.PAPILOT_SITE_RELEASE ?? JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
   for (const width of [1440, 320]) {
     await windowsPage.setViewportSize({ width, height: 900 });
     for (const locale of Object.keys(languages)) {

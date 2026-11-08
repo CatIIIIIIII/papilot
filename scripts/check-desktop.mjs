@@ -12,6 +12,7 @@ import { findCommand } from '../engine/src/core/platform.mjs';
 import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { selectOption, selectedValue } from './select.mjs';
 import { checkDesktopNotifications } from './check-desktop-notifications.mjs';
+import { assertInstalledTools } from './desktop-requirements.mjs';
 
 const require = createRequire(import.meta.url);
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-test-'));
@@ -43,10 +44,11 @@ const launch = () => electron.launch({ executablePath: packaged || require('elec
   chromiumSandbox: process.env.PAPILOT_DESKTOP_TEST_CONTAINER !== '1', timeout: 90000 });
 async function dismissInitialSetup(page) {
   const requirements = await (await fetch(`${new URL(page.url()).origin}/api/runtime/requirements`)).json();
+  assertInstalledTools(requirements, env);
   if (requirements.checks.some(check => !check.ok)) {
-    const setup = page.getByRole('dialog', { name: /^(Get ready to write|准备开始写作)$/ });
+    const setup = page.getByRole('dialog', { name: /^(Git|LaTeX)$/ });
     await expect(setup).toBeVisible();
-    await setup.getByRole('button', { name: /^(Set up later|稍后设置)$/ }).click();
+    await setup.getByRole('button', { name: /^(Close|关闭)$/ }).click();
     await expect(setup).toHaveCount(0);
   }
 }

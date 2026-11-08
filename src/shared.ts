@@ -104,7 +104,7 @@ export interface DiagnosticCheck { id: string; ok: boolean; severity: 'error' | 
 // A compact summary of the host tools required to work on papers.
 export interface SystemRequirements {
   platform: string;
-  checks: { id: 'git' | 'latexmk' | 'synctex' | 'tex-engine'; ok: boolean }[];
+  checks: { id: 'git' | 'latexmk' | 'synctex' | 'tex-engine'; ok: boolean; failureReason?: 'timeout' | 'failed' }[];
 }
 export interface LatexInstallation {
   distribution: 'MacTeX' | 'BasicTeX' | 'TeX Live' | 'MiKTeX' | null;

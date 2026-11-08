@@ -272,7 +272,7 @@ try {
   await settingsDialog.getByRole('searchbox', { name: 'Search settings' }).fill('');
   await page.screenshot({ path: 'test-results/settings-review-desktop.png' });
   const runtimeGroup = settingsDialog.locator('.settings-category-group').filter({ has: page.getByRole('heading', { name: 'Runtime', exact: true }) });
-  assert.deepEqual(await runtimeGroup.getByRole('button').allTextContents(), ['Required tools', 'Agents', 'LaTeX']);
+  assert.deepEqual(await runtimeGroup.getByRole('button').allTextContents(), ['Git', 'Agents', 'LaTeX']);
   await runtimeGroup.getByRole('button', { name: 'Agents', exact: true }).click();
   const diagnostics = settingsDialog;
   assert.equal(await diagnostics.locator('.runtime-advanced').count(), 0);
@@ -1128,6 +1128,7 @@ try {
   assert.equal(await gitPanel.getByRole('region', { name: 'Commit graph', exact: true }).count(), 0);
   assert.equal(await gitPanel.getByRole('region', { name: 'Worktrees', exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('.settings-dialog').getByRole('button', { name: 'Git', exact: true }).click();
   await page.getByRole('switch', { name: 'Show advanced Git features', exact: true }).check();
   await page.locator('.settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
   // Cursor's source control: the commit box, then staged and unstaged lists.

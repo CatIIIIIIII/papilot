@@ -40,10 +40,10 @@ import { ImportDialog } from './import-dialog.tsx';
 import { CompileButton } from './compile-button.tsx';
 import { ProblemsButton, fixRequest, type ProblemsHandle } from './build-problems.tsx';
 import { useTheme } from './theme.tsx';
-import { SettingsDialog } from './settings.tsx';
+import { SettingsDialog, type SettingsInitialPage } from './settings.tsx';
 import { WorkspaceSwitcher } from './workspace-switcher.tsx';
 import { workspaceModifier, workspaceShortcutLabel } from './workspace-switch.ts';
-import { useSystemRequirements, requirementsMissing, RequirementsBanner, RequirementsDialog } from './system-requirements.tsx';
+import { useSystemRequirements, missingTools, RequirementsBanner } from './system-requirements.tsx';
 import { connectStamps } from './stamps.ts';
 import { connectIndirectChanges } from './effect-preferences.ts';
 import type { DiagnosticReport, SystemRequirements } from '../shared.ts';
@@ -103,7 +103,7 @@ connectStamps(api);
 connectIndirectChanges(api);
 const uploadAttachment = (projectId: string, file: File, signal: AbortSignal) => api<Attachment>(`/projects/${projectId}/attachments`, file, signal, 120000);
 const detectLatexInstallation = (signal: AbortSignal) => api<LatexInstallation | null>('/runtime/latex', undefined, signal, 30000);
-const loadRequirements = (signal: AbortSignal) => api<SystemRequirements>('/runtime/requirements', undefined, signal, 15000);
+const loadRequirements = (signal: AbortSignal) => api<SystemRequirements>('/runtime/requirements', undefined, signal, 35000);
 const checkDiagnostics = (projectId: string | undefined, signal: AbortSignal) => api<DiagnosticReport>('/diagnostics', { projectId }, signal, 60000);
 const AGENT_LABELS = AGENT_NAMES;
 const agentName = (task: Task) => AGENT_LABELS[task.agent || 'codex'] || 'Codex';
@@ -1140,7 +1140,7 @@ function App() {
   const [chatWidth, setChatWidth] = useState(() => Number(browserStorage.getItem('papilot:chat-width')) || 0);
   // Appearance, language and notifications live in Settings; a new language re-renders everything.
   const theme = useTheme(); const { language: uiLanguage } = useLanguage();
-  const [settings, setSettings] = useState<false | 'general' | 'shortcuts' | 'quickNotes'>(false);
+  const [settings, setSettings] = useState<false | SettingsInitialPage>(false);
   useEffect(() => {
     const shortcuts = () => setSettings('shortcuts'), quickNotes = () => setSettings('quickNotes');
     window.addEventListener('papilot:open-shortcuts', shortcuts); window.addEventListener('papilot:open-quick-notes', quickNotes);
@@ -1303,14 +1303,14 @@ function App() {
   useEffect(() => { setTaskSearch(''); setShowArchived(false); }, [project?.id]);
   useEffect(() => { if (task) setShowArchived(Boolean(task.archivedAt)); }, [task?.id, Boolean(task?.archivedAt)]);
   const requirements = useSystemRequirements(!isPlayground && Boolean(state) && online, loadRequirements);
-  const [setupOpen, setSetupOpen] = useState(false);
   const setupPrompted = useRef(false);
   const firstSetupVisit = useRef(!browserStorage.getItem('papilot:setup-seen') && !browserStorage.getItem('papilot:project'));
   useEffect(() => {
     if (!requirements.report || setupPrompted.current) return;
     setupPrompted.current = true;
     browserStorage.setItem('papilot:setup-seen', '1');
-    if (firstSetupVisit.current && requirementsMissing(requirements.report) && !document.querySelector('dialog[open]')) setSetupOpen(true);
+    const tool = missingTools(requirements)[0];
+    if (firstSetupVisit.current && tool && !document.querySelector('dialog[open]')) setSettings(tool);
   }, [requirements.report]);
   const newFiles = useAttachmentDraft(`papilot:files:new:${project?.id || projectId}`);
   const tasks = state?.tasks.filter(t => !project || t.projectId === project.id) || [];
@@ -1960,7 +1960,7 @@ function App() {
       {!gitOpen && (mobile || (!task && !manuscriptOpen)) && (sidebarToggle || task || manuscriptOpen) && <div className="workspace-navigation">
         {sidebarToggle}{taskControls}{manuscriptNavigation}{reviewOpen}
       </div>}
-      {state && <RequirementsBanner state={requirements} onOpen={() => setSetupOpen(true)}/>}
+      {state && <RequirementsBanner state={requirements} onOpen={setSettings}/>}
       {state && !online && <div className="connection-banner" role="status"><Icon name="alert" size={15}/><span>{t('Connection lost. Showing the last update; your draft is kept.')}</span><button onClick={() => void refresh(true)}>{t('Retry connection')}</button></div>}
       {task ? <div className={`task-grid layout-${taskLayout} show-${taskTab}`} style={chatWidth ? { '--chat-width': `${chatWidth}px` } as React.CSSProperties : undefined}>
           {!mobile && taskLayout === 'split' && <div className="panel-resizer" role="separator" aria-orientation="vertical" aria-label={t('Resize chat panel')} aria-valuenow={chatWidth || undefined} aria-valuemin={300} tabIndex={0} title={t('Drag to resize · Double-click to reset')} onPointerDown={resizeChat} onDoubleClick={() => setChatWidth(0)} onKeyDown={nudgeChat}/>}
@@ -1979,7 +1979,6 @@ function App() {
       : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button></div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {!isPlayground && setupOpen && <RequirementsDialog state={requirements} online={online} onClose={() => setSetupOpen(false)}/>}
     {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
     {editingPaper && <PaperDialog key={editingPaper.id} paper={editingPaper} onClose={() => setEditingPaper(null)} save={async form => {

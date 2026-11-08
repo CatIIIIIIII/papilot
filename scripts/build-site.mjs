@@ -26,8 +26,10 @@ const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // could meet a stylesheet or script cached from the previous release. Their
 // URLs carry a hash of their content instead.
 const version = name => crypto.createHash('sha256').update(fs.readFileSync(path.join(out, name))).digest('hex').slice(0, 10);
-// Download links name the release this commit belongs to.
-const { version: release } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+// Deployments use the published release, which can differ from main after a
+// rollback or while the next release is still being prepared.
+const release = process.env.PAPILOT_SITE_RELEASE ?? JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+if (!/^\d+\.\d+\.\d+$/.test(release)) throw new Error('PAPILOT_SITE_RELEASE must be a stable version.');
 const names = JSON.parse(fs.readFileSync(path.join(root, 'i18n/languages.json'), 'utf8'));
 const locales = ['en', ...Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'i18n/config.json'), 'utf8')).locales)];
 if (JSON.stringify(Object.keys(names)) !== JSON.stringify(locales)) throw new Error('Website languages must match the App configuration.');

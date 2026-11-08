@@ -5,6 +5,9 @@ on:
     # The playground shares the app source, so every main update rebuilds it.
     branches: [main]
   workflow_dispatch:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
 
 permissions:
   contents: read
@@ -18,6 +21,7 @@ concurrency:
 jobs:
   deploy:
     name: Build and deploy
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     # Give up on a stuck run rather than hold the pages group for six hours.
     timeout-minutes: 15
@@ -30,6 +34,16 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts
+      - name: Use the latest published release for downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="$(gh api repos/PapilotAI/papilot/releases/latest --jq .tag_name)"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The latest published release does not have a stable version tag."; exit 1
+          fi
+          echo "PAPILOT_SITE_RELEASE=${tag#v}" >> "$GITHUB_ENV"
       # Render the native UI examples and translated markup at build time.
       - run: node scripts/build-site.mjs
         env:

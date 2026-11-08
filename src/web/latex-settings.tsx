@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import type { LatexInstallation } from '../shared.ts';
 import { BrandIcon } from './brand-icon.tsx';
 import { Icon } from './icons.tsx';
+import { ToolRequirement, type RequirementsState } from './system-requirements.tsx';
 import { t } from './i18n.ts';
 
-export function LatexSettings({ load, online }: { load: (signal: AbortSignal) => Promise<LatexInstallation | null>; online: boolean }) {
+export function LatexSettings({ load, online, requirements }: { requirements?: { state: RequirementsState; online: boolean }; load: (signal: AbortSignal) => Promise<LatexInstallation | null>; online: boolean }) {
   const [installation, setInstallation] = useState<LatexInstallation | null>(null);
   const [busy, setBusy] = useState(true), [failed, setFailed] = useState(false), [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -20,8 +21,9 @@ export function LatexSettings({ load, online }: { load: (signal: AbortSignal) =>
       <header className="latex-installation-header">
         <BrandIcon name="latex" size={32}/>
         <h3>{installation?.distribution || t('LaTeX installation')}</h3>
-        <button type="button" className="icon-button" aria-label={t('Detect again')} title={t('Detect again')} disabled={busy || !online} onClick={() => setAttempt(value => value + 1)}><Icon name="refresh" size={16}/></button>
+        <button type="button" className="icon-button" aria-label={t('Detect again')} title={t('Detect again')} disabled={busy || requirements?.state.busy || !online} onClick={() => { setAttempt(value => value + 1); requirements?.state.recheck(); }}><Icon name="refresh" size={16}/></button>
       </header>
+      {requirements && <ToolRequirement tool="latex" {...requirements} showRecheck={false}/>}
       {busy ? <p role="status" className="settings-intro">{t('Detecting LaTeX installation…')}</p>
         : failed ? <p role="alert" className="settings-intro">{t('Could not read the LaTeX installation. Try again.')}</p>
         : installation ? <dl className="latex-installation-facts">

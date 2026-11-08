@@ -74,7 +74,10 @@ await context.route('**/api/**', async route => {
 const panel = page.getByRole('region', { name: 'Version Management', exact: true });
 const showHistory = () => panel.locator('.git-detail-switcher').getByRole('button', { name: 'Version history', exact: true }).click();
 const settings = page.locator('.settings-dialog');
-async function openSettings() { await page.getByRole('button', { name: 'Settings', exact: true }).click(); }
+async function openSettings() {
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Git', exact: true }).click();
+}
 async function closeSettings() { await settings.getByRole('button', { name: 'Close', exact: true }).click(); }
 async function syncFromMenu() {
   await panel.getByRole('button', { name: 'More commit actions', exact: true }).click();

@@ -27,7 +27,7 @@
 .appearance-mini-chat b,.appearance-mini-chat em{width:80%;margin:1px 0 3px auto;background:var(--accent)}
 .appearance-mini-chat i:nth-child(3){width:65%}
 .appearance-mini-chat>span{height:8px;border:1px solid var(--line-strong);border-radius:6px;margin-top:auto}
-.settings-content .appearance-settings .appearance-colors-card .settings-row{padding:14px 0;min-height:65px}
+.settings-content .appearance-settings .appearance-colors-card .settings-row{padding:14px 0;min-height:65px;flex-wrap:wrap}
 .appearance-theme-controls{display:flex;align-items:center;gap:12px;min-width:0}
 .appearance-customized{font-size:11px;color:var(--text-3)}
 .appearance-theme-picker,.appearance-accent-picker{position:relative;display:inline-flex;flex:none;max-width:100%}

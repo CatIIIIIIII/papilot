@@ -17,7 +17,7 @@
 .quick-note-icon{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:var(--bg-muted);color:var(--text-2)}
 .quick-note-text{display:grid;gap:1px;min-width:0;padding:4px 8px;margin:-4px -8px;border-radius:8px;text-align:left}
 .quick-note-text:hover:not(:disabled){background:var(--bg-hover)}
-.quick-note-text strong{font-size:13.5px;font-weight:500;color:var(--text)}
+.quick-note-text strong{min-width:0;font-size:13.5px;font-weight:500;color:var(--text);overflow-wrap:anywhere}
 .quick-note-text span{overflow:hidden;color:var(--text-3);font-size:12px;line-height:1.5;text-overflow:ellipsis;white-space:nowrap}
 .quick-note-editor{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:18px;padding:18px 20px;background:var(--bg-subtle)}
 .quick-note-fields{display:grid;gap:12px}

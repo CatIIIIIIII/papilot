@@ -17,19 +17,20 @@ import { QuickNoteSettings } from './quick-note-settings.tsx';
 import { AboutSettings, LicenseSettings } from './about-settings.tsx';
 import info from 'virtual:papilot-info';
 import { DiagnosticsSettings, type DiagnosticsSettingsProps } from './diagnostics-settings.tsx';
-import { RequirementsPanel, type RequirementsState } from './system-requirements.tsx';
+import { ToolRequirement, type RequirementsState } from './system-requirements.tsx';
 import { LatexSettings } from './latex-settings.tsx';
 import { UpdateSettings, versionLabel, type UpdateApi } from './update-notice.tsx';
 import { SkillLibraryPanel, type SkillLibraryControls, type SkillLibraryOptions } from './skill-library.tsx';
 import { ModelDefaultSettings, type ModelDefaultSettingsProps } from './model-default-settings.tsx';
 
-type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'requirements' | 'latex' | 'skills' | 'updates';
+type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'git' | 'latex' | 'skills' | 'updates';
+export type SettingsInitialPage = 'general' | 'shortcuts' | 'quickNotes' | 'git' | 'latex';
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'latex-review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: SettingsInitialPage }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const skillControls = useRef<SkillLibraryControls>(null);
   const { choice } = useLanguage();
@@ -68,7 +69,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const close = () => { if (page === 'skills') skillControls.current?.cancel(); else navigate(onClose); };
   const groups: { label: string; entries: SettingsEntry[] }[] = [
     { label: t('Personal'), entries: [
-      { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')} ${t('Show advanced Git features')}` },
+      { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')}` },
       { page: 'appearance', label: t('Appearance'), icon: 'sun', keywords: `${t('Light')} ${t('Dark')} ${t('System')} ${t('Theme')} ${t('Accent')} ${t('Background')} ${t('Foreground')}` },
       { page: 'notifications', label: t('Notifications'), icon: 'bell' },
       { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Track indirect changes')}` },
@@ -79,7 +80,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       ...(skills ? [{ page: 'skills' as const, label: t('Skills'), icon: 'spark' }] : []),
     ] },
     { label: t('Runtime'), entries: [
-      ...(requirements ? [{ page: 'requirements' as const, label: t('Required tools'), icon: 'check', keywords: 'Git LaTeX TeX Live MacTeX' }] : []),
+      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')}` },
       ...(diagnostics ? [
         { page: 'agents', label: t('Agents'), icon: 'terminal', keywords: `${t('Agent configuration')} ${t('Available models')} ${t('Usage & limits')}` },
         { page: 'latex', label: 'LaTeX', icon: 'paper', keywords: 'TeX Live MacTeX BasicTeX MiKTeX' },
@@ -103,7 +104,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
           {visibleGroups.map(group => <section className="settings-category-group" key={group.label}>
             <h3>{group.label}</h3>
             {group.entries.map(entry => <button type="button" key={entry.label} className="settings-category" data-settings-page={entry.page} aria-current={entry.page === page || (page === 'licenses' && entry.page === 'about') ? 'page' : undefined} onClick={() => goTo(entry.page)}>
-              {entry.page === 'about' ? <img src={logo} width="18" height="18" alt=""/> : entry.page === 'latex' ? <BrandIcon name={entry.page} size={18}/> : <Icon name={entry.icon} size={18}/>}<span>{entry.label}</span>
+              {entry.page === 'about' ? <img src={logo} width="18" height="18" alt=""/> : (entry.page === 'latex' || entry.page === 'git') ? <BrandIcon name={entry.page} size={18}/> : <Icon name={entry.icon} size={18}/>}<span>{entry.label}</span>
             </button>)}
           </section>)}
           {!visibleGroups.length && <p className="settings-search-empty">{t('No matching settings')}</p>}
@@ -116,7 +117,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         <header className="settings-content-header">
           <button type="button" className="settings-back settings-mobile-back" onClick={browseCategories}><Icon name="chevronLeft" size={14}/>{t('Settings')}</button>
           {page === 'licenses' && <button type="button" className="settings-back" onClick={() => goTo('about')}><Icon name="chevronLeft" size={14}/>{t('About Papilot')}</button>}
-          <h2 id="settings-title" tabIndex={-1}>{(page === 'latex') && <BrandIcon name={page} size={30}/>}{title}</h2>
+          <h2 id="settings-title" tabIndex={-1}>{(page === 'latex' || page === 'git') && <BrandIcon name={page} size={30}/>}{title}</h2>
         </header>
         {page === 'general' && <section className="settings-card">
           <div className="settings-row settings-choice">
@@ -128,13 +129,6 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
             <div className="settings-text"><span className="settings-name">{t('Environment')}</span><p>{environment || 'Windows / WSL'}</p></div>
             <button type="button" onClick={() => void window.papilotDesktop?.openEnvironment?.()}>{t('Change…')}</button>
           </div>}
-          <div className="settings-row settings-toggle">
-            <div className="settings-text">
-              <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>
-              <p id="settings-advanced-git-detail">{t('Show the commit graph, worktrees, amend and separate remote actions in the Git panel. Off by default.')}</p>
-            </div>
-            <input id="settings-advanced-git" type="checkbox" role="switch" className="switch" aria-describedby="settings-advanced-git-detail" checked={advancedGit} onChange={event => saveAdvancedGit(event.target.checked)}/>
-          </div>
         </section>}
         {page === 'appearance' && <AppearanceSettings theme={theme} onTheme={onTheme} resolved={resolved} appearance={appearance} onAppearance={onAppearance}/>}
         {page === 'review' && <section className="settings-card">
@@ -164,8 +158,19 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'about' && <AboutSettings onLicenses={() => goTo('licenses')}/>}
         {page === 'licenses' && <LicenseSettings/>}
         {page === 'agents' && diagnostics && <DiagnosticsSettings {...diagnostics}/>}
-        {page === 'requirements' && requirements && <div className="settings-page"><RequirementsPanel {...requirements}/></div>}
-        {page === 'latex' && diagnostics && <LatexSettings online={diagnostics.online} load={diagnostics.latex}/>}
+        {page === 'git' && <div className="settings-page">
+          {requirements && <section className="settings-card settings-card-body"><ToolRequirement tool="git" {...requirements}/></section>}
+          <section className="settings-card">
+            <div className="settings-row settings-toggle">
+              <div className="settings-text">
+                <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>
+                <p id="settings-advanced-git-detail">{t('Show the commit graph, worktrees, amend and separate remote actions in the Git panel. Off by default.')}</p>
+              </div>
+              <input id="settings-advanced-git" type="checkbox" role="switch" className="switch" aria-describedby="settings-advanced-git-detail" checked={advancedGit} onChange={event => saveAdvancedGit(event.target.checked)}/>
+            </div>
+          </section>
+        </div>}
+        {page === 'latex' && diagnostics && <LatexSettings online={diagnostics.online} load={diagnostics.latex} requirements={requirements}/>}
         {page === 'updates' && updates && <UpdateSettings api={updates}/>}
         {page === 'skills' && skills && <SkillLibraryPanel {...skills} controls={skillControls} onClose={onClose}/>}
       </div>
