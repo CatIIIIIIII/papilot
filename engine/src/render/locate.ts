@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { argument, buildOutline } from "../core/outline.ts";
+import {
+  bodyFiles,
+  sourceInputs,
+  structuralSource,
+} from "../core/tex-source.ts";
 import { SynctexIndex } from "./synctex.ts";
 import { listFiles } from "../core/files.ts";
 import { PdfDocument, type PdfPage, type OutlineEntry } from "./pdf.ts";
@@ -17,12 +22,90 @@ const BOUNDARY =
   /^\s*\\(?:\[|\]|begin\{|end\{|input\{|include\{|(?:sub)*section\*?\{|chapter\*?\{|paragraph\{)/;
 export type Box = SourceBox;
 export type Intervals = Map<number, Span[]>;
+// Resolve frame wrappers from the sources actually loaded by the document.
+// An outer environment may contain many frames; its closing line is not a
+// valid substitute for the closing line of the frame being edited.
+function frameEnvironments(
+  read: (name: string) => string | null,
+  main: string,
+) {
+  const names = new Set(["frame"]),
+    seen = new Set<string>(),
+    definitions = new Map<string, string>(),
+    parents = new Map<string, { file: string; line: number }[]>();
+  const walk = (file: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const text = structuralSource(read(file) ?? "");
+    for (const input of sourceInputs(text, main)) {
+      if (!parents.has(input.file)) parents.set(input.file, []);
+      parents.get(input.file)!.push({ file, line: input.line });
+      walk(input.file);
+    }
+    // Wrapper environments are often defined in a project-local package.
+    // Installed TeX packages need no filesystem search here: read() returns
+    // null for dependencies outside the build's source tree.
+    for (const match of text.matchAll(
+      /\\(?:usepackage|RequirePackage|LoadClass|LoadClassWithOptions)\b/g,
+    )) {
+      const [packages] = argument(text, match.index + match[0].length);
+      for (const name of packages?.split(",") ?? []) {
+        const local = name.trim();
+        if (!local || /[\\#]/.test(local) || path.posix.isAbsolute(local))
+          continue;
+        const child = path.posix.normalize(
+          path.posix.join(
+            path.posix.dirname(main),
+            local + (match[0].includes("Class") ? ".cls" : ".sty"),
+          ),
+        );
+        if (child !== ".." && !child.startsWith("../")) walk(child);
+      }
+    }
+    for (const match of text.matchAll(
+      /\\(newenvironment|renewenvironment|(?:New|Renew|Provide|Declare)DocumentEnvironment|NewEnviron|RenewEnviron)\*?\s*/g,
+    )) {
+      const [name, afterName] = argument(text, match.index! + match[0].length);
+      if (!name) continue;
+      const position = match[1].endsWith("DocumentEnvironment")
+        ? argument(text, afterName)[1]
+        : afterName;
+      const [opening, afterOpening] = argument(text, position),
+        closing = match[1].endsWith("Environ")
+          ? ""
+          : argument(text, afterOpening)[0];
+      if (opening !== null) definitions.set(name, opening + (closing ?? ""));
+    }
+  };
+  walk(main);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const [name, body] of definitions) {
+      if (names.has(name)) continue;
+      if (
+        /\\frame\b/.test(body) ||
+        [...body.matchAll(/\\begin\s*\{([^}]+)\}/g)].some((m) =>
+          names.has(m[1]),
+        )
+      ) {
+        names.add(name);
+        added = true;
+      }
+    }
+  }
+  return { names, parents };
+}
 export class Build {
   document: PdfDocument;
   locator: Locator;
   margins: Margins;
   figures: FigureLocator;
   outline: Heading[];
+  bodyFiles: string[];
+  slides: boolean;
+  frameEnvironments: Set<string>;
+  inputParents: Map<string, { file: string; line: number }[]>;
   constructor(
     public info: BuildInfo,
     public main: string,
@@ -31,7 +114,22 @@ export class Build {
     this.document = new PdfDocument(info.pdf);
     this.margins = new Margins(this.document);
     this.locator = new Locator(this);
-    this.outline = buildOutline((n) => this.read(n), main).nodes;
+    const outline = buildOutline((n) => this.read(n), main);
+    this.outline = outline.nodes;
+    this.bodyFiles = bodyFiles((name) => this.read(name), main);
+    this.slides = /\\documentclass\s*(?:\[[^\]]*\]\s*)?\{beamer\}/.test(
+      structuralSource(this.read(main) ?? ""),
+    );
+    const frames = this.slides
+      ? frameEnvironments((name) => this.read(name), main)
+      : null;
+    this.frameEnvironments = frames?.names ?? new Set();
+    this.inputParents = new Map(
+      [...(frames?.parents ?? [])].map(([name, parents]) => [
+        this.path(name),
+        parents.map((parent) => ({ ...parent, file: this.path(parent.file) })),
+      ]),
+    );
     this.figures = new FigureLocator(this);
   }
   path(name: string) {
@@ -243,10 +341,18 @@ export class Locator {
       result.push(...this.lookup(file, line));
     return result;
   }
-  locate(name: string, start: number, end: number, whole = false): Position[] {
+  locate(
+    name: string,
+    start: number,
+    end: number,
+    whole = false,
+    changed?: Span[],
+  ): Position[] {
     const file = this.build.path(name);
     if (!fs.existsSync(file) || path.extname(file) !== ".tex") return [];
     const lines = fs.readFileSync(file, "utf8").split("\n");
+    if (this.build.slides)
+      return this.slidePages(file, lines, changed ?? [[start - 1, end]], whole);
     [start, end] = sourceRange(lines, start, end, whole);
     let wanted = Array.from(
       { length: Math.max(0, end - start + 1) },
@@ -322,6 +428,114 @@ export class Locator {
             Math.min(right, columnRight),
             Math.min(page.height, bottom),
           ],
+          label: page.label,
+        };
+      });
+  }
+  private slidePages(
+    file: string,
+    lines: string[],
+    changed: Span[],
+    whole: boolean,
+    visited = new Set<string>(),
+    enclosingOnly = false,
+  ): Position[] {
+    if (visited.has(file)) return [];
+    visited = new Set(visited).add(file);
+    // An input inside a frame belongs to that canvas, even when the input
+    // also defines macros that contain frame syntax. Resolve the enclosing
+    // frame before inspecting local boundaries or an empty diff side.
+    const inherited = (this.build.inputParents.get(file) ?? []).flatMap(
+      (parent) =>
+        fs.existsSync(parent.file)
+          ? this.slidePages(
+              parent.file,
+              fs.readFileSync(parent.file, "utf8").split("\n"),
+              [[parent.line - 1, parent.line]],
+              false,
+              visited,
+              true,
+            )
+          : [],
+    );
+    if (inherited.length)
+      return [...new Map(inherited.map((at) => [at.page, at])).values()].sort(
+        (a, b) => a.page - b.page,
+      );
+    // Beamer (and body-capturing frame wrappers) records the frame at its
+    // closing line. Interior queries can instead resolve to the previous
+    // frame. Query enclosing frame environments at their closing lines.
+    const stack: { name: string; line: number }[] = [],
+      blocks: Span[] = [],
+      source = structuralSource(lines.join("\n")).split("\n");
+    source.forEach((line, i) => {
+      for (const match of line.matchAll(/\\(begin|end)\s*\{([^}]+)\}/g)) {
+        if (match[2] === "document") continue;
+        if (match[1] === "begin") stack.push({ name: match[2], line: i + 1 });
+        else if (stack.at(-1)?.name === match[2]) {
+          const opening = stack.pop()!;
+          if (this.build.frameEnvironments.has(opening.name))
+            blocks.push([opening.line, i + 1]);
+        }
+      }
+    });
+    const text = source.join("\n");
+    for (const match of text.matchAll(/\\frame\b/g)) {
+      let at = match.index + match[0].length;
+      // Beamer accepts overlay specifications and frame options before its
+      // braced body. Match the body braces, rather than guessing a nearby row.
+      while (at < text.length) {
+        while (/\s/.test(text[at] ?? "") && at < text.length) at++;
+        const close = text[at] === "<" ? ">" : text[at] === "[" ? "]" : null;
+        if (!close) break;
+        const end = text.indexOf(close, at + 1);
+        if (end < 0) break;
+        at = end + 1;
+      }
+      const [body, end] = argument(text, at);
+      if (body !== null)
+        blocks.push([
+          text.slice(0, match.index).split("\n").length,
+          text.slice(0, end).split("\n").length,
+        ]);
+    }
+    // Diff operations are zero-based, half-open. An empty side belongs to
+    // a frame only when its insertion point is strictly inside that frame.
+    // Deleting/inserting a whole frame must not select its unchanged neighbor.
+    const selected = blocks.filter(
+        ([a, b]) =>
+          whole ||
+          changed.some(([start, end]) =>
+            start === end
+              ? a - 1 < start && start < b
+              : a - 1 < end && start < b,
+          ),
+      ),
+      queries = selected.length
+        ? selected.map(([, b]) => b)
+        : enclosingOnly
+          ? []
+          : changed
+              .flatMap(([start, end]) =>
+                Array.from(
+                  { length: Math.max(0, end - start) },
+                  (_, i) => start + i + 1,
+                ),
+              )
+              .filter((line) => source[line - 1]?.trim());
+    this.index ??= new SynctexIndex(this.build.info.pdf);
+    const pages = new Set<number>();
+    for (const line of queries)
+      for (const [number] of this.index.view(file, line))
+        if (number >= 1 && number <= this.build.document.length)
+          pages.add(number - 1);
+    return [...pages]
+      .sort((a, b) => a - b)
+      .map((number) => {
+        const page = this.build.document.page(number);
+        return {
+          page: number,
+          clip: [0, 0, page.width, page.height] as Rect,
           label: page.label,
         };
       });

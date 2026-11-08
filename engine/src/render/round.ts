@@ -84,14 +84,33 @@ export function classify(
     own0 = {
       left:
         located && unit.status !== "added"
-          ? old.locator.locate(name, unit.old_start, unit.old_end, whole)
+          ? old.locator.locate(
+              name,
+              unit.old_start,
+              unit.old_end,
+              whole,
+              unit.ops.length
+                ? unit.ops.map(([, start, end]) => [start, end])
+                : undefined,
+            )
           : [],
       right:
         located && unit.status !== "deleted"
-          ? next.locator.locate(name, unit.new_start, unit.new_end, whole)
+          ? next.locator.locate(
+              name,
+              unit.new_start,
+              unit.new_end,
+              whole,
+              unit.ops.length
+                ? unit.ops.map(([, , , start, end]) => [start, end])
+                : undefined,
+            )
           : [],
     },
-    al = own0.left.length || own0.right.length ? alignment(old, next) : null,
+    al =
+      !(old.slides || next.slides) && (own0.left.length || own0.right.length)
+        ? alignment(old, next)
+        : null,
     // Located edits use the whole comparison to crop between anchors around
     // changed lines, or keep their SyncTeX crops when no words changed.
     groups = al && alignedCrops(al, own0.left, own0.right, whole, mine),
@@ -235,12 +254,13 @@ export function renderRound(
     old = new Build(request.old, request.main, request.source_dir),
     next = new Build(request.new, request.main, request.source_dir);
   try {
-    const body = new Set(
-        [old, next].flatMap((b) => b.outline.flatMap((n) => n.files)),
-      ),
+    const body = new Set([old, next].flatMap((b) => b.bodyFiles)),
       cards: Card[] = [],
       result: RenderedRound = { units: {}, sections: [], loose: [] };
-    const mine = request.cards ? null : owners(old, next, request.units, body);
+    const mine =
+      request.cards || old.slides || next.slides
+        ? null
+        : owners(old, next, request.units, body);
     for (const [index, unit] of request.units.entries()) {
       // The pass after variant builds reuses the first pass's cards rather
       // than asking SyncTeX again.
