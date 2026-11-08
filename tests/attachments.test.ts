@@ -6,7 +6,6 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Store } from '../src/server/store.ts';
 import { Workspace } from '../src/server/workspace.ts';
-import { Accounts } from '../src/server/accounts.ts';
 import { Manuscripts } from '../src/server/manuscript.ts';
 import { buildApp, gitQueue } from '../src/server/app.ts';
 import { attachmentIds } from '../src/server/attachments.ts';
@@ -30,8 +29,7 @@ async function fixture() {
   store.saveProject(project); store.saveProject({ ...project, id: 'other', path: path.join(dir, 'other') });
   const task: Task = { id: 'task-attachments-1', projectId: 'paper', name: 'p-test', title: 'Task', titleSource: 'manual', instructions: 'Edit.', worktree: dir, threadId: null, turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };
   store.saveTask(task);
-  const accounts = new Accounts(store, '');
-  const app = await buildApp({ listener: { kind: 'local', port: 7274, publicOrigin: '', owner: '' }, store, workspace, manuscripts: new Manuscripts(), accounts, csrf: 'csrf', serialGit: gitQueue(), dist: null, version: 'test', connectReview: async () => review });
+  const app = await buildApp({ listener: { kind: 'local', port: 7274, publicOrigin: '', owner: '' }, store, workspace, manuscripts: new Manuscripts(), csrf: 'csrf', serialGit: gitQueue(), dist: null, version: 'test', connectReview: async () => review });
   const upload = (name: string, payload: Buffer, extra = {}) => app.inject({ method: 'POST', url: '/api/projects/paper/attachments', headers: { ...headers, 'content-type': 'application/octet-stream', 'x-papilot-filename': encodeURIComponent(name), ...extra }, payload });
   return { dir, store, agent, workspace, app, upload, task, async close() { await app.close(); workspace.close(); store.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
 }
@@ -61,28 +59,26 @@ test('binary uploads enforce CSRF, body limits and safe downloads, and retain Un
   } finally { await f.close(); }
 });
 
-test('draft files are private, become visible with a message, survive restart, and reach Codex as images', async () => {
+test('draft files attach to one task, survive restart, and reach Codex as images', async () => {
   const f = await fixture();
   try {
-    const image = await f.workspace.attachments.upload('paper', 'ada', 'figure.png', PNG);
-    const data = await f.workspace.attachments.upload('paper', 'ada', 'results.csv', Buffer.from('x,y\n1,2'));
-    assert.throws(() => f.workspace.attachments.get('paper', image.id, 'bob'), /not found/);
-    await assert.rejects(f.workspace.enqueue(f.task.id, 'Use these.', 'wrong-person', false, { attachments: [image.id], author: { id: 'bob', name: 'Bob' } }), /not available/);
-    const run = await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id], author: { id: 'ada', name: 'Ada' } });
+    const image = await f.workspace.attachments.upload('paper', 'figure.png', PNG);
+    const data = await f.workspace.attachments.upload('paper', 'results.csv', Buffer.from('x,y\n1,2'));
+    const run = await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id] });
     assert.deepEqual(run.attachments, [image, data]);
     assert.match(run.prompt, /results.csv/);
     // The listing is JSON for the agent, so the path appears escaped there.
     const listing = run.prompt.split('User-provided attachments (read-only reference material):\n')[1].split('\nRead these files')[0].split('\n');
     assert.ok(listing.some(line => (JSON.parse(line) as { path: string }).path === f.workspace.attachments.path(data)));
     assert.deepEqual(f.store.items(f.task.id)[0].meta?.attachments, [image, data]);
-    assert.equal(f.workspace.attachments.get('paper', image.id, 'bob').id, image.id);
-    assert.throws(() => f.workspace.attachments.resolve('paper', [image.id], 'ada', 'another-task'), /not available/);
-    f.workspace.attachments.discard('paper', image.id, 'ada');
+    assert.equal(f.workspace.attachments.get('paper', image.id).id, image.id);
+    assert.throws(() => f.workspace.attachments.resolve('paper', [image.id], 'another-task'), /not available/);
+    f.workspace.attachments.discard('paper', image.id);
     assert.equal(fs.existsSync(f.workspace.attachments.path(image)), true, 'late draft removal preserves a sent file');
     const reopened = new Store(path.join(f.dir, 'state.sqlite'));
     assert.deepEqual(reopened.runs()[0].attachments, [image, data]); reopened.close();
     f.agent.ready = true; f.workspace.runtime.authenticated = true;
-    await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id], author: { id: 'ada', name: 'Ada' } });
+    await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id] });
     for (let i = 0; i < 40 && !f.agent.calls.some(call => call.method === 'turn/start'); i++) await new Promise(resolve => setTimeout(resolve, 10));
     const input = f.agent.calls.find(call => call.method === 'turn/start')?.params.input;
     assert.equal(input[0].text, run.prompt);

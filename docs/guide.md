@@ -45,7 +45,7 @@ Papilot identifies the main TeX file and compiler, creates Git history when need
 
 A failed build stays in the import window with compiler details and suggested next steps. Change the main file or engine and retry, edit files at the displayed saved location, or choose **Help fix compilation** with a connected assistant. Assistant repairs remain uncommitted for inspection in file changes. Missing TeX tools must be installed on the host. **Continue later** saves the import for the next time you open **Add paper**, including after a restart. **Add and fix later** registers a prepared paper even if compilation still needs attention; PDF review requires a successful build. Closing or replacing an import keeps its saved files. Custom build settings are described in the [review engine reference](../engine/docs/reference.md).
 
-Each paper in that menu has a **pencil** button that opens its name and repository path together, with **Remove paper** in the same dialog. You can manage a paper without switching to it. In the desktop app the dialog shows the paper's **Location**, and **Change…** picks another folder instead of typing a path. Changing the path updates its saved repository location and checks that any existing task worktrees belong to that repository; it does not move files. Removing a paper clears its Papilot tasks, conversations, notes and sharing entries while preserving all files, Git history and worktrees on disk. Path changes and removal are owner-only and require the paper's current tasks and builds to be idle.
+Each paper in that menu has a **pencil** button that opens its name and repository path together, with **Remove paper** in the same dialog. You can manage a paper without switching to it. In the desktop app the dialog shows the paper's **Location**, and **Change…** picks another folder instead of typing a path. Changing the path updates its saved repository location and checks that any existing task worktrees belong to that repository; it does not move files. Removing a paper clears its Papilot tasks, conversations and notes while preserving all files, Git history and worktrees on disk. Path changes and removal require the paper's current tasks and builds to be idle.
 
 To try a sample first, run `papilot demo` (`npm run demo` in a source checkout). It copies the example paper in `examples/papilot-paper` (this README written as a 26-page LaTeX paper in fifteen chapter files, with a usage chapter, formal models of review rounds, conflicts, the PDF view's geometry, queueing and Git, theorems with proofs, an algorithm, TikZ and pgfplots figures, tables and a BibTeX bibliography, so there is plenty to review) into a separate Git repository, `example-paper` in the data folder, and registers it as **Papilot paper** without changing an existing manuscript. Start an editing task from the interface when you are ready to use your chosen agent.
 
@@ -97,7 +97,7 @@ Kimi mode changes were checked against CLI 2.4.1 without model generation, inclu
 
 Papilot checks Git, `latexmk`, SyncTeX and the available LaTeX engines when the workspace opens and after reconnecting. On a first visit, missing tools open a setup guide; returning users see a **Review setup** notice. **Settings → Runtime → Required tools** is always available. The guide explains what each tool does, links to official installation instructions for the computer running Papilot, and offers **Check again** after installation. A partial TeX installation is marked as incomplete. If installed tools are still not detected, restart Papilot; a server may need to be restarted from a new terminal with the correct `PATH`.
 
-**Set up later** leaves the notice available while you explore. Healthy installations do not show a setup prompt. Collaborators see the host's tool status and are directed to the workspace owner; they do not need to install Git or LaTeX on their own computer or phone. These checks share only availability and the host operating system, without host paths or diagnostic logs. They do not install software. AI agent setup remains in **Settings → Runtime → Agents**.
+**Set up later** leaves the notice available while you explore. Healthy installations do not show a setup prompt. These checks share only availability and the host operating system, without host paths or diagnostic logs. They do not install software. AI agent setup remains in **Settings → Runtime → Agents**.
 
 ```sh
 papilot doctor
@@ -105,7 +105,7 @@ papilot doctor --repo /path/to/paper
 papilot doctor --json --data ~/papilot-data --port 4400
 ```
 
-Doctor checks Node, runtime packages, built frontend and review-engine files, the data directory, Git, `latexmk`, SyncTeX and available TeX engines, and the remote-access and collaborator sign-in settings. With `--repo`, it also checks that the selected folder is the Git root, has an initial commit, has a valid main document and review configuration, and can create task worktrees. It uses the review engine's own configuration loader, without compiling or creating a worktree. Registered papers are not automatically inspected; select the paper explicitly with `--repo`.
+Doctor checks Node, runtime packages, built frontend and review-engine files, the data directory, Git, `latexmk`, SyncTeX and available TeX engines, and the personal remote-access settings. With `--repo`, it also checks that the selected folder is the Git root, has an initial commit, has a valid main document and review configuration, and can create task worktrees. It uses the review engine's own configuration loader, without compiling or creating a worktree. Registered papers are not automatically inspected; select the paper explicitly with `--repo`.
 
 Agent checks use the same Codex locations as the installed launcher, check its version and login status, check whether Claude Code is signed in (or, without it, look for a Claude key), look for the Cursor and GLM keys and SDKs in the current environment, ask `agy models` for its model list, and check that the ACP mode of `copilot`, `grok`, `kimi`, `dsh`, `qwen` and `opencode` is available (without checking their logins). No model prompt is sent. Keys are not validated against the API, and SDK-managed credentials are not inspected. A successful report does not guarantee a model request or a paper build will succeed. Agents that are not found are listed for information only, since Papilot does not offer them; an agent that is found but not working is a warning. PDF reading can still work without any agent. Configure at least one agent for editing.
 
@@ -200,7 +200,7 @@ Attach up to **10 files**, with **25 MB per file**, **5 MB per PNG, JPEG, GIF or
 
 Files are stored beside Papilot's database, outside the manuscript and task worktrees. Codex, Claude and Kimi receive supported raster images as native image inputs; other files are provided by their local paths for the agent to read with its tools. Antigravity receives image paths for its file/image tools rather than native image blocks. Reading a particular file format depends on the agent's tools; uploading does not automatically convert documents or import them into the paper. If you ask to use an attached figure or data file in the manuscript, the agent can copy it into its task worktree for review.
 
-Draft uploads are private to their uploader. Sending them shares them with people who can access that paper; unsharing the paper also removes access to its attachments. Deleting a task removes its stored attachments after task cleanup is confirmed. Unsent uploads expire after 30 days and are cleaned up during later uploads; each person can keep up to 500 MB of unsent uploads per paper.
+Sending a draft attaches its files to that task. Deleting a task removes its stored attachments after task cleanup is confirmed. Unsent uploads expire after 30 days and are cleaned up during later uploads; each paper can keep up to 500 MB of unsent uploads.
 
 ## Skills
 
@@ -258,7 +258,7 @@ papilot service install   # npm run service:install in a source checkout
 tailscale serve --bg --https=8443 http://127.0.0.1:7274
 ```
 
-This uses a separate HTTPS port so an existing service on 443 can stay in place. Keep devices connected to your tailnet. Never turn on Funnel for this endpoint: requests on it act as you, and Papilot refuses Funnel traffic there. To let people outside your tailnet in, see [Collaborators](#collaborators), which uses its own port. The Codex app-server itself is never exposed to the network.
+This uses a separate HTTPS port so an existing service on 443 can stay in place. Keep devices connected to your tailnet. Never turn on Funnel for this endpoint: requests on it act as you, and Papilot refuses Funnel traffic there. The Codex app-server itself is never exposed to the network.
 
 If certificate issuance cannot reach Let's Encrypt, use a private HTTP endpoint over the encrypted tailnet instead:
 
@@ -289,37 +289,11 @@ For SSH access without Tailscale, run `ssh -N -L 7274:127.0.0.1:7274 user@your-h
 
 The workspace uses short, non-overlapping polling on HTTP/1 connections so multiple tabs cannot exhaust the browser's connection pool with permanent event streams. HTTP/2 and HTTP/3 connections use event streams. Hidden workspace tabs pause their status refreshes and update when reopened; task switches cancel obsolete conversation requests. If upgrading from an older frontend leaves pages loading indefinitely, close the old Papilot tabs and reopen the workspace.
 
-## Collaborators
-
-You can invite other people, such as an advisor or co-authors, to work on chosen papers. They sign in at a public HTTPS address with a passkey (Face ID, Touch ID, Windows Hello or a phone) and install nothing. Papilot never stores a password.
-
-**Invite only people you would trust with access to the host.** In the papers you share, an invited person can do everything you can: start tasks, chat with agents, approve the commands agents ask to run on the host, accept or reject changes, add notes, and commit and push with the host's Git credentials. Papilot shows them only the papers you share. But agents, LaTeX builds (including a paper's `latexmkrc`) and approved commands run as you and can read any file on the host, including your other papers. So sharing limits what Papilot shows and allows, not what someone determined could reach.
-
-The public address has its own local port, separate from your tailnet endpoint. With Tailscale Funnel, which allows only ports 443, 8443 and 10000, use 10000 so it leaves your Serve endpoint on 8443 alone:
-
-```sh
-export PAPILOT_ACCOUNT_ORIGIN=https://your-host.your-tailnet.ts.net:10000
-papilot service install
-tailscale funnel --bg --https=10000 http://127.0.0.1:7275
-```
-
-A reverse proxy works too: forward the HTTPS origin to `127.0.0.1:7275` (`PAPILOT_ACCOUNT_PORT`). Papilot refuses to start if the account address equals `PAPILOT_PUBLIC_ORIGIN`, if both use the same port, or if it is not HTTPS (plain `http://localhost` is allowed for testing). Every request on the account port is treated as coming from the internet: it needs a signed-in session, POST requests need a matching `Origin`, and Tailscale identity headers are ignored there.
-
-Open **Settings → Sharing** to manage access:
-
-- **Invite someone** takes their name and the papers they can open, and gives you a link to send them yourself. It works once, within 7 days. Opening it asks them to create a passkey, after which they are signed in. The link's secret is in the part after `#`, which browsers never send to a server.
-- Tick or untick a person's papers at any time. The change applies to their next request, and their open tabs update at once.
-- **Invite link for a new device** adds a passkey on another device, or replaces a lost one.
-- Each passkey and signed-in browser is listed and can be removed on its own. **Sign out everywhere** ends all of a person's sessions, and **Remove…** deletes the person, their passkeys and their sessions.
-- **Sign in from anywhere** gives you a link (valid for 15 minutes) to create your own passkey, so you can use the public address too. There you are the owner, as on the host itself.
-
-Sessions last 30 days from last use and at most 90 days. Invited people cannot add papers or manage people; those stay with you. Their messages and PDF notes show their name. Review comments and Git commits do not record who made them yet. Passkeys belong to the address's host name, so renaming the host or the tailnet means everyone needs a new invite.
-
 ## Updates
 
 **Desktop app:** Settings → Updates offers the same **Stable** and **Dev (GitHub main)** channels. Stable follows published releases with an installer for your OS and CPU architecture; Dev follows a nightly build of main. When the new version was built for the installer you have, **Update now** downloads only Papilot's own code (about 5 MB), checks that it starts and restarts when tasks are idle, as the web server does. When it needs a newer Electron, Node, Codex or dependencies, the update links to the installer for your system instead. Papers and settings stay in place either way, and desktop update status is separate from the web server's. See [Papilot Desktop](../desktop/README.md).
 
-**Web server (npm or source checkout):** The owner sees a **New version** badge beside **Settings** when npm has a newer stable Papilot release. Papilot checks at startup and every six hours. Click the badge, then **Update to …**; the panel shows installation, waiting, restart and failure states. Collaborators cannot update the host.
+**Web server (npm or source checkout):** A **New version** badge appears beside **Settings** when npm has a newer stable Papilot release. Papilot checks at startup and every six hours. Click the badge, then **Update to …**; the panel shows installation, waiting, restart and failure states.
 
 Open **Settings → Updates** to check manually or choose an update channel. **Stable** uses npm releases. **Dev (GitHub main)** checks the latest commit on `PapilotAI/papilot`'s `main` branch; the version includes its short commit ID. Choosing a channel checks availability without installing anything. Click **Update to …** to download and build that exact commit in a separate managed directory. Dev builds require Git, npm and at least 2 GB of free disk space. They may be less reliable; select **Stable** and install its latest release to return. Both channels keep the existing data directory, wait for active work to finish, and restore the previous installation if startup fails.
 
@@ -353,8 +327,6 @@ If installation or its initial startup check fails, the existing server keeps ru
 | `PAPILOT_REVIEW_ENGINE` | `engine` | Review engine directory. |
 | `PAPILOT_PUBLIC_ORIGIN` | Unset | Exact remote browser origin, including scheme and port. |
 | `PAPILOT_TAILSCALE_LOGIN` | Unset | Tailscale login allowed to access the remote workspace. |
-| `PAPILOT_ACCOUNT_ORIGIN` | Unset | Public HTTPS origin where [collaborators](#collaborators) sign in with passkeys, such as a Funnel address on port 10000. Unset, there is no public sign-in. |
-| `PAPILOT_ACCOUNT_PORT` | `7275` | Local port the public address is forwarded to; the server binds it to `127.0.0.1`. |
 
 ## Development and validation
 
@@ -410,7 +382,7 @@ The opening window and the three feature windows are drawn in HTML and CSS, with
 
 The automated tests cover restart recovery, access restrictions, review proxy routes, Codex RPC, worktree reservations, stale events, uncertain-operation recovery, rebuilt frontend assets, and draft preservation during feedback, retries, and concurrent editing.
 
-`npm run test:ui` uses Playwright from the review engine's development dependencies (installed by `npm run setup:review`) and an installed Chrome browser. Set `PAPILOT_BROWSER_CHANNEL` to use another installed Playwright browser channel. It exercises English copy, keyboard focus, mobile layouts, the PDF viewer (contents, paging, zoom, search, text and region notes) against `tests/fixtures/outline.pdf`, request failures, navigation during submission, stale snapshots, unanswered Codex requests, blocked browser storage, connection recovery, long conversations, and task deletion confirmation and retries. `scripts/check-accounts.mjs` starts a real server with a public address on `localhost` and two disposable papers: the owner invites someone, who joins with a passkey from Chrome's virtual authenticator, sees only the shared paper, signs out and in, and is signed out when unshared and removed. It saves screenshots in `test-results`. Browser checks use an isolated local server and simulated task data; they do not start real Codex runs or modify manuscripts. Backend deletion tests also exercise the actual review engine against a disposable Git repository, checking that accepted manuscript content and another task's worktree survive cleanup.
+`npm run test:ui` uses Playwright from the review engine's development dependencies (installed by `npm run setup:review`) and an installed Chrome browser. Set `PAPILOT_BROWSER_CHANNEL` to use another installed Playwright browser channel. It exercises English copy, keyboard focus, mobile layouts, the PDF viewer (contents, paging, zoom, search, text and region notes) against `tests/fixtures/outline.pdf`, request failures, navigation during submission, stale snapshots, unanswered Codex requests, blocked browser storage, connection recovery, long conversations, and task deletion confirmation and retries. Browser checks use an isolated local server and simulated task data; they do not start real Codex runs or modify manuscripts. Backend deletion tests also exercise the actual review engine against a disposable Git repository, checking that accepted manuscript content and another task's worktree survive cleanup.
 
 Codex recovery uses the bundled CLI's generated protocol definitions and the [official app-server protocol](https://developers.openai.com/codex/app-server). It matches the pending message identity before adopting a turn and never treats a transport timeout as proof that a turn stopped.
 

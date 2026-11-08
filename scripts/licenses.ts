@@ -6,7 +6,7 @@ import type { AppInfo, LicenseNotice } from '../src/license-info.ts';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 // These ship in the browser even though npm lists them as development dependencies.
-export const browserPackages = ['@simplewebauthn/browser', 'react', 'react-dom', 'pdfjs-dist', 'katex', 'react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex'];
+export const browserPackages = ['react', 'react-dom', 'pdfjs-dist', 'katex', 'react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex'];
 const readPackage = (directory: string) => JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'));
 const readText = (file: string) => fs.readFileSync(file, 'utf8').trim();
 

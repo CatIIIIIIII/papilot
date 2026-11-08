@@ -62,7 +62,7 @@ try {
   assert.equal(health.name, 'Papilot');
   assert.equal(health.version, version);
   const state = await (await fetch(`${origin}/api/state`)).json();
-  assert.ok(state.csrf); assert.equal(state.viewer.role, 'owner');
+  assert.ok(state.csrf); assert.equal('viewer' in state, false, 'Desktop uses the single-user workspace');
   assert.equal(state.projects.length, 1, 'First launch includes the demo paper');
   await dismissInitialSetup(page);
   const demo = state.projects[0];

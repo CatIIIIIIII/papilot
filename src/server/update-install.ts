@@ -35,7 +35,7 @@ export async function probeInstallation(root: string, version: string, stage: st
   const port = (server.address() as net.AddressInfo).port;
   await new Promise<void>(resolve => server.close(() => resolve()));
   const child = spawn(process.execPath, ['--import', importLoader(loaderFor(root)), path.join(root, 'src/server/main.ts')], {
-    cwd: root, env: { ...process.env, PAPILOT_DATA: path.join(stage, 'probe'), PAPILOT_PORT: String(port), PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_UPDATE_PROBE: '1' }, stdio: ['ignore', log, log],
+    cwd: root, env: { ...process.env, PAPILOT_DATA: path.join(stage, 'probe'), PAPILOT_PORT: String(port), PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_UPDATE_PROBE: '1' }, stdio: ['ignore', log, log],
   });
   let ended = false, error: Error | undefined;
   child.once('error', e => { error = e; ended = true; }); child.once('exit', () => { ended = true; });

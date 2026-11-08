@@ -255,6 +255,7 @@ try {
   };
   await settingsButton.click();
   await page.clock.runFor(300);
+  assert.equal(await settingsDialog.getByRole('button', { name: /^(Sharing|Sign out)$/ }).count(), 0, 'Single-user settings have no collaboration controls');
   await page.screenshot({ path: 'test-results/settings-general-desktop.png' });
   for (const [label, file] of [['Appearance', 'appearance'], ['Notifications', 'notifications'], ['Keyboard shortcuts', 'shortcuts'], ['About Papilot', 'about']]) {
     await settingsDialog.getByRole('button', { name: label, exact: true }).click();

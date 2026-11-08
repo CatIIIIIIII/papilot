@@ -495,7 +495,7 @@ for (const version of ['0.7.0', devVersion]) test(`a browser install of ${versio
       Updates.prototype.check = function () { this.options.latest = async () => ${JSON.stringify(version)}; this.options.install = async () => ${JSON.stringify(candidate)}; return check.call(this); };
       await import('./src/server/main.ts');
     `);
-    const env: NodeJS.ProcessEnv = { ...process.env, PAPILOT_PORT: String(port), PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_SERVICE_MANAGER: '', XPC_SERVICE_NAME: '', PAPILOT_UPDATE_PROBE: '1' };
+    const env: NodeJS.ProcessEnv = { ...process.env, PAPILOT_PORT: String(port), PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_SERVICE_MANAGER: '', XPC_SERVICE_NAME: '', PAPILOT_UPDATE_PROBE: '1' };
     delete env.PAPILOT_DATA;
     const launch = (file: string) => spawn(process.execPath, ['--import', importLoader(loaderFor(original)), path.join(original, file)], { cwd: original, env, stdio: ['ignore', log, log] });
     started = launch('boot.ts');

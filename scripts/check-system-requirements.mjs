@@ -14,7 +14,7 @@ const report = (platform, missing = []) => ({ platform, checks: ['git', 'latexmk
 const all = ['git', 'latexmk', 'synctex', 'tex-engine'];
 const errors = [];
 fs.mkdirSync('test-results', { recursive: true });
-async function fixture({ platform = 'darwin', missing = all, member = false, existing = false, returning = existing, desktop = false, language = 'en', width = 1280, dark = false, failure = false } = {}) {
+async function fixture({ platform = 'darwin', missing = all, existing = false, returning = existing, desktop = false, language = 'en', width = 1280, dark = false, failure = false } = {}) {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light' });
   const scenario = { report: report(platform, missing), failure, requests: 0 };
   await context.addInitScript(({ language, returning, desktop, platform }) => {
@@ -22,7 +22,7 @@ async function fixture({ platform = 'darwin', missing = all, member = false, exi
     if (returning) localStorage.setItem('papilot:project', 'paper');
     if (desktop) window.papilotDesktop = { platform, minimize() {}, maximize() {}, close() {}, chooseDirectory: async () => { window.fixtureFolderRequests = (window.fixtureFolderRequests || 0) + 1; return null; } };
   }, { language, returning, desktop, platform });
-  const state = { version: '0.9.0', csrf: 'fixture', projects: existing ? [{ id: 'paper', name: 'Paper', path: '/fixture/paper', createdAt: 1 }] : [], tasks: [], requests: [], runtime: { connected: true, authenticated: true, account: 'Owner', error: null, models: [] }, viewer: { id: member ? 'member' : 'owner', role: member ? 'member' : 'owner', name: 'Reader', listener: member ? 'account' : 'local', owner: 'Owner' } };
+  const state = { version: '0.9.0', csrf: 'fixture', projects: existing ? [{ id: 'paper', name: 'Paper', path: '/fixture/paper', createdAt: 1 }] : [], tasks: [], requests: [], runtime: { connected: true, authenticated: true, account: 'Owner', error: null, models: [] } };
   await context.route('**/api/**', route => {
     const target = new URL(route.request().url()).pathname;
     if (target === '/api/runtime/requirements') { scenario.requests++; return route.fulfill(scenario.failure ? { status: 503, json: { error: 'Unavailable' } } : { json: scenario.report }); }
@@ -101,13 +101,6 @@ try {
   await demo.page.getByRole('dialog', { name: 'Get ready to write' }).waitFor();
   await demo.context.close();
 
-  const member = await fixture({ member: true, width: 390 });
-  await member.page.getByRole('button', { name: 'Review setup' }).click();
-  await member.page.getByText(/You do not need to install them on your own device/).waitFor();
-  assert.equal(await member.page.getByRole('dialog').getByRole('link').count(), 0);
-  await member.page.getByRole('dialog').screenshot({ animations: 'disabled', path: 'test-results/setup-member-mobile.png' });
-  await member.context.close();
-
   const failed = await fixture({ failure: true });
   await failed.page.getByRole('button', { name: 'Review setup' }).click();
   await failed.page.getByText('Could not check the required tools. Try again.', { exact: true }).waitFor();
@@ -150,5 +143,5 @@ try {
     await f.context.close();
   }
   assert.deepEqual(errors, []);
-  console.log('Required tools UI passed: desktop, existing users, partial installs, retries, ready state, host OS, collaborators, keyboard focus, and 11 languages.');
+  console.log('Required tools UI passed: desktop, existing users, partial installs, retries, ready state, host OS, keyboard focus, and 11 languages.');
 } finally { await browser.close(); await server.close(); }

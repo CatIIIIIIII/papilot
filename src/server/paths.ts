@@ -9,8 +9,4 @@ export const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'packa
 export const PORT = Number(process.env.PAPILOT_PORT || 7274);
 export const PUBLIC_ORIGIN = process.env.PAPILOT_PUBLIC_ORIGIN || '';
 export const OWNER = process.env.PAPILOT_TAILSCALE_LOGIN || '';
-// The public URL where invited people sign in with passkeys, and the local
-// port its proxy (such as Tailscale Funnel) forwards to.
-export const ACCOUNT_ORIGIN = (process.env.PAPILOT_ACCOUNT_ORIGIN || '').replace(/\/+$/, '');
-export const ACCOUNT_PORT = Number(process.env.PAPILOT_ACCOUNT_PORT || 7275);
 export const CODEX = process.env.PAPILOT_CODEX_BIN || findExecutable('codex') || [path.join(ROOT, 'node_modules/.bin/codex'), path.join(DATA, 'agents/node_modules/.bin/codex')].find(file => fs.existsSync(file)) || 'codex';

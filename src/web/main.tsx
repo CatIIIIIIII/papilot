@@ -5,14 +5,14 @@ import { useNoteSelection } from './note-selection.tsx';
 import { useGroupInstructions } from './group-instructions.ts';
 import { markText, NoteQuote } from './note-content.tsx';
 import { NoteAttachButton, PdfNoteCard, TaskRemoveButton } from './pdf-suggestion.tsx';
-import { StrictMode, Suspense, createContext, lazy, memo, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { StrictMode, Suspense, lazy, memo, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { readNotesInstructions, type NoteSummary } from '../notes.ts';
 import { aiReviewSummary, isFeedbackPrompt } from '../conversation.ts';
 import { ignorePattern } from '../commit.ts';
 import { AGENT_IDS, AGENT_NAMES, isAgentId, taskFinished } from '../shared.ts';
-import type { TaskCommitReview, LatexInstallation, AgentId, Annotation, MarkKind, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem, Viewer } from '../shared.ts';
+import type { TaskCommitReview, LatexInstallation, AgentId, Annotation, MarkKind, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem } from '../shared.ts';
 import { SkillChip, SkillMenu, SkillPicker, matchSkills, skillName, skillQuery } from './skills.tsx';
 import { reviewDraft, useReviewDraft, reviewNoteSummary, reviewSubmission } from './review-draft.ts';
 import { ReviewDraftCards } from './review-draft-cards.tsx';
@@ -61,8 +61,6 @@ import { GitDiffView } from './git-diff-view.tsx';
 import { VersionHistory, type HistorySelection } from './git-history.tsx';
 import type { GitHistory, GitVersionDetail } from '../shared.ts';
 import { problemCount, ReferencesPanel, useBibliography } from './references-panel.tsx';
-import { Invite, SignIn } from './sign-in.tsx';
-import { forgetBrowserState, isSignedOut, setSignedOut, useSignedOut } from './session.ts';
 import { errorText, locale, t, tn, useLanguage } from './i18n.ts';
 import { notificationState, notify, notifying, subscribeNotifications, taskAlerts } from './notifications.ts';
 import { Markdown } from './markdown.tsx';
@@ -94,8 +92,6 @@ async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal,
   if (import.meta.env.MODE === 'playground') return (await import('./playground/api.ts')).playgroundApi<T>(route, body, signal);
   const timeout = AbortSignal.timeout(wait);
   try { const response = await fetch('/api' + route, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': body instanceof File ? 'application/octet-stream' : 'application/json', 'X-Papilot-Token': token, ...(body instanceof File ? { 'X-Papilot-Filename': encodeURIComponent(body.name) } : {}) }, ...(body === undefined ? {} : { body: body instanceof File ? body : JSON.stringify(body) }), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-    // At the public URL, a lapsed or revoked session shows the sign-in page.
-    if (response.status === 401 && (!route.startsWith('/auth/') || route === '/auth/logout')) { setSignedOut(true); throw new Error(t('Sign in to continue.')); }
     const value = await response.json(); if (!response.ok) throw new Error(value.error ? errorText(value.error) : t('Request failed. Please try again.')); return value;
   }
   catch (error) {
@@ -222,21 +218,15 @@ const taskPath = (file: string, root: string) => root && file.startsWith(root + 
 const editedFiles = (item: TimelineItem, root: string) => item.text.split('\n').filter(Boolean).map(file => taskPath(file, root));
 const toolState = (item: TimelineItem) => item.status === 'inProgress' ? 'running' : item.status && item.status !== 'completed' ? 'failed' : '';
 
-// Who is looking, so messages and notes from other people show their names.
-const ViewerContext = createContext<Viewer | null>(null);
-// A message's sender: the viewer, or someone else by name. A message without
-// an author is the owner's.
-function useSender(author: Author | undefined) {
-  const viewer = useContext(ViewerContext);
-  const mine = !viewer || (author ? author.id === viewer.id : viewer.role === 'owner');
-  return { mine, name: mine ? '' : author?.name || viewer?.owner || '' };
-}
+// Preserve names on historical messages from formerly shared workspaces.
+const senderOf = (author: Author | undefined) => ({ mine: !author, name: author?.name || '' });
+
 const senderLabel = (sender: { mine: boolean; name: string }, at: number) => sender.mine ? t('You, {time}', { time: time(at) }) : t('{name}, {time}', { name: sender.name, time: time(at) });
 const SenderName = ({ sender }: { sender: { mine: boolean; name: string } }) => sender.mine ? null : <div className="message-author">{sender.name}</div>;
 
 // A first message built from PDF notes shows the notes, not the instructions around them.
 function NotesMessage({ item, notes }: { item: TimelineItem; notes: NoteSummary[] }) {
-  const sender = useSender(item.meta?.author);
+  const sender = senderOf(item.meta?.author);
   const results = useNoteResults();
   const renderNote = (note: NoteSummary, index: number) => <li key={index} data-note-result={`${item.id}:${index}`} tabIndex={-1} className={results?.selected === `${item.id}:${index}` ? 'linked-note-selected' : ''}>
       <span className="sent-note-where"><span className="sent-note-number" aria-hidden="true">{index + 1}</span><span className="sent-note-location">{noteLocation(note.where)}</span></span>
@@ -268,7 +258,7 @@ function FeedbackDetails({ feedback }: { feedback: FeedbackSummary }) {
 }
 
 function UserMessage({ item, agent }: { item: TimelineItem; agent: string }) {
-  const sender = useSender(item.meta?.author);
+  const sender = senderOf(item.meta?.author);
   const notes = item.meta?.notes || readNotesInstructions(item.text);
   if (notes) return <NotesMessage item={item} notes={notes}/>;
   const { skill, feedback, sendsFeedback, build } = item.meta || {};
@@ -332,8 +322,7 @@ function Activity({ onRevealQuote, task, runtime, reconnecting, onReconnect, ski
   const [savingModel, setSavingModel] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const { text: draft, sending } = useSyncExternalStore(composer.subscribe, composer.getSnapshot);
-  const viewer = useContext(ViewerContext);
-  const files = useAttachmentDraft(`papilot:files:${viewer?.id || 'owner'}:task:${task.id}`);
+  const files = useAttachmentDraft(`papilot:files:task:${task.id}`);
   const [skill, setSkill] = useState<Skill | null>(null);
   useEffect(() => setSkill(current => current ? skills.find(item => item.id === current.id) || null : null), [skills]);
   const scroller = useRef<HTMLDivElement>(null);
@@ -1313,24 +1302,17 @@ function App() {
   }, [project?.id, Boolean(state)]);
   useEffect(() => { setTaskSearch(''); setShowArchived(false); }, [project?.id]);
   useEffect(() => { if (task) setShowArchived(Boolean(task.archivedAt)); }, [task?.id, Boolean(task?.archivedAt)]);
-  // Older servers send no viewer: whoever is looking is the owner.
-  const viewer = state?.viewer, owner = !viewer || viewer.role === 'owner';
   const requirements = useSystemRequirements(!isPlayground && Boolean(state) && online, loadRequirements);
   const [setupOpen, setSetupOpen] = useState(false);
   const setupPrompted = useRef(false);
   const firstSetupVisit = useRef(!browserStorage.getItem('papilot:setup-seen') && !browserStorage.getItem('papilot:project'));
   useEffect(() => {
-    if (!owner || !requirements.report || setupPrompted.current) return;
+    if (!requirements.report || setupPrompted.current) return;
     setupPrompted.current = true;
     browserStorage.setItem('papilot:setup-seen', '1');
     if (firstSetupVisit.current && requirementsMissing(requirements.report) && !document.querySelector('dialog[open]')) setSetupOpen(true);
-  }, [requirements.report, owner]);
-  const newFiles = useAttachmentDraft(`papilot:files:${viewer?.id || 'owner'}:new:${project?.id || projectId}`);
-  // A session that already ended signs out too.
-  async function signOut() {
-    try { await api('/auth/logout', {}); } catch (e) { if (!isSignedOut()) { reportError(e); return; } }
-    forgetBrowserState(); setSignedOut(true);
-  }
+  }, [requirements.report]);
+  const newFiles = useAttachmentDraft(`papilot:files:new:${project?.id || projectId}`);
   const tasks = state?.tasks.filter(t => !project || t.projectId === project.id) || [];
   const listedTasks = tasks.filter(task => Boolean(task.archivedAt) === showArchived);
   const searchTerms = taskSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -1911,7 +1893,7 @@ function App() {
     </div>
   </section>;
 
-  return <ViewerContext.Provider value={viewer || null}><NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
+  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
     <DesktopWindowChrome/>
     {project && <WorkspaceSwitcher key={project.id} active={task?.id ?? (manuscriptOpen ? '' : null)}
       items={[{ id: '', title: t('Manuscript') }, ...[...tasks].reverse().filter(item => item.status !== 'deleting' && (!item.archivedAt || item.id === task?.id)).map(item => ({ id: item.id, title: item.title }))]}
@@ -1920,9 +1902,9 @@ function App() {
       <div className="sidebar-header">
         {state?.projects.length && project ? <ActionMenu label={t('Paper: {name}', { name: project.name })} className="project-switcher" menuClassName="paper-menu" align="start" actions={[
           ...state.projects.map(p => ({ id: p.id, label: p.name, detail: shortPath(p.path), title: p.path, checked: p.id === project.id, select: p.id === project.id ? undefined : () => { setProjectId(p.id); setSelected(''); }, edit: { label: t('Edit {name}', { name: p.name }), select: () => setEditingPaper(p) } })),
-          ...(owner ? [{ label: nativeFolders ? t('Open a folder') : t('Add paper…'), icon: nativeFolders ? 'folder' : 'plus', divider: true, select: () => openProject() }] : []),
+          { label: nativeFolders ? t('Open a folder') : t('Add paper…'), icon: nativeFolders ? 'folder' : 'plus', divider: true, select: () => openProject() },
         ]}><span className="project-switcher-name">{project.name}</span><Icon name="chevronDown" size={13}/></ActionMenu>
-          : owner && <button className="add-project" disabled={!state} onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button>}
+          : <button className="add-project" disabled={!state} onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button>}
         <button className="icon-button" aria-label={t('Hide task list')} title={t('Hide task list')} onClick={hideSidebar}><Icon name={narrow ? 'close' : 'sidebar'} size={18}/></button>
       </div>
       <div className="sidebar-actions">
@@ -1965,7 +1947,7 @@ function App() {
         </div>
         <div className="brand">
           <a href="/" className="brand-home" aria-label="Papilot" onClick={e => { e.preventDefault(); setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><img className="brand-mark" src={logo} alt=""/><span>Papilot</span></a>
-          {state && (!isPlayground && owner ? <UpdateNotice api={api} version={state.version}/> : <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>)}
+          {state && (!isPlayground ? <UpdateNotice api={api} version={state.version}/> : <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>)}
         </div>
         <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={() => setSettings('general')}><Icon name="settings" size={18}/></button>
       </div>
@@ -1994,15 +1976,14 @@ function App() {
           <ReferencesPanel key={project.id} place={'references:' + project.id} data={bibliography} onInvestigate={draftInvestigation}/>
         </section>
       : !state ? <div className="home"><div className="home-inner"><div className="home-mark"><span className="spinner"/></div><h1>{t('Opening your workspace')}</h1><p className="home-copy" role="status">{connectionError || t('Connecting to your papers and tasks…')}</p>{connectionError && <button className="button secondary" onClick={() => void refresh(true)}>{t('Retry connection')}</button>}</div></div>
-      : !owner ? <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('No papers yet')}</h1><p className="home-copy">{t('No papers have been shared with you yet. Papers appear here as soon as {name} shares them.', { name: viewer?.owner || '' })}</p></div></div>
       : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button></div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {!isPlayground && setupOpen && <RequirementsDialog state={requirements} owner={owner} online={online} onClose={() => setSetupOpen(false)}/>}
-    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, owner, online }} owner={owner} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground && owner ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} people={!isPlayground && owner ? { api, projects: state?.projects || [], ago: agoText } : undefined} onSignOut={viewer?.listener === 'account' ? () => { setSettings(false); void signOut(); } : undefined} accountName={viewer?.name} diagnostics={!isPlayground && owner ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={!isPlayground && owner ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
+    {!isPlayground && setupOpen && <RequirementsDialog state={requirements} online={online} onClose={() => setSetupOpen(false)}/>}
+    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
-    {editingPaper && <PaperDialog key={editingPaper.id} paper={editingPaper} canManage={owner} onClose={() => setEditingPaper(null)} save={async form => {
-      const paper = editingPaper, pathChanged = owner && form.path !== paper.path;
+    {editingPaper && <PaperDialog key={editingPaper.id} paper={editingPaper} onClose={() => setEditingPaper(null)} save={async form => {
+      const paper = editingPaper, pathChanged = form.path !== paper.path;
       await api(`/projects/${paper.id}/${pathChanged ? 'path' : 'rename'}`, pathChanged ? form : { name: form.name });
       if (pathChanged) { ++manuscriptRequest.current; setManuscript({ projectId: '', data: null, error: '' }); setGit({ projectId: '', status: null }); }
       await refresh(true);
@@ -2022,18 +2003,12 @@ function App() {
       setProjectId(paper.id); setSelected(''); setModal(null); setSidebar(false);
     }}/>}
 
-  </div></NoteResultsProvider></ViewerContext.Provider>;
+  </div></NoteResultsProvider>;
 }
 
-// The public URL shows the sign-in page to anyone without a session, and an
-// invite link its own page; the workspace mounts only once signed in.
 function Root() {
-  const signedOut = useSignedOut();
-  const [inviting, setInviting] = useState(location.pathname === '/invite');
-  const signedIn = () => { setInviting(false); setSignedOut(false); };
   if (PlaygroundNotice) return <Suspense fallback={null}><div className="playground-root"><PlaygroundNotice/><App/></div></Suspense>;
-  if (inviting) return <Invite api={api} onDone={signedIn}/>;
-  return signedOut ? <SignIn api={api} onSignedIn={signedIn}/> : <App/>;
+  return <App/>;
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><Root/></StrictMode>);

@@ -40,7 +40,6 @@ test('removing a paper drops only its Papilot records and keeps repositories and
     f.store.saveItem({ id: 'message', taskId: 'task', type: 'user', text: 'Saved conversation', createdAt: 1 });
     f.store.saveRun({ id: 'run', taskId: 'task', requestKey: 'request', prompt: 'Edit', status: 'completed', createdAt: 1, finishedAt: 2 });
     f.store.saveAnnotation({ id: 'note', projectId: 'paper', key: 'pdf', page: 0, rect: [0,0,1,1], quote: 'text', comment: 'note', source: null, createdAt: 1 });
-    f.store.db.prepare('INSERT INTO members VALUES(?,?)').run('paper', 'reader');
     const before = f.git(f.root, 'worktree', 'list', '--porcelain'), head = f.git(f.root, 'rev-parse', 'HEAD');
     assert.deepEqual(f.workspace.removeProject('paper'), { ok: true });
     assert.deepEqual(f.workspace.removeProject('paper'), { ok: true });
@@ -48,7 +47,6 @@ test('removing a paper drops only its Papilot records and keeps repositories and
     assert.deepEqual(f.store.tasks().map(t => t.id), ['other-task']);
     assert.deepEqual(f.store.items('task'), []); assert.deepEqual(f.store.runs(), []); assert.deepEqual(f.store.annotations('paper'), []);
     assert.equal(f.store.taskDeleted('task'), true);
-    assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM members WHERE project_id=?').get('paper')!.n, 0);
     assert.equal(f.git(f.root, 'worktree', 'list', '--porcelain'), before); assert.equal(f.git(f.root, 'rev-parse', 'HEAD'), head);
     assert.equal(fs.readFileSync(path.join(f.root, 'paper.tex'), 'utf8'), 'Keep the manuscript.');
     assert.equal(fs.readFileSync(path.join(f.worktree, 'draft.txt'), 'utf8'), 'Keep uncommitted work.');

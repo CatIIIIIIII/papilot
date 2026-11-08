@@ -22,18 +22,15 @@ import { LatexSettings } from './latex-settings.tsx';
 import { UpdateSettings, versionLabel, type UpdateApi } from './update-notice.tsx';
 import { SkillLibraryPanel, type SkillLibraryControls, type SkillLibraryOptions } from './skill-library.tsx';
 import { ModelDefaultSettings, type ModelDefaultSettingsProps } from './model-default-settings.tsx';
-import { PeopleSettings, type PeopleSettingsProps, type PeopleSettingsControls } from './people-settings.tsx';
 
-type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'requirements' | 'latex' | 'skills' | 'people' | 'updates';
+type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'requirements' | 'latex' | 'skills' | 'updates';
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'latex-review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, people, onSignOut, accountName, diagnostics, requirements, skills, updates, modelDefaults, owner = true, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; people?: PeopleSettingsProps; onSignOut?: () => void; accountName?: string; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; owner: boolean; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; owner?: boolean; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: 'general' | 'shortcuts' | 'quickNotes' }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const peopleControls = useRef<PeopleSettingsControls>(null);
-  const [peopleVisited, setPeopleVisited] = useState(false);
   const skillControls = useRef<SkillLibraryControls>(null);
   const { choice } = useLanguage();
   const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
@@ -58,18 +55,17 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
     target?.focus();
   }, [page, showCategories]);
   function navigate(proceed: () => void) {
-    if (peopleControls.current?.isBusy()) return;
     if (page === 'skills') skillControls.current?.navigate(proceed); else proceed();
   }
   function goTo(next: SettingsPage) {
-    const proceed = () => { if (next === 'people') setPeopleVisited(true); setPage(next); setShowCategories(false); };
+    const proceed = () => { setPage(next); setShowCategories(false); };
     if (next === page) proceed(); else navigate(proceed);
   }
   function browseCategories() {
     navigate(() => { setPage('general'); setShowCategories(true); });
   }
   const browserName = LANGUAGES.find(item => item.id === browserLanguage())!.name;
-  const close = () => { if (peopleControls.current?.isBusy()) return; if (page === 'skills') skillControls.current?.cancel(); else navigate(onClose); };
+  const close = () => { if (page === 'skills') skillControls.current?.cancel(); else navigate(onClose); };
   const groups: { label: string; entries: SettingsEntry[] }[] = [
     { label: t('Personal'), entries: [
       { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')} ${t('Show advanced Git features')}` },
@@ -81,7 +77,6 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
     ] },
     { label: t('Workspace'), entries: [
       ...(skills ? [{ page: 'skills' as const, label: t('Skills'), icon: 'spark' }] : []),
-      ...(people ? [{ page: 'people' as const, label: t('Sharing'), icon: 'people' }] : []),
     ] },
     { label: t('Runtime'), entries: [
       ...(requirements ? [{ page: 'requirements' as const, label: t('Required tools'), icon: 'check', keywords: 'Git LaTeX TeX Live MacTeX' }] : []),
@@ -114,7 +109,6 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
           {!visibleGroups.length && <p className="settings-search-empty">{t('No matching settings')}</p>}
         </nav>
         <div className="settings-sidebar-bottom">
-          {onSignOut && <button type="button" className="settings-category settings-account" onClick={() => navigate(onSignOut)}><Icon name="signOut" size={18}/><span>{t('Sign out')}{accountName && <small>{accountName}</small>}</span></button>}
           <footer className="settings-footer"><span>Papilot · v{versionLabel(info.version)}</span><a href={info.repository} target="_blank" rel="noopener noreferrer" aria-label={`GitHub · ${t('Opens in a new tab')}`}><Icon name="github" size={16}/></a></footer>
         </div>
       </aside>
@@ -155,15 +149,14 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
             </div>
             <input id="settings-references" type="checkbox" role="switch" className="switch" aria-describedby="settings-references-detail" checked={checkReferences} onChange={event => { setCheckReferences(event.target.checked); browserStorage.setItem(REFERENCE_CHECKS, event.target.checked ? 'on' : 'off'); }}/>
           </div>
-          {/* The owner chooses: the setting decides what every round compiles. */}
-          {owner && <div className="settings-row settings-toggle">
+          <div className="settings-row settings-toggle">
             <div className="settings-text">
               <label className="settings-name" htmlFor="settings-effects">{t('Track indirect changes')}</label>
               <p id="settings-effects-detail">{t('Find and show what each edit changes elsewhere, such as the uses of a macro and renumbered references. Off by default: each edit shows its own lines.')}</p>
               {indirectChanges && <p className="settings-warning" role="note">{t('Slower reviews: verifying which edits reproduce each indirect change requires additional compilations.')}</p>}
             </div>
             <input id="settings-effects" type="checkbox" role="switch" className="switch" aria-describedby="settings-effects-detail" checked={indirectChanges} onChange={event => void saveIndirectChanges(event.target.checked)}/>
-          </div>}
+          </div>
         </section>}
         {page === 'notifications' && <NotificationSettings/>}
         {page === 'shortcuts' && <ShortcutSettings/>}
@@ -174,7 +167,6 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'requirements' && requirements && <div className="settings-page"><RequirementsPanel {...requirements}/></div>}
         {page === 'latex' && diagnostics && <LatexSettings online={diagnostics.online} load={diagnostics.latex}/>}
         {page === 'updates' && updates && <UpdateSettings api={updates}/>}
-        {peopleVisited && people && <div hidden={page !== 'people'}><PeopleSettings {...people} controls={peopleControls}/></div>}
         {page === 'skills' && skills && <SkillLibraryPanel {...skills} controls={skillControls} onClose={onClose}/>}
       </div>
     </section>

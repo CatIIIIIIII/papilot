@@ -201,7 +201,7 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
       persist(); return task(permissionTask, plans.indexOf(permissionTask) + 1);
     }
     if (body !== undefined) throw new PlaygroundDownloadRequired();
-    if (path === '/state') return { version, projects: [{ id: projectId, name: 'Meet Papilot', path: '/example/papilot-introduction', createdAt }], tasks: [task(reviewPlan, 0), ...plans.filter(plan => !plan.preset || local.openedPresets[plan.id]).map((plan, index) => task(plan, index + 1))], requests: [], runtime: demoRuntimes.codex, runtimes: demoRuntimes, viewer: { id: 'playground', name: 'You', role: 'owner', listener: 'local', owner: 'You' } } satisfies Snapshot;
+    if (path === '/state') return { version, projects: [{ id: projectId, name: 'Meet Papilot', path: '/example/papilot-introduction', createdAt }], tasks: [task(reviewPlan, 0), ...plans.filter(plan => !plan.preset || local.openedPresets[plan.id]).map((plan, index) => task(plan, index + 1))], requests: [], runtime: demoRuntimes.codex, runtimes: demoRuntimes } satisfies Snapshot;
     if (path === `${base}/manuscript`) return { git, build: { status: 'ready', current: true, key: pdfKey, pages, builtAt: createdAt }, annotations: local.annotations.filter(note => !note.deletedAt) } satisfies Manuscript;
     if (path === `${base}/skills`) return { skills: [
       { id: 'polish', name: 'Polish', description: 'Improve clarity while preserving meaning.', hint: 'Which passage should be clearer?', source: 'builtin' },

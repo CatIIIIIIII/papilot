@@ -5,7 +5,7 @@ import { keepDialogFocus } from './focus.ts';
 import { t } from './i18n.ts';
 import { chooseDirectory, nativeFolders } from './desktop-chrome.tsx';
 
-export function PaperDialog({ paper, canManage, save, remove, onClose }: { paper: Project; canManage: boolean; save: (form: { name: string; path: string }) => Promise<unknown>; remove: () => Promise<unknown>; onClose: () => void }) {
+export function PaperDialog({ paper, save, remove, onClose }: { paper: Project; save: (form: { name: string; path: string }) => Promise<unknown>; remove: () => Promise<unknown>; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null), pending = useRef(false);
   const [form, setForm] = useState({ name: paper.name, path: paper.path }), [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -51,19 +51,19 @@ export function PaperDialog({ paper, canManage, save, remove, onClose }: { paper
             <div className="paper-location" title={form.path}>
               <Icon name="folder" size={16}/>
               <span className="paper-location-path"><span className="paper-location-parent">{form.path.slice(0, folderAt)}</span><span className="paper-location-name">{form.path.slice(folderAt)}</span></span>
-              <button type="button" className="button ghost compact" disabled={busy || !canManage} onClick={() => void chooseDirectory().then(path => { if (path) setForm(current => ({ ...current, path })); }).catch(failure => setError(failure instanceof Error ? failure.message : String(failure)))}>{
+              <button type="button" className="button ghost compact" disabled={busy} onClick={() => void chooseDirectory().then(path => { if (path) setForm(current => ({ ...current, path })); }).catch(failure => setError(failure instanceof Error ? failure.message : String(failure)))}>{
                 // i18n: Opens the system folder picker to point the paper at another folder.
                 t('Change…')
               }</button>
             </div>
           </div>
         </> : <>
-          <label>{t('Repository path')}<input name="path" value={form.path} onChange={event => setForm({ ...form, path: event.target.value })} required maxLength={4000} disabled={busy || !canManage} spellCheck={false} autoComplete="off"/></label>
+          <label>{t('Repository path')}<input name="path" value={form.path} onChange={event => setForm({ ...form, path: event.target.value })} required maxLength={4000} disabled={busy} spellCheck={false} autoComplete="off"/></label>
           <label>{t('Paper name')}<input name="name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required maxLength={120} disabled={busy} autoComplete="off"/></label>
         </>)}
         {error && <p className="inline-error" role="alert">{error}</p>}
         <div className="button-row paper-dialog-actions">
-          {!confirming && canManage && <button type="button" data-remove className="button ghost danger-text paper-remove" disabled={busy} onClick={() => { setError(''); setConfirming(true); }}><Icon name="trash" size={15}/>{t('Remove paper')}</button>}
+          {!confirming && <button type="button" data-remove className="button ghost danger-text paper-remove" disabled={busy} onClick={() => { setError(''); setConfirming(true); }}><Icon name="trash" size={15}/>{t('Remove paper')}</button>}
           <button type="button" data-cancel className="button secondary" disabled={busy} onClick={cancel}>{t('Cancel')}</button>
           <button className={'button ' + (confirming ? 'danger' : 'primary')} type="submit" disabled={busy || (!confirming && (!form.name.trim() || !form.path.trim()))}>{busy ? confirming ? t('Removing…') : t('Saving…') : confirming ? t('Remove from Papilot') : t('Save')}</button>
         </div>

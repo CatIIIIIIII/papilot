@@ -10,7 +10,7 @@ await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
 const projects = [{ id: 'alpha', name: 'Alpha paper', path: '/papers/alpha', createdAt: 1 }, { id: 'beta', name: 'Beta paper', path: '/papers/beta', createdAt: 2 }];
-const state = { version: '0.6.0', csrf: 'fixture', projects: structuredClone(projects), tasks: [], requests: [], runtime: { connected: true, authenticated: false, account: null, error: null, models: [] }, viewer: { id: 'owner', role: 'owner', name: 'Owner', listener: 'local', owner: 'Owner' } };
+const state = { version: '0.6.0', csrf: 'fixture', projects: structuredClone(projects), tasks: [], requests: [], runtime: { connected: true, authenticated: false, account: null, error: null, models: [] } };
 const git = { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null };
 const requests = [], errors = [];
 fs.mkdirSync('test-results', { recursive: true });
@@ -79,10 +79,10 @@ try {
   await edit('Alpha paper'); await dialog.getByRole('button', { name: 'Remove paper', exact: true }).click();
   await confirmation.getByRole('button', { name: 'Remove from Papilot', exact: true }).click(); await confirmation.waitFor({ state: 'hidden' });
   await page.getByRole('heading', { name: 'Add your first paper', exact: true }).waitFor();
-  state.projects = structuredClone(projects); state.viewer.role = 'member'; state.viewer.listener = 'account';
+  state.projects = structuredClone(projects);
   await page.reload(); await edit('Beta paper');
-  assert.equal(await name.isEnabled(), true); assert.equal(await repo.isDisabled(), true);
-  assert.equal(await dialog.getByRole('button', { name: 'Remove paper', exact: true }).count(), 0);
+  assert.equal(await name.isEnabled(), true); assert.equal(await repo.isEnabled(), true);
+  assert.equal(await dialog.getByRole('button', { name: 'Remove paper', exact: true }).count(), 1);
   assert.deepEqual(errors, []);
-  console.log('PASS: Pencil opens one paper editor, both fields save together, failed saves are atomic, removal stays in the dialog, mobile and owner-only controls');
+  console.log('PASS: Pencil opens one paper editor, both fields save together, failed saves are atomic, removal stays in the dialog, mobile and controls after reload');
 } finally { await browser.close(); await server.close(); }

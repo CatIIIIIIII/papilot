@@ -240,17 +240,7 @@ export async function doctor(args) {
     try { const url = new URL(origin); remoteValid = ['http:', 'https:'].includes(url.protocol) && url.origin === origin && !url.username && !url.password; } catch { /* Invalid origin. */ }
   }
   check('remote', remoteValid, 'error', origin || owner ? 'Tailscale origin and owner configuration.' : 'Local access only; remote access is optional.', 'Set both PAPILOT_PUBLIC_ORIGIN (scheme and host, optional port, no path) and PAPILOT_TAILSCALE_LOGIN, or unset both for local access.');
-  // The collaborators' sign-in address: its own HTTPS origin and local port, apart from the tailnet endpoint.
-  const accountOrigin = (process.env.PAPILOT_ACCOUNT_ORIGIN || '').replace(/\/+$/, ''), accountPort = Number(process.env.PAPILOT_ACCOUNT_PORT || 7275);
-  let accountValid = !accountOrigin;
-  if (accountOrigin) {
-    try {
-      const url = new URL(accountOrigin);
-      accountValid = url.origin === accountOrigin && (url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost'))
-        && Number.isInteger(accountPort) && accountPort > 0 && accountPort < 65536 && accountPort !== port && !(origin && URL.canParse(origin) && new URL(origin).host === url.host);
-    } catch { /* Invalid origin. */ }
-  }
-  check('accounts', accountValid, 'error', accountOrigin ? `Collaborators sign in at ${accountOrigin}, forwarded to 127.0.0.1:${accountPort}.` : 'No public sign-in for collaborators; it is optional.', 'Set PAPILOT_ACCOUNT_ORIGIN to an https:// origin without a path that differs from PAPILOT_PUBLIC_ORIGIN (for Funnel, port 10000), and PAPILOT_ACCOUNT_PORT to a free port other than the Papilot port. Papilot does not start otherwise.');
+
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500), redirect: 'error' });
     const health = await response.json();

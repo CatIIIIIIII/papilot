@@ -43,12 +43,6 @@ export async function saveIndirectChanges(value: boolean) {
   catch { failed = true; apply(before); }
   finally { version++; if (failed) loadIndirectChanges(); }
 }
-// Signing out forgets the value here too, not only in storage.
-export function forgetIndirectChanges() {
-  version++;
-  tracked = false;
-  listeners.forEach(listener => listener());
-}
 export function useIndirectChanges() {
   return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => tracked);
 }

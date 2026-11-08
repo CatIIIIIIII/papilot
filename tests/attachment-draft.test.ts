@@ -54,3 +54,14 @@ test('attachment sends retain idempotency on retry, change identity for new file
   await composer.submit('feedback', async message => { messages.push(message); }, undefined, ['file-2']);
   assert.equal(messages[3].attachments, undefined);
 });
+
+test('upgrading restores an account-scoped file draft without replacing a current draft', () => {
+  const saved = new Map<string, string>([['papilot:files:old-account:task:task-1', JSON.stringify([uploaded])]]);
+  const storage = { keys: () => [...saved.keys()], getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => { saved.set(key, value); }, removeItem: (key: string) => { saved.delete(key); } };
+  const key = 'papilot:files:task:task-1';
+  assert.deepEqual(new AttachmentDraft(key, storage).getSnapshot().files, [uploaded]);
+  assert.equal(saved.has('papilot:files:old-account:task:task-1'), false);
+  saved.set('papilot:files:old-account:task:task-1', JSON.stringify([{ ...uploaded, id: 'older' }]));
+  assert.deepEqual(new AttachmentDraft(key, storage).getSnapshot().files, [uploaded]);
+  assert.equal(saved.has('papilot:files:old-account:task:task-1'), true);
+});

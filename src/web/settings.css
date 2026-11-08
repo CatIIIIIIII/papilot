@@ -15,8 +15,6 @@
 .settings-category[aria-current=page]{background:var(--bg-hover);color:var(--text);font-weight:500}
 .settings-search-empty{margin:12px;font-size:13px;color:var(--text-3)}
 .settings-sidebar-bottom{margin-top:auto;padding-top:12px}
-.settings-account{border-top:1px solid var(--line);border-radius:0}
-.settings-account small{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:400;color:var(--text-3)}
 .settings-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 0;font-size:11px;color:var(--text-3)}
 .settings-footer a{display:inline-flex;padding:4px;text-decoration:none;border-radius:5px}
 .settings-footer a:hover{background:var(--bg-hover);color:var(--text)}
@@ -37,8 +35,6 @@
 .settings-content-header #settings-title{font:600 26px/1.3 var(--sans);margin:0 28px 0 0;letter-spacing:-.5px;outline:none}
 .settings-content-header .settings-mobile-back{display:none}
 .settings-content-people .settings-content-header{margin-bottom:12px}
-.people-settings.settings-page{gap:24px}
-.people-settings .settings-card{border-radius:12px}
 .settings-page{display:grid;gap:24px;font-size:13px;line-height:1.6}
 .settings-page>*,.settings-card{min-width:0}
 .settings-intro{margin:0;font-size:13px;line-height:1.6;color:var(--text-2)}

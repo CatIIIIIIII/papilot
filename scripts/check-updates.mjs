@@ -12,7 +12,7 @@ await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const origin = `http://127.0.0.1:${server.server.address().port}`;
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
-const state = { version: '0.6.0', csrf: 'fixture', projects: [], tasks: [], requests: [], runtime: { connected: true, authenticated: false, account: null, error: null, models: [] }, viewer: { id: 'owner', name: 'Owner', role: 'owner', listener: 'local', owner: 'Owner' } };
+const state = { version: '0.6.0', csrf: 'fixture', projects: [], tasks: [], requests: [], runtime: { connected: true, authenticated: false, account: null, error: null, models: [] } };
 let update = { currentVersion: '0.6.0', latestVersion: '0.6.0', phase: 'idle', checkedAt: Date.now(), error: null, canUpdate: true }, offline = false;
 const installs = [], errors = [];
 const devVersion = '0.7.0-dev.' + 'a'.repeat(40), channels = [];
@@ -172,15 +172,6 @@ try {
   assert.equal(await settingsDialog.getByRole('button', { name: '立即更新', exact: true }).count(), 0, 'An installer download is not an in-place update');
   await settingsDialog.screenshot({ path: 'test-results/desktop-installer-settings.png' });
   await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
-  state.version = devVersion; await page.setViewportSize({ width: 320, height: 640 });
-  state.viewer.role = 'member'; state.viewer.listener = 'account';
-  await page.reload();
-  await page.getByRole('heading', { name: '还没有论文', exact: true }).waitFor();
-  assert.equal(await page.locator('.update-badge').count(), 0, 'Collaborators have no update action');
-  await expect(page.locator('.brand-version')).toHaveText('v0.7.0-dev.aaaaaaa');
-  await page.getByRole('button', { name: '显示任务列表', exact: true }).click();
-  await page.getByRole('button', { name: '设置', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: '版本更新', exact: true }).count(), 0, 'Collaborators cannot change channels');
   assert.deepEqual(errors, []);
-  console.log('PASS: Update discovery, compact badge, confirmation, progress, retry, automatic reconnect/reload, dark/mobile layout, desktop channels and installer links, and owner-only UI');
+  console.log('PASS: Update discovery, compact badge, confirmation, progress, retry, automatic reconnect/reload, dark/mobile layout, desktop channels and installer links');
 } finally { await browser.close(); await server.close(); }

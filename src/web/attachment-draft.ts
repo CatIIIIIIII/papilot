@@ -3,7 +3,20 @@ import { t } from './i18n.ts';
 
 export type UploadAttachment = (file: File, signal: AbortSignal) => Promise<Attachment>;
 export interface DraftAttachment { key: string; name: string; size: number; file?: File; attachment?: Attachment; uploading: boolean; error?: string }
-type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem' | 'removeItem'>;
+type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem' | 'removeItem'> & { keys?: () => string[] };
+
+function savedDraft(key: string, storage: Storage) {
+  const saved = storage.getItem(key);
+  if (saved !== null) return saved;
+  // Earlier versions included the account ID. Recover this browser's draft
+  // only when it is unambiguous; never replace a current draft.
+  const suffix = /^papilot:files:((?:task|new):.+)$/.exec(key)?.[1];
+  const previous = suffix ? (storage.keys?.() || []).filter(candidate => /^papilot:files:[^:]+:(?:task|new):/.test(candidate) && candidate.endsWith(':' + suffix)) : [];
+  if (previous.length !== 1) return null;
+  const value = storage.getItem(previous[0]);
+  if (value !== null) { storage.setItem(key, value); storage.removeItem(previous[0]); }
+  return value;
+}
 
 // Uploads belong to the draft, not the mounted form. Switching tasks while a
 // file uploads cannot attach it to the newly opened conversation.
@@ -17,7 +30,7 @@ export class AttachmentDraft {
   getSnapshot = () => this.snapshot;
   constructor(private key: string, private storage: Storage) {
     try {
-      const files: Attachment[] = JSON.parse(storage.getItem(key) || '[]');
+      const files: Attachment[] = JSON.parse(savedDraft(key, storage) || '[]');
       if (Array.isArray(files)) this.entries = files.filter(file => file && typeof file.id === 'string' && typeof file.projectId === 'string' && typeof file.name === 'string' && typeof file.size === 'number' && typeof file.mime === 'string').slice(0, MAX_ATTACHMENTS)
         .map(file => ({ key: file.id, name: file.name, size: file.size, attachment: file, uploading: false }));
     } catch { /* A damaged draft must not prevent the composer from opening. */ }
@@ -65,11 +78,6 @@ export class AttachmentDraft {
     const ids = new Set(sent.map(file => file.id));
     this.entries = this.entries.filter(entry => !entry.attachment || !ids.has(entry.attachment.id)); this.error = ''; this.changed();
   }
-  dispose() {
-    for (const request of this.requests.values()) request.abort();
-    this.entries = []; this.error = ''; this.changed();
-  }
 }
 
 export const attachmentDrafts = new Map<string, AttachmentDraft>();
-export function forgetAttachmentDrafts() { for (const draft of attachmentDrafts.values()) draft.dispose(); attachmentDrafts.clear(); }

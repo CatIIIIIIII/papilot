@@ -85,7 +85,6 @@
   "Required tools": "所需工具",
   "Review setup": "查看安装指引",
   "Set up later": "稍后设置",
-  "These tools are needed on the computer running Papilot. You do not need to install them on your own device. Ask the workspace owner to complete setup.": "这些工具需要安装在运行 Papilot 的电脑上，您的设备无需安装。请联系工作区所有者完成设置。",
   "These tools run on the computer hosting Papilot.": "这些工具需安装在运行 Papilot 的电脑上。",
   "Install Git": "安装 Git",
   "Install MacTeX": "安装 MacTeX",

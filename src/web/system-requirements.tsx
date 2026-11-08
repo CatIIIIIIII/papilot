@@ -34,7 +34,7 @@ function CheckAgain({ state, online, primary = false }: { state: RequirementsSta
   return <button type="button" className={'button requirements-recheck ' + (primary ? 'primary' : 'secondary')} disabled={state.busy || !online} onClick={state.recheck}>{state.busy ? <span className="spinner"/> : <Icon name="refresh" size={15}/>} {t('Check again')}</button>;
 }
 
-export function RequirementsPanel({ state, owner, online, showRecheck = true }: { state: RequirementsState; owner: boolean; online: boolean; showRecheck?: boolean }) {
+export function RequirementsPanel({ state, online, showRecheck = true }: { state: RequirementsState; online: boolean; showRecheck?: boolean }) {
   const { report, busy, failed } = state;
   const platform = report?.platform;
   const ready = Boolean(report && !requirementsMissing(report));
@@ -43,7 +43,7 @@ export function RequirementsPanel({ state, owner, online, showRecheck = true }: 
   const gitUrl = 'https://git-scm.com/install/' + (platform === 'darwin' ? 'mac' : platform === 'win32' ? 'windows' : platform === 'linux' ? 'linux' : '');
   const texUrl = platform === 'darwin' ? 'https://www.tug.org/mactex/mactex-download.html' : 'https://www.tug.org/texlive/acquire-netinstall.html';
   return <div className="requirements-panel">
-    <p className="requirements-intro">{owner ? t('These tools run on the computer hosting Papilot.') : t('These tools are needed on the computer running Papilot. You do not need to install them on your own device. Ask the workspace owner to complete setup.')}</p>
+    <p className="requirements-intro">{t('These tools run on the computer hosting Papilot.')}</p>
     <div className="requirements-list">
       {(['git', 'latex'] as const).map(id => {
         const ok = id === 'git' ? git : latex;
@@ -53,7 +53,7 @@ export function RequirementsPanel({ state, owner, online, showRecheck = true }: 
         return <section key={id} className="requirement-row" aria-label={id === 'git' ? 'Git' : 'LaTeX'}>
           <BrandIcon name={id} size={22}/>
           <div className="requirement-copy"><div className="requirement-heading"><h3>{id === 'git' ? 'Git' : 'LaTeX'}</h3><span className={'requirement-status ' + status}>{status === 'checking' ? <span className="spinner"/> : <Icon name={status === 'ready' ? 'check' : 'alert'} size={12}/>} {label}</span></div><p>{id === 'git' ? t('Version history') : t('PDF compilation')}</p></div>
-          {ok === false && owner && <a className="requirement-install" href={id === 'git' ? gitUrl : texUrl} target="_blank" rel="noopener noreferrer">{id === 'git' ? t('Install Git') : platform === 'darwin' ? t('Install MacTeX') : t('Install TeX Live')}<Icon name="external" size={13}/></a>}
+          {ok === false && <a className="requirement-install" href={id === 'git' ? gitUrl : texUrl} target="_blank" rel="noopener noreferrer">{id === 'git' ? t('Install Git') : platform === 'darwin' ? t('Install MacTeX') : t('Install TeX Live')}<Icon name="external" size={13}/></a>}
         </section>;
       })}
     </div>
@@ -62,7 +62,7 @@ export function RequirementsPanel({ state, owner, online, showRecheck = true }: 
   </div>;
 }
 
-export function RequirementsDialog({ state, owner, online, onClose }: { state: RequirementsState; owner: boolean; online: boolean; onClose: () => void }) {
+export function RequirementsDialog({ state, online, onClose }: { state: RequirementsState; online: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null, element = dialog.current!;
@@ -75,7 +75,7 @@ export function RequirementsDialog({ state, owner, online, onClose }: { state: R
     <section className="modal requirements-dialog">
       <button type="button" className="modal-close icon-button" aria-label={t('Close')} onClick={onClose}><Icon name="close"/></button>
       <h2 id="requirements-title" tabIndex={-1}>{t('Get ready to write')}</h2>
-      <RequirementsPanel state={state} owner={owner} online={online} showRecheck={false}/>
+      <RequirementsPanel state={state} online={online} showRecheck={false}/>
       <footer>{ready ? <><CheckAgain state={state} online={online}/><button type="button" className="button primary" onClick={onClose}>{t('Continue')}</button></> : <><button type="button" className="button ghost" onClick={onClose}>{t('Set up later')}</button><CheckAgain state={state} online={online} primary/></>}</footer>
     </section>
   </dialog>;

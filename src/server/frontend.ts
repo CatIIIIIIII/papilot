@@ -9,7 +9,7 @@ export async function registerFrontend(app: FastifyInstance, root: string) {
   await app.register(staticFiles, { root, prefix: '/', wildcard: true, cacheControl: false, dotfiles: 'deny' });
   app.setNotFoundHandler((request, reply) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
-    if (/^\/(api|review|assets)(\/|$)/.test(pathname)) return reply.code(404).send({ error: 'Not found' });
+    if (/^\/(api|review|assets|invite|sign-in)(\/|$)/.test(pathname)) return reply.code(404).send({ error: 'Not found' });
     return reply.type('text/html').send(fs.readFileSync(path.join(root, 'index.html')));
   });
 }

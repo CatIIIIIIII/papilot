@@ -4,6 +4,16 @@ const storageKey = (key: string) => isPlayground ? 'playground:' + key : key;
 // Keep this tab usable even when durable drafts/preferences are unavailable.
 const fallback = new Map<string, string>();
 export const browserStorage = {
+  keys(): string[] {
+    const keys = new Set(fallback.keys());
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)!;
+        if (isPlayground ? key.startsWith('playground:') : !key.startsWith('playground:')) keys.add(isPlayground ? key.slice(11) : key);
+      }
+    } catch { /* Only tab-local drafts are available. */ }
+    return [...keys];
+  },
   getItem(key: string): string | null {
     if (fallback.has(key)) return fallback.get(key)!;
     try { return localStorage.getItem(storageKey(key)); } catch { return null; }

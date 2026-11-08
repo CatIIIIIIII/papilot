@@ -81,11 +81,6 @@ export async function saveStamps(stamps: Stamp[]) {
   try { apply((await request<{ quickNotes: QuickNote[] | null }>('/quick-notes', { quickNotes: stored(stamps) })).quickNotes); }
   finally { version++; }
 }
-// Signing out forgets this person's list here too, not only in storage.
-export function forgetStamps() {
-  version++; loaded = false; saved = null;
-  listeners.forEach(listener => listener());
-}
 export function useStamps() {
   const value = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => saved);
   const { language } = useLanguage();

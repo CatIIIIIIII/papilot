@@ -1,6 +1,7 @@
 import { isNoteGroup } from '../note-groups.ts';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
+import rateLimit from '@fastify/rate-limit';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,8 +18,7 @@ import { gitHistory, gitVersion, gitVersionDiff, gitRestoreVersion } from './git
 import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
-import { type Accounts, deviceLabel } from './accounts.ts';
-import { type Listener, type Viewer, Limiter, SESSION_COOKIE, author, clientAddress, cookie, equals, guard, viewerInfo, visibleSnapshot } from './access.ts';
+import { type Listener, equals, guard } from './access.ts';
 import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote } from '../shared.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
 import { taskNoteResults } from './note-results.ts';
@@ -38,7 +38,7 @@ const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
 const predicting = new WeakSet<Workspace>();
 
 // Git writes to one repository run one at a time; each returns the new status.
-// Both listeners share one queue, so the owner and a collaborator take turns.
+// Concurrent requests from browser tabs share the same queue.
 export function gitQueue() {
   const queue = new Map<string, Promise<unknown>>();
   return function serialGit<T>(projectId: string, work: () => Promise<T>) {
@@ -73,7 +73,7 @@ function readQuickNotes(value: unknown): QuickNote[] {
 }
 
 export interface AppOptions {
-  listener: Listener; store: Store; workspace: Workspace; manuscripts: Manuscripts; accounts: Accounts; changes?: Changes;
+  listener: Listener; store: Store; workspace: Workspace; manuscripts: Manuscripts; changes?: Changes;
   csrf: string; serialGit: ReturnType<typeof gitQueue>; dist: string | null; version: string;
   connectReview?: typeof reviewClient;
   updates?: Updates; updateInstance?: string;
@@ -84,24 +84,22 @@ export interface AppOptions {
   systemRequirements?: typeof systemRequirements;
 }
 
-// One Fastify instance per listener: the local one for this host and Tailscale,
-// the account one for the public URL. Both serve the same workspace.
+// Serve the local workspace, including authenticated personal Tailscale access.
 export async function buildApp(options: AppOptions) {
-  const { listener, store, workspace, manuscripts, accounts, serialGit } = options, connectReview = options.connectReview || reviewClient;
+  const { listener, store, workspace, manuscripts, serialGit } = options, connectReview = options.connectReview || reviewClient;
   const changes = options.changes || new Changes(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-changes-')));
   const diagnostics = options.diagnostics || new Diagnostics();
   let imports = importsByWorkspace.get(workspace);
   if (!imports) { imports = new PaperImports(manuscripts, DATA, root => Boolean(workspace.projectByPath(root))); importsByWorkspace.set(workspace, imports); }
   workspace.importsBusy = () => imports!.busy;
   // Whether rounds list what each edit changes elsewhere, such as the uses of
-  // a macro: the owner's choice in Settings, off by default, since finding
+  // a macro: the choice in Settings, off by default, since finding
   // which combination reproduces a change needs additional compilations.
   // Task rounds and the manuscript's Changes both follow it.
-  const indirectChanges = () => store.preference<boolean>(accounts.owner().id, 'indirect-changes') === true;
+  const indirectChanges = () => store.preference<boolean>('indirect-changes') === true;
   workspace.indirectChanges = changes.indirectChanges = indirectChanges;
-  // A public request must arrive in full within a minute; held-open bodies tie up nothing.
-  const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER, ...(listener.kind === 'account' ? { requestTimeout: 60000 } : {}) });
-  const { csrfFor } = guard(app, { listener, accounts, store, csrf: options.csrf, request: id => workspace.requests.get(id) });
+  const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
+  guard(app, { listener, csrf: options.csrf });
   const updateRequests = new WeakMap<object, () => void>();
   app.addHook('onRequest', async (request, reply) => {
     if (!options.updates || !/^\/(api|review)\//.test(request.url) || /^\/api\/(?:updates(?:\/|$)|health(?:\?|$)|events(?:\?|$)|state(?:\?|$))/.test(request.url)) return;
@@ -111,11 +109,11 @@ export async function buildApp(options: AppOptions) {
   app.addHook('onResponse', async request => { updateRequests.get(request)?.(); });
   const projectRequests = new WeakMap<object, () => void>();
   app.addHook('preHandler', async request => {
-    const access = request.routeOptions.config.access, params = request.params as Record<string, string>;
-    if (!access || typeof access !== 'object') return;
-    const id = 'project' in access ? (access.from === 'body' ? request.body as Record<string, string> : params)?.[access.project]
-      : 'task' in access ? store.tasks().find(task => task.id === params[access.task])?.projectId
-      : store.tasks().find(task => task.id === workspace.requests.get(params[access.request])?.taskId)?.projectId;
+    const resource = request.routeOptions.config.resource, params = request.params as Record<string, string>;
+    if (!resource) return;
+    const id = 'project' in resource ? (resource.from === 'body' ? request.body as Record<string, string> : params)?.[resource.project]
+      : 'task' in resource ? store.tasks().find(task => task.id === params[resource.task])?.projectId
+      : store.tasks().find(task => task.id === workspace.requests.get(params[resource.request])?.taskId)?.projectId;
     if (id) projectRequests.set(request, workspace.enterProjectRequest(id));
   });
   app.addHook('onSend', async (request, _reply, payload) => { projectRequests.get(request)?.(); return payload; });
@@ -149,10 +147,9 @@ export async function buildApp(options: AppOptions) {
   app.addHook('onError', async request => { projectRequests.get(request)?.(); });
   await app.register(compress);
   app.setErrorHandler((error, _request, reply) => { reply.code((error as any).statusCode || 400).send({ error: (error as Error).message }); });
-  const any = { config: { access: 'any' as const } }, owner = { config: { access: 'owner' as const } };
   registerSkillRoutes(app, store);
   registerAiReviewRoutes(app, store, manuscripts);
-  const project = (param = 'id') => ({ config: { access: { project: param } } }), task = { config: { access: { task: 'id' } } };
+  const project = (param = 'id') => ({ config: { resource: { project: param } } }), task = { config: { resource: { task: 'id' } } };
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
   app.post<{ Params: { id: string } }>('/api/projects/:id/attachments', { ...project(), bodyLimit: MAX_ATTACHMENT_BYTES }, async request => {
     if (!Buffer.isBuffer(request.body)) throw new Error('Upload a file as binary data.');
@@ -160,16 +157,16 @@ export async function buildApp(options: AppOptions) {
     if (typeof header !== 'string') throw new Error('Choose a file with a valid name.');
     let name: string;
     try { name = decodeURIComponent(header); } catch { throw new Error('Choose a file with a valid name.'); }
-    return workspace.attachments.upload(request.params.id, author(request.viewer)?.id || 'owner', name, request.body);
+    return workspace.attachments.upload(request.params.id, name, request.body);
   });
   app.get<{ Params: { id: string; attachment: string } }>('/api/projects/:id/attachments/:attachment', project(), (request, reply) => {
-    const file = workspace.attachments.get(request.params.id, request.params.attachment, author(request.viewer)?.id || 'owner');
+    const file = workspace.attachments.get(request.params.id, request.params.attachment);
     const disposition = file.mime.startsWith('image/') ? 'inline' : 'attachment';
     return reply.type(file.mime).header('Content-Disposition', `${disposition}; filename="attachment"; filename*=UTF-8''${encodeURIComponent(file.name).replace(/'/g, '%27')}`)
       .header('Content-Security-Policy', "default-src 'none'; sandbox").send(fs.createReadStream(workspace.attachments.path(file)));
   });
   app.post<{ Params: { id: string; attachment: string } }>('/api/projects/:id/attachments/:attachment/discard', project(), request => {
-    workspace.attachments.discard(request.params.id, request.params.attachment, author(request.viewer)?.id || 'owner');
+    workspace.attachments.discard(request.params.id, request.params.attachment);
     return { ok: true };
   });
   async function manuscript(id: string, rebuild = false) {
@@ -189,98 +186,89 @@ export async function buildApp(options: AppOptions) {
     return { ...state, annotations: store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note)) };
   }
 
-  app.get('/api/health', { config: { access: 'public' } }, () => listener.kind === 'local' ? { ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) } : { ok: true });
-  app.get('/api/runtime/requirements', any, () => (options.systemRequirements || systemRequirements)());
-  // Environment reports include host paths, so they are available only to the owner.
-  app.get('/api/runtime/latex', owner, () => (options.latexInstallation || detectLatex)());
-  app.post('/api/diagnostics', owner, request => {
+  app.get('/api/health', () => ({ ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) }));
+  app.get('/api/runtime/requirements', () => (options.systemRequirements || systemRequirements)());
+  // Detection starts host processes. All tabs and personal remote connections
+  // share one budget and one in-flight probe; polling other routes is unaffected.
+  await app.register(async latex => {
+    await latex.register(rateLimit, { max: 5, timeWindow: 10000, keyGenerator: () => 'latex-installation' });
+    let probe: ReturnType<typeof detectLatex> | undefined;
+    latex.get('/api/runtime/latex', () => {
+      probe ??= (options.latexInstallation || detectLatex)().finally(() => { probe = undefined; });
+      return probe;
+    });
+  });
+  app.post('/api/diagnostics', request => {
     const projectId = (request.body as { projectId?: unknown } | null)?.projectId;
     if (projectId !== undefined && (typeof projectId !== 'string' || !projectId || projectId.length > 64)) throw new Error('Select a valid paper to check.');
     const repo = projectId ? store.project(projectId).path : undefined;
-    return diagnostics.check(repo, listener.kind === 'local' ? listener.port : undefined);
+    return diagnostics.check(repo, listener.port);
   });
   if (options.updates) {
-    app.get('/api/updates', owner, () => options.updates!.snapshot());
-    app.post('/api/updates/check', owner, () => options.updates!.check());
-    app.post('/api/updates/channel', owner, request => options.updates!.setChannel((request.body as any)?.channel));
-    app.post('/api/updates/install', owner, request => options.updates!.install((request.body as any)?.version));
+    app.get('/api/updates', () => options.updates!.snapshot());
+    app.post('/api/updates/check', () => options.updates!.check());
+    app.post('/api/updates/channel', request => options.updates!.setChannel((request.body as any)?.channel));
+    app.post('/api/updates/install', request => options.updates!.install((request.body as any)?.version));
   }
-  app.get('/api/state', any, async request => {
+  app.get('/api/state', async () => {
     await options.prepareDemo?.();
-    const viewer = request.viewer!;
     // Check the backend environment (Linux when using WSL), again on each poll
     // so installing Git unlocks version management without a page reload.
-    return { ...visibleSnapshot(workspace.snapshot(), viewer, accounts), gitAvailable: Boolean(findExecutable('git')), csrf: csrfFor(viewer), viewer: viewerInfo(viewer, accounts) };
+    return { ...workspace.snapshot(), gitAvailable: Boolean(findExecutable('git')), csrf: options.csrf };
   });
-  // Each person's quick notes for the magic pen, the same on every device they
-  // sign in from. None saved means the presets.
-  const person = (viewer: Viewer) => viewer.listener === 'local' ? accounts.owner().id : viewer.user.id;
-  app.get('/api/quick-notes', any, request => ({ quickNotes: store.preference<QuickNote[]>(person(request.viewer!), 'quick-notes') || null }));
-  app.post('/api/quick-notes', any, request => {
+  // Quick notes for the magic pen. None saved means the presets.
+  app.get('/api/quick-notes', () => ({ quickNotes: store.preference<QuickNote[]>('quick-notes') || null }));
+  app.post('/api/quick-notes', request => {
     const value = (request.body as any)?.quickNotes;
     const quickNotes = value === null ? undefined : readQuickNotes(value);
-    store.savePreference(person(request.viewer!), 'quick-notes', quickNotes);
+    store.savePreference('quick-notes', quickNotes);
     return { quickNotes: quickNotes || null };
   });
-  app.get('/api/indirect-changes', any, () => ({ indirectChanges: indirectChanges() }));
-  app.post('/api/indirect-changes', owner, (request, reply) => {
+  app.get('/api/indirect-changes', () => ({ indirectChanges: indirectChanges() }));
+  app.post('/api/indirect-changes', (request, reply) => {
     const value = (request.body as any)?.indirectChanges;
     if (typeof value !== 'boolean') return reply.code(400).send({ error: 'Send indirectChanges as true or false.' });
-    store.savePreference(accounts.owner().id, 'indirect-changes', value || undefined);
+    store.savePreference('indirect-changes', value || undefined);
     return { indirectChanges: value };
   });
-  // Signed-in people get at most a few event streams each.
-  const streams = new Map<string, number>();
-  app.get('/api/events', any, (request, reply) => {
-    const viewer = request.viewer!, session = viewer.listener === 'account' ? viewer.session.id : '';
-    if (session && (streams.get(session) || 0) >= 6) return reply.code(429).send({ error: 'Too many open Papilot tabs. Close one and try again.' });
-    if (session) streams.set(session, (streams.get(session) || 0) + 1);
+  app.get('/api/events', (request, reply) => {
     reply.hijack();
     reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     reply.raw.write('event: change\ndata: {}\n\n');
     let timer: NodeJS.Timeout | undefined;
     const change = () => { timer ??= setTimeout(() => { timer = undefined; reply.raw.write('event: change\ndata: {}\n\n'); }, 400); };
-    // Removing someone or unsharing a paper reaches their open tabs at once;
-    // a stream whose session ended closes, and the tab then asks to sign in.
-    const revoked = (event: { userId?: string; sessionId?: string }) => {
-      if (viewer.listener !== 'account' || (event.userId !== viewer.user.id && event.sessionId !== viewer.session.id)) return;
-      if (!accounts.session(cookie(request.headers.cookie, SESSION_COOKIE))) { reply.raw.write('event: change\ndata: {}\n\n'); reply.raw.end(); } else change();
-    };
     // A manuscript build started or finished: the open PDF view reloads now
     // instead of at its next poll. The event names no paper.
     let paperTimer: NodeJS.Timeout | undefined;
     const paper = () => { paperTimer ??= setTimeout(() => { paperTimer = undefined; reply.raw.write('event: manuscript\ndata: {}\n\n'); }, 100); };
     workspace.on('change', change);
     manuscripts.on('change', paper);
-    accounts.on('revoked', revoked);
     const heartbeat = setInterval(() => reply.raw.write(': heartbeat\n\n'), 15000);
     reply.raw.on('close', () => {
-      clearInterval(heartbeat); if (timer) clearTimeout(timer); if (paperTimer) clearTimeout(paperTimer); workspace.off('change', change); manuscripts.off('change', paper); accounts.off('revoked', revoked);
-      if (session) { const open = (streams.get(session) || 1) - 1; if (open) streams.set(session, open); else streams.delete(session); }
+      clearInterval(heartbeat); if (timer) clearTimeout(timer); if (paperTimer) clearTimeout(paperTimer); workspace.off('change', change); manuscripts.off('change', paper);
     });
   });
-  app.post('/api/reconnect', any, async request => { await workspace.connect(); return visibleSnapshot(workspace.snapshot(), request.viewer!, accounts).runtime; });
+  app.post('/api/reconnect', async request => { await workspace.connect(); return workspace.snapshot().runtime; });
   // Codex names reasoning efforts with short lowercase words (low, medium, xhigh).
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
   const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
-  // Adding a paper names a folder on this host, so only the owner can.
-  app.post('/api/projects', owner, async request => { const b = request.body as any; return workspace.addProject(string(b.path, 'Repository path', 4000), b.name ? string(b.name, 'Paper name', 120) : undefined); });
-  app.post('/api/projects/open', owner, request => openFolder((request.body || {}) as any, root => workspace.projectByPath(root), (root, name) => workspace.addProject(root, name)));
-  app.post('/api/imports', { ...owner, bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
-  app.get<{ Params: { id: string } }>('/api/imports/:id', owner, request => imports!.get(request.params.id));
-  app.post<{ Params: { id: string } }>('/api/imports/:id/build', owner, request => imports!.build(request.params.id, (request.body || {}) as any));
-  app.post<{ Params: { id: string } }>('/api/imports/:id/repair', owner, request => imports!.build(request.params.id, (request.body || {}) as any, (root, error) => workspace.repairImport(root, error, { agent: agent((request.body as any)?.agent) })));
-  app.post<{ Params: { id: string } }>('/api/imports/:id/finish', owner, request => imports!.finish(request.params.id, (root, name) => workspace.addProject(root, name)));
+  app.post('/api/projects', async request => { const b = request.body as any; return workspace.addProject(string(b.path, 'Repository path', 4000), b.name ? string(b.name, 'Paper name', 120) : undefined); });
+  app.post('/api/projects/open', request => openFolder((request.body || {}) as any, root => workspace.projectByPath(root), (root, name) => workspace.addProject(root, name)));
+  app.post('/api/imports', { bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
+  app.get<{ Params: { id: string } }>('/api/imports/:id', request => imports!.get(request.params.id));
+  app.post<{ Params: { id: string } }>('/api/imports/:id/build', request => imports!.build(request.params.id, (request.body || {}) as any));
+  app.post<{ Params: { id: string } }>('/api/imports/:id/repair', request => imports!.build(request.params.id, (request.body || {}) as any, (root, error) => workspace.repairImport(root, error, { agent: agent((request.body as any)?.agent) })));
+  app.post<{ Params: { id: string } }>('/api/imports/:id/finish', request => imports!.finish(request.params.id, (root, name) => workspace.addProject(root, name)));
   app.post<{ Params: { id: string } }>('/api/projects/:id/rename', project(), request => workspace.renameProject(request.params.id, string((request.body as any).name, 'Paper name', 120)));
   const paperIdle = (id: string) => { if (manuscripts.busyForProject(id) || changes.busyForProject(id)) throw Object.assign(new Error('Wait for this paper’s PDF build to finish before changing its path or removing it.'), { statusCode: 409 }); };
   const forgetPaper = (id: string) => { manuscripts.forgetProject(id); changes.forgetProject(id); };
-  app.post<{ Params: { id: string } }>('/api/projects/:id/path', owner, async request => {
+  app.post<{ Params: { id: string } }>('/api/projects/:id/path', async request => {
     const id = request.params.id, body = request.body as any;
     const result = await workspace.changeProjectPath(id, string(body?.path, 'Repository path', 4000), () => paperIdle(id), body?.name === undefined ? undefined : string(body.name, 'Paper name', 120));
     forgetPaper(id); return result;
   });
-  app.post<{ Params: { id: string } }>('/api/projects/:id/remove', owner, request => {
+  app.post<{ Params: { id: string } }>('/api/projects/:id/remove', request => {
     const id = request.params.id, result = workspace.removeProject(id, () => paperIdle(id));
     forgetPaper(id); return result;
   });
@@ -289,7 +277,7 @@ export async function buildApp(options: AppOptions) {
   // Text the author may leave empty when a skill or review feedback says enough.
   const optional = (value: unknown, name: string, max?: number) => value === undefined || value === '' ? '' : string(value, name, max);
   app.get<{ Params: { id: string } }>('/api/projects/:id/skills', project(), request => ({ skills: loadSkills(store.project(request.params.id).path).map(listedSkill) }));
-  app.post('/api/tasks', { config: { access: { project: 'projectId', from: 'body' } } }, async request => {
+  app.post('/api/tasks', { config: { resource: { project: 'projectId', from: 'body' } } }, async request => {
     const b = request.body as any, skill = skillName(b.skill), attachments = attachmentIds(b.attachments);
     if (b.annotations !== undefined && (!Array.isArray(b.annotations) || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64))) throw new Error('Select valid PDF notes for this task.');
     const annotations: string[] | undefined = b.annotations, groupInstructions = parseGroupInstructions(b.groupInstructions);
@@ -299,7 +287,7 @@ export async function buildApp(options: AppOptions) {
     if (existing) { if (existing.projectId !== projectId) throw new Error('Invalid task ID.'); return existing; }
     // AI review compiles the task's own copy of the manuscript, so it does not wait for the preview.
     const reviewing = Boolean(skill && findSkill(store.project(projectId).path, skill).output === 'annotations');
-    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
+    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
   });
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
@@ -340,7 +328,7 @@ export async function buildApp(options: AppOptions) {
       });
     }
     const text = feedback || skill || reviewNotes || attachments.length ? optional(b.text, 'Revision instructions') : string(b.text, 'Revision instructions');
-    return workspace.enqueue(task.id, text, string(b.requestKey, 'Request ID', 100), true, { skill, feedback, reviewNotes, attachments, author: author(request.viewer) });
+    return workspace.enqueue(task.id, text, string(b.requestKey, 'Request ID', 100), true, { skill, feedback, reviewNotes, attachments });
   });
   // Commits what the author accepted from this task, with the message they confirmed.
   app.post<{ Params: { id: string } }>('/api/tasks/:id/commit', task, request => {
@@ -369,7 +357,7 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/tasks/:id/archive', task, request => workspace.archiveTask(request.params.id, (request.body as any)?.archived, (request.body as any)?.finished === true));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/interrupt', task, request => workspace.interrupt(request.params.id).then(() => ({ ok: true })));
   // Deleting a task that is already gone succeeds, so a lost response can be retried; a hidden one answers the same.
-  app.post<{ Params: { id: string } }>('/api/tasks/:id/delete', { config: { access: { task: 'id' }, hidden: 'ok' } }, request => {
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/delete', { config: { resource: { task: 'id' } } }, request => {
     if ((request.body as any)?.confirm !== true) throw new Error('Confirm permanent task deletion before continuing.');
     return workspace.deleteTask(request.params.id);
   });
@@ -472,8 +460,7 @@ export async function buildApp(options: AppOptions) {
     const comment = b.group || b.kind === 'delete' ? optional(b.comment, 'Note') : string(b.comment, 'Note'), key = string(b.key, 'Preview key', 64), page = Number(b.page);
     const selected = typeof b.quote === 'string' ? b.quote : '';
     const { quote, source } = await manuscripts.locate(project.id, key, page, b.rect, rects, selected);
-    const by = author(request.viewer);
-    return store.saveAnnotation({ id: randomUUID(), projectId: project.id, key, page, rect: b.rect, ...(b.group ? { group: b.group } : {}), ...(b.kind ? { kind: b.kind } : {}), ...(stamp ? { stamp } : {}), ...(rects.length ? { rects } : {}), comment, quote, source, createdAt: Date.now(), ...(by ? { author: by } : {}) });
+    return store.saveAnnotation({ id: randomUUID(), projectId: project.id, key, page, rect: b.rect, ...(b.group ? { group: b.group } : {}), ...(b.kind ? { kind: b.kind } : {}), ...(stamp ? { stamp } : {}), ...(rects.length ? { rects } : {}), comment, quote, source, createdAt: Date.now() });
   });
   app.post<{ Params: { id: string; note: string } }>('/api/projects/:id/annotations/:note', project(), request => {
     const note = store.annotation(request.params.id, request.params.note);
@@ -509,7 +496,7 @@ export async function buildApp(options: AppOptions) {
     const notes = [...new Set<string>(b.annotations)].map(id => store.annotation(project.id, id));
     if (notes.some(note => note.taskId || isTaskReviewNote(note) || note.deletedAt !== undefined)) throw new Error('Select unsent PDF notes for this task.');
     const { title } = annotationTask(notes);
-    return workspace.createTask({ id, projectId: project.id, title, instructions: '', permissions: b.permissions, annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64), author: author(request.viewer) });
+    return workspace.createTask({ id, projectId: project.id, title, instructions: '', permissions: b.permissions, annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
   });
   // What the last build reported, placed on its PDF, and the TeX log itself.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));
@@ -535,58 +522,20 @@ export async function buildApp(options: AppOptions) {
     const pdf = await manuscripts.annotatedPdf(project.id, key, notes);
     return reply.type('application/pdf').header('Content-Disposition', `attachment; filename="${pdfName(project.name, '-annotated')}"`).header('Cache-Control', 'no-store').send(Buffer.from(pdf.buffer, pdf.byteOffset, pdf.byteLength));
   });
-  app.post<{ Params: { id: string } }>('/api/requests/:id', { config: { access: { request: 'id' } } }, request => { workspace.answer(request.params.id, request.body as any); return { ok: true }; });
-
-  // People and sharing, for the owner. Papers shared with someone must exist.
-  const papers = (value: unknown) => { const known = new Set(store.projects().map(p => p.id)); return paths(value).filter(id => known.has(id)); };
-  app.get('/api/people', owner, () => accounts.people());
-  app.post('/api/people', owner, request => { const b = request.body as any; return accounts.addPerson(string(b.name, 'Name', 80), papers(b.projects)); });
-  app.post<{ Params: { person: string } }>('/api/people/:person/rename', owner, request => { accounts.rename(request.params.person, string((request.body as any).name, 'Name', 80)); return accounts.people(); });
-  app.post<{ Params: { person: string } }>('/api/people/:person/share', owner, request => { accounts.share(request.params.person, papers((request.body as any).projects)); return accounts.people(); });
-  app.post<{ Params: { person: string } }>('/api/people/:person/invite', owner, request => ({ link: accounts.invite(request.params.person) }));
-  app.post<{ Params: { person: string } }>('/api/people/:person/remove', owner, request => { accounts.remove(request.params.person); return accounts.people(); });
-  app.post<{ Params: { person: string; device: string } }>('/api/people/:person/devices/:device/remove', owner, request => { accounts.revoke(request.params.person, request.params.device); return accounts.people(); });
-  app.post<{ Params: { person: string } }>('/api/people/:person/sign-out', owner, request => { accounts.signOutEverywhere(request.params.person); return accounts.people(); });
-
-  // Signing in at the public URL: an invite registers a passkey, which then signs in.
-  if (listener.kind === 'account') {
-    // __Host- cookies must be Secure; browsers accept that on http://localhost too.
-    const limiter = new Limiter();
-    const auth = { config: { access: 'public' as const, csrf: false as const }, bodyLimit: 16 * 1024 };
-    const limited = (request: any, reply: any) => { if (!limiter.take(clientAddress(request))) { reply.code(429).send({ error: 'Too many attempts. Wait a minute and try again.' }); return true; } return false; };
-    const signIn = (reply: any, started: { token: string }) => reply.header('Set-Cookie', `${SESSION_COOKIE}=${started.token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${90 * 86400}`).send({ ok: true });
-    const paperName = (id: string) => store.projects().find(p => p.id === id)?.name;
-    app.post('/api/auth/invite', auth, (request, reply) => limited(request, reply) || reply.send(accounts.inviteInfo(String((request.body as any)?.token || ''), paperName)));
-    app.post('/api/auth/invite/options', auth, async (request, reply) => limited(request, reply) || reply.send(await accounts.registrationOptions(String((request.body as any)?.token || ''))));
-    app.post('/api/auth/invite/verify', auth, async (request, reply) => {
-      if (limited(request, reply)) return;
-      const b = request.body as any;
-      return signIn(reply, await accounts.register(String(b?.token || ''), b?.response, deviceLabel(request.headers['user-agent'])));
-    });
-    app.post('/api/auth/options', auth, async (request, reply) => limited(request, reply) || reply.send(await accounts.authenticationOptions()));
-    app.post('/api/auth/verify', auth, async (request, reply) => {
-      if (limited(request, reply)) return;
-      return signIn(reply, await accounts.authenticate((request.body as any)?.response, deviceLabel(request.headers['user-agent'])));
-    });
-    app.post('/api/auth/logout', any, (request, reply) => {
-      const viewer = request.viewer!;
-      if (viewer.listener === 'account') accounts.endSession(viewer.session.id);
-      return reply.header('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`).header('Clear-Site-Data', '"cache"').send({ ok: true });
-    });
-  }
+  app.post<{ Params: { id: string } }>('/api/requests/:id', { config: { resource: { request: 'id' } } }, request => { workspace.answer(request.params.id, request.body as any); return { ok: true }; });
 
   // The review viewer also shows a paper's uncommitted changes against its
   // last commit. Papilot answers those routes itself, ahead of the engine's
   // below, and the viewer posts with Papilot's token. Staging writes the
   // index; reverting writes files, so it waits for review actions and commits.
-  const changesAccess = { config: { access: { project: 'projectId' }, csrf: false as const } };
-  const changesToken = (request: { headers: Record<string, unknown>; viewer?: Parameters<typeof csrfFor>[0] }) => {
-    if (!equals(String(request.headers['x-review-token'] || ''), csrfFor(request.viewer!))) throw Object.assign(new Error('This page has expired. Refresh it and try again.'), { statusCode: 403 });
+  const changesAccess = { config: { resource: { project: 'projectId' }, csrf: false as const } };
+  const changesToken = (request: { headers: Record<string, unknown> }) => {
+    if (!equals(String(request.headers['x-review-token'] || ''), options.csrf)) throw Object.assign(new Error('This page has expired. Refresh it and try again.'), { statusCode: 403 });
   };
   const CHANGE_ACTIONS: Record<string, ChangeAction> = { accept: 'stage', unstage: 'unstage', reject: 'revert' };
   app.get<{ Params: { projectId: string }; Querystring: { round?: string } }>('/review/:projectId/api/changes/state', changesAccess, request => {
     const project = store.project(request.params.projectId), round = Number(request.query.round);
-    return changes.state(project.id, project.path, csrfFor(request.viewer!), Number.isSafeInteger(round) && round > 0 ? round : undefined);
+    return changes.state(project.id, project.path, options.csrf, Number.isSafeInteger(round) && round > 0 ? round : undefined);
   });
   app.get<{ Params: { projectId: string; number: string } }>('/review/:projectId/api/changes/rounds/:number', changesAccess, request => changes.detail(store.project(request.params.projectId).id, Number(request.params.number)));
   app.get<{ Params: { projectId: string; number: string; unit: string } }>('/review/:projectId/api/changes/rounds/:number/effects/:unit', changesAccess, request =>
@@ -614,34 +563,34 @@ export async function buildApp(options: AppOptions) {
     const project = store.project(request.params.projectId), b = request.body as any, action = CHANGE_ACTIONS[String(b?.action)];
     if (!action) throw new Error('Choose stage, unstage or revert.');
     const ids = Array.isArray(b.changes) ? b.changes.filter((id: unknown): id is string => typeof id === 'string') : [];
-    const act = () => changes.act(project.id, project.path, csrfFor(request.viewer!), action, Number(b.round), ids);
+    const act = () => changes.act(project.id, project.path, options.csrf, action, Number(b.round), ids);
     return serialGit(project.id, () => action === 'revert' ? workspace.exclusiveCommit(project.id, act) : act());
   });
   app.post<{ Params: { projectId: string } }>('/review/:projectId/api/changes/undo', changesAccess, request => {
     changesToken(request);
     const project = store.project(request.params.projectId), id = string((request.body as any)?.id, 'Revert ID', 80);
-    return serialGit(project.id, () => workspace.exclusiveCommit(project.id, () => changes.undo(project.id, project.path, csrfFor(request.viewer!), id)));
+    return serialGit(project.id, () => workspace.exclusiveCommit(project.id, () => changes.undo(project.id, project.path, options.csrf, id)));
   });
 
   // The complete PDF of a round's new version, for the review's full paper.
   // A round may compile only the changed chapters; this compiles them all once.
   // While it compiles, `passes` names each earlier version that `?pass=`
   // serves: the chapters the round compiled, then each TeX pass of the whole.
-  app.get<{ Params: { projectId: string; name: string; round: string }; Querystring: { pass?: string } }>('/review/:projectId/pdf/:name/:round', { config: { access: { project: 'projectId' } } }, async (request, reply) => {
+  app.get<{ Params: { projectId: string; name: string; round: string }; Querystring: { pass?: string } }>('/review/:projectId/pdf/:name/:round', { config: { resource: { project: 'projectId' } } }, async (request, reply) => {
     const project = store.project(request.params.projectId), name = request.params.name, round = Number(request.params.round);
     const pass = request.query.pass === undefined ? null : Number(request.query.pass);
     if (!/^[a-z0-9-]+$/.test(name) || !Number.isSafeInteger(round) || round < 1 || (pass !== null && (!Number.isSafeInteger(pass) || pass < 1))) return reply.code(404).send({ error: 'Review resource not found.' });
     const pdf = pass === null ? await fullPaperPdf(connectReview, project.path, name, round, 'after') : await paperPassPdf(connectReview, project.path, name, round, pass);
     return reply.type('application/pdf').sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
   });
-  app.get<{ Params: { projectId: string; name: string; round: string }; Querystring: { after?: string } }>('/review/:projectId/pdf/:name/:round/passes', { config: { access: { project: 'projectId' } } }, async (request, reply) => {
+  app.get<{ Params: { projectId: string; name: string; round: string }; Querystring: { after?: string } }>('/review/:projectId/pdf/:name/:round/passes', { config: { resource: { project: 'projectId' } } }, async (request, reply) => {
     const project = store.project(request.params.projectId), name = request.params.name, round = Number(request.params.round), after = Number(request.query.after ?? 0);
     if (!/^[a-z0-9-]+$/.test(name) || !Number.isSafeInteger(round) || round < 1 || !Number.isSafeInteger(after) || after < 0) return reply.code(404).send({ error: 'Review resource not found.' });
     return nextPaperPass(connectReview, project.path, name, round, after);
   });
   app.route<{ Params: { projectId: string; '*': string } }>({
     // The review page posts with the review engine's token rather than Papilot's.
-    method: ['GET', 'POST'], url: '/review/:projectId/*', config: { access: { project: 'projectId' }, csrf: false }, handler: async (request, reply) => {
+    method: ['GET', 'POST'], url: '/review/:projectId/*', config: { resource: { project: 'projectId' }, csrf: false }, handler: async (request, reply) => {
       const project = store.project(request.params.projectId);
       const route = '/' + request.params['*'];
       if (route.includes('..') || !allowedReviewRoute(route, request.method)) return reply.code(404).send({ error: 'Review resource not found.' });
@@ -698,6 +647,6 @@ export async function buildApp(options: AppOptions) {
   });
 
   if (options.dist) await registerFrontend(app, options.dist);
-  else app.get('/', { config: { access: 'public' } }, (_request, reply) => reply.type('text/plain').send('Papilot: run npm run build, then restart the server.'));
+  else app.get('/', (_request, reply) => reply.type('text/plain').send('Papilot: run npm run build, then restart the server.'));
   return app;
 }

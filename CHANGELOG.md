@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Removed
+
+- Multi-user collaboration, including Sharing settings, invitations, passkey sign-in, paper access permissions and the separate public account server. Papilot now runs as a single-user workspace. Existing papers, tasks, conversations, notes and the host’s preferences are preserved; old accounts, invitations and sessions are removed on upgrade. Personal Tailscale access remains available.
+
 ### Fixed
 
 - OpenCode now discovers reasoning effort levels for models other than its default, so their effort controls are available before starting a task. Model changes retry stale responses and stop if OpenCode cannot confirm the selected model.

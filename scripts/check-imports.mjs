@@ -8,7 +8,7 @@ import { chromium } from '../engine/node_modules/playwright/index.mjs';
 import { selectOption } from './select.mjs';
 const server = Fastify(); await server.register(staticFiles, { root: path.resolve('dist') }); await server.listen({ host: '127.0.0.1', port: 0 });
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
-const state = { version: '0.6.0', csrf: 'fixture', projects: [], tasks: [], requests: [], runtime: { connected: true, authenticated: true, account: 'Owner', error: null, models: [] }, viewer: { id: 'owner', role: 'owner', name: 'Owner', listener: 'local', owner: 'Owner' } };
+const state = { version: '0.6.0', csrf: 'fixture', projects: [], tasks: [], requests: [], runtime: { connected: true, authenticated: true, account: 'Owner', error: null, models: [] } };
 const imported = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', name: 'My paper', path: '/papers/copied-paper', copied: true, candidates: ['main.tex', 'supplement.tex'], main: 'main.tex', engine: 'pdflatex', phase: 'choose' };
 const requests = [], errors = []; let draft = structuredClone(imported), result = 'failed', failure = 'fontspec needs XeLaTeX';
 fs.mkdirSync('test-results', { recursive: true });

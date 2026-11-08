@@ -21,15 +21,19 @@ export class Store extends EventEmitter {
       CREATE TABLE IF NOT EXISTS ai_review_inputs(task_id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS annotations(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, data TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS credentials(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, data TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS invites(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL, data TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, id TEXT UNIQUE NOT NULL, user_id TEXT NOT NULL, expires INTEGER NOT NULL, data TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS members(project_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY(project_id, user_id));
-      CREATE TABLE IF NOT EXISTS migrations(key TEXT PRIMARY KEY, done INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS preferences(user_id TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(user_id, key));
+      CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS task_items ON items(task_id,created);
       CREATE INDEX IF NOT EXISTS task_runs ON runs(task_id,status);`);
+    // Keep the host's settings when upgrading a formerly shared workspace.
+    // Papers, tasks, notes and historical attribution stay intact; credentials
+    // and invitations are removed together so they cannot be reused.
+    this.transaction(() => {
+      const tables = new Set((this.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(row => row.name));
+      if (tables.has('users') && tables.has('preferences')) this.db.exec(`
+        INSERT OR IGNORE INTO settings SELECT p.key, p.data FROM preferences p
+        JOIN users u ON u.id=p.user_id WHERE json_extract(u.data, '$.role')='owner';`);
+      for (const table of ['credentials', 'invites', 'sessions', 'members', 'preferences', 'users', 'migrations']) this.db.exec(`DROP TABLE IF EXISTS ${table}`);
+    });
   }
   private rows<T>(table: string): T[] { return (this.db.prepare(`SELECT data FROM ${table} ORDER BY rowid`).all() as { data: string }[]).map(r => JSON.parse(r.data)); }
   projects() { return this.rows<Project>('projects'); }
@@ -46,17 +50,16 @@ export class Store extends EventEmitter {
       // Only Papilot records are removed. Never finish review tasks or touch their files.
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
       for (const table of ['items', 'runs', 'ai_review_inputs']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
-      for (const table of ['tasks', 'annotations', 'members']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
+      for (const table of ['tasks', 'annotations']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
     for (const task of tasks) this.itemRevisions.delete(task);
     this.emit('change');
   }
-  // A person's own settings that follow them between devices.
-  preference<T>(userId: string, key: string) { const row = this.db.prepare('SELECT data FROM preferences WHERE user_id=? AND key=?').get(userId, key) as { data: string } | undefined; return row ? JSON.parse(row.data) as T : undefined; }
-  savePreference(userId: string, key: string, value: unknown) {
-    if (value === undefined) this.db.prepare('DELETE FROM preferences WHERE user_id=? AND key=?').run(userId, key);
-    else this.db.prepare('INSERT INTO preferences VALUES(?,?,?) ON CONFLICT(user_id, key) DO UPDATE SET data=excluded.data').run(userId, key, JSON.stringify(value));
+  preference<T>(key: string) { const row = this.db.prepare('SELECT data FROM settings WHERE key=?').get(key) as { data: string } | undefined; return row ? JSON.parse(row.data) as T : undefined; }
+  savePreference(key: string, value: unknown) {
+    if (value === undefined) this.db.prepare('DELETE FROM settings WHERE key=?').run(key);
+    else this.db.prepare('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET data=excluded.data').run(key, JSON.stringify(value));
   }
   saveTask(t: Task) { t.updatedAt = Date.now(); this.db.prepare('INSERT INTO tasks VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(t.id, t.projectId, JSON.stringify(t)); this.emit('change'); return t; }
   updateTask(id: string, update: Partial<Task>) { return this.saveTask({ ...this.task(id), ...update }); }

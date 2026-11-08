@@ -81,7 +81,7 @@ export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: strin
 export interface NoteChange { round: number; stop: number; units: string[]; state: 'pending' | 'accepted' | 'rejected' | 'commented' | 'mixed'; match: 'source' | 'quote' }
 export interface NoteResult { key: string; itemId: string; index: number; note: NoteSummary; round: number | null; state: 'waiting' | 'unmatched' | 'matched'; changes: NoteChange[] }
 export interface MessageMeta { attachments?: Attachment[]; skill?: { id: string; name: string; icon?: SkillIcon }; notes?: NoteSummary[]; groupInstructions?: GroupInstructions; feedback?: FeedbackSummary; sendsFeedback?: boolean; build?: BuildFailure; author?: Author }
-// Who wrote a message or note; none means the owner.
+// Historical attribution on messages and notes from older shared workspaces.
 export interface Author { id: string; name: string }
 // A failed review build as the engine reports it; log is the compiler log's path.
 export interface BuildFailure { error: string; details: string[]; log?: string }
@@ -101,7 +101,7 @@ export interface Usage { plan: string | null; windows: UsageWindow[]; credits: {
 // credentials or key); such agents are not offered. Older servers omit it.
 export interface RuntimeStatus { permissionOptions?: TaskPermissionOption[]; connected: boolean; authenticated: boolean; account: string | null; error: string | null; models: AgentModel[]; usage?: Usage | null; installed?: boolean }
 export interface DiagnosticCheck { id: string; ok: boolean; severity: 'error' | 'warn' | 'info'; detail: string; fix: string | null }
-// Safe to share with collaborators: no host paths, command output or accounts.
+// A compact summary of the host tools required to work on papers.
 export interface SystemRequirements {
   platform: string;
   checks: { id: 'git' | 'latexmk' | 'synctex' | 'tex-engine'; ok: boolean }[];
@@ -115,17 +115,7 @@ export interface DiagnosticReport {
   version: string; checkedAt: number; platform: string; arch: string; node: string;
   ok: boolean; checks: DiagnosticCheck[];
 }
-export interface Snapshot { projects: Project[]; tasks: Task[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; viewer?: Viewer; gitAvailable?: boolean }
-// Who is looking: the owner on this host or Tailscale (local), or a person
-// signed in with a passkey at the public URL (account). Older servers send none.
-// owner names the owner, whose messages carry no author.
-export interface Viewer { id: string; name: string; role: 'owner' | 'member'; listener: 'local' | 'account'; owner: string }
-// A person the owner invited, as the People dialog shows them. joined means
-// they have registered at least one passkey; projects are the shared papers.
-export interface Person { id: string; name: string; role: 'owner' | 'member'; joined: boolean; projects: string[]; lastSeenAt: number | null; devices: Device[] }
-// A passkey or a signed-in browser session, either of which the owner can revoke.
-export interface Device { id: string; kind: 'passkey' | 'session'; label: string; createdAt: number; lastUsedAt: number | null }
-export interface People { origin: string | null; people: Person[] }
+export interface Snapshot { projects: Project[]; tasks: Task[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; gitAvailable?: boolean }
 // staged: the index has changes to this file; unstaged: the working tree has more.
 // index is the staged status where it differs from status, which is the working tree's when it has changes.
 export interface GitFile { path: string; status: string; staged: boolean; unstaged: boolean; lines?: [number, number]; from?: string; index?: string; incoming?: string }
@@ -174,7 +164,7 @@ export interface ManuscriptProblems { status: ManuscriptBuild['status']; key?: s
 // name of a quick note the author picked; its comment holds the instruction.
 export type MarkKind = 'delete' | 'point';
 export const isMarkKind = (value: unknown): value is MarkKind => value === 'delete' || value === 'point';
-// The magic pen's quick notes, as each person keeps them. A preset that is
+// The magic pen's saved quick notes. A preset that is
 // unchanged stores only its id, so its name and instruction follow the
 // interface language; anything changed or added stores its own text.
 export interface QuickNote { id: string; label?: string; instruction?: string; icon?: string }

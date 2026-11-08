@@ -38,7 +38,7 @@ export function backendEnvironment(node: string, root: string, data: string, inh
     '/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
   const env = { ...inherited, PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),
     NODE_ENV: 'production', PAPILOT_DESKTOP: '1', PAPILOT_DATA: data, PAPILOT_PORT: '0',
-    PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_ACCOUNT_ORIGIN: '', PAPILOT_TAILSCALE_LOGIN: '' };
+    PAPILOT_PUBLIC_ORIGIN: '', PAPILOT_TAILSCALE_LOGIN: '' };
   // The backend is ordinary Node, even when Electron itself was started by a tool.
   for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'NODE_PATH', 'PAPILOT_REVIEW_ENGINE', 'PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX',
     'PAPILOT_DESKTOP_BUNDLE', 'PAPILOT_DESKTOP_FINGERPRINT']) delete (env as NodeJS.ProcessEnv)[key];

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_TOTAL, MAX_IMAGE_BYTES, type Attachment } from '../shared.ts';
 import type { Store } from './store.ts';
 
-interface SavedAttachment extends Attachment { owner: string; createdAt: number; taskId?: string }
+interface SavedAttachment extends Attachment { createdAt: number; taskId?: string }
 
 // Detect only inert raster formats for inline previews and native image input.
 // Everything else is downloaded; a client-supplied MIME type is never trusted.
@@ -26,7 +26,7 @@ export function attachmentIds(value: unknown): string[] {
 const publicFile = ({ id, projectId, name, size, mime }: SavedAttachment): Attachment => ({ id, projectId, name, size, mime });
 
 // Files live beside the database, never in the paper or its review worktrees.
-// Drafts are private to their uploader; sending shares them with that task.
+// Sending a draft attaches it to one task.
 export class Attachments {
   private directory: string | null = null;
   private reservations = new Map<string, string>();
@@ -42,16 +42,15 @@ export class Attachments {
     if (!row) throw new Error('Attachment not found.');
     return JSON.parse(row.data);
   }
-  get(projectId: string, id: string, owner: string): Attachment {
+  get(projectId: string, id: string): Attachment {
     const file = this.saved(projectId, id);
     if (file.taskId) {
       if (this.store.task(file.taskId).projectId !== projectId) throw new Error('Attachment not found.');
-    } else if (file.owner !== owner) throw new Error('Attachment not found.');
+    }
     return publicFile(file);
   }
-  discard(projectId: string, id: string, owner: string) {
+  discard(projectId: string, id: string) {
     const file = this.saved(projectId, id);
-    if (file.owner !== owner) throw new Error('Attachment not found.');
     // A late remove or another tab must never delete a sent attachment.
     if (!file.taskId && !this.reservations.has(id)) this.remove(file);
   }
@@ -63,18 +62,18 @@ export class Attachments {
     const rows = this.store.db.prepare("SELECT data FROM attachments WHERE json_extract(data, '$.taskId')=?").all(taskId) as { data: string }[];
     for (const row of rows) this.remove(JSON.parse(row.data));
   }
-  private checkDraftSpace(projectId: string, owner: string, size: number) {
+  private checkDraftSpace(projectId: string, size: number) {
     const rows = this.store.db.prepare('SELECT data FROM attachments WHERE project_id=?').all(projectId) as { data: string }[];
     let total = 0;
     for (const row of rows) {
       const file: SavedAttachment = JSON.parse(row.data);
-      if (file.taskId || file.owner !== owner) continue;
+      if (file.taskId) continue;
       if (file.createdAt < Date.now() - 30 * 86400000 && !this.reservations.has(file.id)) this.remove(file);
       else total += file.size;
     }
     if (total + size > 500 * 1024 * 1024) throw new Error('Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.');
   }
-  async upload(projectId: string, owner: string, filename: string, bytes: Buffer): Promise<Attachment> {
+  async upload(projectId: string, filename: string, bytes: Buffer): Promise<Attachment> {
     this.store.project(projectId);
     const name = filename.replace(/\\/g, '/').split('/').at(-1)!.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim();
     if (!name || name === '.' || name === '..' || name.length > 240) throw new Error('Choose a file with a valid name.');
@@ -82,38 +81,38 @@ export class Attachments {
     if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('Files must be 25 MB or smaller.');
     const image = imageType(bytes);
     if (image && bytes.length > MAX_IMAGE_BYTES) throw new Error('Images must be 5 MB or smaller.');
-    this.checkDraftSpace(projectId, owner, bytes.length);
-    const file: SavedAttachment = { id: randomUUID(), projectId, name, size: bytes.length, mime: image || (bytes.subarray(0, 5).toString() === '%PDF-' ? 'application/pdf' : 'application/octet-stream'), owner, createdAt: Date.now() };
+    this.checkDraftSpace(projectId, bytes.length);
+    const file: SavedAttachment = { id: randomUUID(), projectId, name, size: bytes.length, mime: image || (bytes.subarray(0, 5).toString() === '%PDF-' ? 'application/pdf' : 'application/octet-stream'), createdAt: Date.now() };
     fs.mkdirSync(this.root(), { recursive: true, mode: 0o700 });
     const destination = this.path(file);
     await fs.promises.writeFile(destination, bytes, { flag: 'wx', mode: 0o400 });
     try {
       this.store.project(projectId);
-      this.checkDraftSpace(projectId, owner, bytes.length);
+      this.checkDraftSpace(projectId, bytes.length);
       this.store.db.prepare('INSERT INTO attachments VALUES(?,?,?)').run(file.id, projectId, JSON.stringify(file));
     } catch (error) { await fs.promises.unlink(destination); throw error; }
     return publicFile(file);
   }
-  resolve(projectId: string, ids: string[], owner: string, taskId: string): Attachment[] {
+  resolve(projectId: string, ids: string[], taskId: string): Attachment[] {
     const files = attachmentIds(ids).map(id => {
       const file = this.saved(projectId, id);
       const reserved = this.reservations.get(id);
       if (reserved && reserved !== taskId) throw new Error('This attachment is already being sent to another task.');
-      if ((file.taskId && file.taskId !== taskId) || (!file.taskId && file.owner !== owner)) throw new Error('This attachment is not available for this task.');
+      if ((file.taskId && file.taskId !== taskId)) throw new Error('This attachment is not available for this task.');
       if (!fs.existsSync(this.path(file))) throw new Error(`Attachment is missing: ${file.name}. Remove it and upload it again.`);
       return publicFile(file);
     });
     if (files.reduce((total, file) => total + file.size, 0) > MAX_ATTACHMENT_TOTAL) throw new Error('Attachments must total 100 MB or less.');
     return files;
   }
-  reserve(projectId: string, ids: string[], owner: string, taskId: string) {
-    this.resolve(projectId, ids, owner, taskId);
+  reserve(projectId: string, ids: string[], taskId: string) {
+    this.resolve(projectId, ids, taskId);
     for (const id of ids) this.reservations.set(id, taskId);
     return () => { for (const id of ids) if (this.reservations.get(id) === taskId) this.reservations.delete(id); };
   }
   // Called inside the transaction that saves a message, after async feedback loading.
-  claim(projectId: string, ids: string[], owner: string, taskId: string) {
-    this.resolve(projectId, ids, owner, taskId);
+  claim(projectId: string, ids: string[], taskId: string) {
+    this.resolve(projectId, ids, taskId);
     for (const id of ids) {
       const file = this.saved(projectId, id);
       this.store.db.prepare('UPDATE attachments SET data=? WHERE id=?').run(JSON.stringify({ ...file, taskId }), id);

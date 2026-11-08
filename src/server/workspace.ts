@@ -27,7 +27,7 @@ import { notesInstructions, reviewNotesInstructions, summarizeNotes } from '../n
 import { canonicalGroup, groupsWithoutInstructions, parseGroupInstructions, type GroupInstructions } from '../note-groups.ts';
 import { commitChanges, conflictMarkers, gitCommit, gitRemote, gitStatus, mergeConflicts, mergeInProgress } from './manuscript.ts';
 import { AGENT_IDS, isTaskReviewNote } from '../shared.ts';
-import type { Task, TaskPermissions, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Author, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview } from '../shared.ts';
+import type { Task, TaskPermissions, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview } from '../shared.ts';
 
 const execute = promisify(execFile);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -103,7 +103,7 @@ export class Workspace extends EventEmitter {
   private connectionEpochs = new Map<AgentId, number>();
   private loaded = new Set<string>();
   // Whether rounds list each edit's changes elsewhere (Settings); buildApp
-  // reads it from the owner's preferences.
+  // reads it from the saved preferences.
   indirectChanges: () => boolean = () => false;
   private preparing = new Set<string>();
   private preparingNotes = new Set<string>();
@@ -309,7 +309,7 @@ export class Workspace extends EventEmitter {
   // A task combines the author's words, an optional skill and selected PDF notes.
   annotationSending(id: string) { return this.preparingNotes.has(id); }
   // An AI review passes prepareReview, which reads the PDF of the new task's manuscript copy.
-  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string; author?: Author }) {
+  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
     if (!/^[\w-]{16,64}$/.test(input.id)) throw new Error('Invalid task ID.');
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
     // A retried request returns its task; an ID from another paper is refused.
@@ -332,8 +332,8 @@ export class Workspace extends EventEmitter {
     try {
       const project = this.store.project(input.projectId), skill = input.skill ? findSkill(project.path, input.skill) : undefined;
       if (skill?.output === 'annotations' && !input.prepareReview) throw new Error('Start a new task to run the AI review skill on the current PDF.');
-      const files = this.attachments.resolve(project.id, input.attachments || [], input.author?.id || 'owner', input.id);
-      releaseAttachments = this.attachments.reserve(project.id, input.attachments || [], input.author?.id || 'owner', input.id);
+      const files = this.attachments.resolve(project.id, input.attachments || [], input.id);
+      releaseAttachments = this.attachments.reserve(project.id, input.attachments || [], input.id);
       const available = new Map(this.store.annotations(project.id).filter(note => !note.taskId && !isTaskReviewNote(note)).map(note => [note.id, note]));
       notes = [...new Set(input.annotations || [])].map(id => {
         const note = available.get(id);
@@ -364,7 +364,7 @@ export class Workspace extends EventEmitter {
         this.store.saveTask(task);
         if (reviewInput) this.store.saveReviewInput(task.id, reviewInput);
       });
-      await this.enqueue(task.id, input.instructions || (input.prepareReview && !skill ? 'Review this manuscript and suggest improvements.' : ''), 'initial-' + task.id, false, { skill, notes, groupInstructions, attachments: files.map(file => file.id), author: input.author });
+      await this.enqueue(task.id, input.instructions || (input.prepareReview && !skill ? 'Review this manuscript and suggest improvements.' : ''), 'initial-' + task.id, false, { skill, notes, groupInstructions, attachments: files.map(file => file.id) });
       // Naming is independent of the editing turn. An unavailable helper must
       // not fail creation or prevent the queued task from running.
       try { this.requestTaskTitle(task.id); } catch { /* Keep the prompt-derived title. */ }
@@ -374,7 +374,7 @@ export class Workspace extends EventEmitter {
   // The author's message, a skill run with or without one, the review
   // feedback alone, or a build the agent broke. The chat keeps what happened;
   // the agent gets the prompt.
-  async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; feedback?: boolean; build?: BuildFailure; author?: Author; merge?: TaskReconciliation } = {}) {
+  async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; feedback?: boolean; build?: BuildFailure; merge?: TaskReconciliation } = {}) {
     const task = this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     if (task.mode === 'review' && ((options.skill && options.skill.output !== 'annotations') || options.notes?.length || options.reviewNotes?.length || options.attachments?.length || options.feedback || options.build)) throw new Error('AI review accepts review instructions only. Start an editing task to send notes, skills or attachments.');
@@ -384,7 +384,7 @@ export class Workspace extends EventEmitter {
     if (task.status === 'uncertain') throw new Error('Check the task status before sending more instructions.');
     if (task.delivery?.pending) throw new Error('Retry the pending delivery before sending more instructions.');
     if (this.committing.has(task.projectId)) throw new Error('Wait for the current Git operation before sending more instructions.');
-    const files = this.attachments.resolve(task.projectId, options.attachments || [], options.author?.id || 'owner', taskId);
+    const files = this.attachments.resolve(task.projectId, options.attachments || [], taskId);
     const pauseVersion = task.pauseVersion || 0;
     if (this.store.runs().some(r => r.taskId === taskId && r.status === 'queued')) throw new Error('This task already has queued instructions. Wait or pause it first.');
     const instructions = options.notes?.length ? notesInstructions(options.notes, text, options.groupInstructions) : options.reviewNotes?.length ? reviewNotesInstructions(options.reviewNotes, text) : text.trim();
@@ -402,7 +402,7 @@ export class Workspace extends EventEmitter {
     if (files.length) prompt = (prompt || 'The user attached reference material without an instruction. Briefly identify the material and ask what they would like to do with it. Do not change the manuscript yet.') + this.attachments.prompt(files);
     if (task.mode === 'review') prompt = reviewPrompt(prompt, this.store.reviewInput(taskId));
     const run: Run = { id: randomUUID(), taskId, requestKey, prompt, ...(files.length ? { attachments: files } : {}), feedbackCursor: cursor, status: 'queued', createdAt: Date.now(), finishedAt: null, reviewRound: 0 };
-    const meta: MessageMeta = { ...(options.skill ? { skill: { id: options.skill.id, name: options.skill.name, ...(options.skill.icon ? { icon: options.skill.icon } : {}) } } : {}), ...(options.notes?.length ? { notes: summarizeNotes(options.notes) } : options.reviewNotes?.length ? { notes: options.reviewNotes } : {}), ...(summary ? { feedback: summary } : {}), ...(options.feedback ? { sendsFeedback: true } : {}), ...(options.build ? { build: options.build } : {}), ...(options.author ? { author: options.author } : {}) };
+    const meta: MessageMeta = { ...(options.skill ? { skill: { id: options.skill.id, name: options.skill.name, ...(options.skill.icon ? { icon: options.skill.icon } : {}) } } : {}), ...(options.notes?.length ? { notes: summarizeNotes(options.notes) } : options.reviewNotes?.length ? { notes: options.reviewNotes } : {}), ...(summary ? { feedback: summary } : {}), ...(options.feedback ? { sendsFeedback: true } : {}), ...(options.build ? { build: options.build } : {}) };
     if (options.groupInstructions && Object.keys(options.groupInstructions).length) meta.groupInstructions = options.groupInstructions;
     const saved = this.store.transaction(() => {
       // Feedback loading yields to other requests. Recheck identity, queue, and
@@ -419,7 +419,7 @@ export class Workspace extends EventEmitter {
       if ((current.pauseVersion || 0) !== pauseVersion) throw new Error('The task was paused before these instructions were queued. Your draft has been kept.');
       if (current.status === 'uncertain') throw new Error('Check the task status before sending more instructions.');
       if (files.length) {
-        this.attachments.claim(task.projectId, files.map(file => file.id), options.author?.id || 'owner', taskId);
+        this.attachments.claim(task.projectId, files.map(file => file.id), taskId);
         meta.attachments = files;
       }
       this.store.saveRun(run);

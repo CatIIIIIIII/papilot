@@ -6,7 +6,7 @@ import { pdfWords, type Manuscripts } from './manuscript.ts';
 import { isTaskReviewNote } from '../shared.ts';
 
 export function registerAiReviewRoutes(app: FastifyInstance, store: Store, manuscripts: Manuscripts) {
-  const access = { config: { access: { task: 'id' } } };
+  const access = { config: { resource: { task: 'id' } } };
   function review(id: string) {
     const task = store.task(id);
     if (task.mode !== 'review') throw new Error('This task is not an AI review.');

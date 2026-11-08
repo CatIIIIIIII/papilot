@@ -119,11 +119,6 @@
     "textHash": "695f8ba7755e842bab456fc3c500302f0da8cb25da02e376878889ca520e2cc6",
     "model": "gemini-4-argon-medium"
   },
-  "Choose Codex, Claude or GLM for AI review.": {
-    "revision": "6c17c5cf6b8c06a2ebdd36a3bada92bd1ad17ef961d99d24e9aa96221912d294",
-    "textHash": "6422b2e99b813f4c2e0bdc5798478a69fee37ae7ac67640c122fdaef01ec61c8",
-    "model": "gemini-4-argon-medium"
-  },
   "Choose a ZIP smaller than 64 MB.": {
     "revision": "72ead97738f8a693439d87af910b9bf6c2a0f771e4c5c6667396d6c5e4db3ce6",
     "textHash": "f5cd1753a0101ea9177f0d59289615ae24e3fb14d8a572656380997184542e7c",
@@ -469,16 +464,6 @@
     "textHash": "3c9330f713228f42df9d8cc428c1dcd11f9f214cef03d5d6bba89678e5ff28c6",
     "model": "gemini-4-argon-high"
   },
-  "Only the owner of this Papilot can do this.": {
-    "revision": "a095f59dbabb11fc1da556df54cb79a06e0891d7763d7e821018eb41d2255bae",
-    "textHash": "bba473d008c82bf9d30cfca1eac81483c06e8f1002037568188ed1e5d7c62b45",
-    "model": "gemini-4-argon-medium"
-  },
-  "Open Papilot at its public address.": {
-    "revision": "7d2cc07c440c28c899ea585a7b37e389e187fbbc7cf100c3ae50231f7b1af720",
-    "textHash": "a7d0b9c3efa7bd90392617619683939b971ac5245204b57b6fbcad89138458b4",
-    "model": "gemini-4-argon-medium"
-  },
   "Paper name is too long.": {
     "revision": "80472b8fe5c2f67af48189dfd823b7362e3b4ed0728e7c86997980625d4d1519",
     "textHash": "95019ca779bf41e08a35f58fd9a681ece738d86dd00df7312ed93bd2ea370df5",
@@ -629,21 +614,6 @@
     "textHash": "ce0f912bf184cc0afb784a2bea2c5b1bf9530a46d4840eda148883e763e2fb75",
     "model": "gemini-4-argon-medium"
   },
-  "Set PAPILOT_ACCOUNT_ORIGIN to the public URL before inviting people.": {
-    "revision": "58e5f9f039aac09e522f1afd35f6ac2da165803687cd12040d772fc2af83a7f1",
-    "textHash": "d00f3f9b08062ba15eb46d930a41bdfd79e284b0cd25af9b3f4fe0605045a44e",
-    "model": "gemini-4-argon-medium"
-  },
-  "Sign in to continue.": {
-    "revision": "0768610e4ed92c20f6ea09c7bd2c3ab9fc86f1e5b7eabfcd84a7b3c93755c53c",
-    "textHash": "4e17070db8ebd9c28d3aad7964e2be133719e0b68e98f3e9f59e9cff98b75e5f",
-    "model": "gemini-4-argon-medium"
-  },
-  "Sign-in is not set up on this Papilot.": {
-    "revision": "a1973ccb315226319daef9ea771db8a1c498e4c102f8b8ffd0c8e60c4f09d64c",
-    "textHash": "2218962458872e80fd1976cd4c47a46933318e1447e759c195fcef83ee4be3c5",
-    "model": "gemini-4-argon-medium"
-  },
   "Stage at least one change to commit.": {
     "revision": "648f315e01c5600346766db437248d556315552d5dca464d8d4334715f337577",
     "textHash": "059f850ce23f4c49c2a5340a1167655b91dee641f84eeaf89e2e79773e9ff0ca",
@@ -682,11 +652,6 @@
   "The AI review did not return valid annotations. Ask it to retry with the required JSON format.": {
     "revision": "e0443b46f2e33cf47ae50df39589ad52a4e4564b49e45ffdd1396bd712c26a09",
     "textHash": "cbaef8b38613fcb812c2e9cd158d46d5b4e658bac46483c5c5ec5aeb4c0ce307",
-    "model": "gemini-4-argon-medium"
-  },
-  "The AI review response is incomplete or too long. Ask the reviewer to retry.": {
-    "revision": "7014233d71ee0c2441e5986fce093d7d2196df6e457c042ae8b3fd5ee0331f59",
-    "textHash": "cfd84afa845551d391f61162c4d11337956d69d590d2894b4bfa588a639804d1",
     "model": "gemini-4-argon-medium"
   },
   "The PDF copy for this review is unavailable. Start a new AI review.": {
@@ -759,16 +724,6 @@
     "textHash": "b5f587d21fdeb4767669f8cf64df5f707be594b815e4d371d67e1cdd7ab3e7ad",
     "model": "gemini-4-argon-medium"
   },
-  "The owner cannot be removed.": {
-    "revision": "239b2c6015c2901588f920687af03496134ed1ed9e09cb315719ed8969f6afe5",
-    "textHash": "ac6a19e3eb923813a3f0efd408e68731c83651e6f7b54441c54f29ee97b399cf",
-    "model": "gemini-4-argon-medium"
-  },
-  "The owner sees every paper.": {
-    "revision": "0c3183bb30bdc93d2f9c529423c8a3db2714d1b20e92a8c4c6f58215a65fda26",
-    "textHash": "9a4fe257bc90e39797ef532fcd8eaf6eb5b86b4f994e7de1c9da295f05299566",
-    "model": "gemini-4-argon-medium"
-  },
   "The paper configuration must contain a JSON object.": {
     "revision": "a62110c9ea9cb48919a9686146a7be4a7d7172bd8b2efe47bd0cd6377e913fe2",
     "textHash": "93a24dc59b86a9508588b60e6c0d74a35e1609e541e38dd447949a5d2011d2a5",
@@ -777,16 +732,6 @@
   "The paper configuration must not be a symbolic link.": {
     "revision": "b0b246a0359553dc3b24dcc99af49289b21afcbc4cfa86dd1dc1309555135768",
     "textHash": "63e3e9793e86b4534a8235817bb01af282e62bdc8daa91fa9008f712c5ee56f7",
-    "model": "gemini-4-argon-medium"
-  },
-  "The passkey could not be created. Try again.": {
-    "revision": "e61f077c711e8e6ae81c3d5cec097e968f3ab4b241ab9661506bf0a77324a6a9",
-    "textHash": "927d56200b2cb886b3d0b8041c6216345878c851f7eddd055951a7335bfd121f",
-    "model": "gemini-4-argon-medium"
-  },
-  "The request origin does not match.": {
-    "revision": "08d51cdf75258bf7ac4811398bf203ab895ebced39b05480eeb305e0b1a483e8",
-    "textHash": "313942abb1af18fc524521429a80d57349abc37e8d5b143796436f4975a08741",
     "model": "gemini-4-argon-medium"
   },
   "The review action is still being checked. Wait for it to finish.": {
@@ -889,16 +834,6 @@
     "textHash": "a0191506240085d9f3315f585525d51136cb30c805c847d7bf969f6f3e478e61",
     "model": "gemini-4-argon-medium"
   },
-  "This PDF is too long for one AI review (180,000 characters maximum).": {
-    "revision": "457fe08b25d5ac88cfba09a7be8ddd4ffc24550da5578199d4da2a37b6c1a64c",
-    "textHash": "47f0b02adf091fcc1f2f210cfae6fbad2a163ca22d6d0d1aecd754e8efb36ae9",
-    "model": "gemini-4-argon-medium"
-  },
-  "This address is only for your tailnet. People outside it sign in at PAPILOT_ACCOUNT_ORIGIN.": {
-    "revision": "bb86204e8acc1617aff8cbcad05f730c18260e9c45933998ef60c5158d6b0461",
-    "textHash": "af1546929ada26434d364743666a2370defb92d4a9bca47d32dd791c05ed3ee4",
-    "model": "gemini-4-argon-medium"
-  },
   "This agent does not report usage.": {
     "revision": "591119deb51d5eae6063a4539e9f01f030f6673c83684b3ba497dbb60fa93ab0",
     "textHash": "3e5ae1dea014cedc25603122d368cd4efdf8e4cae38cb9f23bef658d4ba186d0",
@@ -924,11 +859,6 @@
     "textHash": "98c9814b326490158ca081211fbfdc556d610a937ed677e6fd32b0c6adfe0e29",
     "model": "gemini-4-argon-medium"
   },
-  "This device is no longer signed in.": {
-    "revision": "55fcd94aa02242188e97a12fd052f2e1cc33b08b553470d4b35761ed96a525ab",
-    "textHash": "39d846a81e9d4e6183af1f92ad8fdf3cfd3ee61cdf3138f37980659457f93b36",
-    "model": "gemini-4-argon-medium"
-  },
   "This entry is no longer among the changes. Refresh the page.": {
     "revision": "bc2a19f803142245f273e9adfbebec76d3ff1c8395d9f367d5e11df35c251e69",
     "textHash": "2419f4ccc59d7948e1a1330c36cecbe6b14fa13e0ff968ba30aadbae00121a9b",
@@ -952,11 +882,6 @@
   "This image format is not supported.": {
     "revision": "b9885f8c58dfb9776fda5c99ac920aff751d7c37d0835d3272ff9898e2f355d7",
     "textHash": "dfa09b13264f9d8689f84133d47e8708ac60fe8dce0b0793a48ebab418689679",
-    "model": "gemini-4-argon-medium"
-  },
-  "This invite link has expired or was already used. Ask for a new one.": {
-    "revision": "061652c3158655e8d3385db738f1647c8651a4f40eef0a4e71f30e95680f571c",
-    "textHash": "77d7c2fc94fd27c24bfbd860df888a11b203aaee63d9a62b055bdd362d635ccd",
     "model": "gemini-4-argon-medium"
   },
   "This manuscript preview is out of date. Refresh it and try again.": {
@@ -1002,16 +927,6 @@
   "This passage could not be located reliably in the current manuscript. The suggestion remains in the review task.": {
     "revision": "700a6af1f13167773701d3faceb298c37fd7ecae7ef5b86fed561e48b2894fea",
     "textHash": "43bc26c726ae77ca1a31202eab615412cf8a13e277833e842a3ee3eed0134a4c",
-    "model": "gemini-4-argon-medium"
-  },
-  "This passkey could not sign you in. Ask the owner for a new invite if it was removed.": {
-    "revision": "cee571e3b2c7e2c564688f1d69fa54b4426d822c99e9294b4b9fe7d34001c83f",
-    "textHash": "2398a3e2d1b8e60a9682b55b2e08bb08413817b9e690c98f01f0c55ec773c951",
-    "model": "gemini-4-argon-medium"
-  },
-  "This person is no longer in Papilot.": {
-    "revision": "5f8b856f7cdebcc6ba3aa0e25ad6cc3e8b49ae22cd3a68ef0347f55e531d5e67",
-    "textHash": "326cc59d38031ffcb487de460780e635e37992c62f4ccd2f8645fe8c357cf534",
     "model": "gemini-4-argon-medium"
   },
   "This repository has no commits yet. Commit once to compare later changes in the PDF.": {
@@ -1112,16 +1027,6 @@
   "This task was deleted. Create a new task instead.": {
     "revision": "ea48e4d13812cde6d228083ce209d177cb91bebbdca0c5525757ef82ab0f1477",
     "textHash": "c4ff6fd9bb79e2433a4caa602656014df2e3faf07619483988489f816b67d265",
-    "model": "gemini-4-argon-medium"
-  },
-  "Too many attempts. Wait a minute and try again.": {
-    "revision": "328fe6a7b35b596dca0dc82bb05a020e289253e249fc396d71dd9bbcfb1d5b4c",
-    "textHash": "4c4ba40bbced0e3166b4ef1a6195c8b801845369d98e98faa40232dfc7cfac95",
-    "model": "gemini-4-argon-medium"
-  },
-  "Too many open Papilot tabs. Close one and try again.": {
-    "revision": "5f9bd5b56f6455c8ef3b53a3104516ac6605991ad91524cca8ad68c7c8d662ea",
-    "textHash": "5d43fe1579abed06b5dac69460fe14f17e3540e49f836c1730747e313feaa238",
     "model": "gemini-4-argon-medium"
   },
   "Unknown Git action.": {
