@@ -263,5 +263,6 @@
   "{source} has this work with other details. Compare them below.": "{source} riporta questo lavoro con altri dettagli. Confrontali di seguito.",
   "{staged} of {total} staged": "{staged} di {total} preparate",
   "↵ send · Esc cancel": "↵ invia · Esc annulla",
-  "Your comments are saved. Continue in Chat to request a revision.": "I tuoi commenti sono stati salvati. Continua nella chat per richiedere una revisione."
+  "Your comments are saved. Continue in Chat to request a revision.": "I tuoi commenti sono stati salvati. Continua nella chat per richiedere una revisione.",
+  "Confirm this option before reviewing its changes.": "Conferma questa opzione prima di esaminarne le modifiche."
 }

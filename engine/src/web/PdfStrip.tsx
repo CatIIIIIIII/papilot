@@ -60,11 +60,13 @@ export const PdfStrip = memo(function PdfStrip({
   base,
   label,
   clean = false,
+  focus,
 }: {
   image: Strip;
   base: string;
   label: string;
   clean?: boolean;
+  focus?: string[];
 }) {
   // Keep every line searchable. Only visible strips need the individual
   // glyph boxes used for accurate pointer selection over the PDF image.
@@ -173,7 +175,7 @@ export const PdfStrip = memo(function PdfStrip({
       style={{ aspectRatio: `${image.width}/${image.height}` }}
     >
       <img
-        src={base + (clean ? image.clean : image.src)}
+        src={base + (clean || focus ? image.clean : image.src)}
         alt={image.text?.length ? "" : label}
         width={image.width}
         height={image.height}
@@ -182,6 +184,13 @@ export const PdfStrip = memo(function PdfStrip({
         draggable={false}
         aria-hidden={Boolean(image.text?.length)}
       />
+      {focus && !clean && <svg className="pdf-focus-marks" viewBox={`0 0 ${image.width} ${image.height}`} aria-hidden="true">
+        {(image.marks || []).filter(mark => focus.includes(mark.unit)).map((mark, i) => {
+          const [x, y, right, bottom] = mark.rect, color = mark.kind === "removed" ? "#c72938" : mark.kind === "moved" ? "#2563c9" : "#1f8c52";
+          return <g key={i} data-unit={mark.unit}><rect x={x} y={y} width={right - x} height={bottom - y} fill={color} fillOpacity=".18"/>
+            {mark.kind === "removed" && <path d={`M ${x} ${y + (bottom - y) * .55} H ${right}`} stroke={color} strokeWidth=".45"/>}</g>;
+        })}
+      </svg>}
       {image.text?.length ? (
         <div
           className="pdf-text"

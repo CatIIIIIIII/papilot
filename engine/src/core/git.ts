@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { mergeText } from "./text-edits.ts";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -598,6 +599,10 @@ export async function merge3Async(
     const files = ["ours", "base", "theirs"].map((name) => path.join(folder, name));
     await Promise.all([ours, base, theirs].map((data, i) => fs.promises.writeFile(files[i], data)));
     const result = await capture(gitBinary(), ["merge-file", "-p", ...(favorCurrent ? ["--ours"] : []), ...files], { check: false });
+    if (result.status > 0 && !favorCurrent) {
+      const merged = mergeText(ours, base, theirs);
+      if (merged !== null) return [merged, false];
+    }
     return [result.stdout, result.status !== 0];
   } finally {
     await fs.promises.rm(folder, { recursive: true, force: true });
@@ -626,6 +631,10 @@ export function merge3(
     const result = run(gitBinary(), ["merge-file", "-p", ...(favorCurrent ? ["--ours"] : []), ...files], {
       check: false,
     });
+    if (result.status > 0 && !favorCurrent) {
+      const merged = mergeText(ours, base, theirs);
+      if (merged !== null) return [merged, false];
+    }
     return [result.stdout, result.status !== 0];
   });
 }

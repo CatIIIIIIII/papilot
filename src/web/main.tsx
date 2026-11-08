@@ -75,7 +75,7 @@ import { TaskFlight, type TaskFlightData } from './task-flight.tsx';
 import { returnNotes } from './note-flight.ts';
 import { UsageSummary } from './usage.tsx';
 import { useNoteUndo } from './use-note-undo.ts';
-import { NoteResultsProvider, NoteResultLinks, useNoteResults } from './note-results.tsx';
+import { NoteResultsProvider, useNoteResults } from './note-results.tsx';
 import { usePanelWidth } from './panel-width.tsx';
 import type { OutlineItem, PdfHandle, PdfHistoryActions, Rect } from './pdf-view.tsx';
 // pdf.js is large, so the PDF view loads the first time it opens.
@@ -228,11 +228,12 @@ const SenderName = ({ sender }: { sender: { mine: boolean; name: string } }) => 
 function NotesMessage({ item, notes }: { item: TimelineItem; notes: NoteSummary[] }) {
   const sender = senderOf(item.meta?.author);
   const results = useNoteResults();
-  const renderNote = (note: NoteSummary, index: number) => <li key={index} data-note-result={`${item.id}:${index}`} tabIndex={-1} className={results?.selected === `${item.id}:${index}` ? 'linked-note-selected' : ''}>
+  const renderNote = (note: NoteSummary, index: number) => <li key={index} data-note-result={`${item.id}:${index}`} tabIndex={0}
+    onClick={event => { if (!(event.target as Element).closest('button, input, textarea, a, [role="radiogroup"]')) results?.focusNote(`${item.id}:${index}`); }}
+    onKeyDown={event => { if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); results?.focusNote(`${item.id}:${index}`); } }} className={results?.selected === `${item.id}:${index}` ? 'linked-note-selected' : ''}>
       <span className="sent-note-where"><span className="sent-note-number" aria-hidden="true">{index + 1}</span><span className="sent-note-location">{noteLocation(note.where)}</span></span>
       {note.quote ? <blockquote data-kind={note.kind}>{note.quote}</blockquote> : <span className="sent-note-region">{t('Marked region')}</span>}
       {(note.comment || note.kind === 'delete') && <p>{note.stamp && <span className="pdf-note-stamp"><Icon name="spark" size={12}/>{note.stamp}</span>}{markText(note)}</p>}
-      <NoteResultLinks noteKey={`${item.id}:${index}`}/>
     </li>;
   return <article className="message user notes-message" aria-label={senderLabel(sender, item.createdAt)}><SenderName sender={sender}/><div className="message-body" title={time(item.createdAt)}>
     {item.meta?.skill && <SkillChip skill={item.meta.skill}/>}
@@ -1893,7 +1894,7 @@ function App() {
     </div>
   </section>;
 
-  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
+  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} optionsRequest={(id, key, body) => body ? api(`/tasks/${id}/note-options`, { key, ...body }, undefined, 150000) : api(`/tasks/${id}/note-options?key=${encodeURIComponent(key)}`)} previewRequest={(id, key, round, option) => api(`/tasks/${id}/note-options/preview?key=${encodeURIComponent(key)}&round=${round}&option=${encodeURIComponent(option)}`, undefined, undefined, 150000)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
     <DesktopWindowChrome/>
     {project && <WorkspaceSwitcher key={project.id} active={task?.id ?? (manuscriptOpen ? '' : null)}
       items={[{ id: '', title: t('Manuscript') }, ...[...tasks].reverse().filter(item => item.status !== 'deleting' && (!item.archivedAt || item.id === task?.id)).map(item => ({ id: item.id, title: item.title }))]}

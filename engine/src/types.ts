@@ -69,11 +69,14 @@ export interface Unit {
   kind: "text" | "figure" | "binary";
   whole_file: boolean;
   ops: Op[];
+  /** Exact UTF-16 source ranges. Absent in older, line-based rounds. */
+  text_ops?: Op[];
   old_start: number;
   old_end: number;
   new_start: number;
   new_end: number;
   old_text: string;
+  old_context?: { text: string; start: number; source_hash?: string };
   new_text: string;
   truncated: boolean;
 }
@@ -202,6 +205,8 @@ export interface Card {
   context_node?: string | null;
   /** The crops were cut at the same anchors of the whole comparison. */
   aligned?: boolean;
+  /** Precisely located independent source edit; shared preview context is OK. */
+  independent?: boolean;
 }
 export interface TextGlyph {
   text: string;
@@ -223,6 +228,8 @@ export interface Strip {
   page: number;
   label: string;
   text?: TextLine[];
+  /** Native PDF coordinates relative to this strip, attributed to source edits. */
+  marks?: (Mark & { unit: string })[];
 }
 export interface ChangeBlock {
   kind: "change";
@@ -233,6 +240,7 @@ export interface ChangeBlock {
   moved?: boolean;
   before: Strip[];
   after: Strip[];
+
 }
 export type Block =
   ChangeBlock | { kind: "context"; image: Strip } | { kind: "gap" };

@@ -5,6 +5,7 @@ import { it, expect } from "vitest";
 import { App } from "../../src/server.ts";
 import { Builder, BuildError } from "../../src/core/build.ts";
 import { more } from "../../src/core/publish.ts";
+import { applyUnits } from "../../src/core/changes.ts";
 import { which } from "../../src/core/process.ts";
 import { prepareDemo, applyDemo } from "../../examples/demo.ts";
 import { Fixture, METHOD } from "./helpers.ts";
@@ -112,13 +113,12 @@ it.skipIf(!tex)(
       const detail = app.review.roundDetail(task.name, 1);
       // A host can show the chapters the round compiled while the whole paper compiles.
       expect(detail.build).toEqual({ key: round.summary.builds!.at(-1), targets: round.summary.targets });
-      expect(detail.units).toHaveLength(1);
-      expect(detail.units[0]).toMatchObject({
-        visual: "text",
-        section: "Acknowledgments",
-      });
+      expect(detail.units.map(unit => unit.new_text)).toEqual(["patient ", " throughout my research"]);
+      for (const unit of detail.units) {
+        expect(unit).toMatchObject({ visual: "text", section: "Acknowledgments" });
+        expect(unit.pages?.length).toBeGreaterThan(0);
+      }
       expect(detail.sections[0].title).toBe("Acknowledgments");
-      expect(detail.units[0].pages?.length).toBeGreaterThan(0);
       // Strips record where they start on the page; a round rendered before
       // they did recovers the same positions from its PDF.
       const after = [...detail.sections.flatMap((s) => s.blocks), ...detail.loose].flatMap((b) =>
@@ -155,20 +155,27 @@ it.skipIf(!tex)(
   120000,
 );
 it.skipIf(!tex)(
-  "compiles the bundled paper, renders all seven edits and completes review",
+  "compiles the bundled paper, renders every planned edit and completes review",
   async () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-e2e-")),
       { root, plan } = prepareDemo(base),
       app = new App(root);
     try {
       const task = app.tasks.create(plan.task, plan.title, [plan.section]);
+      const files = [...new Set(plan.edits.map(edit => edit.file))];
+      const original = new Map(files.map(file => [file, fs.readFileSync(path.join(root, file))]));
       applyDemo(task.worktree, plan);
+      const proposed = new Map(files.map(file => [file, fs.readFileSync(path.join(task.worktree, file))]));
       const job = app.publisher.submit(task.name);
       await app.publisher.join();
       const result = app.publisher.job(job.id);
       expect(result.status, JSON.stringify(result.result)).toBe("done");
-      expect(result.result.changes).toBe(7);
       const detail = app.review.roundDetail(task.name, 1);
+      expect(result.result.changes).toBe(detail.units.length);
+      expect(new Set(detail.units.map(unit => unit.file))).toEqual(new Set(files));
+      for (const file of files) {
+        expect(applyUnits(original.get(file)!, proposed.get(file)!, detail.units.filter(unit => unit.file === file))).toEqual(proposed.get(file));
+      }
       expect(detail.units.some((u) => u.kind === "figure")).toBe(true);
       expect(detail.units.some((u) => u.visual === "identical")).toBe(true);
       expect(detail.units.every((u) => u.visual !== "unmapped")).toBe(true);
@@ -181,8 +188,10 @@ it.skipIf(!tex)(
         Object.values(state.decisions).every((d) => d === "accepted"),
       ).toBe(true);
       expect(app.review.summary(task.name).state).toBe("done");
+      for (const file of files) expect(fs.readFileSync(path.join(root, file))).toEqual(proposed.get(file));
       await app.review.undo(task.name, state.undo!.id);
       expect(app.review.summary(task.name).state).toBe("reviewing");
+      for (const file of files) expect(fs.readFileSync(path.join(root, file))).toEqual(original.get(file));
     } finally {
       await app.close();
       fs.rmSync(base, { recursive: true, force: true });
@@ -262,8 +271,9 @@ it.skipIf(!tex)(
         const round = app.review.round(task.name, 2);
         expect(round.before).toBe(app.tasks.get(task.name).accepted);
         expect(round.units).toHaveLength(1);
-        expect(round.units[0].new_text).toContain("Second proposal.");
+        expect(round.units[0].new_text).toBe("Second proposal");
         expect(round.units[0].new_text).not.toContain("First proposal.");
+        expect(applyUnits(app.repo.blob(round.before, METHOD), app.repo.blob(round.after, METHOD), round.units)).toEqual(app.repo.blob(round.after, METHOD));
       } finally {
         spy.mockRestore();
       }

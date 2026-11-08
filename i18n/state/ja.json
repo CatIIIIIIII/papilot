@@ -2570,7 +2570,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Note {n}": {
-    "revision": "393b040a4ef7882fed18d0cd5ef632f93501e76ec3183f078bc92a021f47beca",
+    "revision": "8af648425aff46069a01d3dd254b41fcf44ab5844e8c146b43201bc0225d1460",
     "textHash": "76d66a59a15281e19d31d04185f8744422dd3ec83d59c1165e1ce9d0fa56a07b",
     "model": "gemini-4-argon-medium"
   },
@@ -3480,7 +3480,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Retry": {
-    "revision": "1e78c7aa62790fb50fb09a571be21b48688c7960a0a8b4989f43af94c8c2495e",
+    "revision": "b35649f51c8c3c3a445676d0bff2706302348ac28457d37a2222d230ae7bd3d0",
     "textHash": "fb6cc190949da044499f8bcfc763929640af9ae3a3e929b2d230f4e423b6482b",
     "model": "gemini-4-argon-medium"
   },
@@ -3880,7 +3880,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Show LaTeX source": {
-    "revision": "8ab7db2dd97c50cbc5fe2381dea3c3eeb890d5ea71a4a56c2c85a1eee88167c2",
+    "revision": "51abc09d5cc8166983918e14dfea184123a98afe9e8cd064a034b58f2043cead",
     "textHash": "e0b22e58d019d930a92091a464839c9c81a0dff710cbb2484a493bdad5355fe8",
     "model": "gemini-4-argon-medium"
   },
@@ -4890,7 +4890,7 @@
     "model": "gemini-4-argon-medium"
   },
   "What should change here?": {
-    "revision": "01ac2f30e55fb361c80fd05458f2d55ad6e5c2bbd95f61e597348e913d7f1d9d",
+    "revision": "27617be136cc221bf56d8263ac7dce9625dd801c5b156cad2d12abbdba248904",
     "textHash": "93d9e075446e90e85d04cd75a7b86a6b600e2d5d1e2a6fc1ad347c441bddd5d1",
     "model": "codex-reviewed"
   },
@@ -5600,7 +5600,7 @@
     "model": "codex-reviewed"
   },
   "Comment": {
-    "revision": "43a7ac9c6df5e7c09922b87b4cb7493d70430dbdd76e7ce20060131255620bb7",
+    "revision": "fe65ea518fb2cb4e522ccb238a6774138f17786b3cfa492a4cf391ed5956b0e0",
     "textHash": "6b9190f59aa3a51fcced55744fead599f764c81e4a51d12c2e97af8e7ab31284",
     "model": "codex-reviewed"
   },

@@ -1,6 +1,7 @@
 import { Repo, within } from "./git.ts";
 import { groups, opcodes } from "./diff.ts";
 import { entrySpans } from "./bib.ts";
+import { textEdits } from "./text-edits.ts";
 import type { Scope, Unit, Op } from "../types.ts";
 export const EXCERPT = 6000;
 export function textOf(data: Buffer | null): string | null {
@@ -21,7 +22,12 @@ export function diffUnits(
   isFigure: (p: string) => boolean = () => false,
 ): Unit[] {
   const files = repo.changedFiles(before, after);
-  return unitsOf(files, repo.blobs(before, files), repo.blobs(after, files), isFigure);
+  return unitsOf(
+    files,
+    repo.blobs(before, files),
+    repo.blobs(after, files),
+    isFigure,
+  );
 }
 /** `diffUnits` for servers, which keep answering requests meanwhile. */
 export async function diffUnitsAsync(
@@ -31,7 +37,10 @@ export async function diffUnitsAsync(
   isFigure: (p: string) => boolean = () => false,
 ): Promise<Unit[]> {
   const files = await repo.changedFilesAsync(before, after),
-    [old, next] = await Promise.all([repo.blobsAsync(before, files), repo.blobsAsync(after, files)]);
+    [old, next] = await Promise.all([
+      repo.blobsAsync(before, files),
+      repo.blobsAsync(after, files),
+    ]);
   return unitsOf(files, old, next, isFigure);
 }
 function unitsOf(
@@ -51,17 +60,65 @@ function unitsOf(
       binary = a === null || b === null;
     const left = binary ? [] : splitLines(a!),
       right = binary ? [] : splitLines(b!);
-    let hunks = binary ? [] : groups(opcodes(left, right));
+    let hunks = binary ? [] : groups(opcodes(left, right), 0);
     if (!binary && file.endsWith(".bib"))
       hunks = byEntry(hunks, entrySpans(a!), entrySpans(b!));
     const whole =
       binary || status !== "modified" || isFigure(file) || !hunks.length;
     if (whole) hunks = [[["replace", 0, left.length, 0, right.length]]];
-    for (const edits of hunks) {
+    const offsets = (lines: string[]) => {
+      const result = [0];
+      for (const line of lines) result.push(result.at(-1)! + line.length);
+      return result;
+    };
+    const l = offsets(left),
+      r = offsets(right);
+    let fine = !whole && !file.endsWith(".bib") ? textEdits(a!, b!) : null;
+    // Environment boundary edits are reviewed together, including unchanged
+    // text between the opening and closing commands.
+    const boundary = (text: string) =>
+      /\\(?:begin|end)\b/.test(text) &&
+      !/^\\begin\{([^}]+)\}[^]*\\end\{\1\}$/.test(text);
+    if (
+      fine?.some(
+        ([, i, j, x, y]) =>
+          boundary(a!.slice(i, j)) || boundary(b!.slice(x, y)),
+      )
+    ) {
+      const first = fine[0],
+        last = fine.at(-1)!;
+      fine = [["replace", first[1], last[2], first[3], last[4]]];
+    }
+    const lineAt = (offsets: number[], offset: number) => {
+      let lo = 0,
+        hi = offsets.length - 1;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (offsets[mid] <= offset) lo = mid;
+        else hi = mid - 1;
+      }
+      return Math.min(lo, Math.max(0, offsets.length - 2));
+    };
+    if (fine)
+      hunks = fine.map(([tag, i, j, x, y]) => [
+        [
+          tag,
+          lineAt(l, i),
+          i === j ? lineAt(l, i) : lineAt(l, j - 1) + 1,
+          lineAt(r, x),
+          x === y ? lineAt(r, x) : lineAt(r, y - 1) + 1,
+        ],
+      ]);
+    for (const [index, edits] of hunks.entries()) {
       const [, i, , x] = edits[0],
         [, , j, , y] = edits.at(-1)!;
-      const oldText = left.slice(i, j).join(""),
-        newText = right.slice(x, y).join("");
+      const exact = fine?.[index],
+        oldText = exact
+          ? a!.slice(exact[1], exact[2])
+          : left.slice(i, j).join(""),
+        newText = exact
+          ? b!.slice(exact[3], exact[4])
+          : right.slice(x, y).join("");
       units.push({
         id: `c${String(units.length + 1).padStart(3, "0")}`,
         file,
@@ -69,6 +126,7 @@ function unitsOf(
         kind: binary ? "binary" : isFigure(file) ? "figure" : "text",
         whole_file: whole,
         ops: whole ? [] : edits,
+        ...(exact ? { text_ops: [exact] } : {}),
         old_start: i + 1,
         old_end: Math.max(i + 1, j),
         new_start: x + 1,
@@ -93,7 +151,8 @@ export function byEntry(
   const touches = ([a, b]: [number, number], [s, e]: [number, number]) =>
     a === b ? s < a && a < e : a < e && s < b;
   const root = hunks.map((_, i) => i),
-    find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i]))),
+    find = (i: number): number =>
+      root[i] === i ? i : (root[i] = find(root[i])),
     owner = new Map<string, number>();
   hunks.forEach((hunk, i) => {
     const old: [number, number] = [hunk[0][1], hunk.at(-1)![2]],
@@ -117,8 +176,22 @@ export function byEntry(
     ops.sort((p, q) => p[1] - q[1] || p[3] - q[3]),
   );
 }
-function edits(units: Unit[], index: 1 | 3): Op[] {
-  return units.flatMap((u) => u.ops).sort((a, b) => b[index] - a[index]);
+function edits(units: Unit[], old: string, next: string, index: 1 | 3): Op[] {
+  const offset = (text: string, line: number) =>
+    splitLines(text).slice(0, line).join("").length;
+  return units
+    .flatMap(
+      (u) =>
+        u.text_ops ??
+        u.ops.map(([tag, i, j, x, y]): Op => [
+          tag,
+          offset(old, i),
+          offset(old, j),
+          offset(next, x),
+          offset(next, y),
+        ]),
+    )
+    .sort((a, b) => b[index] - a[index]);
 }
 export function applyUnits(
   old: Buffer | null,
@@ -126,11 +199,11 @@ export function applyUnits(
   units: Unit[],
 ) {
   if (units.some((u) => u.whole_file)) return next;
-  const a = splitLines(old!.toString()),
-    b = splitLines(next!.toString());
-  for (const [, i, j, x, y] of edits(units, 1))
-    a.splice(i, j - i, ...b.slice(x, y));
-  return Buffer.from(a.join(""));
+  let a = old!.toString();
+  const b = next!.toString();
+  for (const [, i, j, x, y] of edits(units, a, b, 1))
+    a = a.slice(0, i) + b.slice(x, y) + a.slice(j);
+  return Buffer.from(a);
 }
 // The tree of `before`, a commit or a tree, with only these units of
 // `after` applied.
@@ -163,11 +236,11 @@ export function revertUnits(
   units: Unit[],
 ) {
   if (units.some((u) => u.whole_file)) return old;
-  const a = splitLines(old!.toString()),
-    b = splitLines(next!.toString());
-  for (const [, i, j, x, y] of edits(units, 3))
-    b.splice(x, y - x, ...a.slice(i, j));
-  return Buffer.from(b.join(""));
+  const a = old!.toString();
+  let b = next!.toString();
+  for (const [, i, j, x, y] of edits(units, a, b, 3))
+    b = b.slice(0, x) + a.slice(i, j) + b.slice(y);
+  return Buffer.from(b);
 }
 export function scopeViolations(
   repo: Repo,
@@ -176,14 +249,29 @@ export function scopeViolations(
   scope: Scope,
 ) {
   const files = repo.changedFiles(base, revision);
-  if (scope.ranges === null) return files.filter((f) => !within(f, scope.paths));
-  return violationsOf(files, repo.blobs(base, files), repo.blobs(revision, files), scope);
+  if (scope.ranges === null)
+    return files.filter((f) => !within(f, scope.paths));
+  return violationsOf(
+    files,
+    repo.blobs(base, files),
+    repo.blobs(revision, files),
+    scope,
+  );
 }
 /** `scopeViolations` for servers, which keep answering requests meanwhile. */
-export async function scopeViolationsAsync(repo: Repo, base: string, revision: string, scope: Scope) {
+export async function scopeViolationsAsync(
+  repo: Repo,
+  base: string,
+  revision: string,
+  scope: Scope,
+) {
   const files = await repo.changedFilesAsync(base, revision);
-  if (scope.ranges === null) return files.filter((f) => !within(f, scope.paths));
-  const [old, next] = await Promise.all([repo.blobsAsync(base, files), repo.blobsAsync(revision, files)]);
+  if (scope.ranges === null)
+    return files.filter((f) => !within(f, scope.paths));
+  const [old, next] = await Promise.all([
+    repo.blobsAsync(base, files),
+    repo.blobsAsync(revision, files),
+  ]);
   return violationsOf(files, old, next, scope);
 }
 function violationsOf(

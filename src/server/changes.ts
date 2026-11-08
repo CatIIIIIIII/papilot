@@ -14,7 +14,7 @@ import { checker, confirmations, engine as referenceEngine } from './references.
 // is staged, so one set of edits can become several commits.
 
 type Op = ['equal' | 'replace' | 'insert' | 'delete', number, number, number, number];
-export interface Unit { id: string; file: string; status: 'added' | 'deleted' | 'modified'; kind: string; whole_file: boolean; ops: Op[]; old_start: number; old_end: number; new_start: number; new_end: number; old_text: string; new_text: string; truncated: boolean }
+export interface Unit { id: string; file: string; status: 'added' | 'deleted' | 'modified'; kind: string; whole_file: boolean; ops: Op[]; text_ops?: Op[]; old_start: number; old_end: number; new_start: number; new_end: number; old_text: string; new_text: string; truncated: boolean }
 type Decision = 'pending' | 'accepted' | 'rejected' | 'commented';
 export type ChangeAction = 'stage' | 'unstage' | 'revert';
 interface Round { number: number; before: string; after: string; indirect: boolean; units: Unit[]; folder: string; warnings: string[]; decisions: Record<string, Decision>; pdf?: string }
@@ -28,9 +28,9 @@ const conflict = (message: string) => Object.assign(new Error(message), { status
 
 async function engine() {
   const load = (file: string) => import(pathToFileURL(path.join(ENGINE, file)).href);
-  const [{ Builder, BuildError, buildDate }, { Repo }, { loadProject, isFigure }, { diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf }, { opcodes }, { render, more }] = await Promise.all(
-    ['src/core/build.ts', 'src/core/git.ts', 'src/core/config.ts', 'src/core/changes.ts', 'src/core/diff.ts', 'src/core/publish.ts'].map(load));
-  return { Builder, BuildError, buildDate, Repo, loadProject, isFigure, diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf, opcodes, render, more } as {
+  const [{ Builder, BuildError, buildDate }, { Repo }, { loadProject, isFigure }, { diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf }, { opcodes }, { textEdits }, { render, more }] = await Promise.all(
+    ['src/core/build.ts', 'src/core/git.ts', 'src/core/config.ts', 'src/core/changes.ts', 'src/core/diff.ts', 'src/core/text-edits.ts', 'src/core/publish.ts'].map(load));
+  return { Builder, BuildError, buildDate, Repo, loadProject, isFigure, diffUnits, diffUnitsAsync, revertUnits, withUnits, splitLines, textOf, opcodes, textEdits, render, more } as {
     Builder: any; BuildError: any; Repo: any; loadProject: (root: string) => any; isFigure: (project: any, file: string) => boolean;
     buildDate: () => { SOURCE_DATE_EPOCH: string; FORCE_SOURCE_DATE?: string };
     diffUnits: (repo: any, before: string, after: string, isFigure: (file: string) => boolean) => Unit[];
@@ -39,6 +39,7 @@ async function engine() {
     withUnits: (repo: any, before: string, after: string, units: Unit[]) => string;
     splitLines: (text: string) => string[]; textOf: (data: Buffer | null) => string | null;
     opcodes: (a: string[], b: string[]) => Op[];
+    textEdits: (a: string, b: string) => Op[];
     render: (output: string, request: unknown, variant?: (units: Unit[]) => Promise<unknown>) => Promise<void>;
     more: (output: string, unit: string) => Promise<unknown[]>;
   };
@@ -46,7 +47,7 @@ async function engine() {
 
 // A change is the same change in a later comparison when it replaces the same
 // committed lines with the same text; reverting another change leaves both.
-export const signature = (unit: Unit) => createHash('sha256').update(JSON.stringify([unit.file, unit.status, unit.old_start, unit.old_end, unit.old_text, unit.new_text])).digest('hex').slice(0, 24);
+export const signature = (unit: Unit) => createHash('sha256').update(JSON.stringify([unit.file, unit.status, unit.old_start, unit.old_end, unit.old_text, unit.new_text, unit.text_ops?.map(op => [op[1], op[2]])])).digest('hex').slice(0, 24);
 
 // Where a change sits in the committed file and in the working file, as line ranges.
 const headRange = (unit: Unit): [number, number] => [unit.ops[0][1], unit.ops[unit.ops.length - 1][2]];
@@ -121,12 +122,13 @@ export class Changes {
 
   // Which of the current changes are staged, read from the index.
   private async staged(root: string, snapshot: Snapshot, units: Unit[]) {
-    const { Repo, splitLines, textOf, opcodes } = await engine(), repo = new Repo(root);
+    const { Repo, splitLines, textOf, opcodes, textEdits } = await engine(), repo = new Repo(root);
     const files = [...new Set(units.map(unit => unit.file))];
     const [work, index] = await Promise.all([repo.blobsAsync(snapshot.after, files), repo.blobsAsync('', files)]);
     const staged = new Set<string>();
     for (const unit of units) {
       const ready = unit.whole_file ? same(index[unit.file], work[unit.file])
+        : unit.text_ops ? !textEdits(textOf(index[unit.file]) ?? '', textOf(work[unit.file]) ?? '').some(op => unit.text_ops!.some(u => meets([op[3], op[4]], [u[3], u[4]])))
         : index[unit.file] !== null && stagedLines(splitLines(textOf(index[unit.file]) ?? ''), splitLines(textOf(work[unit.file]) ?? ''), workRange(unit), opcodes);
       if (ready) staged.add(unit.id);
     }
@@ -287,7 +289,7 @@ export class Changes {
   // keeps what it replaced for undo.
   async act(projectId: string, root: string, csrf: string, action: ChangeAction, number: number, ids: string[]) {
     const { comparison, snapshot, units } = await this.chosen(projectId, root, number, ids);
-    const { Repo, splitLines, textOf, opcodes, revertUnits } = await engine(), repo = new Repo(root);
+    const { Repo, splitLines, textOf, opcodes, textEdits, revertUnits } = await engine(), repo = new Repo(root);
     const files = [...new Set(units.map(unit => unit.file))];
     const head = repo.blobs(snapshot.before, files), work = repo.blobs(snapshot.after, files), index = repo.blobs('', files);
     const lines = (data: Buffer | null) => splitLines(textOf(data) ?? '');
@@ -300,7 +302,14 @@ export class Changes {
       if (part.some(unit => unit.whole_file)) { repo.run(['reset', '-q', 'HEAD', '--', file]); return; }
       if (index[file] === null) return;
       let next = lines(index[file]);
-      for (const unit of part) next = unstageLines(lines(head[file]), next, headRange(unit), opcodes);
+      for (const unit of part) {
+        if (unit.text_ops) {
+          const source = textOf(head[file]) ?? ''; let text = next.join('');
+          for (const [, i, j, x, y] of textEdits(source, text).reverse())
+            if (unit.text_ops.some(u => meets([i, j], [u[1], u[2]]))) text = text.slice(0, x) + source.slice(i, j) + text.slice(y);
+          next = [text];
+        } else next = unstageLines(lines(head[file]), next, headRange(unit), opcodes);
+      }
       if (next.join('') !== lines(index[file]).join('')) writeIndex(file, next);
     };
     const revert: Revert = { id: randomUUID(), files: [], signatures: units.map(signature) };
@@ -310,7 +319,14 @@ export class Changes {
         if (whole) repo.run(['add', '-A', '--', file]);
         else {
           let next = index[file] === null ? lines(head[file]) : lines(index[file]);
-          for (const unit of part) next = stageLines(next, lines(work[file]), workRange(unit), opcodes);
+          for (const unit of part) {
+            if (unit.text_ops) {
+              const target = textOf(work[file]) ?? ''; let text = next.join('');
+              for (const [, i, j, x, y] of textEdits(text, target).reverse())
+                if (unit.text_ops.some(u => meets([x, y], [u[3], u[4]]))) text = text.slice(0, i) + target.slice(x, y) + text.slice(j);
+              next = [text];
+            } else next = stageLines(next, lines(work[file]), workRange(unit), opcodes);
+          }
           writeIndex(file, next);
         }
       } else if (action === 'unstage') unstage(file, part);

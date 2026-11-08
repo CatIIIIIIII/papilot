@@ -246,5 +246,15 @@
   "Grok disconnected. Reconnect to resume.": "Grok 연결이 끊겼습니다. 다시 연결하여 계속하세요.",
   "Pause the task before restoring its session.": "세션을 복원하기 전에 작업을 일시 중지하세요.",
   "This task already has a running turn.": "이 작업에는 이미 실행 중인 턴이 있습니다.",
-  "Use your authorized Tailscale account to access Papilot.": "승인된 Tailscale 계정으로 Papilot에 접속하세요."
+  "Use your authorized Tailscale account to access Papilot.": "승인된 Tailscale 계정으로 Papilot에 접속하세요.",
+  "The review changed. Reload the options.": "검토가 변경되었습니다. 옵션을 다시 불러오세요.",
+  "This option is no longer available.": "이 옵션은 더 이상 사용할 수 없습니다.",
+  "The review action could not be confirmed. Check task status before retrying.": "검토 작업의 완료 여부를 확인하지 못했습니다. 다시 시도하기 전에 작업 상태를 확인하세요.",
+  "The option save could not be confirmed. Check task status before retrying.": "옵션의 저장 여부를 확인하지 못했습니다. 다시 시도하기 전에 작업 상태를 확인하세요.",
+  "The agent did not return two usable options. Try again.": "에이전트가 사용 가능한 옵션 두 개를 반환하지 않았습니다. 다시 시도하세요.",
+  "The agent returned an incomplete option. Try again.": "에이전트가 불완전한 옵션을 반환했습니다. 다시 시도하세요.",
+  "Each option needs a brief, specific reason. Try again.": "각 옵션에는 짧고 구체적인 이유가 필요합니다. 다시 시도하세요.",
+  "The option includes an invalid change. Try again.": "옵션에 유효하지 않은 변경 사항이 포함되어 있습니다. 다시 시도하세요.",
+  "The agent repeated an option. Try again.": "에이전트가 중복된 옵션을 반환했습니다. 다시 시도하세요.",
+  "This note has no linked changes.": "이 주석에 연결된 변경 사항이 없습니다."
 }

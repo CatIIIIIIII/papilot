@@ -187,7 +187,7 @@ Background.
     expect(ranges[METHOD]).toEqual([[1, 44]]);
     expect(deepestNode(nodes, METHOD, 30, 30)?.title).toBe("Details");
   });
-  it("groups nearby edits and applies distant hunks independently", () => {
+  it("keeps nearby edits independent when unchanged text separates them", () => {
     const head = f.repo.rev("HEAD");
     f.write(
       METHOD,
@@ -197,10 +197,10 @@ Background.
     );
     const after = f.repo.snapshot(["paper"]),
       units = diffUnits(f.repo, head, after);
-    expect(units).toHaveLength(2);
+    expect(units).toHaveLength(3);
     const old = f.repo.blob(head, METHOD),
       next = f.repo.blob(after, METHOD);
-    expect(applyUnits(old, next, [units[1]])?.toString()).toBe(
+    expect(applyUnits(old, next, [units[2]])?.toString()).toBe(
       BODY.replace("Detail sentence 12.", "Twelve."),
     );
     expect(revertUnits(old, next, units)).toEqual(old);

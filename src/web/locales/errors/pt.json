@@ -246,5 +246,15 @@
   "Grok disconnected. Reconnect to resume.": "Grok foi desconectado. Reconecte para continuar.",
   "Pause the task before restoring its session.": "Pause a tarefa antes de restaurar sua sessão.",
   "This task already has a running turn.": "Esta tarefa já tem um turno em execução.",
-  "Use your authorized Tailscale account to access Papilot.": "Use sua conta Tailscale autorizada para acessar o Papilot."
+  "Use your authorized Tailscale account to access Papilot.": "Use sua conta Tailscale autorizada para acessar o Papilot.",
+  "The review changed. Reload the options.": "A revisão mudou. Recarregue as opções.",
+  "This option is no longer available.": "Esta opção não está mais disponível.",
+  "The review action could not be confirmed. Check task status before retrying.": "Não foi possível confirmar a ação de revisão. Verifique o status da tarefa antes de tentar novamente.",
+  "The option save could not be confirmed. Check task status before retrying.": "Não foi possível confirmar se a opção foi salva. Verifique o status da tarefa antes de tentar novamente.",
+  "The agent did not return two usable options. Try again.": "O agente não retornou duas opções utilizáveis. Tente novamente.",
+  "The agent returned an incomplete option. Try again.": "O agente retornou uma opção incompleta. Tente novamente.",
+  "Each option needs a brief, specific reason. Try again.": "Cada opção precisa de uma justificativa breve e específica. Tente novamente.",
+  "The option includes an invalid change. Try again.": "A opção inclui uma alteração inválida. Tente novamente.",
+  "The agent repeated an option. Try again.": "O agente repetiu uma opção. Tente novamente.",
+  "This note has no linked changes.": "Esta anotação não tem alterações vinculadas."
 }

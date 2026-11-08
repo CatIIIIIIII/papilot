@@ -246,5 +246,15 @@
   "Grok disconnected. Reconnect to resume.": "Grok kopplades från. Anslut igen för att fortsätta.",
   "Pause the task before restoring its session.": "Pausa uppgiften innan du återställer sessionen.",
   "This task already has a running turn.": "Den här uppgiften har redan en pågående tur.",
-  "Use your authorized Tailscale account to access Papilot.": "Använd ditt behöriga Tailscale-konto för att komma åt Papilot."
+  "Use your authorized Tailscale account to access Papilot.": "Använd ditt behöriga Tailscale-konto för att komma åt Papilot.",
+  "The review changed. Reload the options.": "Granskningen har ändrats. Läs in alternativen igen.",
+  "This option is no longer available.": "Detta alternativ är inte längre tillgängligt.",
+  "The review action could not be confirmed. Check task status before retrying.": "Granskningsåtgärden kunde inte bekräftas. Kontrollera uppgiftens status innan du försöker igen.",
+  "The option save could not be confirmed. Check task status before retrying.": "Det gick inte att bekräfta att alternativet sparades. Kontrollera uppgiftens status innan du försöker igen.",
+  "The agent did not return two usable options. Try again.": "Agenten returnerade inte två användbara alternativ. Försök igen.",
+  "The agent returned an incomplete option. Try again.": "Agenten returnerade ett ofullständigt alternativ. Försök igen.",
+  "Each option needs a brief, specific reason. Try again.": "Varje alternativ behöver en kort, konkret motivering. Försök igen.",
+  "The option includes an invalid change. Try again.": "Alternativet innehåller en ogiltig ändring. Försök igen.",
+  "The agent repeated an option. Try again.": "Agenten upprepade ett alternativ. Försök igen.",
+  "This note has no linked changes.": "Denna anteckning har inga länkade ändringar."
 }

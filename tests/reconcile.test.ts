@@ -57,11 +57,13 @@ test('conflicts become a review of only overlapping passages, preserving clean e
     await assert.rejects(async () => app.review.decide(task.name, { id: crypto.randomUUID(), round: original.number, action: 'reject', changes: original.units.map(unit => unit.id) }), /new merge suggestion/);
     await assert.rejects(async () => app.delivery.deliver(task.name, 'workspace'), /Review the merge suggestion/);
     // Simulate the AI's proposed resolution; it still needs an author decision.
+    const conflictLine = disk.read(METHOD, task.worktree).split('\n').findIndex(line => line.includes('Latest manuscript statement.')) + 1;
     disk.edit(task, METHOD, 'Latest manuscript statement.', 'Combined statement for author review.');
     const round = fakeRound(app, task.name);
-    assert.equal(round.units.length, 1);
-    assert.match(round.units[0].old_text, /Latest manuscript statement/);
-    assert.doesNotMatch(round.units[0].new_text, /Accepted independent detail|Accepted introduction/);
+    assert.ok(round.units.length > 0);
+    assert.ok(round.units.every(unit => unit.file === METHOD && unit.old_start === conflictLine && unit.old_end === conflictLine), 'only the overlapping sentence needs review, regardless of fragment count');
+    assert.match(round.units.map(unit => unit.old_text).join(' '), /Latest/);
+    assert.doesNotMatch(round.units.map(unit => unit.new_text).join(' '), /Accepted independent detail|Accepted introduction/);
     const refreshed = app.tasks.get(task.name);
     assert.deepEqual(scopeViolations(app.repo, refreshed.base, app.tasks.snapshot(refreshed), refreshed.scope), []);
     await assert.rejects(async () => app.delivery.apply(task.name), /Finish reviewing/);

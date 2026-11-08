@@ -263,5 +263,6 @@
   "{source} has this work with other details. Compare them below.": "{source} har detta verk med andra uppgifter. Jämför dem nedan.",
   "{staged} of {total} staged": "{staged} av {total} köade",
   "↵ send · Esc cancel": "↵ skicka · Esc avbryt",
-  "Your comments are saved. Continue in Chat to request a revision.": "Dina kommentarer är sparade. Fortsätt i chatten för att begära en revidering."
+  "Your comments are saved. Continue in Chat to request a revision.": "Dina kommentarer är sparade. Fortsätt i chatten för att begära en revidering.",
+  "Confirm this option before reviewing its changes.": "Bekräfta detta alternativ innan du granskar ändringarna."
 }

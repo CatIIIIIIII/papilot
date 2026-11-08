@@ -31,12 +31,21 @@ export function nextPending(
   stops: Stop[],
   decisions: Record<string, Decision>,
   current = -1,
+  focused?: readonly string[],
 ) {
   for (let step = 1; step <= stops.length; step++) {
     const index = ((current < 0 ? -1 : current) + step) % stops.length;
-    if (pendingUnits(stops[index], decisions).length) return index;
+    if (pendingUnits(stops[index], decisions).some(id => !focused || focused.includes(id))) return index;
   }
   return -1;
+}
+// The host drafts comments from these exact units, not the merged PDF block.
+export function commentScope(units: (Unit & Partial<VisualUnit>)[]) {
+  const before = units.every(unit => !unit.new_text);
+  return {
+    where: `${before ? "Before" : "After"} · ${describeLocation(before ? units.map(unit => ({ ...unit, new_start: unit.old_start, new_end: unit.old_end })) : units)}`,
+    quote: units.map(unit => unit.new_text || unit.old_text).filter(Boolean).join("\n"),
+  };
 }
 // Names for a change's state; the viewer translates them where it shows them.
 export const STATE: Record<string, string> = {
@@ -156,7 +165,7 @@ export function describeLocation(
   const pages = [...new Set(units.flatMap((u) => u.pages ?? []))];
   return (
     [...files]
-      .map(([file, places]) => `${file}:${places.join(", ")}`)
+      .map(([file, places]) => `${file}:${[...new Set(places)].join(", ")}`)
       .join("; ") +
     (pages.length ? ` · ${say("p. {pages}", { pages: pages.join(", ") })}` : "")
   );

@@ -228,7 +228,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 @keyframes workspace-panel-in{from{opacity:0;transform:translateX(var(--workspace-shift,16px))}}
 @keyframes workspace-panel-out{to{opacity:0;transform:translateX(var(--workspace-shift,16px))}}
 .review-panel{display:flex;flex-direction:column;position:relative;min-height:0;min-width:0;background:var(--canvas);container-type:inline-size}
-.review-viewport{container-type:inline-size;position:relative;display:flex;flex:1;min-height:0;min-width:0}
+.review-viewport{container-type:inline-size;position:relative;display:flex;flex:1;min-height:0;min-width:0;overflow:clip}
 .review-marking-rail{position:absolute;z-index:4;left:0;top:44px;bottom:0;display:flex}
 .review-frame{display:block;width:100%;height:100%;flex:1;border:0;background:var(--canvas);min-height:0}
 .review-pending>.review-frame{visibility:hidden}
@@ -1035,3 +1035,88 @@ body.resizing iframe{pointer-events:none}
 .ai-review-view{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0}
 .review-copy-label{font-size:11px;white-space:nowrap;color:var(--text-3);padding:0 5px}
 @media(max-width:520px){.review-copy-label{display:none}}
+
+/* Note focus is optional. The conversation stays read-only; review controls
+   float inside the PDF pane without changing the document geometry. */
+.sent-notes li[data-note-result] { cursor: pointer; }
+.sent-notes li[data-note-result]:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.review-note-controls { position: absolute; z-index: 5; left: 64px; right: 18px; bottom: 12px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--bg); box-shadow: var(--float); max-height: min(50%, 320px); display: flex; flex-direction: column; overflow: hidden; transform: translateY(0); opacity: 1; transition: transform .18s ease, opacity .18s ease; }
+.review-note-controls[data-open="true"] { animation: note-drawer-in .2s ease-out; }
+.review-note-controls[data-open="false"] { transform: translateY(calc(100% + 16px)); opacity: 0; pointer-events: none; }
+@keyframes note-drawer-in { from { transform: translateY(calc(100% + 16px)); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .review-note-controls { transition: none; animation: none !important; } }
+.review-note-pager { display: flex; align-items: center; flex-shrink: 0; gap: 2px; margin: 0 0 4px auto; color: var(--text-2); }
+.review-note-pager .icon-button { width: 26px; height: 26px; border-radius: 5px; }
+.review-note-pager .icon-button:disabled { opacity: .35; cursor: default; }
+.review-note-position { min-width: 34px; text-align: center; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
+.review-note-position > span { color: var(--text-3); }
+.review-note-pager button:focus-visible, .note-option-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.note-review-scope { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; padding-left: 6px; border-left: 1px solid var(--line); }
+.note-review-scope button { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 5px; padding: 5px 7px; background: transparent; color: var(--text-2); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
+.note-review-scope button[aria-pressed="true"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--bg)); }
+.note-review-scope button:hover { background: var(--bg-muted); }
+.note-review-scope button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.note-options { --note-folder: var(--bg-muted); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+@media (max-width: 680px) { .review-note-controls { left: 12px; right: 12px; bottom: 12px; } }
+.note-option-navigation { display: flex; align-items: end; gap: 8px; flex-shrink: 0; min-width: 0; }
+.note-option-tabs { min-width: 0; flex: 1; display: flex; align-items: end; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 0 8px; }
+.note-option-tab { position: relative; flex-shrink: 0; padding: 8px 12px 9px; border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; white-space: nowrap; }
+.note-option-tab:hover:not(:disabled) { color: var(--text); }
+.note-option-tab[aria-selected="true"] { background: var(--note-folder); color: var(--text); }
+.note-option-tab[aria-selected="true"] .note-option-label { font-weight: 600; }
+.note-option-tab[data-rejected="true"] .note-option-label { text-decoration: line-through; color: var(--text-3); }
+.note-option-content { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: auto; padding: 8px; border-radius: 8px; background: var(--note-folder); }
+.note-option-label { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.note-option-label .spinner { width: 12px; height: 12px; margin-left: auto; }
+.note-option-reason { margin: 0; padding: 0 4px 2px; flex-shrink: 0; font-size: 11px; line-height: 1.4; color: var(--text-2); overflow-wrap: anywhere; }
+.note-options .note-option-hint { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); margin: 0; flex-shrink: 0; }
+.note-options .note-option-error { font-size: 12px; color: var(--danger, #b33); }
+.note-option-actions { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 4px; margin: 0 4px 3px 0; }
+.note-option-actions .icon-button { width: 28px; height: 28px; border-radius: 5px; }
+.note-option-actions svg { stroke-width: 2.2; }
+.note-option-actions .accept { color: var(--green); }
+.note-option-actions .accept:hover:not(:disabled) { color: var(--green); background: var(--green-soft); }
+.note-option-actions .reject { color: var(--red); }
+.note-option-actions .reject:hover:not(:disabled), .note-option-actions .reject[aria-pressed="true"] { color: var(--red); background: var(--red-soft); }
+.note-option-actions .comment { color: var(--accent); }
+.note-option-actions .comment:hover:not(:disabled), .note-option-actions .comment[data-commented="true"] { color: var(--accent); background: var(--accent-soft); }
+.note-option-actions .source[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.note-option-comment { display: flex; align-items: flex-start; gap: 4px; flex-shrink: 0; }
+.note-option-comment textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 8px; background: var(--bg-subtle); font-size: 12px; line-height: 1.4; }
+.note-option-comment textarea:focus-visible { border-color: var(--accent); }
+.note-option-comment .icon-button { width: 24px; height: 24px; }
+.note-options-generate { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; color: var(--accent); font-size: 12px; }
+.note-options button:disabled { opacity: .5; cursor: default; }
+
+.note-option-comparison { --pdf-filter: var(--review-filter); --pdf-page: var(--review-page); min-height: 50px; max-height: 180px; overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; border-radius: 4px; padding: 3px 0; background: var(--pdf-page); }
+.note-option-comparison:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.note-comparison-change { margin: 3px 0; }
+.note-comparison-side { position: relative; padding: 12px 0 2px; min-height: 18px; border-left: 2px solid transparent; }
+.note-comparison-change[data-related="true"] .note-comparison-side.before { border-left-color: var(--red); background: var(--review-before); }
+.note-comparison-change[data-related="true"] .note-comparison-side.after { border-left-color: var(--green); background: var(--review-after); }
+.note-comparison-side-label { position: absolute; top: 2px; right: 9px; font-size: 10px; line-height: 13px; color: var(--text-3); }
+.note-comparison-side pre { margin: 0; padding: 4px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.note-comparison-gap { text-align: center; color: var(--text-3); }
+.note-option-comparison .pdf-strip { position: relative; width: 100%; container-type: inline-size; isolation: isolate; }
+.note-option-comparison .pdf-strip img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; pointer-events: none; filter: var(--pdf-filter); }
+.note-option-comparison .pdf-text { position: absolute; inset: 0; overflow: hidden; color: transparent; user-select: text; -webkit-user-select: text; cursor: text; line-height: 1; }
+.note-option-comparison .pdf-text-line { white-space: pre; }
+.note-option-comparison .pdf-glyph, .note-option-comparison .pdf-line-preview { position: absolute; font-family: "Times New Roman", serif; font-weight: normal; line-height: 1; white-space: pre; transform-origin: 0 0; color: transparent; }
+.note-option-comparison .pdf-glyph::selection, .note-option-comparison .pdf-line-preview::selection { background: rgb(67 126 231 / .35); color: transparent; }
+
+.note-comparison-context { position: relative; height: 0; overflow: hidden; }
+.note-comparison-context > div { position: absolute; top: 0; left: 0; width: 100%; }
+.note-option-comparison .pdf-focus-marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.note-option-source { background: var(--bg); padding: 0; }
+.note-source-unit + .note-source-unit { margin-top: 8px; }
+.note-source-unit header { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; color: var(--text-3); font-size: 10px; }
+.note-source-unit header code { overflow-wrap: anywhere; }
+.note-source-unit header span { flex-shrink: 0; font-family: var(--mono); }
+.note-source-unit p { padding: 0 8px; font-size: 11px; color: var(--text-3); }
+.note-source-side { display: flex; gap: 8px; padding: 4px 8px; border-left: 2px solid transparent; }
+.note-source-side > span { width: 38px; flex-shrink: 0; color: var(--text-3); font-size: 10px; line-height: 18px; }
+.note-source-side pre { min-width: 0; margin: 0; color: var(--text); font: 11px/18px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-source-unit[data-related="true"] .before { border-color: var(--red); background: var(--red-soft); }
+.note-source-unit[data-related="true"] .after { border-color: var(--green); background: var(--green-soft); }
+.note-source-side del { color: var(--red); background: var(--red-soft); }
+.note-source-side ins { color: var(--green); background: var(--green-soft); text-decoration: none; }

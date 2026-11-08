@@ -1,4 +1,4 @@
-import type { Annotation, GitStatus, Manuscript, Snapshot, Task, TimelineItem, AgentId, Skill, NoteSummary, NoteResult } from '../../shared.ts';
+import type { Annotation, GitStatus, Manuscript, Snapshot, Task, TimelineItem, AgentId, Skill, NoteSummary, NoteResult, NoteOptions } from '../../shared.ts';
 import type { ActionKind, Decision, PageState, RoundDetail } from '../../../engine/src/types.ts';
 import plans from '../../../examples/playground-paper/edits.json';
 import seededNotes from '../../../examples/playground-paper/preview/notes.json';
@@ -88,6 +88,29 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
     const note = seededNotes.find(note => note.id === id)!;
     return { id, where: `Page ${note.page + 1}`, quote: note.quote, comment: note.comment, ...('group' in note ? { group: note.group } : {}), ...('kind' in note ? { kind: note.kind } : {}), ...('stamp' in note ? { stamp: note.stamp } : {}) } as NoteSummary;
   });
+  function noteResults(example: { id: string; notes?: string[] }): NoteResult[] {
+    const detail = rounds[example.id], itemId = `${example.id}-prompt`, notes = planNotes(example);
+    if (progress(example.id) && !progress(example.id)!.done) return notes.map((note, index) => ({ key: `${itemId}:${index}`, itemId, index, note, round: null, state: 'waiting', changes: [] }));
+    return notes.map((note, index): NoteResult => {
+      const changes: NoteResult['changes'] = [...detail.sections.flatMap(section => section.blocks.filter(block => block.kind === 'change')), ...detail.loose].flatMap((block, stop) => {
+        if (block.kind !== 'change') return [];
+        const units = detail.units.filter(unit => block.units.includes(unit.id) && unit.old_text.normalize('NFKC').includes(note.quote.normalize('NFKC'))).map(unit => unit.id);
+        if (!units.length) return [];
+        const states = new Set(units.map(id => local.reviews[example.id].decisions[id]));
+        return [{ round: 1, stop, units, state: states.size === 1 ? [...states][0] : 'mixed', match: 'quote' }];
+      });
+      return { key: `${itemId}:${index}`, itemId, index, note, round: 1, state: changes.length ? 'matched' : 'unmatched', changes };
+    });
+  }
+  function noteOptions(id: string, key: string): NoteOptions {
+    const example = plans.find(plan => plan.id === id), note = example && noteResults(example).find(note => note.key === key);
+    if (!note?.round || !note.changes.length) throw new Error('This note has no linked changes.');
+    const ids = new Set(note.changes.flatMap(change => change.units)), units = rounds[id].units.filter(unit => ids.has(unit.id));
+    return { key, round: 1, selected: 'current', before: Object.fromEntries(units.map(unit => [unit.id, unit.old_text])),
+      options: [{ id: 'current', label: 'Current proposal', edits: units.map(unit => ({ unit: unit.id, text: unit.new_text })) }],
+      ...(units.some(unit => local.reviews[id].decisions[unit.id] !== 'pending') ? { locked: 'This note includes a reviewed change. Undo that decision before replacing it.' } : {}),
+    };
+  }
   function read(route: string, body?: unknown): unknown {
     restore();
     const path = route.split('?')[0], base = `/projects/${projectId}`;
@@ -132,6 +155,27 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
     }
     if (path === '/quick-notes') { if (body !== undefined) storage.setItem('playground:quick-notes', JSON.stringify(body)); try { return JSON.parse(storage.getItem('playground:quick-notes') || '{"quickNotes":null}'); } catch { return { quickNotes: null }; } }
     if (path === '/indirect-changes') return { indirectChanges: false };
+    // The note drawer uses the same prepared comparison and local decision
+    // journal as the iframe. Only an explicit request for new AI alternatives
+    // needs the installed app; opening a note never triggers a download prompt.
+    const optionRoute = path.match(/^\/tasks\/([^/]+)\/note-options(\/preview)?$/);
+    if (optionRoute && rounds[optionRoute[1]]) {
+      const [, id, preview] = optionRoute, query = new URLSearchParams(route.split('?')[1]);
+      const input = body as { key?: string; round?: number; option?: string; id?: string; accept?: boolean } | undefined;
+      const key = input?.key ?? query.get('key') ?? '', options = noteOptions(id, key);
+      if (body === undefined && !preview) return options;
+      if ((preview ? Number(query.get('round')) : input?.round) !== options.round) throw new Error('The review changed. Reload the options.');
+      if (preview) {
+        if (body !== undefined || query.get('option') !== 'current') throw new Error('This option is no longer available.');
+        return rounds[id];
+      }
+      if (!input?.option) throw new PlaygroundDownloadRequired();
+      if (input.option !== 'current') throw new Error('This option is no longer available.');
+      if (!input.accept) return options;
+      if (options.locked) throw new Error(options.locked);
+      read(`/playground-reviews/${id}/decide`, { id: input.id, round: 1, action: 'accept', changes: options.options[0].edits.map(edit => edit.unit) });
+      return noteOptions(id, key);
+    }
     const match = path.match(/^\/playground-reviews\/([^/]+)(\/.*)$/);
     if (match && rounds[match[1]]) {
       const [, id, action] = match, review = local.reviews[id];
@@ -211,7 +255,7 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
     if (path === `${base}/manuscript/problems`) return { status: 'ready', key: pdfKey, problems: [], log: false };
     const example = [...plans, { ...reviewPlan, notes: [] as string[] }].find(example => path.startsWith(`/tasks/${example.id}/`));
     if (example) {
-      const replay = local.replays[example.id], stage = progress(example.id), pending = stage && !stage.done;
+      const replay = local.replays[example.id], stage = progress(example.id);
       const timestamp = replay?.startedAt || createdAt;
       if (path.endsWith('/items') && replay && stage) {
         const items: TimelineItem[] = [{ id: `${example.id}-prompt`, taskId: example.id, type: 'user', text: example.prompt, createdAt: timestamp, meta: { notes: planNotes(example) } }, replayItem(example.id, replay, now())];
@@ -227,18 +271,7 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
         { id: `${example.id}-answer`, taskId: example.id, type: 'assistant', text: example.answer, createdAt: createdAt + 30000 },
       ] satisfies TimelineItem[] };
       if (path.endsWith('/note-results')) {
-        const detail = rounds[example.id], itemId = `${example.id}-prompt`;
-        const notes = 'notes' in example ? planNotes(example) : [];
-        if (pending) return { notes: notes.map((note, index): NoteResult => ({ key: `${itemId}:${index}`, itemId, index, note, round: null, state: 'waiting', changes: [] })) };
-        return { notes: notes.map((note, index): NoteResult => ({ key: `${itemId}:${index}`, itemId, index, note, round: 1, state: 'matched',
-          changes: [...detail.sections.flatMap(section => section.blocks.filter(block => block.kind === 'change')), ...detail.loose].flatMap((block, stop) => {
-            if (block.kind !== 'change') return [];
-            const units = detail.units.filter(unit => block.units.includes(unit.id) && unit.old_text.normalize('NFKC').includes(note.quote.normalize('NFKC'))).map(unit => unit.id);
-            if (!units.length) return [];
-            const states = new Set(units.map(id => local.reviews[example.id].decisions[id]));
-            return [{ round: 1, stop, units, state: states.size === 1 ? [...states][0] : 'mixed', match: 'quote' }];
-          }),
-        })) };
+        return { notes: noteResults(example) };
       }
       if (path.endsWith('/ai-review')) return { key: pdfKey, notes: suggestions().filter(note => !local.hiddenSuggestions.includes(note.id)) };
     }

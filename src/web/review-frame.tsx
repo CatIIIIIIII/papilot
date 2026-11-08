@@ -9,7 +9,7 @@ import { Icon } from './icons.tsx';
 import themeStyles from './theme.css?inline';
 import { syncAppearance } from './appearance.ts';
 import { language, t, useLanguage } from './i18n.ts';
-import { useNoteResults } from './note-results.tsx';
+import { NoteReviewControls, NoteReviewScope, useNoteResults } from './note-results.tsx';
 import { ReviewNoteConnections } from './review-note-connections.tsx';
 import { SHORTCUT_EVENT, useShortcuts } from './shortcuts.ts';
 import { connectWorkspaceKeys } from './workspace-switch.ts';
@@ -241,6 +241,9 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     :root[data-papilot-reader] .paper{--pdf-crop-scale:1;--pdf-crop-shift:0}
     :root[data-papilot-reader][data-papilot-phone] .review-body>#paper{--paper-top:10px;padding:10px 0 132px}
     :root[data-papilot-reader][data-papilot-phone] .paper-page{margin-bottom:10px}
+    /* Extra scroll room keeps even the final edit above the note drawer.
+       The PDF width, pages and line geometry remain untouched. */
+    :root[data-papilot-note-drawer] .review-body>#paper{padding-bottom:calc(90px + var(--papilot-note-inset));scroll-padding-bottom:calc(16px + var(--papilot-note-inset))}
     @container review-bar (max-width:340px){.bar .batch-label{display:none}.bar .accept-all,.bar .reject-all{padding:0 8px}.bar .bar-end{gap:4px}}
     :root{--icon-history:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12a9 9 0 1 0 2.6-6.4L3 8'/><path d='M3 3v5h5M12 7v5l3 2'/></svg>")}
   `;
@@ -299,9 +302,9 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   const modes = task && fullPaper ? <ModeSwitch mode={view === 'paper' ? 'pdf' : 'changes'} onMode={mode => chooseView(mode === 'pdf' ? 'paper' : 'changes')} changesTitle={t('Changes')}/> : null;
   const noteLinks = useNoteResults(), linksRef = useRef(noteLinks); linksRef.current = noteLinks;
   // Current changes open in the usual review; only older results need history.
-  const linkedRound = quoteFocus?.note.round ?? (task ? noteLinks?.focus?.change.round : undefined);
+  const linkedRound = quoteFocus?.note.round ?? (task && noteLinks?.focus?.historical ? noteLinks.focus.change.round : undefined);
   const linkedChange = quoteFocus?.note.stop ?? (linkedRound === task?.review?.round ? noteLinks?.focus?.change.stop : undefined);
-  const focusSequence = quoteFocus ? `quote:${quoteFocus.sequence}` : task && noteLinks?.focus ? `result:${noteLinks.focus.sequence}` : undefined;
+  const focusSequence = quoteFocus ? `quote:${quoteFocus.sequence}` : undefined;
   const [document, setDocument] = useState<Document | null>(null);
   const [reader, setReader] = useState<PdfReaderState | null>(null);
   const [findOpen, setFindOpen] = useState(false), [query, setQuery] = useState('');
@@ -521,11 +524,12 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   return <div className={'review-viewport' + (ready ? '' : ' review-pending')} aria-busy={!ready}>
     <iframe ref={frame} key={`${attempt}:${shown}:${linkedRound || ''}:${focusSequence || ''}`} title={task ? t('{title} PDF change review', { title: task.title }) : t('Uncommitted changes in the PDF')} src={task ? reviewUrl(task, linkedRound, linkedChange) : changesUrl(changesOf!)} onLoad={loaded} onError={() => setPhase('error')} className="review-frame" aria-hidden={!ready} tabIndex={ready ? 0 : -1}/>
     {task && ready && <ReviewNoteConnections doc={document} round={linkedRound || task.review?.round || 0}/>}
+    {task && ready && <NoteReviewControls doc={document}/>}
     <div ref={hostBar} className={'review-host-bar' + (readingPdf ? ' pdf-toolbar' : '')} role={readingPdf ? 'toolbar' : undefined} aria-label={readingPdf ? t('PDF controls') : undefined}>
-      {(lead || modes) && <div ref={leading} className="review-lead">{lead}{modes}{readingPdf && <PdfContents outline={reader?.outline || []} section={reader?.section ?? -1} ready={Boolean(reader)} onSelect={item => readerCommand({ type: 'outline', index: reader!.outline.indexOf(item) })}/>}</div>}
+      {(lead || modes || noteLinks?.focus) && <div ref={leading} className="review-lead">{lead}{modes}{task && ready && <NoteReviewScope/>}{readingPdf && <PdfContents outline={reader?.outline || []} section={reader?.section ?? -1} ready={Boolean(reader)} onSelect={item => readerCommand({ type: 'outline', index: reader!.outline.indexOf(item) })}/>}</div>}
       {readingPdf && <><div className="pdf-toolbar-spacer"/><PdfPageControls page={reader?.page || 1} pages={reader?.pages || 0} zoom={reader?.zoom || { value: 'page-width', scale: 1 }} onPage={page => readerCommand({ type: 'page', page })} onZoom={value => readerCommand({ type: 'zoom', value })} onZoomBy={factor => readerCommand({ type: 'zoomBy', factor })}/></>}
       {readingPdf && <PdfFindButton open={findOpen} onClick={() => findOpen ? closeFind() : setFindOpen(true)}/>}
-      <div ref={toolbar} className="review-tools">{task && onComment && <ReviewNotes railSlot={railSlot} doc={ready ? document : null} task={task} onComment={onComment}/>}{tools}</div>
+      <div ref={toolbar} className="review-tools">{task && onComment && <ReviewNotes railSlot={railSlot} doc={ready && !noteLinks?.preview ? document : null} task={task} onComment={onComment}/>}{tools}</div>
       {readingPdf && findOpen && <PdfFind inputRef={findInput} query={query} matches={reader?.find || { current: 0, total: 0 }} notFound={reader?.find?.notFound || false} onQuery={value => { setQuery(value); readerCommand({ type: 'find', query: value, again: false, previous: false }); }} onNext={previous => readerCommand({ type: 'find', query, again: true, previous })} onClose={closeFind}/>}
     </div>
     {task && onComment && <div ref={setRailSlot} className="review-marking-rail"/>}

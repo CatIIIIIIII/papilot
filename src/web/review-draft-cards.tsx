@@ -11,6 +11,7 @@ function version(note: ReviewNote) {
   return note.whole ? 'whole' : / · Before(?: ·|$)/.test(note.where) ? 'before' : / · After(?: ·|$)/.test(note.where) ? 'after' : 'unchanged';
 }
 function place(note: ReviewNote) {
+  if (note.option) return <span className="review-draft-side">{t('Option: {label}', { label: note.option.label })}</span>;
   const side = version(note);
   const label = side === 'whole' ? t('Whole change') : side === 'before' ? t('Before revision') : side === 'after' ? t('After revision') : t('Unchanged text');
   const page = note.where.match(/PDF page ([^·]+)/)?.[1].trim();

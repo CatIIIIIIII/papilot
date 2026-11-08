@@ -4,6 +4,11 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/?task=tighten-design");
   await expect(page.locator(".change").first()).toBeVisible();
 });
+async function totalUnits(page: Page) {
+  const progress = page.getByRole("progressbar");
+  await expect(progress).toHaveAttribute("aria-valuenow", "0");
+  return Number(await progress.getAttribute("aria-valuemax"));
+}
 test("renders vectors and selectable text without browser errors", async ({
   page,
 }) => {
@@ -215,9 +220,10 @@ test("source diff shows TeX and local accept can be undone", async ({
 test("a decided change offers no decisions, only the way to the next undecided one", async ({
   page,
 }) => {
+  const total = await totalUnits(page);
   const first = page.locator(".change.current");
   await first.getByRole("button", { name: "Accept", exact: true }).click();
-  await expect(page.getByRole("progressbar", { name: "1 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `1 of ${total} decided`, exact: true })).toBeVisible();
   await page.getByRole("button", { name: "History", exact: true }).click();
   const accepted = page.locator('.change[data-state="accepted"]');
   await accepted.click();
@@ -227,15 +233,16 @@ test("a decided change offers no decisions, only the way to the next undecided o
   await expect(accepted.getByRole("button", { name: "Next undecided", exact: true })).toBeVisible();
   // The review server is shared by every test; leave the round undecided.
   await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
-  await expect(page.getByRole("progressbar", { name: "0 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `0 of ${total} decided`, exact: true })).toBeVisible();
 });
 test("Accept all acts once for the full round and one undo restores every change", async ({
   page,
 }) => {
+  const total = await totalUnits(page);
   await page
-    .getByRole("button", { name: "Accept all (7)", exact: true })
+    .getByRole("button", { name: `Accept all (${total})`, exact: true })
     .click();
-  await expect(page.getByRole("progressbar", { name: "7 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `${total} of ${total} decided`, exact: true })).toBeVisible();
   await expect(page.locator('.change[data-state="pending"]')).toHaveCount(0);
   await expect(
     page.locator('.change-map-mark[data-state="pending"]'),
@@ -244,9 +251,9 @@ test("Accept all acts once for the full round and one undo restores every change
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+z" : "Control+z",
   );
-  await expect(page.getByRole("progressbar", { name: "0 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `0 of ${total} decided`, exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Accept all (7)", exact: true }),
+    page.getByRole("button", { name: `Accept all (${total})`, exact: true }),
   ).toBeEnabled();
   await expect(
     page.locator('.change-map-mark[data-state="accepted"]'),
@@ -257,6 +264,7 @@ test("Accept all acts once for the full round and one undo restores every change
 test("Reject all decides only undecided changes and one undo restores the batch", async ({
   page,
 }) => {
+  const total = await totalUnits(page);
   const undo = process.platform === "darwin" ? "Meta+z" : "Control+z";
   await page
     .locator(".change.current")
@@ -268,7 +276,7 @@ test("Reject all decides only undecided changes and one undo restores the batch"
     await rejectAll.locator(".batch-count").textContent(),
   );
   expect(undecided).toBeGreaterThan(0);
-  expect(undecided).toBeLessThan(7);
+  expect(undecided).toBeLessThan(total);
   await expect(
     page.getByRole("button", {
       name: `Accept all (${undecided})`,
@@ -276,53 +284,61 @@ test("Reject all decides only undecided changes and one undo restores the batch"
     }),
   ).toBeVisible();
   await rejectAll.click();
-  await expect(page.getByRole("progressbar", { name: "7 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `${total} of ${total} decided`, exact: true })).toBeVisible();
   await expect(page.locator('.change[data-state="accepted"]')).toHaveCount(1);
   await expect(page.locator('.change[data-state="pending"]')).toHaveCount(0);
   await expect(rejectAll).toHaveCount(0);
   await page.keyboard.press(undo);
   await expect(
-    page.getByRole("progressbar", { name: `${7 - undecided} of 7 decided`, exact: true }),
+    page.getByRole("progressbar", { name: `${total - undecided} of ${total} decided`, exact: true }),
   ).toBeVisible();
   await expect(page.locator('.change[data-state="accepted"]')).toHaveCount(1);
   await expect(page.locator('.change[data-state="rejected"]')).toHaveCount(0);
   await page.keyboard.press(undo);
-  await expect(page.getByRole("progressbar", { name: "0 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `0 of ${total} decided`, exact: true })).toBeVisible();
 });
 
 test("the last undecided change is decided from its own bar, without batch buttons", async ({
   page,
 }) => {
-  for (let decided = 1; decided <= 6; decided++) {
+  const total = await totalUnits(page);
+  for (let decided = 1; decided < total; decided++) {
     const next = page
       .locator(".change.current")
       .getByRole("button", { name: "Next undecided", exact: true });
     if (await next.isVisible()) await next.click();
-    await page
-      .locator(".change.current")
-      .getByRole("button", { name: "Accept", exact: true })
-      .click();
+    const block = page.locator(".change.current"), accept = block.locator('.dock button.accept');
+    if (/\(\d+\)/.test(await accept.textContent() || '')) {
+      // One PDF block can hold several independent source edits. Use its
+      // per-unit action so this test still leaves exactly one undecided unit.
+      if (!await block.locator('.source').isVisible()) await block.getByRole('button', { name: /LaTeX$/ }).click();
+      await block.locator('.unit-actions button.accept').first().click();
+    } else await accept.click();
     await expect(
-      page.getByRole("progressbar", { name: `${decided} of 7 decided`, exact: true }),
+      page.getByRole("progressbar", { name: `${decided} of ${total} decided`, exact: true }),
     ).toBeVisible();
   }
   await expect(
     page.getByRole("button", { name: /^(Accept|Reject) all/ }),
   ).toHaveCount(0);
+  await page.locator('.change.current .dock').getByRole('button', { name: 'Accept', exact: true }).click();
+  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', String(total));
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', String(total - 1));
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+z" : "Control+z",
   );
-  await expect(page.getByRole("progressbar", { name: "5 of 7 decided", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: `${total - 2} of ${total} decided`, exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Accept all (2)", exact: true }),
   ).toBeVisible();
   // The review server is shared by every test; leave the round undecided.
-  for (let decided = 4; decided >= 0; decided--) {
+  for (let decided = total - 3; decided >= 0; decided--) {
     await page.keyboard.press(
       process.platform === "darwin" ? "Meta+z" : "Control+z",
     );
     await expect(
-      page.getByRole("progressbar", { name: `${decided} of 7 decided`, exact: true }),
+      page.getByRole("progressbar", { name: `${decided} of ${total} decided`, exact: true }),
     ).toBeVisible();
   }
 });
@@ -371,6 +387,7 @@ test("comments retain drafts and reach agent feedback with their source location
 test("review controls and overview remain usable on narrow screens", async ({
   page,
 }) => {
+  const total = await totalUnits(page);
   await expect(page.getByText("Your turn", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /Message.*agent/ }),
@@ -379,7 +396,7 @@ test("review controls and overview remain usable on narrow screens", async ({
     await page.setViewportSize({ width, height: 1000 });
     await page.evaluate(() => document.fonts.ready);
     await expect(
-      page.getByRole("button", { name: "Accept all (7)", exact: true }),
+      page.getByRole("button", { name: `Accept all (${total})`, exact: true }),
     ).toBeInViewport();
     await expect(
       page

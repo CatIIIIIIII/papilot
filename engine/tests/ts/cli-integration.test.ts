@@ -72,8 +72,8 @@ it("CLI obtains every comment, note and source location without browser access",
   expect(answer.feedback[0].text).toBe(long);
   expect(answer.feedback[0].changes?.[0]).toMatchObject({
     file: METHOD,
-    old: "Method sentence 2.",
-    new: "Agent A.",
+    old: "Method sentence 2",
+    new: "Agent A",
   });
   expect(answer.feedback.at(-1)?.text).toBe("Opinion 249: keep this context.");
   expect((await cli("feedback")).feedback).toEqual([]);

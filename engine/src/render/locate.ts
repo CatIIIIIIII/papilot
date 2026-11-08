@@ -347,12 +347,13 @@ export class Locator {
     end: number,
     whole = false,
     changed?: Span[],
+    exact?: Span[],
   ): Position[] {
     const file = this.build.path(name);
     if (!fs.existsSync(file) || path.extname(file) !== ".tex") return [];
     const lines = fs.readFileSync(file, "utf8").split("\n");
     if (this.build.slides)
-      return this.slidePages(file, lines, changed ?? [[start - 1, end]], whole);
+      return this.slidePages(file, lines, changed ?? [[start - 1, end]], whole, new Set(), false, exact);
     [start, end] = sourceRange(lines, start, end, whole);
     let wanted = Array.from(
       { length: Math.max(0, end - start + 1) },
@@ -439,6 +440,7 @@ export class Locator {
     whole: boolean,
     visited = new Set<string>(),
     enclosingOnly = false,
+    exact?: Span[],
   ): Position[] {
     if (visited.has(file)) return [];
     visited = new Set(visited).add(file);
@@ -465,19 +467,21 @@ export class Locator {
     // Beamer (and body-capturing frame wrappers) records the frame at its
     // closing line. Interior queries can instead resolve to the previous
     // frame. Query enclosing frame environments at their closing lines.
-    const stack: { name: string; line: number }[] = [],
-      blocks: Span[] = [],
+    const stack: { name: string; line: number; offset: number }[] = [],
+      blocks: { lines: Span; offsets: Span }[] = [],
       source = structuralSource(lines.join("\n")).split("\n");
+    let offset = 0;
     source.forEach((line, i) => {
       for (const match of line.matchAll(/\\(begin|end)\s*\{([^}]+)\}/g)) {
         if (match[2] === "document") continue;
-        if (match[1] === "begin") stack.push({ name: match[2], line: i + 1 });
+        if (match[1] === "begin") stack.push({ name: match[2], line: i + 1, offset: offset + match.index });
         else if (stack.at(-1)?.name === match[2]) {
           const opening = stack.pop()!;
           if (this.build.frameEnvironments.has(opening.name))
-            blocks.push([opening.line, i + 1]);
+            blocks.push({ lines: [opening.line, i + 1], offsets: [opening.offset, offset + match.index + match[0].length] });
         }
       }
+      offset += line.length + 1;
     });
     const text = source.join("\n");
     for (const match of text.matchAll(/\\frame\b/g)) {
@@ -494,25 +498,25 @@ export class Locator {
       }
       const [body, end] = argument(text, at);
       if (body !== null)
-        blocks.push([
-          text.slice(0, match.index).split("\n").length,
-          text.slice(0, end).split("\n").length,
-        ]);
+        blocks.push({
+          lines: [text.slice(0, match.index).split("\n").length, text.slice(0, end).split("\n").length],
+          offsets: [match.index, end],
+        });
     }
     // Diff operations are zero-based, half-open. An empty side belongs to
     // a frame only when its insertion point is strictly inside that frame.
     // Deleting/inserting a whole frame must not select its unchanged neighbor.
     const selected = blocks.filter(
-        ([a, b]) =>
+        ({ lines: [a, b], offsets: [i, j] }) =>
           whole ||
-          changed.some(([start, end]) =>
+          (exact ? exact.some(([start, end]) => start === end ? i < start && start < j : i < end && start < j) : changed.some(([start, end]) =>
             start === end
               ? a - 1 < start && start < b
               : a - 1 < end && start < b,
-          ),
+          )),
       ),
       queries = selected.length
-        ? selected.map(([, b]) => b)
+        ? selected.map(({ lines: [, b] }) => b)
         : enclosingOnly
           ? []
           : changed

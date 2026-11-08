@@ -1,5 +1,6 @@
 // Simplified Chinese for the review viewer, keyed by the English text.
 export const zhCN: Record<string, string> = {
+  "Confirm this option before reviewing its changes.": "请先确认此方案，再审阅其中的修改。",
   'Your comments are saved. Continue in Chat to request a revision.': '评论已保存，可在聊天框中发送修改意见。',
 
   "Edit": "编辑",

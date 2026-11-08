@@ -10,6 +10,8 @@ import { CONFIG_NAME, loadProject, type Project } from "./core/config.ts";
 import { Store } from "./core/store.ts";
 import { Tasks } from "./core/tasks.ts";
 import { Review } from "./core/review.ts";
+import { useNoteOption, type OptionInput } from "./core/note-options.ts";
+import { previewNoteOption } from "./core/option-preview.ts";
 import { SourceEdits } from "./core/source-edit.ts";
 import { Reconciliations } from "./core/reconcile.ts";
 import { Deliveries } from "./core/delivery.ts";
@@ -218,6 +220,23 @@ export function createServer(app: App) {
             : 0,
         ),
     );
+    server.post<{ Params: { name: string }; Body: OptionInput }>("/api/tasks/:name/source/options/preview",
+      request => previewNoteOption(app, app.tasks.get(request.params.name).name, request.body));
+    server.get<{ Params: { name: string; number: string; key: string; file: string } }>(
+      "/option-files/:name/:number/:key/:file", (request, reply) => {
+        const { name, number, key, file } = request.params;
+        const task = app.tasks.get(name, false);
+        if (!/^\d+$/.test(number) || !/^[a-f0-9]{64}$/.test(key) || !/^[\w.-]+\.(svg|png|pdf)$/.test(file))
+          return reply.code(404).send({ error: "No such file" });
+        const root = path.resolve(app.state, "cache/option-previews");
+        const target = path.resolve(root, task.name, String(Number(number)), key, file);
+        if (!target.startsWith(root + path.sep)) return reply.code(404).send({ error: "No such file" });
+        if (!fs.existsSync(target)) return reply.code(404).send({ error: "No such file" });
+        reply.header("Cache-Control", "private, max-age=31536000, immutable").type(file.endsWith(".svg") ? "image/svg+xml" : file.endsWith(".pdf") ? "application/pdf" : "image/png");
+        return fs.createReadStream(target);
+      });
+    server.post<{ Params: { name: string }; Body: OptionInput }>("/api/tasks/:name/source/options",
+      request => useNoteOption(app, app.tasks.get(request.params.name).name, request.body));
     server.get<{ Params: { name: string; number: string } }>(
       "/api/tasks/:name/rounds/:number",
       (request) =>

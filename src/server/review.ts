@@ -51,13 +51,13 @@ export function annotateReviewState(value: unknown, tasks: readonly Task[]): unk
 
 export function allowedReviewRoute(route: string, method: string): boolean {
   if (route.includes('..') || route.includes('\\')) return false;
-  if (method === 'GET') return route === '/' || /^\/(assets|fonts)\/[\w./-]+$/.test(route) || /^\/files\/[a-z0-9-]+\/\d+\/[\w.-]+\.(svg|png)$/.test(route) || /^\/api\/tasks(?:\/[a-z0-9-]+(?:\/(?:state|source|rounds\/\d+(?:\/effects\/c\d+|\/references)?))?)?$/.test(route);
-  return method === 'POST' && /^\/api\/tasks\/[a-z0-9-]+\/(decide|undo|note|source|rounds\/\d+\/references\/confirm)$/.test(route);
+  if (method === 'GET') return route === '/' || /^\/option-files\/[a-z0-9-]+\/\d+\/[a-f0-9]{64}\/[\w.-]+\.(svg|png|pdf)$/.test(route) || /^\/(assets|fonts)\/[\w./-]+$/.test(route) || /^\/files\/[a-z0-9-]+\/\d+\/[\w.-]+\.(svg|png)$/.test(route) || /^\/api\/tasks(?:\/[a-z0-9-]+(?:\/(?:state|source|rounds\/\d+(?:\/effects\/c\d+|\/references)?))?)?$/.test(route);
+  return method === 'POST' && /^\/api\/tasks\/[a-z0-9-]+\/(decide|undo|note|source(?:\/options)?|rounds\/\d+\/references\/confirm)$/.test(route);
 }
 export function rewriteReviewJson(value: any, prefix: string): any {
   if (Array.isArray(value)) return value.map(v => rewriteReviewJson(v, prefix));
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, k === 'url' && typeof v === 'string' && /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(v) ? prefix + new URL(v).pathname + new URL(v).search : rewriteReviewJson(v, prefix)]));
-  return typeof value === 'string' && value.startsWith('/files/') ? prefix + value : value;
+  return typeof value === 'string' && (value.startsWith('/files/') || value.startsWith('/option-files/')) ? prefix + value : value;
 }
 export function rewriteReviewHtml(html: string, prefix: string): string {
   const script = `<script>(()=>{const prefix=${JSON.stringify(prefix)};if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(20)),b=>b.toString(16).padStart(2,'0')).join('');const original=window.fetch;window.fetch=(input,init)=>{if(typeof input==='string'&&input.startsWith('/api/'))input=prefix+input;const response=original.call(window,input,init);if(typeof input==='string'&&/\\/rounds\\/\\d+$/.test(input))response.then(r=>{if(r.ok)r.clone().json().then(value=>{if(Number.isSafeInteger(value.round)){document.documentElement.dataset.papilotRound=String(value.round);window.dispatchEvent(new Event('papilot:round'));}}).catch(()=>{});}).catch(()=>{});return response};})();</script>`;

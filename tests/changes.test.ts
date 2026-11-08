@@ -77,11 +77,11 @@ test('the PDF comparison stages, reverts and restores single changes', { skip: !
   const { root, git, commit } = repository();
   const state = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-changes-state-'));
   const changes = new Changes(state);
-  const paragraphs = (edits: Record<number, string>) => `\\documentclass{article}\n\\begin{document}\n${Array.from({ length: 24 }, (_, i) => `${edits[i] ?? `Paragraph ${i} of the paper.`}\n\n`).join('')}\\end{document}\n`;
+  const paragraphs = (edits: Record<number, string>) => `\\documentclass{article}\n\\begin{document}\n${Array.from({ length: 24 }, (_, i) => `${edits[i] ?? (i === 2 ? 'The method is fast and the result is useful.' : `Paragraph ${i} of the paper.`)}\n\n`).join('')}\\end{document}\n`;
   try {
     fs.writeFileSync(path.join(root, 'main.tex'), paragraphs({}));
     git('add', '.'); commit('Initial');
-    fs.writeFileSync(path.join(root, 'main.tex'), paragraphs({ 2: 'Paragraph 2, now longer.', 20: 'A new paragraph 20.' }));
+    fs.writeFileSync(path.join(root, 'main.tex'), paragraphs({ 2: 'The method is efficient and the result is practical.', 20: 'Paragraph 20 of the manuscript.' }));
     fs.writeFileSync(path.join(root, 'main.aux'), 'build output');
     let page: any;
     for (let tries = 0; tries < 240; tries++) {
@@ -90,24 +90,30 @@ test('the PDF comparison stages, reverts and restores single changes', { skip: !
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     assert.equal(page.state, 'reviewing', JSON.stringify(page.job));
-    const [early, late] = changes.detail('p', page.latest).units;
-    assert.deepEqual(changes.detail('p', page.latest).units.map((unit: any) => unit.file), ['main.tex', 'main.tex'], 'Untracked build output is left out');
+    const [early, neighbor, late] = changes.detail('p', page.latest).units;
+    assert.deepEqual(changes.detail('p', page.latest).units.map((unit: any) => unit.file), ['main.tex', 'main.tex', 'main.tex'], 'Untracked build output is left out');
 
+    page = await changes.act('p', root, 'token', 'stage', page.latest, [neighbor.id]);
+    assert.match(git('show', ':main.tex'), /The method is fast and the result is practical/);
+    assert.equal(page.decisions[early.id], 'pending', 'Staging one word leaves its same-line neighbour pending');
     page = await changes.act('p', root, 'token', 'stage', page.latest, [late.id]);
-    assert.deepEqual(page.decisions, { [early.id]: 'pending', [late.id]: 'accepted' });
-    assert.match(git('diff', '--cached'), /\+A new paragraph 20\./);
-    assert.doesNotMatch(git('diff', '--cached'), /now longer/);
+    assert.deepEqual(page.decisions, { [early.id]: 'pending', [neighbor.id]: 'accepted', [late.id]: 'accepted' });
+    assert.match(git('diff', '--cached'), /\+Paragraph 20 of the manuscript\./);
+    assert.doesNotMatch(git('diff', '--cached'), /efficient/);
 
     page = await changes.act('p', root, 'token', 'revert', page.latest, [early.id]);
     assert.equal(page.decisions[early.id], 'rejected');
-    assert.doesNotMatch(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), /now longer/);
-    assert.match(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), /A new paragraph 20\./);
+    assert.doesNotMatch(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), /efficient/);
+    assert.match(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), /Paragraph 20 of the manuscript\./);
 
     page = await changes.undo('p', root, 'token', page.undo.id);
     assert.deepEqual(page.restored, [early.id]);
-    assert.match(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), /now longer/);
+    assert.match(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), /efficient/);
     assert.equal(page.decisions[late.id], 'accepted', 'Undoing a revert keeps what is staged');
 
+    page = await changes.act('p', root, 'token', 'unstage', page.latest, [neighbor.id]);
+    assert.doesNotMatch(git('show', ':main.tex'), /practical/);
+    assert.equal(page.decisions[late.id], 'accepted');
     page = await changes.act('p', root, 'token', 'unstage', page.latest, [late.id]);
     assert.equal(git('diff', '--cached'), '');
 

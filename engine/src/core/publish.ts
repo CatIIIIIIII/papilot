@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { ROOT, codeVersion } from "../runtime.ts";
 import { Builder, BuildError, auxiliaryBuildError, buildDate } from "./build.ts";
 import { diffUnitsAsync, scopeViolationsAsync, withUnits } from "./changes.ts";
+import { acceptNoteOption, noteOptionUnits } from "./note-options.ts";
 import { isFigure } from "./config.ts";
 import { now, readJson, writeJson } from "./files.ts";
 import { runAsync } from "./process.ts";
@@ -359,6 +360,7 @@ export class Publisher {
             throw new Error("Server stopped during publication.");
         }
       }
+      await acceptNoteOption(this.app, job.task, job.id);
       this.update(job.id, { status: "done", result, finished: now() });
     } catch (error) {
       // A build the server stopped stays unfinished: the next server marks it
@@ -438,7 +440,8 @@ export class Publisher {
         changes: latest.units.length,
       };
     const files = await app.repo.changedFilesAsync(before, after);
-    if (!files.length) {
+    const optionUnits = await noteOptionUnits(app, name, job.id, before, after);
+    if (!files.length && !optionUnits) {
       // A manual correction can remove the final proposal altogether. Give
       // it an empty latest round so the viewer cannot keep offering the old
       // wording for acceptance after it has disappeared from the worktree.
@@ -454,7 +457,7 @@ export class Publisher {
       }
       return { outcome: "empty", round: null, changes: 0 };
     }
-    const units = await diffUnitsAsync(app.repo, before, after, (f) =>
+    const units = optionUnits ?? await diffUnitsAsync(app.repo, before, after, (f) =>
       isFigure(project, f),
     );
     this.phase(job, "build");

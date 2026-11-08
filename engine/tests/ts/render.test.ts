@@ -18,8 +18,10 @@ import {
 import type { Build } from "../../src/render/locate.ts";
 import { byReading, laneAt, readingKey } from "../../src/render/locate.ts";
 import { typesetWords } from "../../src/render/round.ts";
+import { sourcePairs } from "../../src/render/source-spans.ts";
+import { textEdits } from "../../src/core/text-edits.ts";
 import { opcodes } from "../../src/core/diff.ts";
-import type { Card, Heading, Position, Strip } from "../../src/types.ts";
+import type { Card, Heading, Position, Strip, Unit } from "../../src/types.ts";
 const documents: PdfDocument[] = [];
 const folders: string[] = [];
 it("keeps at least a page of context on each side of an isolated edit", () => {
@@ -149,6 +151,64 @@ function sectioned(doc: PdfDocument, lines: number[]): Build {
     } as unknown as Build;
   return build;
 }
+it("shares full PDF context while attributing each word highlight to its source edit", () => {
+  const a = "The method is fast and the result is useful.",
+    b = "The method is efficient and the result is practical.",
+    old = sectioned(document([a]), [0]),
+    next = sectioned(document([b]), [0]);
+  old.read = () => a;
+  next.read = () => b;
+  const cards = textEdits(a, b).map((op, i): Card => {
+    const unit = { file: "paper.tex", text_ops: [op] } as Unit,
+      pairs = sourcePairs(
+        old,
+        next,
+        unit,
+        positions(old.document),
+        positions(next.document),
+      );
+    expect(pairs).not.toBeNull();
+    const shown = old.document
+      .page(0)
+      .lines[0].chars.filter((c) =>
+        pairs![0].before_marks.some((m) => containsCenter(m.rect, c.rect)),
+      )
+      .map((c) => c.text)
+      .join("");
+    expect(shown).toBe(i === 0 ? "fast" : "useful");
+    return {
+      id: `c${i}`,
+      file: unit.file,
+      context_node: "0",
+      comparison: "text",
+      aligned: true,
+      independent: true,
+      pairs: pairs!,
+    };
+  });
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-fine-"));
+  folders.push(folder);
+  const result = renderDocument(
+      old,
+      next,
+      cards,
+      new Strips(folder),
+      () => false,
+    ),
+    changes = [
+      ...result.sections.flatMap((s) => s.blocks),
+      ...result.loose,
+    ].filter((b) => b.kind === "change");
+  expect(changes.map(c => c.units)).toEqual([["c0", "c1"]]);
+  expect(changes[0].before[0].text?.map(line => line.text.trim()).join(" ")).toBe(a);
+  const words = (unit: string, side: "before" | "after") => changes[0][side].flatMap(strip =>
+    strip.text?.flatMap(line => line.chars.filter(char => strip.marks?.some(mark => mark.unit === unit && containsCenter(mark.rect, char.rect))).map(char => char.text)) || []).join("").trim();
+  expect(words("c0", "before")).toBe("fast");
+  expect(words("c1", "before")).toBe("useful");
+  expect(words("c0", "after")).toBe("efficient");
+  expect(words("c1", "after")).toBe("practical");
+});
+
 it("renders shared ink once across sections and floating edits, retaining every edit", () => {
   const doc = document([
       Array.from(

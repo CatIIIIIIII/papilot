@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createPlaygroundData, PlaygroundDownloadRequired, projectId } from '../src/web/playground/data.ts';
-import type { Annotation, Manuscript, Snapshot, Task, TimelineItem, NoteResult, GitStatus, GitHistory, GitDiff, GitOverview } from '../src/shared.ts';
+import type { Annotation, Manuscript, Snapshot, Task, TimelineItem, NoteResult, NoteOptions, GitStatus, GitHistory, GitDiff, GitOverview } from '../src/shared.ts';
 import { AGENT_IDS } from '../src/shared.ts';
 import { replayDuration } from '../src/web/playground/replay.ts';
 const base = `/projects/${projectId}`;
@@ -160,6 +160,36 @@ test('prepared tasks open once, persist, and link each seeded note to its actual
   assert.equal((await reload<Manuscript>(`${base}/manuscript`)).annotations.length, 7);
   await reload('/playground/reset', {});
   assert.equal((await reload<Snapshot>('/state')).tasks.length, 3);
+});
+test('prepared note options preview locally and accept only the focused note through the shared journal', async () => {
+  let clock = 1_000_000;
+  const { api, storage } = setup(() => clock), id = 'example-note-math';
+  await api('/playground/tasks', { preset: id }); clock += replayDuration;
+  const { notes } = await api<{ notes: NoteResult[] }>(`/tasks/${id}/note-results`);
+  assert.equal(notes.length, 2);
+  const route = `/tasks/${id}/note-options`, key = notes[0].key;
+  const before = await api<Snapshot>('/state');
+  const options = await api<NoteOptions>(`${route}?key=${encodeURIComponent(key)}`);
+  assert.equal(options.selected, 'current');
+  assert.equal(options.locked, undefined);
+  const chosen = options.options[0].edits.map(edit => edit.unit);
+  assert.deepEqual(chosen, [...new Set(notes[0].changes.flatMap(change => change.units))]);
+  const comparison = await api<import('../engine/src/types.ts').RoundDetail>(`${route}/preview?key=${encodeURIComponent(key)}&round=1&option=current`);
+  assert.ok(comparison.units.length > chosen.length, 'a focused note still previews the complete prepared comparison');
+  assert.equal(comparison.files, `/demo/fixtures/${id}/`);
+  await assert.rejects(api(route, { key, round: 1 }), PlaygroundDownloadRequired, 'only explicit AI generation asks for the installed app');
+  await assert.rejects(api(`${route}?key=missing`), /no linked changes/);
+  await assert.rejects(api(`${route}/preview?key=${encodeURIComponent(key)}&round=2&option=current`), /review changed/);
+  await assert.rejects(api(route, { key, round: 1, option: 'unprepared', accept: true, id: 'bad' }), /no longer available/);
+  assert.deepEqual(await api('/state'), before, 'reads and unsupported alternatives must not change decisions');
+  const accepted = await api<NoteOptions>(route, { key, round: 1, option: 'current', accept: true, id: 'note-accept' });
+  assert.ok(accepted.locked);
+  const reload = createPlaygroundData(storage, 'test', 'paper-hash', pages, () => clock);
+  const decisions = (await reload<{ decisions: Record<string, string> }>(`/playground-reviews/${id}/state`)).decisions;
+  assert.deepEqual(Object.keys(decisions).filter(unit => decisions[unit] === 'accepted'), chosen);
+  assert.ok(notes[1].changes.flatMap(change => change.units).every(unit => decisions[unit] === 'pending'));
+  await reload(`/playground-reviews/${id}/undo`, { id: 'note-accept' });
+  assert.equal((await reload<NoteOptions>(`${route}?key=${encodeURIComponent(key)}`)).locked, undefined);
 });
 test('demo replay reveals progress and streams the answer before publishing the diff, with pause and reload support', async () => {
   let clock = 1_000_000;

@@ -1,8 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ReviewDraft, reviewNoteSummary, reviewSubmission, type ReviewMark } from '../src/web/review-draft.ts';
+import { ReviewDraft, reviewCommentMark, reviewNoteSummary, reviewSubmission, type ReviewMark } from '../src/web/review-draft.ts';
 const mark: ReviewMark = { strip: '1:before.svg', round: 1, stop: 0, where: 'Round 1 · PDF page 1 · Before · main.tex:2–4', quote: 'Original term', rects: [[0.1, 0.2, 0.4, 0.3]], region: false };
 const storage = () => { const values = new Map<string, string>(); return { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } }; };
+test('each alternative keeps its own comment and rejection in the unsent draft', () => {
+  const saved = storage(), draft = new ReviewDraft('options', saved);
+  const option = { ...mark, where: mark.where + ' · Option: Concise', option: { note: 'run:0', id: 'brief', label: 'Concise', kind: 'comment' as const } };
+  const id = draft.add(option, false)!;
+  draft.edit(id, 'Keep the technical term.');
+  assert.equal(draft.add(option, false), id, 'reopening edits the same draft');
+  const rejected = draft.add({ ...option, option: { ...option.option, id: 'specific', kind: 'reject' } }, false, 'Do not use this option.')!;
+  const reopened = new ReviewDraft('options', saved);
+  assert.equal(reopened.getSnapshot().notes.length, 2);
+  assert.equal(reopened.getSnapshot().notes.find(note => note.id === id)?.comment, 'Keep the technical term.');
+  reopened.remove(rejected);
+  assert.equal(reopened.getSnapshot().notes.length, 1, 'undoing rejection leaves the other option comment intact');
+  const summary = reviewNoteSummary(reopened.getSnapshot().notes[0]);
+  assert.match(summary.where, /Option: Concise/);
+  assert.equal(summary.comment, 'Keep the technical term.');
+  assert.deepEqual(summary.anchor, { round: 1, sources: [{ file: 'main.tex', lines: [2, 4] }] });
+});
 test('review draft keeps exact before/after anchors across reload and delete/undo', () => {
   const saved = storage(), draft = new ReviewDraft('task', saved);
   draft.add(mark); const note = draft.getSnapshot().notes[0]; draft.edit(note.id, 'Keep it.');
@@ -43,6 +60,24 @@ test('Comment reopens one overall comment per change while quotations stay indep
   draft.add({ ...mark, whole: true, stop: 1 });
   draft.add({ ...mark, whole: true, round: 2 });
   assert.equal(draft.getSnapshot().notes.length, 5);
+});
+test('scoped comments preserve their exact units and never merge with the surrounding change', () => {
+  const saved = storage(), draft = new ReviewDraft('task', saved);
+  const selected = reviewCommentMark(mark, { round: 1, stop: 0, changes: ['c001'], scope: { where: 'After · main.tex:10', quote: 'efficient' } }, 'efficient and robust with five datasets');
+  const id = draft.add(selected)!;
+  draft.edit(id, 'Keep this concise.');
+  assert.equal(draft.add(selected), id);
+  draft.add({ ...selected, changes: ['c002'], quote: 'robust' });
+  draft.add(reviewCommentMark(mark, { round: 1, stop: 0 }, 'efficient and robust with five datasets'));
+  const reopened = new ReviewDraft('task', saved), notes = reopened.getSnapshot().notes;
+  assert.equal(notes.length, 3);
+  assert.deepEqual(notes[0].changes, ['c001']);
+  assert.equal(notes[0].whole, false);
+  assert.equal(notes[0].quote, 'efficient');
+  const sent = reviewSubmission(reopened.getSnapshot()).notes.map(reviewNoteSummary);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].where, /Source changes: c001$/);
+  assert.deepEqual(sent[0].anchor, { round: 1, sources: [{ file: 'main.tex', lines: [10, 10] }] });
 });
 test('reloading the first trial consolidates repeated overall drafts without losing text', () => {
   const saved = storage(); saved.setItem('task', JSON.stringify({ notes: [

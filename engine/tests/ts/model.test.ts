@@ -8,8 +8,9 @@ import {
   visibleStop,
   wordDiff,
   buildStops,
+  commentScope,
 } from "../../src/web/model.ts";
-import type { RenderedRound, Decision, ChangeBlock } from "../../src/types.ts";
+import type { RenderedRound, Decision, ChangeBlock, Unit } from "../../src/types.ts";
 const change = (units: string[]): ChangeBlock => ({
   kind: "change",
   units,
@@ -70,6 +71,21 @@ it("resolved blocks show chosen versions and counts remain source-unit based", (
     total: 4,
     decided: 3,
   });
+});
+it("pending navigation wraps within the focused units and skips unrelated pending edits", () => {
+  const stops = buildStops(detail), decisions: Record<string, Decision> = {
+    c001: "pending", c002: "pending", c003: "accepted", c004: "pending",
+  };
+  expect(nextPending(stops, decisions, -1, ["c001", "c004"])).toBe(1);
+  expect(nextPending(stops, decisions, 1, ["c001", "c004"])).toBe(3);
+  expect(nextPending(stops, decisions, 3, ["c001", "c004"])).toBe(1);
+  expect(nextPending(stops, decisions, 0, ["c003"])).toBe(-1);
+  expect(nextPending(stops, decisions, 0, [])).toBe(-1);
+});
+it("scoped comments quote only the selected source units, including deletions", () => {
+  const unit = { id: "c001", file: "main.tex", status: "modified", old_start: 9, old_end: 9, new_start: 10, new_end: 10, old_text: "fast", new_text: "efficient" } as Unit;
+  expect(commentScope([unit])).toEqual({ where: "After · main.tex:10", quote: "efficient" });
+  expect(commentScope([{ ...unit, new_text: "" }])).toEqual({ where: "Before · main.tex:9", quote: "fast" });
 });
 it("keeps selected stop during scrolling when it remains visible", () => {
   const regions = [

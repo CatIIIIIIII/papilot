@@ -16,7 +16,7 @@ import { StampWheel } from './stamp-wheel.tsx';
 import { useReviewToolKeys } from './review-tool-keys.ts';
 import { useNoteUndo } from './use-note-undo.ts';
 
-import { reviewDraft, useReviewDraft, type ReviewMark as Mark } from './review-draft.ts';
+import { reviewCommentMark, reviewDraft, useReviewDraft, type ReviewComment, type ReviewMark as Mark } from './review-draft.ts';
 
 type Layer = { strip: HTMLElement; element: HTMLElement; key: string; round: number };
 // A touch selection's ends: the edge of its first and last glyph, with that line's top and bottom.
@@ -248,13 +248,13 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
     const comment = (event: Event) => {
       event.preventDefault();
       if (current.current.busy) return;
-      const detail = (event as CustomEvent<{ round: number; stop: number }>).detail;
+      const detail = (event as CustomEvent<ReviewComment>).detail;
       const change = doc.querySelector<HTMLElement>(`.change[data-stop="${detail.stop}"]`);
       if (!change) return;
       const layer = layers.find(layer => change.contains(layer.strip) && layer.strip.closest('.after')) || layers.find(layer => change.contains(layer.strip));
       const location = change.querySelector<HTMLElement>('.change-where');
       const base = layer ? mark(layer, [], '', false) : { strip: '', round: detail.round, where: `Round ${detail.round} · ${location?.dataset.location || location?.textContent || ''}`, rects: [], region: false, quote: '' };
-      store.add({ ...base, whole: true, stop: detail.stop, quote: Array.from(change.querySelectorAll('.after .pdf-text')).map(el => el.textContent).join(' ').trim() });
+      store.add(reviewCommentMark(base, detail, Array.from(change.querySelectorAll('.after .pdf-text')).map(el => el.textContent).join(' ').trim()));
       onComment();
     };
     view.addEventListener('latex-review:comment', comment);

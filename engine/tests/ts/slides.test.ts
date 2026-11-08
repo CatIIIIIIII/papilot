@@ -227,6 +227,28 @@ The oldvalue is here.
     beforePages: [1],
     slides: true,
   },
+  ...['insert', 'delete'].map(operation => ({
+    name: `${operation} text in a one-line frame retains both versions`,
+    preamble: '\\documentclass{beamer}',
+    body: '  \\begin{frame}{Changed title}The oldvalue is here. ' + (operation === 'delete' ? 'The newvalue is here. ' : '') + '\\end{frame}',
+    from: 'The oldvalue is here. ',
+    to: operation === 'insert' ? 'The newvalue is here. The oldvalue is here. ' : '',
+    pages: [1],
+    beforePages: [1],
+    slides: true,
+  })),
+  ...['insert', 'delete'].map(operation => ({
+    name: `${operation} an indented one-line frame leaves its opposite side empty`,
+    preamble: '\\documentclass{beamer}',
+    body: '  ' + (operation === 'delete' ? '\\begin{frame}{Changed title}The oldvalue is here.\\end{frame}\n  ' : '') + '\\begin{frame}{Following sentinel}Keep this frame unchanged.\\end{frame}',
+    from: operation === 'insert' ? '\\begin{frame}{Following sentinel}' : '\\begin{frame}{Changed title}The oldvalue is here.\\end{frame}\n  ',
+    to: operation === 'insert' ? '\\begin{frame}{Changed title}The newvalue is here.\\end{frame}\n  \\begin{frame}{Following sentinel}' : '',
+    pages: operation === 'insert' ? [1] : [],
+    beforePages: operation === 'delete' ? [1] : [],
+    beforeText: operation === 'insert' ? '' : undefined,
+    afterText: operation === 'delete' ? '' : undefined,
+    slides: true,
+  })),
   ...["frame", "slide"].map((env) => ({
     name: `a ${env} inside a grouping environment`,
     preamble: String.raw`\documentclass{beamer}

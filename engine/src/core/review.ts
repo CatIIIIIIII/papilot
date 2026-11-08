@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { applyUnits, revertUnits } from "./changes.ts";
 import { now, readBytes, readJson, same, writeOrDelete } from "./files.ts";
 import { cleanPath, merge3Async } from "./git.ts";
@@ -280,6 +280,18 @@ export class Review {
         block.after = block.after ? [block.after] : [];
       block.kind = "change";
     }
+    const sources = new Map<string, { text: string; hash?: string }>();
+    const context = (unit: Unit) => {
+      if (!unit.text_ops?.length) return {};
+      if (!sources.has(unit.file)) {
+        const data = this.app.repo.blob(round.before, unit.file);
+        sources.set(unit.file, { text: data?.toString("utf8") || "", ...(data ? { hash: createHash("sha256").update(data).digest("hex") } : {}) });
+      }
+      // Identify the complete baseline file, not just this bounded excerpt.
+      // Accepting another file changes the round's commit but not this source.
+      const { text, hash } = sources.get(unit.file)!, offset = unit.text_ops[0][1], start = Math.max(0, offset - 2000);
+      return { old_context: { text: text.slice(start, unit.text_ops.at(-1)![2] + 2000), start, ...(hash ? { source_hash: hash } : {}) } };
+    };
     return {
       task: name,
       round: number,
@@ -287,6 +299,7 @@ export class Review {
       after: round.after,
       units: round.units.map((u) => ({
         ...u,
+        ...context(u),
         ...render.units[u.id],
         ...(history[u.id] ? { history: history[u.id] } : {}),
       })),
@@ -310,9 +323,25 @@ export class Review {
         if (
           comments[old.id] &&
           old.file === unit.file &&
-          ((old.old_text && old.old_text === unit.old_text) ||
-            Math.max(old.old_start, unit.old_start) <=
-              Math.min(old.old_end, unit.old_end))
+          (old.text_ops && unit.text_ops
+            ? previous.before === round.before
+              ? old.text_ops.some((a) =>
+                  unit.text_ops!.some((b) =>
+                    a[1] === a[2] || b[1] === b[2]
+                      ? a[1] === b[1]
+                      : a[1] < b[2] && b[1] < a[2],
+                  ),
+                )
+              : Boolean(
+                  old.old_text &&
+                  old.old_text === unit.old_text &&
+                  round.units.filter(
+                    (u) => u.file === unit.file && u.old_text === old.old_text,
+                  ).length === 1,
+                )
+            : (old.old_text && old.old_text === unit.old_text) ||
+              Math.max(old.old_start, unit.old_start) <=
+                Math.min(old.old_end, unit.old_end))
         )
           (result[unit.id] ??= []).push({
             round: previous.number,

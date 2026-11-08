@@ -41,6 +41,12 @@ and is labeled as a demo replay; no model is called. Opening the same
 preset again replays the process and keeps its review decisions. Sending an unchanged seeded note without
 extra instructions also opens its matching prepared task. Custom notes, extra
 instructions and follow-ups open a download dialog and preserve the draft.
+Clicking a sent note opens its comparison drawer in the PDF pane, with the full
+prepared comparison, note navigation, a LaTeX view and local accept/reject/comment
+controls. Acceptance uses the same undoable local journal as the main review;
+option feedback stays in the browser's review draft. The prepared proposal is
+the only available option. **Generate alternatives** explicitly opens the download
+dialog; opening or previewing a note does not call an agent or a backend.
 Compilation, imports and agent execution still point to download.
 
 Version Management uses a browser-local mock repository with staged and unstaged

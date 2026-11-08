@@ -11,7 +11,13 @@ const parentApi = (() => {
 })();
 const local = parentApi || createPlaygroundData(browserStorage, version, metadata.key, metadata.pages);
 export async function playgroundApi<T>(route: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  try { return await local<T>(route, body, signal); }
+  try {
+    const result = await local<T>(route, body, signal);
+    // The static demo has no server event stream. Notify the host after local
+    // writes, including decisions made by the note drawer outside the iframe.
+    if (body !== undefined && !parentApi) window.dispatchEvent(new Event('papilot:playground-change'));
+    return result;
+  }
   catch (error) { if (error instanceof PlaygroundDownloadRequired) window.dispatchEvent(new Event('papilot:playground-download')); throw error; }
 }
 (window as DemoWindow).__papilotDemoApi = playgroundApi;

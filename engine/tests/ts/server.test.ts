@@ -65,6 +65,40 @@ it("requires localhost origin and token for mutation", async () => {
       .tasks,
   ).toHaveLength(1);
 });
+it("serves note preview assets only inside the cache for a recorded task", async () => {
+  const task = app.tasks.create("options"), key = "a".repeat(64);
+  const folder = path.join(app.state, "cache/option-previews", task.name, "1", key);
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, "preview.svg"), "<svg>preview</svg>");
+  const outside = path.join(app.state, "outside.svg");
+  fs.writeFileSync(outside, "outside-secret");
+  const base = `/option-files/${task.name}/1/${key}/`;
+  const valid = await server.inject({ url: base + "preview.svg", headers: headers() });
+  expect(valid.statusCode).toBe(200);
+  expect(valid.body).toBe("<svg>preview</svg>");
+  for (const url of [
+    base + "..%2F..%2F..%2F..%2Foutside.svg",
+    base + "..%5C..%5Coutside.svg",
+    base + "%2Ftmp%2Foutside.svg",
+    base + "preview.svg%00.png",
+    base + "%252e%252e%252foutside.svg",
+    base.replace("/options/", "/..%2Foutside/") + "preview.svg",
+    base.replace("/1/", "/..%2Foutside/") + "preview.svg",
+    base.replace(key, "..%2Foutside") + "preview.svg",
+    base.replace(key, "a".repeat(63)) + "preview.svg",
+    base.replace("/options/", "/unknown/") + "preview.svg",
+  ]) {
+    const response = await server.inject({ url, headers: headers() });
+    expect(response.statusCode, url).toBeGreaterThanOrEqual(400);
+    expect(response.body, url).not.toContain("outside-secret");
+  }
+  expect((await server.inject({ url: base + "preview.svg", headers: { ...headers(), origin: "https://evil.example" } })).statusCode).toBe(403);
+  for (const suffix of ["/source/options", "/source/options/preview"]) {
+    expect((await server.inject({ method: "POST", url: `/api/tasks/${task.name}${suffix}`, headers: { host: "127.0.0.1:9" }, payload: {} })).statusCode).toBe(403);
+    expect((await server.inject({ method: "POST", url: `/api/tasks/..%2Foutside${suffix}`, headers: headers(), payload: {} })).statusCode).toBe(400);
+  }
+  expect(fs.readFileSync(outside, "utf8")).toBe("outside-secret");
+});
 it("validates action schemas and serves immutable compressed vectors", async () => {
   const task = app.tasks.create("test");
   f.edit(task, METHOD, "Method sentence 2.", "new");

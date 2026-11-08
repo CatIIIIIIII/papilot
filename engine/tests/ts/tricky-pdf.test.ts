@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { it, expect } from "vitest";
 import { Fixture } from "./helpers.ts";
+import { applyUnits, revertUnits } from "../../src/core/changes.ts";
 import { run, which } from "../../src/core/process.ts";
 import { containsCenter, PdfDocument } from "../../src/render/pdf.ts";
 import { ROOT } from "../../src/runtime.ts";
@@ -376,10 +377,14 @@ ${scenario.body}
         const result = app.publisher.job(job.id);
         expect(result.status, JSON.stringify(result.result)).toBe("done");
         const detail = app.review.roundDetail(task.name, 1);
-        expect(detail.units).toHaveLength(1);
-        expect(detail.units[0].visual).not.toBe("unmapped");
-        if (scenario.visual)
-          expect(detail.units[0].visual).toBe(scenario.visual);
+        const expected = Buffer.from(source.replace(scenario.from, scenario.to));
+        expect(detail.units.length).toBeGreaterThan(0);
+        expect(applyUnits(Buffer.from(source), expected, detail.units)).toEqual(expected);
+        expect(revertUnits(Buffer.from(source), expected, detail.units)).toEqual(Buffer.from(source));
+        for (const unit of detail.units) {
+          expect(unit.visual).not.toBe("unmapped");
+          if (scenario.visual) expect(unit.visual).toBe(scenario.visual);
+        }
         const blocks = [
             ...detail.sections.flatMap((s) =>
               s.blocks.filter((b): b is ChangeBlock => b.kind === "change"),
@@ -395,6 +400,7 @@ ${scenario.body}
                 .join("\n"),
             ),
           folder = path.join(app.state, "rounds/tricky/001");
+        expect(new Set(blocks.flatMap(block => block.units))).toEqual(new Set(detail.units.map(unit => unit.id)));
         if (scenario.before) expect(text(before)).toContain(scenario.before);
         if (scenario.after) expect(text(after)).toContain(scenario.after);
         for (const outside of scenario.outside ?? []) {
@@ -442,6 +448,12 @@ ${scenario.body}
           expect(blue(before)).toBe(true);
           expect(blue(after)).toBe(true);
           expect(blocks.some((b) => "moved" in b && b.moved)).toBe(true);
+          for (const [side, strips] of [['old_text', before], ['new_text', after]] as const) {
+            const unit = detail.units.find(unit => unit[side].includes('Moved paragraph sentinel'))!;
+            const marks = strips.flatMap(strip => strip.marks ?? []).filter(mark => mark.unit === unit.id);
+            expect(marks.length).toBeGreaterThan(0);
+            expect(marks.every(mark => mark.kind === 'moved')).toBe(true);
+          }
         }
         if (scenario.relocated)
           expect(before.some((a) => after.some((b) => a.page !== b.page))).toBe(

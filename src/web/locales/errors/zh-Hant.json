@@ -246,5 +246,15 @@
   "Grok disconnected. Reconnect to resume.": "Grok 已中斷，請重新連線後繼續。",
   "Pause the task before restoring its session.": "還原工作階段前請先暫停任務。",
   "This task already has a running turn.": "此任務已有執行中的回合。",
-  "Use your authorized Tailscale account to access Papilot.": "請使用已獲授權的 Tailscale 帳號存取 Papilot。"
+  "Use your authorized Tailscale account to access Papilot.": "請使用已獲授權的 Tailscale 帳號存取 Papilot。",
+  "The review changed. Reload the options.": "審閱已更新，請重新載入方案。",
+  "This option is no longer available.": "此方案已無法使用。",
+  "The review action could not be confirmed. Check task status before retrying.": "無法確認審閱操作是否完成。重試前請檢查任務狀態。",
+  "The option save could not be confirmed. Check task status before retrying.": "無法確認方案是否已儲存。重試前請檢查任務狀態。",
+  "The agent did not return two usable options. Try again.": "智慧代理未傳回兩個可用方案，請重試。",
+  "The agent returned an incomplete option. Try again.": "智慧代理傳回的方案不完整，請重試。",
+  "Each option needs a brief, specific reason. Try again.": "每個方案都需要簡短、具體的理由，請重試。",
+  "The option includes an invalid change. Try again.": "方案包含無效修改，請重試。",
+  "The agent repeated an option. Try again.": "智慧代理傳回了重複方案，請重試。",
+  "This note has no linked changes.": "此註解沒有關聯的修改。"
 }

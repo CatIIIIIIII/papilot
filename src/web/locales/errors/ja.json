@@ -246,5 +246,15 @@
   "Grok disconnected. Reconnect to resume.": "Grok が切断されました。再接続して再開してください。",
   "Pause the task before restoring its session.": "セッションを復元する前にタスクを一時停止してください。",
   "This task already has a running turn.": "このタスクには実行中のターンがあります。",
-  "Use your authorized Tailscale account to access Papilot.": "許可された Tailscale アカウントで Papilot にアクセスしてください。"
+  "Use your authorized Tailscale account to access Papilot.": "許可された Tailscale アカウントで Papilot にアクセスしてください。",
+  "The review changed. Reload the options.": "レビューが更新されました。案を再読み込みしてください。",
+  "This option is no longer available.": "この案は利用できなくなりました。",
+  "The review action could not be confirmed. Check task status before retrying.": "レビュー操作の完了を確認できませんでした。再試行する前にタスクの状態を確認してください。",
+  "The option save could not be confirmed. Check task status before retrying.": "案の保存を確認できませんでした。再試行する前にタスクの状態を確認してください。",
+  "The agent did not return two usable options. Try again.": "エージェントが利用可能な案を 2 つ返しませんでした。もう一度お試しください。",
+  "The agent returned an incomplete option. Try again.": "エージェントが返した案は不完全です。もう一度お試しください。",
+  "Each option needs a brief, specific reason. Try again.": "各案には短く具体的な理由が必要です。もう一度お試しください。",
+  "The option includes an invalid change. Try again.": "この案には無効な変更が含まれています。もう一度お試しください。",
+  "The agent repeated an option. Try again.": "エージェントが同じ案を繰り返しました。もう一度お試しください。",
+  "This note has no linked changes.": "この注釈に関連付けられた変更はありません。"
 }

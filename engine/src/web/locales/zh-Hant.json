@@ -263,5 +263,6 @@
   "{source} has this work with other details. Compare them below.": "{source} 中收錄的此著作具有其他詳細資訊。請在下方進行比對。",
   "{staged} of {total} staged": "已暫存 {staged} / {total}",
   "↵ send · Esc cancel": "↵ 傳送 · Esc 取消",
-  "Your comments are saved. Continue in Chat to request a revision.": "您的評論已儲存。請在聊天中繼續提出修改要求。"
+  "Your comments are saved. Continue in Chat to request a revision.": "您的評論已儲存。請在聊天中繼續提出修改要求。",
+  "Confirm this option before reviewing its changes.": "請先確認此方案，再審閱其中的修改。"
 }

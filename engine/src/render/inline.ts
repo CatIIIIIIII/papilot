@@ -33,6 +33,7 @@ import {
   containsCenter,
   intersect,
   intersects,
+  union,
   PdfDocument,
   type Raster,
 } from "./pdf.ts";
@@ -774,8 +775,8 @@ export function renderDocument(
     }
   }
   const sections = readingSections(next);
-  // Set the final footprint before resolving ownership. No later snap or
-  // margin expansion may make independently owned crops overlap again.
+  // Set the final footprint before grouping coarse crops. Precisely located
+  // word edits may share a line of context without sharing a decision.
   for (const card of cards)
     for (const pair of card.pairs)
       for (const [side, build] of [
@@ -934,19 +935,24 @@ export function renderDocument(
         );
       },
       images = (side: "old" | "new", build: Build, positions: Position[]) =>
-        positions
-          .map((p) =>
-            strips.write(
-              build.document,
-              p.page,
-              p.clip[1],
-              p.clip[3],
-              marks(side, p.page),
-              side,
-              [p.clip[0], p.clip[2]],
-            ),
-          )
-          .filter((s): s is Strip => s !== null),
+        positions.flatMap(p => {
+          const image = strips.write(build.document, p.page, p.clip[1], p.clip[3],
+            marks(side, p.page), side, [p.clip[0], p.clip[2]]);
+          if (!image) return [];
+          image.marks = area.pairs.flatMap(([i, j]) => {
+            const card = cards[i], pair = card.pairs[j];
+            if (pair[side]?.page !== p.page) return [];
+            return drawn(card, side === "old" ? pair.before_marks : pair.after_marks)
+              .filter(m => m.kind !== "context" && intersects(m.rect, p.clip))
+              .map(m => {
+                const r = intersect(m.rect, p.clip);
+                return { kind: m.kind, unit: card.id,
+                  rect: [r[0] - (image.left || 0), r[1] - image.top!, r[2] - (image.left || 0), r[3] - image.top!] as Rect };
+              });
+          });
+          image.marks = [...new Map(image.marks.map(mark => [JSON.stringify(mark), mark])).values()];
+          return [image];
+        }),
       kinds = new Set(
         area.pairs.flatMap(([i, j]) => {
           const card = cards[i],

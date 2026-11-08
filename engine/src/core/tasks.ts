@@ -288,6 +288,7 @@ export class Tasks {
       recursive: true,
       force: true,
     });
+    await fs.promises.rm(path.join(app.state, "cache/option-previews", task.name), { recursive: true, force: true });
     app.store.execute("UPDATE tasks SET closed=? WHERE name=?", now(), name);
     return {
       changed: await app.repo.changedFilesAsync(task.base, task.accepted),
