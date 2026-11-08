@@ -411,6 +411,8 @@ kbd {
 }
 .side {
   position: relative;
+  /* Short PDF strips still need room for the 10px label and its 4px insets. */
+  min-height: 18px;
   border-left: 2px solid transparent;
 }
 .side.before {
@@ -422,6 +424,7 @@ kbd {
   border-left-color: var(--after-edge);
 }
 .side.after.identical {
+  min-height: 0;
   background: transparent;
   border-left-color: var(--line);
 }
@@ -503,6 +506,7 @@ kbd {
   display: none;
 }
 .change[data-resolved] .side {
+  min-height: 0;
   background: transparent;
   border-left-color: transparent;
 }
