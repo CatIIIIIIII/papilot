@@ -49,7 +49,10 @@ try {
   await expect(banner.locator('nav, p')).toHaveCount(0);
   await expect(banner.locator('strong')).toHaveText('static demo');
   for (const platform of ['macOS', 'Windows', 'Linux']) await expect(banner.getByRole('button', { name: `Download for ${platform}`, exact: true })).toBeVisible();
-  await expect(banner.getByRole('button')).toHaveCount(4);
+  const reset = banner.getByRole('button', { name: 'Reset demo', exact: true });
+  await expect(reset).toBeVisible();
+  await expect(reset).toHaveAttribute('title', 'Reset demo');
+  await expect(banner.getByRole('button')).toHaveCount(5);
   await expect(page.getByText('Playground', { exact: true })).toHaveCount(0);
   await expect(page.locator('.task-row')).toHaveCount(3);
   const modelMenu = page.getByRole('dialog', { name: 'Agent settings', exact: true });
@@ -275,12 +278,18 @@ try {
   await expect(review.locator('.dock button.comment')).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: 'test-results/playground-mobile-diff.png' });
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
+  await Promise.all([page.waitForEvent('load'), reset.click()]);
+  await expect(page.getByRole('region', { name: 'PDF preview', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(input).toHaveValue('');
+  await showSidebar();
+  await expect(page.locator('.task-row')).toHaveCount(3);
+  await expect(marks()).toHaveCount(0);
+  await openTask('example-clarity');
+  await expect(review.locator('.change[data-state="pending"]')).toHaveCount(2);
   await openTask('example-math');
   await expect(page.locator('.review-draft-note')).toHaveCount(0);
   await expect(review.locator('.change[data-state="pending"]')).toHaveCount(mathBlocks);
-  await page.setViewportSize({ width: 1440, height: 1000 });
   await showSidebar();
   await page.locator('.sidebar').getByRole('button', { name: /^Version Management/ }).click();
   const git = page.locator('.git-workspace');
@@ -316,9 +325,16 @@ try {
   await expect(git.locator('.git-version-row')).toHaveCount(5);
   await page.reload();
   await expect(git.locator('.git-version-row')).toHaveCount(5);
+  await Promise.all([page.waitForEvent('load'), reset.click()]);
+  await expect(input).toBeVisible();
+  await expect(git).toHaveCount(0);
+  await page.locator('.sidebar').getByRole('button', { name: /^Version Management/ }).click();
+  await expect(git.locator('.git-file')).toHaveCount(3);
+  await expect(git.locator('.git-version-row')).toHaveCount(3);
   await openManuscript();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(banner).toBeVisible();
+  await expect(reset).toBeInViewport();
   await expect(page.locator('.sidebar')).toBeHidden();
   assert.ok(await banner.getByRole('link', { name: 'Download Papilot', exact: true }).evaluate(element => element.getBoundingClientRect().right <= innerWidth));
   await page.screenshot({ path: 'test-results/demo-banner-mobile.png', animations: 'disabled' });
@@ -366,5 +382,5 @@ try {
   assert.deepEqual(apiRequests, [], 'static playground must never contact /api');
   assert.deepEqual(failed, [], 'all static assets resolve under /demo/');
   assert.deepEqual(errors, []);
-  console.log('PASS: precise notes, prepared tasks and note-to-diff links, review decisions, model controls, local Git diff/stage/commit/sync/restore/history, dismissible banner, download gates, mobile layout and zero API requests.');
+  console.log('PASS: precise notes, prepared tasks and note-to-diff links, review decisions, model controls, local Git diff/stage/commit/sync/restore/history, demo reset, dismissible banner, download gates, mobile layout and zero API requests.');
 } catch (error) { await page.screenshot({ path: 'test-results/playground-failure.png' }); console.error({ errors, failed, apiRequests }); throw error; } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

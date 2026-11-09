@@ -8,7 +8,7 @@ const base = `/projects/${projectId}`;
 const pages: [number, number][] = [[612, 792], [612, 792]];
 function setup(now?: () => number) {
   const values = new Map<string, string>();
-  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   return { storage, api: createPlaygroundData(storage, 'test', 'paper-hash', pages, now) };
 }
 const note = { key: 'paper-hash', page: 0, rect: [0.1, 0.2, 0.4, 0.3], comment: 'Clarify this claim.', quote: 'Example text', kind: 'point' };
@@ -127,15 +127,39 @@ test('AI suggestions copy to the manuscript once, and reset restores the initial
   storage.setItem('papilot:review-notes:example-clarity', '{"notes":[{}]}');
   storage.setItem('papilot:draft:example-math', 'Follow up');
   storage.setItem('papilot:new-task', 'My task');
+  storage.setItem('papilot:page', 'git');
+  storage.setItem(`papilot:commit:${projectId}`, 'Draft commit');
+  storage.setItem('papilot:selected-notes', JSON.stringify({ [projectId]: ['note-claim'] }));
   await api('/playground/reset', {});
-  assert.equal(storage.getItem('papilot:review-notes:example-clarity'), '');
-  assert.equal(storage.getItem('papilot:draft:example-math'), '');
-  assert.equal(storage.getItem('papilot:new-task'), '');
+  assert.equal(storage.getItem('papilot:review-notes:example-clarity'), null);
+  assert.equal(storage.getItem('papilot:draft:example-math'), null);
+  assert.equal(storage.getItem('papilot:new-task'), null);
+  assert.equal(storage.getItem('papilot:page'), null);
+  assert.equal(storage.getItem(`papilot:commit:${projectId}`), null);
+  assert.equal(storage.getItem('papilot:selected-notes'), null);
   const manuscript = await api<Manuscript>(`${base}/manuscript`);
   assert.equal(manuscript.annotations.length, 7);
   assert.ok(manuscript.annotations.some(note => note.kind === 'delete'));
   assert.ok(manuscript.annotations.some(note => note.stamp));
   assert.equal(new Set(manuscript.annotations.map(note => note.group).filter(Boolean)).size, 4);
+});
+test('reset survives reload when storage is full and cannot save the seed', async () => {
+  const { api, storage } = setup();
+  const before = await api<Manuscript>(`${base}/manuscript`);
+  for (const note of before.annotations) await api(`${base}/annotations/${note.id}`, { comment: 'x' });
+  await api('/playground-reviews/example-clarity/decide', { id: 'accepted', round: 1, action: 'accept', changes: ['c001'] });
+  storage.setItem('papilot:new-task', 'My draft');
+  storage.setItem('papilot:page', 'git');
+  storage.setItem('papilot:theme', 'dark');
+  const full = { ...storage, setItem() { throw new DOMException('Storage full', 'QuotaExceededError'); } };
+  await createPlaygroundData(full, 'test', 'paper-hash', pages)('/playground/reset', {});
+  const reloaded = createPlaygroundData(full, 'test', 'paper-hash', pages);
+  assert.deepEqual((await reloaded<Manuscript>(`${base}/manuscript`)).annotations, before.annotations);
+  const task = (await reloaded<Snapshot>('/state')).tasks.find(task => task.id === 'example-clarity')!;
+  assert.equal(task.review?.counts.pending, 2);
+  assert.equal(storage.getItem('papilot:new-task'), null);
+  assert.equal(storage.getItem('papilot:page'), null);
+  assert.equal(storage.getItem('papilot:theme'), 'dark');
 });
 test('prepared tasks open once, persist, and link each seeded note to its actual diff', async () => {
   let clock = 1_000_000;

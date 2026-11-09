@@ -12,7 +12,7 @@ export const projectId = 'playground-paper';
 const rounds = preparedRounds as unknown as Record<string, RoundDetail>;
 const validRect = (value: unknown): value is Annotation['rect'] => Array.isArray(value) && value.length === 4 && value.every(number => Number.isFinite(number) && number >= 0 && number <= 1) && value[0] <= value[2] && value[1] <= value[3];
 const uuid = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(20)), byte => byte.toString(16).padStart(2, '0')).join('');
-interface Store { getItem(key: string): string | null; setItem(key: string, value: string): void }
+interface Store { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem?(key: string): void }
 interface ReviewState {
   decisions: Record<string, Decision>; comments: Record<string, string>;
   history: { id: string; kind: ActionKind; changes: string[]; decisions: Record<string, Decision>; comments: Record<string, string> }[];
@@ -147,10 +147,12 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
       }
     }
     if (path === '/playground/reset' && body !== undefined) {
-      local = seed(); persist();
-      for (const key of ['papilot:new-task', 'papilot:new-task-request', 'papilot:task', ...[...plans, reviewPlan].flatMap(plan => [`papilot:review-notes:${plan.id}`, `papilot:draft:${plan.id}`])]) {
-        try { storage.setItem(key, ''); } catch { /* A reload also resets tab-local drafts. */ }
+      // Remove durable edits before saving the seed: quota failures must not
+      // resurrect old progress when the reset button reloads the page.
+      for (const key of [storageKey, 'papilot:new-task', 'papilot:new-task-request', 'papilot:task', 'papilot:page', 'papilot:selected-notes', `papilot:commit:${projectId}`, ...[...plans, reviewPlan].flatMap(plan => [`papilot:review-notes:${plan.id}`, `papilot:draft:${plan.id}`])]) {
+        try { if (storage.removeItem) storage.removeItem(key); else storage.setItem(key, ''); } catch { /* A reload also resets tab-local drafts. */ }
       }
+      local = seed(); persist();
       return { ok: true };
     }
     if (path === '/quick-notes') { if (body !== undefined) storage.setItem('playground:quick-notes', JSON.stringify(body)); try { return JSON.parse(storage.getItem('playground:quick-notes') || '{"quickNotes":null}'); } catch { return { quickNotes: null }; } }
