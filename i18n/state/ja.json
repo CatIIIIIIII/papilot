@@ -2645,7 +2645,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Off": {
-    "revision": "baee29ff1bf4e5435e24b6e13c34cc74abd5fe549eb67e221edbaf7aa9df5f66",
+    "revision": "cd96dd1a9ccdb4007dfe20c85ed2dfeb989a4eeac9254ad04bb585b36e4c4ea2",
     "textHash": "01c2df03fd3f553758a90a99605066bd31372cb19f7dce6f22087f6f96680c41",
     "model": "gemini-4-argon-medium"
   },
