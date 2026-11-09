@@ -119,12 +119,11 @@
   "Long change: the source is shortened.": "修改较长，源码已截断显示。",
   "No visible change": "无可见变化",
   "Prepare alternatives for PDF notes": "修改时准备备选方案",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "按 PDF 批注修改时，随首选方案一起准备其他表达和简短理由。只影响之后发送的请求。",
-  "Extra alternatives per note": "每条批注的额外备选",
   "Few": "少量",
   "Balanced": "适中",
   "More": "更多",
   "{min}–{max} alternatives": "{min}–{max} 个备选",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "不含首选方案。这是目标范围，AI 会按内容调整实际数量；更多备选需要更长的准备时间。",
-  "Other options · {n}": "其他方案 · {n}"
+  "Other options · {n}": "其他方案 · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "随修改一起准备；数量不含首选方案，仅作参考。只影响之后的请求。"
 }

@@ -5,29 +5,30 @@ import { t } from './i18n.ts';
 
 export function NoteOptionSettings() {
   const preference = useNoteAlternatives(), description = useId();
-  const choices: { id: NoteAlternativeRange; label: string }[] = [{ id: 'few', label: t('Few') }, { id: 'balanced', label: t('Balanced') }, { id: 'many', label: t('More') }];
-  const index = choices.findIndex(choice => choice.id === preference.range), [min, max] = NOTE_ALTERNATIVE_RANGES[preference.range];
-  const range = t('{min}–{max} alternatives', { min, max });
-  const centre = (step: number) => `calc(15px + ${step / 2} * (100% - 30px))`;
-  const style = { '--effort-position': centre(index), '--effort-fill-width': `calc(30px + ${index / 2} * (100% - 30px))` } as CSSProperties;
-  return <>
-    <div className="settings-row settings-toggle">
-      <div className="settings-text">
-        <label className="settings-name" htmlFor="settings-note-alternatives">{t('Prepare alternatives for PDF notes')}</label>
-        <p id="settings-note-alternatives-detail">{t('When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.')}</p>
-      </div>
-      <input id="settings-note-alternatives" type="checkbox" role="switch" className="switch" aria-describedby="settings-note-alternatives-detail" checked={preference.enabled} onChange={event => void saveNoteAlternatives(event.target.checked)}/>
+  const choices: { id: 'off' | NoteAlternativeRange; label: string }[] = [{ id: 'off', label: t('Off') }, { id: 'few', label: t('Few') }, { id: 'balanced', label: t('Balanced') }, { id: 'many', label: t('More') }];
+  const index = preference.enabled ? choices.findIndex(choice => choice.id === preference.range) : 0, [min, max] = NOTE_ALTERNATIVE_RANGES[preference.range];
+  const range = preference.enabled ? t('{min}–{max} alternatives', { min, max }) : t('Off');
+  const help = t('A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.');
+  const centre = (step: number) => `calc(8px + ${step / 3} * (100% - 16px))`;
+  const style = { '--effort-position': centre(index) } as CSSProperties;
+  return <div className="settings-row settings-note-options">
+    <div className="settings-text">
+      <label className="settings-name" htmlFor="settings-note-alternatives">{t('Prepare alternatives for PDF notes')}</label>
+      <p id="settings-note-alternatives-detail">{t('Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.')}</p>
     </div>
-    <div className="agent-effort settings-note-count" data-effort="custom" style={style} aria-disabled={!preference.enabled}>
-      <div className="effort-head"><span>{t('Extra alternatives per note')}</span><strong className="effort-value" key={range}>{range}</strong></div>
-      <div className="effort-track">
+    <div className="agent-effort settings-note-count" data-effort="custom" style={style} title={help}>
+      <div className="note-count-value">{preference.enabled ? range : null}</div>
+      <div className={'effort-track' + (preference.enabled ? '' : ' unset')}>
         <span className="effort-fill" aria-hidden="true"/>
         {choices.map((choice, step) => step !== index && <span key={choice.id} aria-hidden="true" className={'effort-stop' + (step < index ? ' on' : '')} style={{ left: centre(step) }}/>) }
         <span className="effort-thumb" aria-hidden="true"/>
-        <input type="range" min={0} max={2} step={1} value={index} aria-label={t('Extra alternatives per note')} aria-valuetext={`${choices[index].label} · ${range}`} aria-describedby={description} disabled={!preference.enabled} onChange={event => void saveNoteAlternatives(preference.enabled, choices[Number(event.target.value)].id)}/>
+        <input id="settings-note-alternatives" type="range" min={0} max={3} step={1} value={index} aria-valuetext={preference.enabled ? `${choices[index].label} · ${range}` : range} aria-describedby={`settings-note-alternatives-detail ${description}`} onChange={event => {
+          const choice = choices[Number(event.target.value)].id;
+          void (choice === 'off' ? saveNoteAlternatives(false) : saveNoteAlternatives(true, choice));
+        }}/>
       </div>
-      <div className="effort-scale note-count-scale" aria-hidden="true">{choices.map(choice => <span key={choice.id}>{choice.label}</span>)}</div>
-      <p className="effort-description" id={description}>{t('A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.')}</p>
+      <div className="effort-scale note-count-scale" aria-hidden="true">{choices.map((choice, step) => <span key={choice.id} className={step === index ? 'active' : undefined} style={step > 0 && step < choices.length - 1 ? { left: centre(step) } : undefined}>{choice.label}</span>)}</div>
+      <span className="sr-only" id={description}>{help}</span>
     </div>
-  </>;
+  </div>;
 }

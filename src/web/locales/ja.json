@@ -1297,12 +1297,11 @@
   "Long change: the source is shortened.": "長い変更: ソースは省略されています。",
   "No visible change": "表示上の変更なし",
   "Prepare alternatives for PDF notes": "PDF の注釈に対する別案を用意",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "PDF の注釈に沿って編集するとき、主案とともに別の表現と短い理由を用意します。今後のリクエストに適用されます。",
-  "Extra alternatives per note": "注釈ごとの追加案",
   "Few": "少なめ",
   "Balanced": "標準",
   "More": "多め",
   "{min}–{max} alternatives": "{min}〜{max} 個の別案",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "主案を除いた目安です。AI が返す有用な案の数は前後することがあります。案が多いほど準備に時間がかかります。",
-  "Other options · {n}": "別の案 · {n}"
+  "Other options · {n}": "別の案 · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "編集と同時に用意します。主案を除く数の目安です。今後のリクエストに適用されます。"
 }

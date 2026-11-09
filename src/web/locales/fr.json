@@ -1297,12 +1297,11 @@
   "Long change: the source is shortened.": "Modification longue : la source est raccourcie.",
   "No visible change": "Aucune modification visible",
   "Prepare alternatives for PDF notes": "Préparer des variantes pour les annotations PDF",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "Lors des modifications à partir des annotations PDF, préparer d’autres formulations et de brèves justifications avec la proposition principale. S’applique aux prochaines demandes.",
-  "Extra alternatives per note": "Variantes supplémentaires par annotation",
   "Few": "Peu",
   "Balanced": "Équilibré",
   "More": "Plus",
   "{min}–{max} alternatives": "{min}–{max} variantes",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "Une fourchette indicative, hors proposition principale. L’IA peut proposer moins ou plus de variantes utiles. Plus de variantes demandent plus de temps de préparation.",
-  "Other options · {n}": "Autres options · {n}"
+  "Other options · {n}": "Autres options · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "Préparées avec les modifications. Nombre indicatif, hors proposition principale. S’applique aux prochaines demandes."
 }

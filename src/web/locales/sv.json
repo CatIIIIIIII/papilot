@@ -1297,12 +1297,11 @@
   "Long change: the source is shortened.": "Omfattande ändring: källkoden har förkortats.",
   "No visible change": "Ingen synlig ändring",
   "Prepare alternatives for PDF notes": "Förbered alternativ för PDF-anteckningar",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "Vid redigering utifrån PDF-anteckningar förbereds andra formuleringar och korta motiveringar tillsammans med huvudförslaget. Gäller framtida förfrågningar.",
-  "Extra alternatives per note": "Extra alternativ per anteckning",
   "Few": "Få",
   "Balanced": "Balanserat",
   "More": "Fler",
   "{min}–{max} alternatives": "{min}–{max} alternativ",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "Ett riktmärke som inte räknar med huvudförslaget. AI:n kan ge färre eller fler användbara alternativ. Fler alternativ tar längre tid att förbereda.",
-  "Other options · {n}": "Andra alternativ · {n}"
+  "Other options · {n}": "Andra alternativ · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "Förbereds med ändringarna. Antalet är ungefärligt och räknar inte med huvudförslaget. Gäller framtida förfrågningar."
 }

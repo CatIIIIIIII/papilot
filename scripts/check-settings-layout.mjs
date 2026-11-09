@@ -75,6 +75,18 @@ try {
         const label = `${language}/${width}/${name}`;
         if (overflow.length) await page.screenshot({ path: `test-results/settings-overflow-${language}-${width}-${name}.png` });
         assert.deepEqual(overflow, [], label);
+        if (name === 'review') {
+          const alternatives = page.locator('.settings-note-options');
+          await expect(alternatives.getByRole('slider', { name: await alternatives.locator('label').innerText(), exact: true })).toHaveCount(1);
+          const labels = await alternatives.locator('.note-count-scale span').evaluateAll(elements => elements.map(element => {
+            const bounds = element.getBoundingClientRect();
+            return { text: element.textContent, left: bounds.left, right: bounds.right };
+          }));
+          for (let index = 1; index < labels.length; index++) {
+            assert.ok(labels[index].left >= labels[index - 1].right + 1,
+              `${label}: alternative labels ${labels[index - 1].text} and ${labels[index].text} stay separated`);
+          }
+        }
         if (name === 'skills') {
           assert.ok((await page.locator('.skill-library-search input').boundingBox()).width >= 100, `${label}: search keeps enough room to type`);
           await expect(page.locator('.skill-library-new')).toBeInViewport();
