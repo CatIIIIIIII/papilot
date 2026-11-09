@@ -1297,12 +1297,12 @@
   "Long change: the source is shortened.": "Modifica estesa: il sorgente è stato abbreviato.",
   "No visible change": "Nessuna modifica visibile",
   "Prepare alternatives for PDF notes": "Prepara alternative per le note PDF",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "Quando modifichi in base alle note PDF, prepara altre formulazioni e brevi motivazioni insieme alla proposta principale. Si applica alle richieste future.",
   "Extra alternatives per note": "Alternative aggiuntive per nota",
   "Few": "Poche",
   "Balanced": "Equilibrato",
   "More": "Più",
   "{min}–{max} alternatives": "{min}–{max} alternative",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "Un intervallo indicativo, esclusa la proposta principale. L’IA può fornire meno o più alternative utili. Più alternative richiedono più tempo di preparazione.",
-  "Other options · {n}": "Altre opzioni · {n}"
+  "Other options · {n}": "Altre opzioni · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "Preparate insieme alle modifiche. Numero indicativo, esclusa la proposta principale. Si applica alle richieste future."
 }

@@ -1297,12 +1297,12 @@
   "Long change: the source is shortened.": "變更較長：原始碼已縮略。",
   "No visible change": "無可見變更",
   "Prepare alternatives for PDF notes": "修改時準備備選方案",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "依 PDF 註解修改時，隨首選方案一起準備其他表達和簡短理由。只影響之後送出的請求。",
   "Extra alternatives per note": "每則註解的額外備選",
   "Few": "少量",
   "Balanced": "適中",
   "More": "更多",
   "{min}–{max} alternatives": "{min}–{max} 個備選",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "不含首選方案。這是目標範圍，AI 會依內容調整實際數量；更多備選需要更長的準備時間。",
-  "Other options · {n}": "其他方案 · {n}"
+  "Other options · {n}": "其他方案 · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "隨修改一起準備；數量不含首選方案，僅供參考。只影響之後的請求。"
 }

@@ -1297,12 +1297,12 @@
   "Long change: the source is shortened.": "Umfangreiche Änderung: Der Quelltext ist gekürzt.",
   "No visible change": "Keine sichtbare Änderung",
   "Prepare alternatives for PDF notes": "Alternativen für PDF-Anmerkungen vorbereiten",
-  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "Beim Bearbeiten anhand von PDF-Anmerkungen andere Formulierungen mit kurzen Begründungen zusammen mit dem Hauptvorschlag vorbereiten. Gilt für künftige Anfragen.",
   "Extra alternatives per note": "Zusätzliche Alternativen pro Anmerkung",
   "Few": "Wenige",
   "Balanced": "Ausgewogen",
   "More": "Mehr",
   "{min}–{max} alternatives": "{min}–{max} Alternativen",
   "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "Ein Zielbereich ohne den Hauptvorschlag. Die KI kann weniger oder mehr sinnvolle Alternativen liefern. Mehr Alternativen benötigen mehr Vorbereitungszeit.",
-  "Other options · {n}": "Weitere Optionen · {n}"
+  "Other options · {n}": "Weitere Optionen · {n}",
+  "Prepared with edits. Counts exclude the main proposal and are approximate. Applies to future requests.": "Zusammen mit den Änderungen vorbereitet. Die Anzahl ist ein Richtwert ohne den Hauptvorschlag. Gilt für künftige Anfragen."
 }
