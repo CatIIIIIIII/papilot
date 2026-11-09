@@ -44,6 +44,11 @@ const strip = text => {
   const src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="30"><rect width="600" height="30" fill="white"/><text x="40" y="20" font-size="12">${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</text></svg>`);
   return { src, clean: src, width: 600, height: 30, page: 1, label: '1', text: [{ text, chars: Array.from(text, (text, index) => ({ text, rect: [40 + index * 5, 8, 45 + index * 5, 22] })) }] };
 };
+const sharedStrip = text => {
+  const image = strip(text);
+  const src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="white"/><text x="40" y="20">Unrelated opening</text><text x="40" y="412" font-size="12">${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</text><text x="40" y="720">Unrelated ending</text></svg>`);
+  return { ...image, src, clean: src, height: 800, text: image.text.map(line => ({ ...line, chars: line.chars.map(char => ({ ...char, rect: [char.rect[0], char.rect[1] + 392, char.rect[2], char.rect[3] + 392] })) })), marks: [{ unit: 'c1', kind: 'added', rect: [40, 400, 300, 414] }, { unit: 'other', kind: 'added', rect: [40, 700, 300, 720] }] };
+};
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
   if (url.pathname.startsWith('/review/')) return route.fallback();
@@ -58,7 +63,8 @@ await page.route('**/api/**', async route => {
     assert.equal(url.searchParams.get('comparison'), comparisonVersion);
     const round = Number(url.searchParams.get('round')), option = url.searchParams.get('option');
     const candidate = round === 2 ? [...units[round].map(unit => ({ ...unit, new_text: option === 'brief' ? alternateSource : unit.new_text })), unit('other', 80, 'Three datasets.', 'Five datasets.')] : units[round];
-    return route.fulfill({ json: { ...rounds[round], units: candidate, task: task.name, before: 'before', after: `candidate-${option}-${comparisonVersion}`, files: '', warnings: [], loose: [...candidate.map(unit => ({ kind: 'change', units: [unit.id], before: [strip(unit.old_text)], after: [strip(unit.new_text)] })), ...Array.from({ length: 5 }, (_, i) => ({ kind: 'change', units: ['space-' + i], identical: true, before: [], after: [] }))] } });
+    const blocks = round === 2 ? [{ kind: 'change', units: candidate.map(unit => unit.id), before: [strip('Unrelated leading strip'), sharedStrip(candidate[0].old_text)], after: [strip('Unrelated leading strip'), sharedStrip(candidate[0].new_text)] }] : candidate.map(unit => ({ kind: 'change', units: [unit.id], before: [strip(unit.old_text)], after: [strip(unit.new_text)] }));
+    return route.fulfill({ json: { ...rounds[round], units: candidate, task: task.name, before: 'before', after: `candidate-${option}-${comparisonVersion}`, files: '', warnings: [], loose: [...blocks, ...Array.from({ length: 5 }, (_, i) => ({ kind: 'change', units: ['space-' + i], identical: true, before: [], after: [] }))] } });
   }
   if (url.pathname.endsWith('/note-options')) {
     const body = route.request().method() !== 'GET' ? route.request().postDataJSON() : null;
@@ -132,6 +138,8 @@ try {
   assert.equal(await controls().locator('.note-option-reason').textContent(), 'Preserve the author’s technical term.', 'The preferred proposal uses the AI-provided title and reason');
   assert.equal(await controls().locator('.note-comparison-side-label').count(), 2, 'Only this group has before/after labels');
   assert.equal(await controls().locator('.note-comparison-change[data-units="other"]').count(), 0, 'Other groups remain in the main review');
+  await expect(controls().locator('.note-comparison-crop').first()).toHaveAttribute('data-crop-top', '376');
+  assert.ok((await controls().locator('.note-comparison-crop').first().boundingBox()).height < 200, 'The shared PDF opens at this note instead of a page of unrelated edits');
   // A shared engine strip must follow live workspace language changes even
   // though this page has no viewer ?lang parameter or workspace reload.
   const firstStrip = controls().locator('.pdf-strip .pdf-text').first();

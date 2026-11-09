@@ -3,7 +3,7 @@ import type { Block, RoundDetail, Strip } from '../../engine/src/types.ts';
 import { PdfStrip } from '../../engine/src/web/PdfStrip.tsx';
 import { wordDiff } from '../../engine/src/web/model.ts';
 import { t, useLanguage } from './i18n.ts';
-import { noteComparisonScope } from './note-comparison-scope.ts';
+import { noteComparisonCrop, noteComparisonScope } from './note-comparison-scope.ts';
 
 // Keep nearby PDF context compact. Scan rendered pixels rather than text
 // bounds so the visible crop retains figures and other non-text content.
@@ -57,8 +57,14 @@ function CompactContext({ image, base, edge }: { image: Strip; base: string; edg
 export function NoteOptionDiff({ detail, focus }: { detail: RoundDetail; focus: string[] }) {
   const { language } = useLanguage();
   const scoped = noteComparisonScope(detail, focus);
-  const strips = (images: Strip[], label: string, clean = false) => images.map((image, index) =>
-    <PdfStrip key={`${image.src}:${index}`} image={image} base={detail.files} label={label} clean={clean} focus={focus} language={language}/>);
+  const strips = (images: Strip[], label: string) => images.map((image, index) => {
+    const { top, height } = noteComparisonCrop(image, focus);
+    return <div key={`${image.src}:${index}`} className="note-comparison-crop" data-crop-top={top} style={{ position: 'relative', overflow: 'hidden', aspectRatio: `${image.width}/${height}` }}>
+      <div style={{ position: 'absolute', insetInline: 0, top: `${-100 * top / height}%` }}>
+        <PdfStrip image={image} base={detail.files} label={label} focus={focus} language={language}/>
+      </div>
+    </div>;
+  });
   const block = (item: Block, index: number, blocks: Block[]) => {
     if (item.kind === 'gap') return <div key={index} className="note-comparison-gap" role="separator">⋯</div>;
     if (item.kind === 'context') return <CompactContext key={detail.files + item.image.clean} image={item.image} base={detail.files} edge={blocks[index + 1]?.kind === 'change' ? 'end' : 'start'}/>;

@@ -140,6 +140,54 @@ it("keeps multiline math and arguments together even across unchanged source lin
   ).toBe(next);
 });
 
+it("keeps a rewritten display's nested environment separate from surrounding prose", () => {
+  const old = 'A small example.\n\\[\\begin{aligned}x &= 1 \\\\ y &= 2\\end{aligned}\\]\nThe result is useful.\n';
+  const next = old.replace('small', 'short').replace('y &= 2', 'y &= 3').replace('useful', 'practical');
+  f.write(METHOD, old);
+  const before = f.repo.snapshot(['paper']);
+  f.write(METHOD, next);
+  const units = diffUnits(f.repo, before, f.repo.snapshot(['paper']));
+  expect(units).toHaveLength(3);
+  expect(units[1].old_text).toBe('\\[\\begin{aligned}x &= 1 \\\\ y &= 2\\end{aligned}\\]');
+  expect(applyUnits(Buffer.from(old), Buffer.from(next), [units[0]])?.toString()).toBe(old.replace('small', 'short'));
+  expect(applyUnits(Buffer.from(old), Buffer.from(next), [units[2]])?.toString()).toBe(old.replace('useful', 'practical'));
+});
+
+for (const [label, oldBody, newBody] of [
+  ['remove a list', '\\begin{enumerate}\n\\item A fast result.\n\\item A stable estimate.\n\\end{enumerate}', 'A fast result.\nA stable estimate.'],
+  ['add a list', 'A fast result.\nA stable estimate.', '\\begin{enumerate}\n\\item A fast result.\n\\item A stable estimate.\n\\end{enumerate}'],
+  ['rename a list', '\\begin{enumerate}\n\\item A fast result.\n\\item A stable estimate.\n\\end{enumerate}', '\\begin{itemize}\n\\item A fast result.\n\\item A robust estimate.\n\\end{itemize}'],
+  ['remove a nested list', '\\begin{quote}\n\\begin{itemize}\n\\item A fast result.\n\\end{itemize}\n\\end{quote}', 'A fast result.'],
+]) it(`groups only the affected environment when edits ${label}`, () => {
+  const old = `A small example.\n\n${oldBody}\n\nThe result is useful.\n`;
+  const next = old.replace('small', 'short').replace(oldBody, newBody).replace('useful', 'practical');
+  f.write(METHOD, old);
+  const before = f.repo.snapshot(['paper']);
+  f.write(METHOD, next);
+  const units = diffUnits(f.repo, before, f.repo.snapshot(['paper']));
+  expect(units).toHaveLength(3);
+  for (let mask = 0; mask < 8; mask++) {
+    const selected = units.filter((_, index) => mask & (1 << index));
+    let expected = old;
+    if (mask & 1) expected = expected.replace('small', 'short');
+    if (mask & 2) expected = expected.replace(oldBody, newBody);
+    if (mask & 4) expected = expected.replace('useful', 'practical');
+    expect(applyUnits(Buffer.from(old), Buffer.from(next), selected)?.toString()).toBe(expected);
+    expect(revertUnits(Buffer.from(old), Buffer.from(next), units.filter(unit => !selected.includes(unit)))?.toString()).toBe(expected);
+  }
+});
+
+it("does not couple prose edits because of delimiters inside comments or literal examples", () => {
+  const old = 'A small example.\n% \\begin{enumerate}\nA useful result.\n\\verb|\\end{enumerate}|\nA stable estimate.\n';
+  const next = old.replace('small', 'short').replace('% \\begin{enumerate}', '% \\begin{itemize}').replace('useful', 'practical').replace('stable', 'robust');
+  f.write(METHOD, old);
+  const before = f.repo.snapshot(['paper']);
+  f.write(METHOD, next);
+  const units = diffUnits(f.repo, before, f.repo.snapshot(['paper']));
+  expect(units).toHaveLength(4);
+  expect(applyUnits(Buffer.from(old), Buffer.from(next), [units[2]])?.toString()).toBe(old.replace('useful', 'practical'));
+});
+
 it("does not attach a comment to another change on the same source line", async () => {
   const old = "The method is fast and the result is useful.\n";
   f.write(METHOD, old);

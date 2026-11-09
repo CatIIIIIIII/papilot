@@ -57,11 +57,26 @@ function quoteSource(text: string, start: number) {
 function quotedUnit(note: NoteSummary, unit: NoteRound['units'][number]): boolean | null {
   if (!unit.text_ops || !unit.old_context || !note.quote.trim()) return null;
   const { text, start } = unit.old_context, { normalized, letters } = quoteSource(text, start);
-  const quote = normalize(note.quote), at = normalized.indexOf(quote);
+  const quote = normalize(note.quote);
   // Exact units must fail closed when a quote cannot be resolved. Falling back
   // to its source line would silently accept unrelated edits on that line.
-  if (!quote || at < 0 || normalized.indexOf(quote, at + 1) >= 0) return false;
-  const low = letters[at], last = letters[at + quote.length - 1], high = last + String.fromCodePoint(text.codePointAt(last - start)!).length;
+  if (!quote) return false;
+  let occurrences: { low: number; high: number }[] = [];
+  for (let at = normalized.indexOf(quote); at >= 0; at = normalized.indexOf(quote, at + 1)) {
+    const last = letters[at + quote.length - 1];
+    occurrences.push({ low: letters[at], high: last + String.fromCodePoint(text.codePointAt(last - start)!).length });
+  }
+  if (occurrences.length > 1) {
+    // A short selection can occur elsewhere in the context excerpt. Original
+    // manuscript lines disambiguate it, but an older review's lines cannot.
+    const anchor = noteAnchor(note), origin = unit.text_ops[0]?.[1];
+    if (anchor.round !== undefined || origin === undefined || origin < start || origin > start + text.length) return false;
+    const newlines = (a: number, b: number) => (text.slice(a - start, b - start).match(/\n/g) || []).length;
+    const lineAt = (offset: number) => unit.old_start + (offset < origin ? -newlines(offset, origin) : newlines(origin, offset));
+    occurrences = occurrences.filter(({ low, high }) => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], lineAt(low)) <= Math.min(place.lines[1], lineAt(high - 1))));
+  }
+  if (occurrences.length !== 1) return false;
+  const { low, high } = occurrences[0];
   return unit.text_ops.some(([, a, b]) => a === b ? low <= a && a <= high : a < high && b > low);
 }
 

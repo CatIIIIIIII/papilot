@@ -2,6 +2,7 @@ import { Repo, within } from "./git.ts";
 import { groups, opcodes } from "./diff.ts";
 import { entrySpans } from "./bib.ts";
 import { textEdits } from "./text-edits.ts";
+import { groupEnvironmentEdits } from "./environment-edits.ts";
 import type { Scope, Unit, Op } from "../types.ts";
 export const EXCERPT = 6000;
 export function textOf(data: Buffer | null): string | null {
@@ -73,22 +74,10 @@ function unitsOf(
     };
     const l = offsets(left),
       r = offsets(right);
-    let fine = !whole && !file.endsWith(".bib") ? textEdits(a!, b!) : null;
-    // Environment boundary edits are reviewed together, including unchanged
-    // text between the opening and closing commands.
-    const boundary = (text: string) =>
-      /\\(?:begin|end)\b/.test(text) &&
-      !/^\\begin\{([^}]+)\}[^]*\\end\{\1\}$/.test(text);
-    if (
-      fine?.some(
-        ([, i, j, x, y]) =>
-          boundary(a!.slice(i, j)) || boundary(b!.slice(x, y)),
-      )
-    ) {
-      const first = fine[0],
-        last = fine.at(-1)!;
-      fine = [["replace", first[1], last[2], first[3], last[4]]];
-    }
+    const fine =
+      !whole && !file.endsWith(".bib")
+        ? groupEnvironmentEdits(a!, b!, textEdits(a!, b!))
+        : null;
     const lineAt = (offsets: number[], offset: number) => {
       let lo = 0,
         hi = offsets.length - 1;

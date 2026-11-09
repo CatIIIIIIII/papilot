@@ -17,7 +17,18 @@ f.write('paper/main.tex', String.raw`\documentclass{book}
 \end{document}
 `);
 f.write(METHOD, String.raw`\chapter{Method}
+A small example.
+
+\[\begin{array}{c}x = 1\end{array}\]
+
 The model is fast and the estimates are stable. The surrounding context remains here.
+
+\begin{enumerate}
+\item First check.
+\item Second check.
+\end{enumerate}
+
+The surrounding discussion stays unchanged. It separates the independent observations below.
 
 We evaluate the model on three datasets. This is a different note.
 `);
@@ -30,6 +41,9 @@ const task = app.tasks.create('options', 'Prepared note options', [], ['paper'],
 const source = f.read(METHOD);
 f.edit(task, METHOD, 'fast', 'efficient');
 f.edit(task, METHOD, 'three', 'five');
+f.edit(task, METHOD, 'small', 'short');
+f.edit(task, METHOD, 'x = 1', 'x = 2');
+f.edit(task, METHOD, '\\begin{enumerate}\n\\item First check.\n\\item Second check.\n\\end{enumerate}', 'First check.\nSecond check.');
 const originalBuild = Builder.prototype.build, builds = [];
 Builder.prototype.build = function (rev, targets, seed, options) {
   builds.push({ rev, targets });
@@ -51,7 +65,10 @@ try {
   assert.ok(builds.every(build => JSON.stringify(build.targets) === '["sections/method"]'), 'No whole-document compilation for options');
   const first = results[0], scope = noteComparisonScope(first, [selected.id]);
   assert.ok(scope.sections.length || scope.loose.length);
-  assert.ok(scope.units.every(unit => unit.new_text !== 'five'), 'The other note’s separate group stays outside the drawer');
+  assert.ok(scope.units.every(unit => unit.new_text !== 'five'), 'The other note’s separate group stays outside the drawer: ' + JSON.stringify(scope.units.map(unit => [unit.id, unit.new_text])));
+  assert.ok(scope.units.every(unit => unit.new_text !== 'short'), 'The leading edit does not appear in every note’s alternatives');
+  assert.equal(results[0].units.find(unit => unit.id === selected.id).new_text, 'quick');
+  assert.equal(results[1].units.find(unit => unit.id === selected.id).new_text, 'computationally efficient');
   assert.ok(first.units.some(unit => unit.new_text === 'five'), 'The complete candidate still preserves the other edit');
   const paths = results.map(detail => path.join(app.state, 'cache', detail.files.replace('/option-files/', 'option-previews/'), 'preview.json'));
   assert.ok(paths.every(file => fs.existsSync(file)), 'Both manifests persist on disk');
