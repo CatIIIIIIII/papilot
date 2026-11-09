@@ -17,7 +17,7 @@ In **Settings → Review preferences**, one compact slider offers **Off**, **Few
 - Embedded alternative previews preserve the workspace language and translated page labels.
 - Switching between manuscripts and tasks cancels pending PDF loads cleanly.
 - Before/After labels fit short PDF changes.
-- Startup tool detection and platform installation guidance are clearer.
+- Startup tool detection and platform installation guidance are clearer, and Windows diagnostics identify stalled tool checks correctly.
 - Failed attachment uploads remove partial files, and oversized update downloads stop early.
 - The website adds an illustrated multilingual blog and a visible reset button for the interactive demo.
 

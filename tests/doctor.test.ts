@@ -209,14 +209,65 @@ test('doctor distinguishes a healthy local server from an occupied port and vali
 
 test('a stalled agent probe times out while the rest of the report remains usable', async () => {
   const f = fixture();
+  const pidFile = path.join(f.dir, 'agent.pid');
   try {
     f.baseTools();
-    const agy = f.tool('agy', 'setInterval(() => {}, 1000);');
+    const agy = f.tool('agy', `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`);
     const start = Date.now();
     const result = await f.run(['--json'], { PAPILOT_AGY_BIN: agy });
     assert.equal(result.code, 0, result.stdout);
     assert.match(item(result.report, 'agent.antigravity').detail, /timed out/);
     assert.ok(Date.now() - start < 14000);
+    const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+    assert.ok(Number.isInteger(pid) && pid > 0);
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, 'the timed-out agent must be stopped');
+  } finally {
+    if (fs.existsSync(pidFile)) { try { process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch { /* already stopped */ } }
+    f.cleanup();
+  }
+});
+
+test('doctor marks a timeout before process cleanup reports a plain exit code', async () => {
+  const f = fixture();
+  try {
+    f.baseTools();
+    const agy = f.tool('agy', 'process.exit(1);');
+    const failed = await f.run(['--json'], { PAPILOT_AGY_BIN: agy });
+    assert.equal(item(failed.report, 'agent.antigravity').ok, false);
+    assert.match(item(failed.report, 'agent.antigravity').detail, /failed \(1\)/);
+    f.tool('agy', 'console.log("model\\tExample model");');
+    const success = await f.run(['--json'], { PAPILOT_AGY_BIN: agy });
+    assert.equal(item(success.report, 'agent.antigravity').ok, true);
+
+    // Windows taskkill can close a .cmd probe with code 1 before a separately
+    // registered deadline callback runs. Model that ordering on every host;
+    // the integration test above separately verifies actual process cleanup.
+    const paths = path.join(f.app, 'bin/agent-paths.mjs'), killed = path.join(f.dir, 'killed');
+    fs.renameSync(paths, path.join(f.app, 'bin/agent-paths-real.mjs'));
+    fs.writeFileSync(paths, `
+      import { EventEmitter } from 'node:events';
+      import fs from 'node:fs';
+      import * as real from './agent-paths-real.mjs';
+      export * from './agent-paths-real.mjs';
+      let probe;
+      export function spawnCommand(file, args, options = {}) {
+        if (file !== process.env.PAPILOT_AGY_BIN) return real.spawnCommand(file, args, options);
+        probe = new EventEmitter(); probe.pid = -1;
+        probe.kill = () => { probe.emit('close', 1, null); return true; };
+        if (options.timeout) setTimeout(() => probe.emit('close', 1, null), options.timeout);
+        return probe;
+      }
+      export function killTree(pid, signal) {
+        if (pid !== -1) return real.killTree(pid, signal);
+        fs.writeFileSync(${JSON.stringify(killed)}, signal);
+        probe.emit('close', 1, null);
+      }
+    `);
+    const timedOut = await f.run(['--json'], { PAPILOT_AGY_BIN: agy });
+    assert.equal(timedOut.code, 0, timedOut.stdout);
+    assert.equal(item(timedOut.report, 'agent.antigravity').ok, false);
+    assert.match(item(timedOut.report, 'agent.antigravity').detail, /timed out/);
+    assert.equal(fs.readFileSync(killed, 'utf8'), 'SIGKILL', 'the deadline must still clean up the process tree');
   } finally { f.cleanup(); }
 });
 

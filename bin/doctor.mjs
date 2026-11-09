@@ -1,4 +1,4 @@
-import { findExecutable, spawnCommand } from './agent-paths.mjs';
+import { findExecutable, killTree, spawnCommand } from './agent-paths.mjs';
 // Deliberately uses only Node built-ins: diagnostics must work before npm setup.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,19 +34,24 @@ function executable(command, env = process.env) {
 const agentExecutable = findExecutable;
 
 function command(file, args, options = {}) {
-  const timeout = options.timeout ?? 5000;
+  const { timeout = 5000, killSignal = 'SIGKILL', ...spawnOptions } = options;
   return new Promise(resolve => {
     // Never return raw stderr: login commands can print credentials or account data.
-    const child = spawnCommand(file, args, { cwd: os.homedir(), timeout, killSignal: 'SIGKILL', ...options });
+    const child = spawnCommand(file, args, { cwd: os.homedir(), ...spawnOptions });
     let stdout = '', stderr = '', settled = false, timedOut = false;
     const finish = (ok, reason) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ ok, stdout, stderr, reason }); };
-    // A killed process can report a plain exit code, so the deadline itself
-    // decides whether the probe timed out.
-    const timer = setTimeout(() => { timedOut = true; finish(false, 'timed out'); }, timeout);
+    // Own the deadline and termination together. Windows taskkill can report a
+    // plain exit code before a second timer has marked the probe as timed out.
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { if (child.pid) killTree(child.pid, killSignal); }
+      catch { try { child.kill(killSignal); } catch { /* Already stopped. */ } }
+      finally { finish(false, 'timed out'); }
+    }, timeout);
     child.stdout?.on('data', (data) => { stdout += data; });
     child.stderr?.on('data', (data) => { stderr += data; });
-    child.on('error', (error) => finish(false, error.code || 'unknown error'));
-    child.on('close', (code, signal) => finish(code === 0, timedOut || signal ? 'timed out' : code === 0 ? '' : `failed (${code})`));
+    child.on('error', (error) => finish(false, timedOut ? 'timed out' : error.code || 'unknown error'));
+    child.on('close', (code, signal) => finish(!timedOut && !signal && code === 0, timedOut || signal ? 'timed out' : code === 0 ? '' : `failed (${code})`));
     child.stdin?.end();
   });
 }
