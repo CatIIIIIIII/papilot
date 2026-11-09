@@ -85,12 +85,15 @@ export class Attachments {
     const file: SavedAttachment = { id: randomUUID(), projectId, name, size: bytes.length, mime: image || (bytes.subarray(0, 5).toString() === '%PDF-' ? 'application/pdf' : 'application/octet-stream'), createdAt: Date.now() };
     fs.mkdirSync(this.root(), { recursive: true, mode: 0o700 });
     const destination = this.path(file);
-    await fs.promises.writeFile(destination, bytes, { flag: 'wx', mode: 0o400 });
+    // Only clean up a destination this upload successfully created.
+    const handle = await fs.promises.open(destination, 'wx', 0o400);
     try {
+      try { await fs.promises.writeFile(handle, bytes); }
+      finally { await handle.close(); }
       this.store.project(projectId);
       this.checkDraftSpace(projectId, bytes.length);
       this.store.db.prepare('INSERT INTO attachments VALUES(?,?,?)').run(file.id, projectId, JSON.stringify(file));
-    } catch (error) { await fs.promises.unlink(destination); throw error; }
+    } catch (error) { await fs.promises.rm(destination, { force: true }); throw error; }
     return publicFile(file);
   }
   resolve(projectId: string, ids: string[], taskId: string): Attachment[] {
