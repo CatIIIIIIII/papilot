@@ -4,6 +4,49 @@ The flake packages Papilot's CLI, browser interface and Linux Electron desktop, 
 
 The flake exposes packages for `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. The CLI and Electron desktop are exercised by the `x86_64-linux` NixOS VM integration check. ARM Linux has evaluation coverage only. The pinned Nixpkgs no longer supports Intel macOS. Electron installers are built separately; see [Papilot Desktop](../desktop/README.md).
 
+## NixOS flake
+
+Add Papilot to the inputs in your system's `flake.nix`:
+
+```nix
+inputs.papilot.url = "github:PapilotAI/papilot";
+```
+
+Include `papilot` in the `outputs` arguments and add its package to `environment.systemPackages` through an inline module:
+
+```nix
+outputs = { nixpkgs, papilot, ... }: {
+  nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+    system = "x86_64-linux";
+    modules = [
+      ./configuration.nix
+      ({ pkgs, ... }: {
+        environment.systemPackages = [
+          papilot.packages.${pkgs.stdenv.hostPlatform.system}.default
+        ];
+      })
+    ];
+  };
+};
+```
+
+Merge these additions into your existing flake, keeping its other inputs, outputs and modules. Replace `my-host`, the system architecture and the configuration path with your own values. The default Linux package includes the CLI, the desktop launcher and an application-menu entry.
+
+Apply the configuration from your system flake's directory:
+
+```sh
+sudo nixos-rebuild switch --flake .#my-host
+```
+
+Your system's `flake.lock` pins the Papilot revision. To update it and rebuild:
+
+```sh
+nix flake update papilot
+sudo nixos-rebuild switch --flake .#my-host
+```
+
+See the [NixOS flake guide](https://wiki.nixos.org/wiki/Flakes) for the initial system configuration.
+
 ## Run or install
 
 Use Nix with the `nix-command` and `flakes` experimental features enabled. From this checkout:

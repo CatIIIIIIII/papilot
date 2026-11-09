@@ -6,8 +6,19 @@
 
 Um **novo paradigma** para escrita e diagramação responsáveis com IA.
 
-**[Baixar o Papilot](https://github.com/PapilotAI/papilot/releases/latest)** para <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>e <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) ou Windows (x64),<br>ou execute `npm install -g papilot`.
+<!-- BEGIN BADGES -->
+[![License: MIT](https://img.shields.io/github/license/PapilotAI/papilot?style=flat&color=22c55e)](../../LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/PapilotAI/papilot/ci.yml?branch=main&style=flat&label=CI)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/PapilotAI/papilot?style=flat&label=release&color=0969da)](https://github.com/PapilotAI/papilot/releases/latest)
+[![GitHub total downloads](https://img.shields.io/github/downloads/PapilotAI/papilot/total?style=flat&logo=github&label=downloads&color=0969da)](https://github.com/PapilotAI/papilot/releases)
+[![npm monthly downloads](https://img.shields.io/npm/dm/papilot?style=flat&logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/papilot)
+<!-- END BADGES -->
 
+<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center">
 <a href="https://papilot.ai">
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
@@ -16,8 +27,7 @@ Um **novo paradigma** para escrita e diagramação responsáveis com IA.
   <img src="../assets/readme-showcase/hero.png" alt="O Papilot mostra uma edição de IA como um antes e depois diagramado no PDF, com Aceitar, Rejeitar e Comentar." width="900">
 </picture>
 </a>
-
-</div>
+</p>
 
 <a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
 
@@ -85,13 +95,34 @@ Marque uma frase, uma equação ou uma figura e escreva uma anotação.<br>
 </p>
 <!-- END AGENT ICONS -->
 
+<a id="downloads"></a>
+
+<a id="-downloads"></a>
+
+## 📥 Downloads
+
+<!-- BEGIN DOWNLOADS -->
+| Sistema / distribuição | Download / pacote | Instalar / executar |
+| --- | --- | --- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture> **macOS** | [Apple Silicon](https://github.com/PapilotAI/papilot/releases/latest) · [Intel](https://github.com/PapilotAI/papilot/releases/latest)<br>DMG / ZIP | Abra o DMG e arraste Papilot para Aplicativos. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/windows-dark.svg"><img src="../assets/readme-icons/windows.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Windows** | [Instalador](https://github.com/PapilotAI/papilot/releases/latest) · [Versão portátil](https://github.com/PapilotAI/papilot/releases/latest)<br>x64 | Execute o instalador ou abra diretamente a versão portátil. |
+| <img src="../assets/readme-icons/ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> <img src="../assets/readme-icons/debian.svg" width="18" height="18" align="absmiddle" alt=""> **Ubuntu / Debian / Linux Mint** | [.deb](https://github.com/PapilotAI/papilot/releases/latest) | `sudo apt install ./Papilot-*.deb` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Fedora / Arch / openSUSE** | [AppImage](https://github.com/PapilotAI/papilot/releases/latest) | `chmod +x Papilot-*.AppImage`<br>`./Papilot-*.AppImage` |
+| <img src="../assets/readme-icons/nixos.svg" width="18" height="18" align="absmiddle" alt=""> **NixOS** | [Nix flake](../nix.md#nixos-flake) | [Adicionar ao seu `flake.nix`](../nix.md#nixos-flake) |
+| **macOS / Linux / Windows (CLI)** | [npm](https://www.npmjs.com/package/papilot) | `npm install -g papilot` |
+
+Os pacotes Linux são para x86_64 e foram testados no Ubuntu 22.04. Consulte o [guia da versão desktop](../../desktop/README.md#build-and-run) para dependências e ajuda com AppImage/FUSE.
+
+O pacote npm abre a interface no navegador e requer Node.js 22.22+. O Nix requer flakes ativados; consulte o [guia do Nix](../nix.md#nixos-flake).
+<!-- END DOWNLOADS -->
+
 <a id="quick-start"></a>
 
 <a id="-get-started"></a>
 
 ## 🚀 Comece a usar
 
-1. **Instale.** [Baixe o aplicativo](https://github.com/PapilotAI/papilot/releases/latest) para macOS, Linux ou Windows, ou execute `npm install -g papilot` (Node.js 22.22+). Você também precisa do Git e do TeX Live ou MacTeX.
+1. **Instale.** [Baixe o aplicativo](#downloads) para macOS, Linux ou Windows, ou execute `npm install -g papilot` (Node.js 22.22+). Você também precisa do Git e do TeX Live ou MacTeX.
 2. **Abra seu projeto.** Escolha a pasta com seus arquivos `.tex`. O Papilot compila o PDF.
 3. **Escolha um agente.** Use o login de CLI ou a chave de API que você já tem e faça marcações na página.
 
@@ -110,11 +141,5 @@ Quer ver um exemplo primeiro? Execute `papilot demo`. Os detalhes estão no [gui
 <img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Torne-se um colaborador.** Pull requests são muito bem-vindos, inclusive os escritos com agentes de IA. Comece pelo [guia de contribuição](../../.github/CONTRIBUTING.md).
 
 ---
-
-<div align="center">
-
-<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
-
-</div>
 
 <p align="center"><sub><a href="../../LICENSE">MIT</a> © 2026 PapilotAI. Agradecimentos aos nossos amigos da <a href="https://linux.do/">LINUX DO</a>.</sub></p>

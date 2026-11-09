@@ -6,8 +6,19 @@
 
 Ein **neues Paradigma** für verantwortungsvolles Schreiben und Setzen mit KI.
 
-**[Papilot herunterladen](https://github.com/PapilotAI/papilot/releases/latest)** für <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>und <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) oder Windows (x64),<br>oder führen Sie `npm install -g papilot` aus.
+<!-- BEGIN BADGES -->
+[![License: MIT](https://img.shields.io/github/license/PapilotAI/papilot?style=flat&color=22c55e)](../../LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/PapilotAI/papilot/ci.yml?branch=main&style=flat&label=CI)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/PapilotAI/papilot?style=flat&label=release&color=0969da)](https://github.com/PapilotAI/papilot/releases/latest)
+[![GitHub total downloads](https://img.shields.io/github/downloads/PapilotAI/papilot/total?style=flat&logo=github&label=downloads&color=0969da)](https://github.com/PapilotAI/papilot/releases)
+[![npm monthly downloads](https://img.shields.io/npm/dm/papilot?style=flat&logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/papilot)
+<!-- END BADGES -->
 
+<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center">
 <a href="https://papilot.ai">
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
@@ -16,8 +27,7 @@ Ein **neues Paradigma** für verantwortungsvolles Schreiben und Setzen mit KI.
   <img src="../assets/readme-showcase/hero.png" alt="Papilot zeigt eine KI-Bearbeitung als gesetzten Vorher-Nachher-Vergleich im PDF, mit Annehmen, Ablehnen und Kommentieren." width="900">
 </picture>
 </a>
-
-</div>
+</p>
 
 <a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
 
@@ -85,13 +95,34 @@ Markieren Sie einen Satz, eine Gleichung oder eine Abbildung und schreiben Sie e
 </p>
 <!-- END AGENT ICONS -->
 
+<a id="downloads"></a>
+
+<a id="-downloads"></a>
+
+## 📥 Downloads
+
+<!-- BEGIN DOWNLOADS -->
+| System / Distribution | Download / Paket | Installieren / starten |
+| --- | --- | --- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture> **macOS** | [Apple Silicon](https://github.com/PapilotAI/papilot/releases/latest) · [Intel](https://github.com/PapilotAI/papilot/releases/latest)<br>DMG / ZIP | DMG öffnen und Papilot in den Programme-Ordner ziehen. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/windows-dark.svg"><img src="../assets/readme-icons/windows.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Windows** | [Installer](https://github.com/PapilotAI/papilot/releases/latest) · [Portable Version](https://github.com/PapilotAI/papilot/releases/latest)<br>x64 | Installer ausführen oder die portable Version direkt öffnen. |
+| <img src="../assets/readme-icons/ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> <img src="../assets/readme-icons/debian.svg" width="18" height="18" align="absmiddle" alt=""> **Ubuntu / Debian / Linux Mint** | [.deb](https://github.com/PapilotAI/papilot/releases/latest) | `sudo apt install ./Papilot-*.deb` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Fedora / Arch / openSUSE** | [AppImage](https://github.com/PapilotAI/papilot/releases/latest) | `chmod +x Papilot-*.AppImage`<br>`./Papilot-*.AppImage` |
+| <img src="../assets/readme-icons/nixos.svg" width="18" height="18" align="absmiddle" alt=""> **NixOS** | [Nix flake](../nix.md#nixos-flake) | [In `flake.nix` eintragen](../nix.md#nixos-flake) |
+| **macOS / Linux / Windows (CLI)** | [npm](https://www.npmjs.com/package/papilot) | `npm install -g papilot` |
+
+Die Linux-Pakete sind für x86_64 und wurden unter Ubuntu 22.04 getestet. Abhängigkeiten und Hilfe zu AppImage/FUSE stehen in der [Desktop-Anleitung](../../desktop/README.md#build-and-run).
+
+Das npm-Paket öffnet die Browseroberfläche und benötigt Node.js 22.22+. Für Nix müssen Flakes aktiviert sein; siehe [Nix-Anleitung](../nix.md#nixos-flake).
+<!-- END DOWNLOADS -->
+
 <a id="quick-start"></a>
 
 <a id="-get-started"></a>
 
 ## 🚀 Erste Schritte
 
-1. **Installieren.** [Laden Sie die App herunter](https://github.com/PapilotAI/papilot/releases/latest) für macOS, Linux oder Windows, oder führen Sie `npm install -g papilot` aus (Node.js 22.22+). Außerdem benötigen Sie Git sowie TeX Live oder MacTeX.
+1. **Installieren.** [Laden Sie die App herunter](#downloads) für macOS, Linux oder Windows, oder führen Sie `npm install -g papilot` aus (Node.js 22.22+). Außerdem benötigen Sie Git sowie TeX Live oder MacTeX.
 2. **Projekt öffnen.** Wählen Sie den Ordner mit Ihren `.tex`-Dateien aus. Papilot erstellt das PDF.
 3. **Agenten auswählen.** Verwenden Sie Ihr vorhandenes CLI-Login oder Ihren API-Schlüssel und markieren Sie anschließend Stellen auf der Seite.
 
@@ -110,11 +141,5 @@ Möchten Sie zuerst ein Beispiel ausprobieren? Führen Sie `papilot demo` aus. D
 <img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Mitwirken.** Pull Requests sind herzlich willkommen, auch solche, die mit KI-Agenten erstellt wurden. Beginnen Sie mit dem [Leitfaden für Beitragende](../../.github/CONTRIBUTING.md).
 
 ---
-
-<div align="center">
-
-<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
-
-</div>
 
 <p align="center"><sub><a href="../../LICENSE">MIT</a> © 2026 PapilotAI. Vielen Dank an unsere Freunde bei <a href="https://linux.do/">LINUX DO</a>.</sub></p>

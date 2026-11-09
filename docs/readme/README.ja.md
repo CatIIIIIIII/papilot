@@ -6,8 +6,19 @@
 
 AI を用いた責任ある執筆と組版のための**新しいパラダイム**。
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS (Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>および <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux (AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) または Windows (x64) 向けに **[Papilot をダウンロード](https://github.com/PapilotAI/papilot/releases/latest)**、<br>または `npm install -g papilot` を実行してください。
+<!-- BEGIN BADGES -->
+[![License: MIT](https://img.shields.io/github/license/PapilotAI/papilot?style=flat&color=22c55e)](../../LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/PapilotAI/papilot/ci.yml?branch=main&style=flat&label=CI)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/PapilotAI/papilot?style=flat&label=release&color=0969da)](https://github.com/PapilotAI/papilot/releases/latest)
+[![GitHub total downloads](https://img.shields.io/github/downloads/PapilotAI/papilot/total?style=flat&logo=github&label=downloads&color=0969da)](https://github.com/PapilotAI/papilot/releases)
+[![npm monthly downloads](https://img.shields.io/npm/dm/papilot?style=flat&logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/papilot)
+<!-- END BADGES -->
 
+<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center">
 <a href="https://papilot.ai">
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
@@ -16,8 +27,7 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
   <img src="../assets/readme-showcase/hero.png" alt="Papilot は AI による編集を組版済みの変更前後として PDF 上に表示し、承認・却下・コメントを行えます。" width="900">
 </picture>
 </a>
-
-</div>
+</p>
 
 <a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
 
@@ -85,13 +95,34 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
 </p>
 <!-- END AGENT ICONS -->
 
+<a id="downloads"></a>
+
+<a id="-downloads"></a>
+
+## 📥 ダウンロード
+
+<!-- BEGIN DOWNLOADS -->
+| OS / ディストリビューション | ダウンロード / パッケージ | インストール / 起動 |
+| --- | --- | --- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture> **macOS** | [Apple Silicon](https://github.com/PapilotAI/papilot/releases/latest) · [Intel](https://github.com/PapilotAI/papilot/releases/latest)<br>DMG / ZIP | DMG を開き、Papilot を「アプリケーション」にドラッグします。 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/windows-dark.svg"><img src="../assets/readme-icons/windows.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Windows** | [インストーラー](https://github.com/PapilotAI/papilot/releases/latest) · [ポータブル版](https://github.com/PapilotAI/papilot/releases/latest)<br>x64 | インストーラーを実行するか、ポータブル版を直接起動します。 |
+| <img src="../assets/readme-icons/ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> <img src="../assets/readme-icons/debian.svg" width="18" height="18" align="absmiddle" alt=""> **Ubuntu / Debian / Linux Mint** | [.deb](https://github.com/PapilotAI/papilot/releases/latest) | `sudo apt install ./Papilot-*.deb` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Fedora / Arch / openSUSE** | [AppImage](https://github.com/PapilotAI/papilot/releases/latest) | `chmod +x Papilot-*.AppImage`<br>`./Papilot-*.AppImage` |
+| <img src="../assets/readme-icons/nixos.svg" width="18" height="18" align="absmiddle" alt=""> **NixOS** | [Nix flake](../nix.md#nixos-flake) | [`flake.nix` に追加](../nix.md#nixos-flake) |
+| **macOS / Linux / Windows (CLI)** | [npm](https://www.npmjs.com/package/papilot) | `npm install -g papilot` |
+
+Linux パッケージは x86_64 向けで、Ubuntu 22.04 でテスト済みです。依存関係と AppImage/FUSE の説明は[デスクトップ版のセットアップ](../../desktop/README.md#build-and-run)をご覧ください。
+
+npm 版はブラウザーで動作し、Node.js 22.22+ が必要です。Nix では flakes を有効にしてください。詳しくは [Nix のセットアップ](../nix.md#nixos-flake)をご覧ください。
+<!-- END DOWNLOADS -->
+
 <a id="quick-start"></a>
 
 <a id="-get-started"></a>
 
 ## 🚀 はじめに
 
-1. **インストール。** macOS、Linux、Windows 向けの[アプリをダウンロード](https://github.com/PapilotAI/papilot/releases/latest)するか、`npm install -g papilot`（Node.js 22.22 以降）を実行します。また、Git と TeX Live または MacTeX が必要です。
+1. **インストール。** macOS、Linux、Windows 向けの[アプリをダウンロード](#downloads)するか、`npm install -g papilot`（Node.js 22.22 以降）を実行します。また、Git と TeX Live または MacTeX が必要です。
 2. **プロジェクトを開く。** `.tex` ファイルが含まれるフォルダを選択すると、Papilot が PDF をビルドします。
 3. **エージェントを選択。** 既存の CLI ログインまたは API キーを使用し、ページに注釈を付けます。
 
@@ -110,11 +141,5 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
 <img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**コントリビューターになる。** AI エージェントを用いて作成されたものを含め、プルリクエストを歓迎します。まずは[コントリビューションガイド](../../.github/CONTRIBUTING.md)をご覧ください。
 
 ---
-
-<div align="center">
-
-<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
-
-</div>
 
 <p align="center"><sub><a href="../../LICENSE">MIT</a> © 2026 PapilotAI. <a href="https://linux.do/">LINUX DO</a> の皆様に感謝いたします。</sub></p>

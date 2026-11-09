@@ -6,8 +6,19 @@
 
 AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다임**.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;macOS(Apple&nbsp;Silicon&nbsp;/&nbsp;Intel)<br>및 <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture>&nbsp;Linux(AppImage / <img src="../assets/readme-icons/ubuntu.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Ubuntu / <img src="../assets/readme-icons/debian.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;Debian / <img src="../assets/readme-icons/nixos.svg" width="16" height="16" align="absmiddle" alt="">&nbsp;NixOS) 또는 Windows (x64)용 **[Papilot 다운로드](https://github.com/PapilotAI/papilot/releases/latest)**,<br>또는 `npm install -g papilot`을 실행하세요.
+<!-- BEGIN BADGES -->
+[![License: MIT](https://img.shields.io/github/license/PapilotAI/papilot?style=flat&color=22c55e)](../../LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/PapilotAI/papilot/ci.yml?branch=main&style=flat&label=CI)](https://github.com/PapilotAI/papilot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/PapilotAI/papilot?style=flat&label=release&color=0969da)](https://github.com/PapilotAI/papilot/releases/latest)
+[![GitHub total downloads](https://img.shields.io/github/downloads/PapilotAI/papilot/total?style=flat&logo=github&label=downloads&color=0969da)](https://github.com/PapilotAI/papilot/releases)
+[![npm monthly downloads](https://img.shields.io/npm/dm/papilot?style=flat&logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/papilot)
+<!-- END BADGES -->
 
+<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+
+</div>
+
+<p align="center">
 <a href="https://papilot.ai">
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
@@ -16,8 +27,7 @@ AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다�
   <img src="../assets/readme-showcase/hero.png" alt="Papilot은 수락, 거절 및 댓글 기능과 함께 AI 수정 사항을 PDF 상에서 조판된 전후 비교로 보여줍니다." width="900">
 </picture>
 </a>
-
-</div>
+</p>
 
 <a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
 
@@ -85,13 +95,34 @@ AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다�
 </p>
 <!-- END AGENT ICONS -->
 
+<a id="downloads"></a>
+
+<a id="-downloads"></a>
+
+## 📥 다운로드
+
+<!-- BEGIN DOWNLOADS -->
+| 운영체제 / 배포판 | 다운로드 / 패키지 | 설치 / 실행 |
+| --- | --- | --- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture> **macOS** | [Apple Silicon](https://github.com/PapilotAI/papilot/releases/latest) · [Intel](https://github.com/PapilotAI/papilot/releases/latest)<br>DMG / ZIP | DMG를 열고 Papilot을 응용 프로그램 폴더로 드래그하세요. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/windows-dark.svg"><img src="../assets/readme-icons/windows.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Windows** | [설치 프로그램](https://github.com/PapilotAI/papilot/releases/latest) · [포터블 버전](https://github.com/PapilotAI/papilot/releases/latest)<br>x64 | 설치 프로그램을 실행하거나 포터블 버전을 바로 여세요. |
+| <img src="../assets/readme-icons/ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> <img src="../assets/readme-icons/debian.svg" width="18" height="18" align="absmiddle" alt=""> **Ubuntu / Debian / Linux Mint** | [.deb](https://github.com/PapilotAI/papilot/releases/latest) | `sudo apt install ./Papilot-*.deb` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Fedora / Arch / openSUSE** | [AppImage](https://github.com/PapilotAI/papilot/releases/latest) | `chmod +x Papilot-*.AppImage`<br>`./Papilot-*.AppImage` |
+| <img src="../assets/readme-icons/nixos.svg" width="18" height="18" align="absmiddle" alt=""> **NixOS** | [Nix flake](../nix.md#nixos-flake) | [`flake.nix`에 추가](../nix.md#nixos-flake) |
+| **macOS / Linux / Windows (CLI)** | [npm](https://www.npmjs.com/package/papilot) | `npm install -g papilot` |
+
+Linux 패키지는 x86_64용이며 Ubuntu 22.04에서 테스트했습니다. 의존성과 AppImage/FUSE 사용법은 [데스크톱 설치 안내](../../desktop/README.md#build-and-run)를 참고하세요.
+
+npm 패키지는 브라우저 인터페이스를 사용하며 Node.js 22.22+가 필요합니다. Nix는 flakes를 활성화해야 합니다. [Nix 설치 안내](../nix.md#nixos-flake)를 참고하세요.
+<!-- END DOWNLOADS -->
+
 <a id="quick-start"></a>
 
 <a id="-get-started"></a>
 
 ## 🚀 시작하기
 
-1. **설치.** macOS, Linux, Windows용 [앱을 다운로드](https://github.com/PapilotAI/papilot/releases/latest)하거나 `npm install -g papilot`(Node.js 22.22+)을 실행하세요. 또한 Git과 TeX Live 또는 MacTeX이 필요합니다.
+1. **설치.** macOS, Linux, Windows용 [앱을 다운로드](#downloads)하거나 `npm install -g papilot`(Node.js 22.22+)을 실행하세요. 또한 Git과 TeX Live 또는 MacTeX이 필요합니다.
 2. **프로젝트 열기.** `.tex` 파일이 있는 폴더를 선택하세요. Papilot이 PDF를 빌드합니다.
 3. **에이전트 선택.** 이미 보유한 CLI 로그인이나 API 키를 사용한 뒤, 페이지에 표시를 남기세요.
 
@@ -110,11 +141,5 @@ AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다�
 <img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**기여자가 되어 주세요.** AI 에이전트와 함께 작성한 풀 리퀘스트(PR)를 포함하여 모든 기여를 환영합니다. [기여 가이드](../../.github/CONTRIBUTING.md)부터 확인해 보세요.
 
 ---
-
-<div align="center">
-
-<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
-
-</div>
 
 <p align="center"><sub><a href="../../LICENSE">MIT</a> © 2026 PapilotAI. <a href="https://linux.do/">LINUX DO</a>의 동료들에게 감사드립니다.</sub></p>
