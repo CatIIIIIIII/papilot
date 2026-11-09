@@ -1839,6 +1839,10 @@ function App() {
       layoutTransition.current = null;
       document.documentElement.classList.remove('switching-workspace');
     };
+    // A skipped or timed-out animation can reject ready independently of
+    // finished. Observe every promise; the layout update still takes effect.
+    void transition.ready.catch(() => {});
+    void transition.updateCallbackDone.catch(() => {});
     void transition.finished.then(finish, finish);
   }
   const taskStateActions = task && (

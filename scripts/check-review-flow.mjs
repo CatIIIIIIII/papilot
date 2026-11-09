@@ -54,6 +54,7 @@ function detail(round) {
 let indirectChanges = false;
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/indirect-changes') {
     if (route.request().method() === 'POST') indirectChanges = route.request().postDataJSON().indirectChanges === true;
     return route.fulfill({ json: { indirectChanges } });

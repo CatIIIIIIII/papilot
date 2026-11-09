@@ -33,6 +33,7 @@ async function open(options, { desktop = false } = {}) {
     const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
     if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
     if (url.pathname === '/api/state') return json(snapshot);
+    if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
     if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
     if (url.pathname === '/api/updates') return json({ phase: 'idle', currentVersion: 'test', latestVersion: 'test', canUpdate: false });
     if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });

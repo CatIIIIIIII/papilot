@@ -27,6 +27,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/updates')) return json({ currentVersion: 'test', phase: 'idle', canUpdate: false });
   if (url.pathname.endsWith('/indirect-changes')) return json({ indirectChanges: false });
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname.endsWith('/quick-notes')) return json({ quickNotes: null });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/items')) return json({ items: [{ id: 'answer', taskId: task.id, type: 'assistant', text: '已根据 5 条批注完成修改。', createdAt: 2 }] });

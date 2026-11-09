@@ -4,6 +4,29 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-09
+
+Review edits by PDF note, compare prepared alternatives in context, and choose how many alternatives future requests should prepare.
+
+### Added
+
+- **Note-focused review and prepared alternatives.** Select a sent PDF note to focus its exact changes while keeping the surrounding PDF visible. A bottom drawer compares the main proposal with prepared alternatives, including their reasons and LaTeX source. Accept, reject and comment act on the selected note. Alternatives are prepared with the editing request, and their PDF previews are cached across restarts. ([#90](https://github.com/PapilotAI/papilot/pull/90), [#93](https://github.com/PapilotAI/papilot/pull/93))
+- **An illustrated, multilingual blog.** Read about PDF-first human–AI writing on the website, and reset the interactive demo from its visible banner button. ([#96](https://github.com/PapilotAI/papilot/pull/96), [#98](https://github.com/PapilotAI/papilot/pull/98), [#99](https://github.com/PapilotAI/papilot/pull/99))
+
+### Changed
+
+- **One compact control for note alternatives.** In Review preferences, choose Off, Few (1–2), Balanced (2–3), or More (3–5). Counts exclude the main proposal and guide future requests; existing review choices remain available when preparation is off. ([#101](https://github.com/PapilotAI/papilot/pull/101))
+- **Clearer setup and installation guidance.** Startup tool detection handles missing tools more consistently, settings explain the required tools, and the README groups installation instructions by platform. ([#88](https://github.com/PapilotAI/papilot/pull/88), [#100](https://github.com/PapilotAI/papilot/pull/100))
+
+### Fixed
+
+- **Workspace switching stays responsive after saving a PDF note.** Decorative note animations no longer block the keyboard switcher. Interrupted view transitions no longer leave uncaught browser errors.
+- **Embedded alternative previews follow the workspace language.** Shared PDF components no longer reset the page's language on reload, and their accessible page labels update with the selected language.
+- **Rejecting a note restores its original source immediately.** The undoable operation affects only that note's edits and invalidates stale alternative previews. ([#93](https://github.com/PapilotAI/papilot/pull/93))
+- **AI PDF review preparation keeps the server responsive.** Expensive PDF work runs outside the server's event loop. ([#97](https://github.com/PapilotAI/papilot/pull/97))
+- **Short PDF changes keep their labels readable.** Before/After labels no longer overflow short comparison strips. ([#89](https://github.com/PapilotAI/papilot/pull/89))
+- **Interrupted uploads and oversized downloads are cleaned up safely.** Failed attachment uploads remove partial files, and update downloads stop as soon as their size limit is exceeded. ([#95](https://github.com/PapilotAI/papilot/pull/95), [#92](https://github.com/PapilotAI/papilot/pull/92))
+
 ## [0.9.3] - 2026-11-08
 
 Papilot shows complete PDF comparisons for Beamer slides and documents without sections, brings the manuscript's PDF controls into task reviews, and simplifies the app to a single-user workspace.

@@ -5,8 +5,12 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
+import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
 import { taskNoteResults } from '../src/server/note-results.ts';
 import { rewriteReviewHtml } from '../src/server/review.ts';
+import { messages } from '../src/web/locales/index.ts';
+import { messages as reviewMessages } from '../engine/src/web/locales/index.ts';
+import { interpolateMessage } from '../engine/src/locales.ts';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
@@ -38,7 +42,7 @@ let comparisonVersion = 'initial';
 const alternateSource = '\\emph{A concise alternative preserving the technical term.}';
 const strip = text => {
   const src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="30"><rect width="600" height="30" fill="white"/><text x="40" y="20" font-size="12">${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</text></svg>`);
-  return { src, clean: src, width: 600, height: 30, page: 1, label: '1' };
+  return { src, clean: src, width: 600, height: 30, page: 1, label: '1', text: [{ text, chars: Array.from(text, (text, index) => ({ text, rect: [40 + index * 5, 8, 45 + index * 5, 22] })) }] };
 };
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
@@ -128,6 +132,20 @@ try {
   assert.equal(await controls().locator('.note-option-reason').textContent(), 'Preserve the author’s technical term.', 'The preferred proposal uses the AI-provided title and reason');
   assert.equal(await controls().locator('.note-comparison-side-label').count(), 2, 'Only this group has before/after labels');
   assert.equal(await controls().locator('.note-comparison-change[data-units="other"]').count(), 0, 'Other groups remain in the main review');
+  // A shared engine strip must follow live workspace language changes even
+  // though this page has no viewer ?lang parameter or workspace reload.
+  const firstStrip = controls().locator('.pdf-strip .pdf-text').first();
+  for (const id of ['fr', 'de', 'en']) {
+    await page.evaluate(id => {
+      localStorage.setItem('papilot:language', id);
+      window.dispatchEvent(new StorageEvent('storage', { key: 'papilot:language', newValue: id }));
+    }, id);
+    const before = id === 'en' ? 'Before' : messages[id].Before;
+    const expected = interpolateMessage(id === 'en' ? '{label}, PDF page {page}' : reviewMessages[id]['{label}, PDF page {page}'], id, { label: before, page: '1' });
+    await expect(page.locator('html')).toHaveAttribute('lang', id);
+    await expect(firstStrip).toHaveAttribute('aria-label', expected);
+  }
+  console.log('PASS: Embedded PDF strip labels follow live workspace language changes');
   const sourceToggle = controls().getByRole('button', { name: 'Show LaTeX source', exact: true });
   assert.equal(await sourceToggle.getAttribute('aria-pressed'), 'false', 'PDF remains the default');
   await sourceToggle.click();

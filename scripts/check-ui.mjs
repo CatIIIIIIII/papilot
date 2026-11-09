@@ -729,6 +729,39 @@ try {
   await page.waitForFunction(() => document.querySelector('.review-frame').contentDocument.documentElement.style.getPropertyValue('--papilot-lead') === '0px');
   console.log('PASS: Content toolbars retain view-switch focus and reopen the sidebar in every desktop layout');
 
+  // Browser animation failures have independent promise rejections. Force
+  // them without relying on a machine being slow enough to time out naturally.
+  const transitionErrors = pageErrors.length;
+  await page.evaluate(() => {
+    const original = document.startViewTransition;
+    window.restoreWorkspaceTransition = () => { document.startViewTransition = original; };
+    window.workspaceTransitionFailure = 'timeout';
+    document.startViewTransition = update => {
+      const failure = window.workspaceTransitionFailure;
+      const updateCallbackDone = Promise.resolve().then(() => {
+        update();
+        if (failure === 'update') throw new Error('Fixture transition update failed');
+      });
+      return {
+        updateCallbackDone,
+        ready: updateCallbackDone.then(() => { throw new DOMException('Fixture transition timed out', 'TimeoutError'); }),
+        finished: updateCallbackDone.then(() => {}),
+        skipTransition() {},
+      };
+    };
+  });
+  try {
+    for (const [failure, view] of [['timeout', 'Review'], ['update', 'Chat']]) {
+      await page.evaluate(failure => { window.workspaceTransitionFailure = failure; }, failure);
+      await selectWorkspaceView(view);
+      await expect(views.getByRole('button', { name: view, exact: true })).toBeFocused();
+      await page.clock.runFor(1);
+    }
+    assert.deepEqual(pageErrors.slice(transitionErrors), [], 'Failed transition promises never become uncaught page errors');
+  } finally { await page.evaluate(() => { window.restoreWorkspaceTransition(); delete window.restoreWorkspaceTransition; delete window.workspaceTransitionFailure; }); }
+  await selectWorkspaceView('Split');
+  console.log('PASS: Workspace animation timeouts and update rejections preserve layout, focus, cleanup, and subsequent switching');
+
   const pdfLink = page.locator('.manuscript-link');
   await expect(page.locator('.git-link')).toHaveAttribute('title', /main · 2 changed · ↑1/);
   await expect(page.locator('.git-link .count')).toHaveText('2');

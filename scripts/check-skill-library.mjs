@@ -36,6 +36,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', phase: 'idle', canUpdate: false });
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/quick-notes') return json({ quickNotes: null });
   if (url.pathname.endsWith('/skills')) return json({ skills: loadSkills(project.path, roots).map(listedSkill) });

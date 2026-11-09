@@ -1,6 +1,6 @@
 {
   "name": "papilot",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "A Cursor-like workspace for your papers: annotate and review PDFs directly without ever touching LaTeX.",
   "keywords": [
     "latex",

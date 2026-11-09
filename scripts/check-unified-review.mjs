@@ -57,6 +57,7 @@ function detail(round) {
 }
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/indirect-changes') return route.fulfill({ json: { indirectChanges: false } });
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/quick-notes') return route.fulfill({ json: { quickNotes: null } });
@@ -66,6 +67,8 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/tasks/question-fixture/items') return route.fulfill({ json: { items: [{ id: 'answer', taskId: 'question-fixture', type: 'assistant', text: 'This equation expresses conservation of mass.', createdAt: 1 }] } });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items: timeline } });
   if (url.pathname.endsWith('/note-results')) return route.fulfill({ json: { notes: noteResults } });
+  if (url.pathname.endsWith('/note-options/preview')) return route.fulfill({ json: detail(Number(url.searchParams.get('round')) || latest) });
+  if (url.pathname.endsWith('/note-options')) return route.fulfill({ json: { key: url.searchParams.get('key'), round: latest, options: [], locked: 'Options are not available for this source range yet.' } });
   if (url.pathname.endsWith('/delete')) {
     deleteRequests.push(route.request().postDataJSON());
     snapshot.tasks = snapshot.tasks.filter(item => item.id !== task.id);
@@ -201,6 +204,9 @@ try {
   await input().fill('A follow-up without a comment on that quotation.');
   await expect(send()).toBeEnabled();
   await send().click(); await expect.poll(() => sent.length).toBe(3);
+  // Receiving the POST is earlier than the client applying its success.
+  // Reload only after the submitted text has been removed from the draft.
+  await expect(input()).toHaveValue('');
   assert.equal(sent[2].notes, undefined);
   await expect(page.locator('.review-draft-note')).toHaveCount(1);
   // An unwritten comment must not hide the save action after accepting everything.
@@ -241,15 +247,18 @@ try {
   // Draft quotations and sent-note results must take turns owning navigation.
   const linkedNote = sent[1].notes[0];
   timeline = [{ id: 'sent-note', taskId: task.id, type: 'user', text: '', createdAt: 2, meta: { notes: [linkedNote] } }];
-  noteResults = [{ key: 'sent-note:0', itemId: 'sent-note', index: 0, note: linkedNote, round: 2, state: 'matched', changes: [{ round: 2, stop: 0, state: 'pending' }] }];
+  noteResults = [{ key: 'sent-note:0', itemId: 'sent-note', index: 0, note: linkedNote, round: 2, state: 'matched', changes: [{ round: 2, stop: 0, units: ['new'], match: 'source', state: 'pending' }] }];
   task.updatedAt = 2; await sync();
-  const resultLink = page.locator('[data-note-result="sent-note:0"]').getByRole('button', { name: /Change 1/ });
+  const resultLink = page.locator('[data-note-result="sent-note:0"]');
   for (let attempt = 0; attempt < 2; attempt++) {
     await resultLink.click();
-    await expect(page.locator('.review-frame')).toHaveAttribute('src', /round=2/);
+    await expect(page.locator('.review-frame')).not.toHaveAttribute('src', /[?&](round|history)=/);
+    await expect(viewer().locator('html')).toHaveAttribute('data-papilot-round', '2');
+    await expect(viewer().locator('.change[data-units="new"]')).toBeVisible();
     await expect(viewer().locator('.papilot-linked-change[data-stop="0"]')).toBeVisible();
     await page.getByRole('button', { name: /Before revision.*Page 1/ }).click();
     await expect(page.locator('.review-frame')).toHaveAttribute('src', /round=1/);
+    await expect(viewer().locator('html')).toHaveAttribute('data-papilot-round', '1');
     await expect(viewer().locator('.review-note-tag').first()).toBeVisible();
     await expect(viewer().locator('.papilot-linked-change')).toHaveCount(0);
   }

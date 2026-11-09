@@ -7,7 +7,6 @@ export function pageLanguage(search = location.search): Language {
 }
 const current: Language =
   typeof location === "undefined" ? "en" : pageLanguage();
-if (typeof document !== "undefined") document.documentElement.lang = current;
 
 export const language = () => current;
 // Dates and numbers follow the interface language.
@@ -21,9 +20,9 @@ export function withLanguage(href: string) {
 }
 
 // t("Change {n}", { n }) fills {placeholders} after translating.
-export function t(text: string, values?: Record<string, string | number>) {
-  const template = Object.hasOwn(messages[current], text) ? messages[current][text] : text;
-  return interpolateMessage(template, current, values);
+export function t(text: string, values?: Record<string, string | number>, language: Language = current) {
+  const template = Object.hasOwn(messages[language], text) ? messages[language][text] : text;
+  return interpolateMessage(template, language, values);
 }
 // Select the count form using the active locale; {n} is the count.
 export function tn(

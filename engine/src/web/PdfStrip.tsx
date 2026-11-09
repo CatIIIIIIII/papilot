@@ -8,7 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { Strip, TextGlyph } from "../types.ts";
-import { t } from "./i18n.ts";
+import { language as viewerLanguage, t, type Language } from "./i18n.ts";
 let context: CanvasRenderingContext2D | null | undefined;
 const widths = new Map<string, number>();
 function width(text: string) {
@@ -61,12 +61,14 @@ export const PdfStrip = memo(function PdfStrip({
   label,
   clean = false,
   focus,
+  language = viewerLanguage(),
 }: {
   image: Strip;
   base: string;
   label: string;
   clean?: boolean;
   focus?: string[];
+  language?: Language;
 }) {
   // Keep every line searchable. Only visible strips need the individual
   // glyph boxes used for accurate pointer selection over the PDF image.
@@ -198,7 +200,7 @@ export const PdfStrip = memo(function PdfStrip({
           aria-label={t("{label}, PDF page {page}", {
             label,
             page: image.label,
-          })}
+          }, language)}
         >
           {text}
         </div>

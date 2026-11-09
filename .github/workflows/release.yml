@@ -57,7 +57,7 @@ jobs:
           release_notes="docs/releases/$version/release-notes.md"
           if [ -f "$release_notes" ]; then
             # The versioned introduction may cover an entire minor-release cycle.
-            # Omit the heading; the CHANGELOG supplies the release title below.
+            # Omit the heading; the release title contains only the version.
             sed '1{/^# /d;}' "$release_notes" | sed '/./,$!d' > "$RUNNER_TEMP/notes.md"
             if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
               echo "::error::$release_notes is empty."; exit 1
@@ -65,10 +65,7 @@ jobs:
           else
             printf '```sh\nnpm install -g papilot@latest\n```\n' >> "$RUNNER_TEMP/notes.md"
           fi
-          headline="$(awk -v heading="## [$version]" 'index($0, heading) == 1 { separator = " — "; offset = index($0, separator); if (offset) print substr($0, offset + length(separator)); exit }' CHANGELOG.md)"
-          title="Papilot $version"
-          if [ -n "$headline" ]; then title="$title — $headline"; fi
-          printf '%s\n' "$title" > "$RUNNER_TEMP/title.txt"
+          printf 'Papilot %s\n' "$version" > "$RUNNER_TEMP/title.txt"
       - run: npm ci
       - run: npm run setup:review
       - name: Download tested desktop installers

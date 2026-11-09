@@ -31,6 +31,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
   if (url.pathname === '/api/state') return json(state);
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/skills')) return json({ skills: [{ id: 'ai-review', name: 'AI review', description: 'Read the paper and leave PDF comments without editing the manuscript', hint: 'Review focus', source: 'builtin', output: 'annotations' }] });

@@ -43,7 +43,8 @@ export function WorkspaceSwitcher({ items, active, onSelect }: {
   useEffect(() => {
     const consume = (event: KeyboardEvent) => { event.preventDefault(); event.stopImmediatePropagation(); };
     const hasDialog = (doc: Document) => [...doc.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"], [aria-modal="true"], :popover-open')]
-      .some(element => element.checkVisibility({ visibilityProperty: true }));
+      // Note-flight animations retain their card's dialog role but are inert.
+      .some(element => !element.closest('[inert]') && element.checkVisibility({ visibilityProperty: true }));
     const key = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return;
       if (event.type === 'keyup') {

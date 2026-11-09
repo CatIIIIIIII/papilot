@@ -39,6 +39,7 @@ await context.addInitScript(() => {
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/runtime/requirements') return json(readyRequirements);
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname.endsWith('/indirect-changes')) return json({ indirectChanges: false });
   if (url.pathname === '/api/state') {
     stateReads++;

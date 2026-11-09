@@ -1,11 +1,11 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { zhCN } from "../../src/web/zh-CN.ts";
 import { messages } from "../../src/web/locales/index.ts";
 import { LANGUAGES } from "../../src/locales.ts";
 import { STATUS } from "../../src/web/overview.tsx";
 import { STATE } from "../../src/web/model.ts";
-import { pageLanguage } from "../../src/web/i18n.ts";
+import { pageLanguage, t, language } from "../../src/web/i18n.ts";
 
 const web = new URL("../../src/web/", import.meta.url);
 // Every literal passed to t(), tn() or a translator, plus the label maps the
@@ -50,6 +50,28 @@ it("reads the language from the page address only", () => {
   expect(pageLanguage("?lang=zh-Hant")).toBe("zh-Hant");
   expect(pageLanguage("?lang=zh-Hans")).toBe("zh-Hans");
   for (const { id } of LANGUAGES) expect(pageLanguage(`?lang=${id}`)).toBe(id);
+});
+
+it("importing shared viewer translations leaves the host document language alone", async () => {
+  const document = { documentElement: { lang: "fr" } };
+  vi.resetModules();
+  vi.stubGlobal("document", document);
+  vi.stubGlobal("location", { search: "?lang=de" });
+  try {
+    const viewer = await import("../../src/web/i18n.ts");
+    expect(viewer.language()).toBe("de");
+    expect(document.documentElement.lang).toBe("fr");
+  } finally {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  }
+});
+
+it("shared components can translate in their host language without changing the viewer language", () => {
+  const original = language();
+  expect(t("{label}, PDF page {page}", { label: "Avant", page: "1" }, "fr")).toBe("Avant, page PDF 1");
+  expect(t("{label}, PDF page {page}", { label: "Vorher", page: "1" }, "de")).toBe("Vorher, PDF-Seite 1");
+  expect(language()).toBe(original);
 });
 
 it("translates every review message into every supported language with intact placeholders", () => {

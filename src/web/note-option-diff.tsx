@@ -2,13 +2,14 @@ import { Fragment, useEffect, useState } from 'react';
 import type { Block, RoundDetail, Strip } from '../../engine/src/types.ts';
 import { PdfStrip } from '../../engine/src/web/PdfStrip.tsx';
 import { wordDiff } from '../../engine/src/web/model.ts';
-import { t } from './i18n.ts';
+import { t, useLanguage } from './i18n.ts';
 import { noteComparisonScope } from './note-comparison-scope.ts';
 
 // Keep nearby PDF context compact. Scan rendered pixels rather than text
 // bounds so the visible crop retains figures and other non-text content.
 const contentHeights = new Map<string, number>();
 function CompactContext({ image, base, edge }: { image: Strip; base: string; edge: 'start' | 'end' }) {
+  const { language } = useLanguage();
   const src = base + image.clean;
   const cacheKey = `${edge}:${src}`;
   const [height, setHeight] = useState(() => contentHeights.get(cacheKey) ?? image.height);
@@ -47,16 +48,17 @@ function CompactContext({ image, base, edge }: { image: Strip; base: string; edg
   // Keep the context nearest the change, without retaining a page's blank
   // tail or distant footer as empty space in this compact drawer.
   return <div className="note-comparison-context" data-edge={edge} style={{ aspectRatio: `${image.width} / ${height}` }}>
-    <div style={{ paddingBottom: `${height / image.width * 100}%` }}><PdfStrip image={image} base={base} label={t('Unchanged context')} clean/></div>
+    <div style={{ paddingBottom: `${height / image.width * 100}%` }}><PdfStrip image={image} base={base} label={t('Unchanged context')} language={language} clean/></div>
   </div>;
 }
 
 /** Compare this note's groups in the complete candidate's native layout,
  * attributing highlights only to the note's exact edits. */
 export function NoteOptionDiff({ detail, focus }: { detail: RoundDetail; focus: string[] }) {
+  const { language } = useLanguage();
   const scoped = noteComparisonScope(detail, focus);
   const strips = (images: Strip[], label: string, clean = false) => images.map((image, index) =>
-    <PdfStrip key={`${image.src}:${index}`} image={image} base={detail.files} label={label} clean={clean} focus={focus}/>);
+    <PdfStrip key={`${image.src}:${index}`} image={image} base={detail.files} label={label} clean={clean} focus={focus} language={language}/>);
   const block = (item: Block, index: number, blocks: Block[]) => {
     if (item.kind === 'gap') return <div key={index} className="note-comparison-gap" role="separator">⋯</div>;
     if (item.kind === 'context') return <CompactContext key={detail.files + item.image.clean} image={item.image} base={detail.files} edge={blocks[index + 1]?.kind === 'change' ? 'end' : 'start'}/>;
