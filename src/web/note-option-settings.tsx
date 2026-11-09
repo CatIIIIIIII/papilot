@@ -22,7 +22,7 @@ export function NoteOptionSettings() {
         <span className="effort-fill" aria-hidden="true"/>
         {choices.map((choice, step) => step !== index && <span key={choice.id} aria-hidden="true" className={'effort-stop' + (step < index ? ' on' : '')} style={{ left: centre(step) }}/>) }
         <span className="effort-thumb" aria-hidden="true"/>
-        <input id="settings-note-alternatives" type="range" min={0} max={3} step={1} value={index} aria-label={t('Extra alternatives per note')} aria-valuetext={preference.enabled ? `${choices[index].label} · ${range}` : range} aria-describedby={`settings-note-alternatives-detail ${description}`} onChange={event => {
+        <input id="settings-note-alternatives" type="range" min={0} max={3} step={1} value={index} aria-valuetext={preference.enabled ? `${choices[index].label} · ${range}` : range} aria-describedby={`settings-note-alternatives-detail ${description}`} onChange={event => {
           const choice = choices[Number(event.target.value)].id;
           void (choice === 'off' ? saveNoteAlternatives(false) : saveNoteAlternatives(true, choice));
         }}/>

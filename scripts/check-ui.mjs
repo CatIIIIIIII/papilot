@@ -274,7 +274,7 @@ try {
   await settingsDialog.getByRole('searchbox', { name: 'Search settings' }).fill('indirect');
   await settingsDialog.getByRole('button', { name: 'Review preferences', exact: true }).click();
   await settingsDialog.getByRole('switch', { name: 'Track indirect changes' }).waitFor();
-  const countSlider = settingsDialog.getByRole('slider', { name: 'Extra alternatives per note' });
+  const countSlider = settingsDialog.getByRole('slider', { name: 'Prepare alternatives for PDF notes', exact: true });
   const optionRow = settingsDialog.locator('.settings-note-options'), countControl = settingsDialog.locator('.settings-note-count');
   const rowBounds = await optionRow.boundingBox(), controlBounds = await countControl.boundingBox(), textBounds = await optionRow.locator('.settings-text').boundingBox();
   assert.ok(controlBounds.width <= 240 && Math.abs(controlBounds.x + controlBounds.width - rowBounds.x - rowBounds.width) < 2, 'The compact control aligns with the right edge');

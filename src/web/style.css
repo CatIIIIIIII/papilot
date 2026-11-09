@@ -852,6 +852,8 @@ body.resizing iframe{pointer-events:none}
 .note-count-scale span.active{color:var(--text-2)}
 .note-count-scale span:first-child{left:0;transform:none}
 .note-count-scale span:last-child{right:0;transform:none}
+/* Long translated Off labels need their own space on the smallest screens. */
+@media(max-width:360px){.note-count-scale span{position:static;transform:none}}
 @media(max-width:480px){.settings-note-count{align-self:flex-end}}
 .settings-name{font-size:14px;font-weight:500;color:var(--text)}
 .segmented{display:inline-flex;gap:2px;padding:3px;border-radius:var(--r-md);background:var(--bg-muted)}
