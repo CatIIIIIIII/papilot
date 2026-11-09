@@ -139,7 +139,9 @@ test('the CLI loader keeps HTTP responsive during extraction and serializes conc
       void jobs.catch(() => {});
       try {
         const deadline = Date.now() + 20000;
-        while (!fs.existsSync(started)) { if (Date.now() > deadline) throw new Error('Worker did not start'); await delay(10); }
+        // appendFileSync opens the marker before writing it. Wait for a complete
+        // line, then keep the exact count assertions below to detect concurrency.
+        while (!fs.existsSync(started) || !fs.readFileSync(started, 'utf8').includes('\\n')) { if (Date.now() > deadline) throw new Error('Worker did not start'); await delay(10); }
         const response = await fetch('http://127.0.0.1:' + server.address().port + '/api/health', { signal: AbortSignal.timeout(5000) });
         assert.equal(await response.text(), 'responsive');
         assert.equal(fs.readFileSync(started, 'utf8'), 'started\\n', 'only one PDF extracts at a time');
