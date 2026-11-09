@@ -15,11 +15,12 @@ export function ModelLabel({ model, effort, fast }: { model: string; effort?: st
 export function AgentConnectionNotice({ name, runtime, reconnecting, onReconnect }: { name: string; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void }) {
   if (!runtime || (runtime.connected && runtime.authenticated)) return null;
   const error = runtime.error || '', first = error.split(/:\s|\.\s/)[0];
+  const connecting = runtime.installed !== false && !error && !runtime.connected;
   // An agent that was not found is not connecting: say so until it is installed and Reconnect finds it.
   const message = runtime.installed === false ? t('{agent} was not found on this computer. Install or set it up, then select Reconnect.', { agent: name })
-    : error ? (first.length <= 120 ? first : t('{agent} is unavailable', { agent: name })) : t('Connecting to {agent}…', { agent: name });
-  return <div className="agent-connection">
-    <div className="agent-connection-message" role="status"><Icon name="alert" size={15}/><span>{message}</span></div>
+    : error ? (first.length <= 120 ? first : t('{agent} is unavailable', { agent: name })) : runtime.connected ? t('Sign-in required') : t('Connecting to {agent}…', { agent: name });
+  return <div className="agent-connection" data-state={connecting ? 'connecting' : 'error'}>
+    <div className="agent-connection-message" role="status">{connecting ? <span className="spinner" aria-hidden="true"/> : <Icon name="alert" size={14}/>}<span>{message}</span></div>
     {error && error !== message && <details><summary>{t('Connection details')}</summary><p>{error}</p></details>}
     <button type="button" disabled={reconnecting} onClick={onReconnect}><Icon name="refresh" size={12}/>{reconnecting ? t('Connecting…') : t('Reconnect')}</button>
   </div>;

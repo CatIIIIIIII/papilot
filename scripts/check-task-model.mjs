@@ -121,6 +121,28 @@ try {
   const box = await taskModelMenu.boundingBox();
   assert.ok(box.x >= 0 && box.x + box.width <= 390);
   await page.screenshot({ path: 'test-results/task-model-mobile.png' });
+  await taskModelMenu.getByRole('combobox').press('Escape');
+  Object.assign(runtime, { connected: false, authenticated: false, error: null });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  const connection = page.locator('.composer-wrap > .agent-connection');
+  await expect(connection).toHaveAttribute('data-state', 'connecting');
+  await expect(connection.getByRole('status')).toContainText('Connecting to Codex');
+  assert.equal(await connection.locator('.agent-connection-message > svg').count(), 0, 'Normal startup has no warning icon');
+  assert.equal(await connection.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)', 'Normal startup has no warning card background');
+  await page.screenshot({ path: 'test-results/agent-connecting-mobile.png' });
+  Object.assign(runtime, { error: 'Connection refused: The agent did not respond.' });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(connection).toHaveAttribute('data-state', 'error');
+  await expect(connection.getByRole('button', { name: 'Reconnect', exact: true })).toBeEnabled();
+  await connection.getByText('Connection details', { exact: true }).click();
+  await expect(connection.getByText(runtime.error, { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/agent-connection-error-mobile.png' });
+  Object.assign(runtime, { connected: true, authenticated: false, error: null });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(connection.getByRole('status')).toHaveText('Sign-in required');
+  Object.assign(runtime, { connected: true, authenticated: true, error: null });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(connection).toHaveCount(0);
   assert.deepEqual(errors, []);
   console.log('PASS: Task model and effort stay editable within the same agent, persist, serialize changes, recover from save failures and fit mobile');
 

@@ -40,16 +40,28 @@ export function ReviewNoteConnections({ doc, round }: { doc: Document | null; ro
     scan();
     const observer = new MutationObserver(scan); observer.observe(doc.body, { childList: true, subtree: true });
     doc.defaultView?.addEventListener('papilot:round', scan);
-    return () => { observer.disconnect(); doc.defaultView?.removeEventListener('papilot:round', scan); slots.forEach((pair, element) => { pair.slot.remove(); pair.optionsSlot.remove(); element.classList.remove('papilot-linked-change'); }); };
+    return () => { observer.disconnect(); doc.defaultView?.removeEventListener('papilot:round', scan); slots.forEach((pair, element) => { pair.slot.remove(); pair.optionsSlot.remove(); element.classList.remove('papilot-linked-change', 'papilot-linked-target'); }); };
   }, [doc, links?.notes, round]);
   useEffect(() => {
     const focus = links?.focus;
     const selected = links?.notes.find(note => note.key === focus?.key);
-    for (const place of places) place.element.classList.toggle('papilot-linked-change', Boolean(links?.scope === 'note' && selected && place.notes.some(note => note.key === selected.key)));
+    for (const place of places) {
+      const linked = Boolean(links?.scope === 'note' && selected && place.notes.some(note => note.key === selected.key));
+      place.element.classList.toggle('papilot-linked-change', linked);
+      place.element.classList.toggle('papilot-linked-target', linked && place.round === focus?.change.round && place.stop === focus.change.stop);
+    }
     if (!doc || !focus || (jumped.current?.doc === doc && jumped.current.sequence === focus.sequence)) return;
-    const place = places.find(place => place.round === focus.change.round && place.notes.some(note => note.key === focus.key));
+    const place = places.find(place => place.round === focus.change.round && place.stop === focus.change.stop && place.notes.some(note => note.key === focus.key));
     if (!place) return;
-    place.element.click(); place.element.scrollIntoView({ block: 'center' }); place.element.focus({ preventScroll: true });
+    place.element.click();
+    // Scroll only the PDF pane: scrollIntoView can also move the host page
+    // horizontally or leave the target behind the bottom drawer.
+    const paper = doc.getElementById('paper');
+    if (paper) {
+      const padding = parseFloat(doc.defaultView?.getComputedStyle(paper).scrollPaddingTop || '') || 0;
+      paper.scrollBy({ top: place.element.getBoundingClientRect().top - paper.getBoundingClientRect().top - padding - 12, behavior: 'instant' });
+    }
+    place.element.focus({ preventScroll: true });
     jumped.current = { doc, sequence: focus.sequence };
   }, [doc, places, links?.focus, links?.scope]);
   useEffect(() => {
@@ -66,20 +78,31 @@ export function ReviewNoteConnections({ doc, round }: { doc: Document | null; ro
     return () => { target.removeEventListener('papilot:round', send); target.removeEventListener('papilot:note-focus-ready', send); };
   }, [doc, round, links?.focus, links?.notes, links?.preview, links?.scope]);
   if (!doc || !links) return null;
+  const focusAt = (place: Place, note: NoteResult) => {
+    const change = note.changes.find(change => change.round === place.round && change.stop === place.stop);
+    if (change) latest.current?.showChange(note.key, change);
+    else latest.current?.focusNote(note.key);
+  };
   return <>{createPortal(<style>{`
-    .papilot-note-links{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px;order:5}
-    .papilot-note-links button{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg-muted);color:var(--text-2);font:12px/1.5 var(--sans);cursor:pointer}
-    .papilot-note-links button:hover,.papilot-note-links button:focus-visible{color:var(--primary);border-color:var(--primary)}
+    .papilot-note-links{display:inline-flex;align-items:center;flex-wrap:nowrap;gap:1px;order:5;flex-shrink:0;padding:2px;border-radius:5px;background:var(--bg-muted)}
+    .papilot-note-links>svg{flex:none;margin:0 3px;color:var(--text-2)}
+    .papilot-note-links>span{display:flex;min-width:0;max-width:112px;overflow-x:auto;scrollbar-width:thin}
+    .papilot-note-links button{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:22px;padding:2px 5px;border:0;border-radius:3px;background:transparent;color:var(--text-2);font:11px/1.5 var(--sans);cursor:pointer}
+    .papilot-note-links button:hover,.papilot-note-links button[aria-pressed=true]{color:var(--primary);background:var(--accent-soft)}
+    .papilot-note-links button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
     .papilot-note-options{display:inline-flex;flex:none;order:3;margin-left:4px}
     .papilot-note-options:empty{display:none}
     .papilot-note-options button{display:inline-flex;align-items:center;gap:3px;padding:4px;border:0;border-radius:5px;background:transparent;color:var(--accent);font:11px/1.5 var(--sans);white-space:nowrap;cursor:pointer}
     .papilot-note-options button:hover,.papilot-note-options button[aria-expanded=true]{background:var(--accent-soft)}
     .papilot-note-options button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-    .papilot-linked-change{outline:2px solid var(--primary);outline-offset:-2px}
-    @media(max-width:680px){.papilot-note-links button{min-height:32px}}
-  `}</style>, doc.head)}{places.map(place => createPortal(<>{place.notes.map(note => <button key={note.key} type="button" title={note.note.comment} aria-pressed={links.focus?.key === note.key} aria-label={t('Show note {n}: {comment}', { n: note.index + 1, comment: note.note.comment })} onClick={event => { event.stopPropagation(); latest.current?.focusNote(note.key); }}><Icon name="notes" size={12}/>{note.index + 1}</button>)}</>, place.slot, `${place.round}:${place.stop}`))}{places.map(place => {
+    .papilot-linked-change>.change-head{box-shadow:inset 3px 0 color-mix(in srgb,var(--primary) 35%,transparent)}
+    .papilot-linked-target{outline:2px solid var(--primary);outline-offset:-2px}
+    .papilot-linked-target>.change-head{background:color-mix(in srgb,var(--primary) 12%,var(--bg));box-shadow:inset 3px 0 var(--primary)}
+    .papilot-linked-target>.change-head .change-number{color:var(--primary);font-weight:600}
+    @media(pointer:coarse){.papilot-note-links button{min-height:32px;min-width:28px}}
+  `}</style>, doc.head)}{places.map(place => createPortal(<><Icon name="notes" size={12}/><span>{place.notes.map(note => <button key={note.key} type="button" title={note.note.comment} aria-pressed={links.focus?.key === note.key} aria-label={t('Show note {n}: {comment}', { n: note.index + 1, comment: note.note.comment })} onClick={event => { event.stopPropagation(); focusAt(place, note); }}>{note.index + 1}</button>)}</span></>, place.slot, `${place.round}:${place.stop}`))}{places.map(place => {
     const available = place.notes.filter(note => links.alternativeCounts[note.key] > 0);
     const note = available.find(note => note.key === links.focus?.key) || available[0];
-    return createPortal(note ? <button type="button" aria-expanded={links.focus?.key === note.key} onClick={event => { event.stopPropagation(); latest.current?.focusNote(note.key); }}>{t('Other options · {n}', { n: links.alternativeCounts[note.key] })}<Icon name="chevronDown" size={12}/></button> : null, place.optionsSlot, `options:${place.round}:${place.stop}`);
+    return createPortal(note ? <button type="button" aria-expanded={links.focus?.key === note.key} onClick={event => { event.stopPropagation(); focusAt(place, note); }}>{t('Other options · {n}', { n: links.alternativeCounts[note.key] })}<Icon name="chevronDown" size={12}/></button> : null, place.optionsSlot, `options:${place.round}:${place.stop}`);
   })}</>;
 }

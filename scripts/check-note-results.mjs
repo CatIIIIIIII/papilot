@@ -30,10 +30,13 @@ const items = [
   { id: 'request-2', taskId: task.id, type: 'user', text: '', createdAt: 3, meta: { notes: [{ ...note('Keep the technical term.', 10, 'A shorter technical sentence.'), where: 'Round 1 · Page 1 · main.tex line 10', anchor: { round: 1, sources: [{ file: 'main.tex', lines: [10, 12] }] } }] } },
 ];
 const runs = [{ id: 'request-1', taskId: task.id, reviewRound: 1, status: 'completed' }, { id: 'request-2', taskId: task.id, reviewRound: 2, status: 'completed' }];
+// Several annotations can legitimately share a PDF group. Its links stay
+// compact and individually usable instead of wrapping into tall cards.
+items[2].meta.notes.push(...['Keep the definition precise.', 'Avoid unnecessary repetition.'].map(comment => ({ ...items[2].meta.notes[0], comment })));
 const unit = (id, line, old, revised) => ({ id, file: 'main.tex', kind: 'text', status: 'modified', old_start: line, old_end: line + 2, new_start: line, new_end: line + 2, old_text: old, new_text: revised });
-const units = { 1: [unit('c1', 10, 'The original technical sentence.', 'A shorter technical sentence.'), unit('c2', 20, 'A second original sentence.', 'Our contribution is now explicit.')], 2: [unit('c1', 11, 'A shorter technical sentence.', 'A shorter sentence preserving the technical term.')] };
+const units = { 1: [unit('c1', 10, 'The original technical sentence.', 'A shorter technical sentence.'), unit('c2', 20, 'A second original sentence.', 'Our contribution is now explicit.'), unit('c3', 12, 'The original technical sentence.', 'A clearer technical sentence.')], 2: [unit('c1', 11, 'A shorter technical sentence.', 'A shorter sentence preserving the technical term.')] };
 const rounds = Object.fromEntries([1, 2].map(round => [round, { round, units: units[round], sections: [], loose: units[round].map(unit => ({ kind: 'change', units: [unit.id], before: [{ text: [{ text: unit.old_text }] }] })) }]));
-const decisions = { 1: { c1: 'pending', c2: 'rejected' }, 2: { c1: 'pending' } };
+const decisions = { 1: { c1: 'pending', c2: 'rejected', c3: 'accepted' }, 2: { c1: 'pending' } };
 const client = { get: async route => route.includes('/rounds/') ? rounds[Number(route.split('/').at(-1))] : { decisions: decisions[Number(new URL(route, origin).searchParams.get('round'))] } };
 let failResults = true;
 const optionWrites = [];
@@ -89,7 +92,7 @@ await page.route('**/review/**', async route => {
   const url = new URL(route.request().url());
   if (url.pathname.includes('/rounds/')) return route.fulfill({ json: rounds[Number(url.pathname.split('/').at(-1))] });
   const round = Number(url.searchParams.get('round')) || 2;
-  const html = `<html><head><style>${css} .change{min-height:300px}.source-fixture{padding:24px;font-size:18px;line-height:1.6}</style></head><body><header class="bar"><div class="identity"><span>Round ${round}</span></div></header><main id="paper"><div class="document"><div class="sheet">${units[round].map((unit, index) => `<article class="change inline" data-stop="${index}" data-state="${decisions[round][unit.id]}" tabindex="-1"><header class="change-head"><span class="change-number" data-change="${index + 1}">Change ${index + 1}</span><span class="change-where" data-location="main.tex:${unit.old_start}–${unit.old_end}">main.tex:${unit.old_start}–${unit.old_end}</span></header><div class="source-fixture"><p>${unit.old_text}</p><p>${unit.new_text}</p></div></article>`).join('')}</div></div></main><script>fetch('/api/tasks/p-note-results/rounds/${round}');</script></body></html>`;
+  const html = `<html><head><style>${css} .change{min-height:300px}.source-fixture{padding:24px;font-size:18px;line-height:1.6}</style></head><body><div id="root"><header class="bar"><div class="identity"><span>Round ${round}</span></div></header><div class="review-body"><main id="paper"><div class="document"><div class="sheet">${units[round].map((unit, index) => `<article class="change inline" data-stop="${index}" data-state="${decisions[round][unit.id]}" tabindex="-1"><header class="change-head"><span class="change-number" data-change="${index + 1}">Change ${index + 1}</span><span class="change-where" data-location="main.tex:${unit.old_start}–${unit.old_end}">main.tex:${unit.old_start}–${unit.old_end}</span></header><div class="source-fixture"><p>${unit.old_text}</p><p>${unit.new_text}</p></div></article>`).join('')}</div></div></main></div></div><script>fetch('/api/tasks/p-note-results/rounds/${round}');</script></body></html>`;
   return route.fulfill({ contentType: 'text/html', body: rewriteReviewHtml(html, '/review/paper') });
 });
 const frame = () => page.frameLocator('.review-frame');
@@ -117,7 +120,9 @@ try {
   await frame().locator('html[data-papilot-round="1"]').waitFor();
   await frame().locator('.papilot-linked-change[data-stop="1"]').waitFor();
   assert.equal(await frame().locator('.papilot-note-options button').count(), 0, 'Historical changes do not advertise unavailable alternatives');
-  assert.equal(await controls().locator('.review-note-position').textContent(), '2 / 3');
+  assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 2 / 3');
+  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '1');
+  await expect(controls().locator('.note-review-targets')).toHaveCount(0);
   assert.equal(await controls().getByRole('button', { name: 'Previous note', exact: true }).isEnabled(), true);
   assert.equal(await controls().getByRole('button', { name: 'Next note', exact: true }).isEnabled(), true);
   assert.match(await page.locator('.review-frame').getAttribute('src'), /round=1&history=1/);
@@ -125,12 +130,35 @@ try {
   decisions[1].c1 = 'accepted';
   await frame().locator('body').evaluate(element => element.ownerDocument.defaultView.dispatchEvent(new Event('latex-review:decided')));
   await sent(0).click();
-  assert.equal(await controls().locator('.review-note-position').textContent(), '1 / 3');
+  assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 1 / 3');
+  await expect(frame().locator('.papilot-linked-change')).toHaveCount(2);
+  await frame().locator('.change[data-stop="2"] .papilot-note-links button').click();
+  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '2');
+  const selectedColor = await frame().locator('.papilot-linked-target').evaluate(element => getComputedStyle(element).outlineColor);
+  assert.equal(await controls().evaluate(element => getComputedStyle(element).borderTopColor), selectedColor, 'The drawer and its exact source change share a selection accent');
+  assert.notEqual(await frame().locator('.change[data-stop="0"] .change-head').evaluate(element => getComputedStyle(element).backgroundColor), await frame().locator('.papilot-linked-target .change-head').evaluate(element => getComputedStyle(element).backgroundColor), 'Other related fragments do not look like the selected target');
+  assert.ok(await frame().locator('.papilot-linked-target').evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top < window.innerHeight && bounds.bottom > 0;
+  }), 'A note badge reveals its own change instead of the note’s first change');
+  await frame().locator('.change[data-stop="0"] .papilot-note-links button').click();
+  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '0');
+  await frame().locator('.change[data-stop="2"] .papilot-note-links button').click();
+  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '2');
+  const linkedHeader = await frame().locator('.papilot-linked-target .change-head').boundingBox();
+  const linkedDrawer = await controls().boundingBox();
+  assert.ok(linkedHeader.y + linkedHeader.height <= linkedDrawer.y, 'The linked header stays above the drawer');
   assert.equal(await controls().getByRole('button', { name: 'Previous note', exact: true }).isEnabled(), false);
   const currentNote = page.locator('[data-note-result="request-2:0"]');
   await currentNote.click();
   await frame().locator('html[data-papilot-round="2"]').waitFor();
   await frame().locator('.papilot-linked-change[data-stop="0"]').waitFor();
+  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '0');
+  const noteLinks = frame().locator('.change[data-stop="0"] .papilot-note-links');
+  await expect(noteLinks.locator('button')).toHaveCount(3);
+  await expect(noteLinks.locator('svg')).toHaveCount(1);
+  const linkBounds = await noteLinks.locator('button').evaluateAll(buttons => buttons.map(button => { const box = button.getBoundingClientRect(); return { top: box.top, bottom: box.bottom }; }));
+  assert.ok(linkBounds.every(box => box.top === linkBounds[0].top && box.bottom === linkBounds[0].bottom), 'Shared note numbers stay on one compact row');
   assert.doesNotMatch(await page.locator('.review-frame').getAttribute('src'), /[?&](history|round)=/);
   assert.deepEqual(await page.locator('[data-note-result]').allTextContents(), original, 'review operations never add content to original messages');
   await controls().getByRole('region', { name: 'Complete PDF comparison', exact: true }).waitFor();
@@ -181,17 +209,21 @@ try {
   await controls().waitFor({ state: 'hidden' });
   await frame().getByRole('button', { name: 'Show note 1: Keep the technical term.', exact: true }).click();
   await controls().waitFor({ state: 'visible' });
+  await controls().getByRole('region', { name: 'Complete PDF comparison', exact: true }).waitFor();
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/note-results-desktop.png', fullPage: true });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.screenshot({ path: 'test-results/note-results-desktop-light.png', fullPage: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
 
   await page.reload();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await sent(0).click();
   await frame().locator('.papilot-linked-change[data-stop="0"]').waitFor();
-  assert.equal(await controls().locator('.review-note-position').textContent(), '1 / 3');
+  assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 1 / 3');
   assert.equal(await page.locator('.review-frame').isVisible(), true);
-  await frame().getByRole('button', { name: 'Show note 1: Shorten the opening.', exact: true }).click();
+  await frame().getByRole('button', { name: 'Show note 1: Shorten the opening.', exact: true }).first().click();
   assert.equal(await page.locator('.review-frame').isVisible(), true, 'PDF note badges keep the author in the review');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
   const box = await controls().boundingBox();

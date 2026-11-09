@@ -194,7 +194,7 @@ export function NoteReviewControls({ doc }: { doc: Document | null }) {
       const frame = doc.defaultView?.frameElement?.getBoundingClientRect();
       const viewport = element.parentElement!.getBoundingClientRect();
       const bottom = viewport.bottom - element.offsetHeight - 12 - (frame?.top || 0);
-      const marks = [...paper.querySelectorAll<SVGRectElement>('.papilot-linked-change .pdf-focus-marks rect')].map(mark => mark.getBoundingClientRect());
+      const marks = [...paper.querySelectorAll<SVGRectElement>('.papilot-linked-target .pdf-focus-marks rect')].map(mark => mark.getBoundingClientRect());
       if (!marks.length) return;
       const top = Math.min(...marks.map(mark => mark.top)), end = Math.max(...marks.map(mark => mark.bottom));
       const visibleTop = paper.getBoundingClientRect().top + 48;
@@ -233,7 +233,7 @@ export function NoteReviewControls({ doc }: { doc: Document | null }) {
     event.preventDefault(); move(event.key === 'ArrowLeft' ? -1 : 1);
   }}>
     <button type="button" className="icon-button" data-direction="previous" aria-label={t('Previous note')} title={t('Previous note')} disabled={index <= 0} onClick={() => move(-1)}><Icon name="chevronLeft" size={14}/></button>
-    <span className="review-note-position" aria-live="polite" aria-atomic="true" aria-label={t('Note {n} of {total}', { n: index + 1, total: siblings.length })}>{index + 1}<span aria-hidden="true"> / </span>{siblings.length}</span>
+    <span className="review-note-position" aria-live="polite" aria-atomic="true" aria-label={t('Note {n} of {total}', { n: index + 1, total: siblings.length })}>{t('Note {n}', { n: index + 1 })}<span aria-hidden="true"> / </span>{siblings.length}</span>
     <button type="button" className="icon-button" data-direction="next" aria-label={t('Next note')} title={t('Next note')} disabled={index >= siblings.length - 1} onClick={() => move(1)}><Icon name="chevronRight" size={14}/></button>
   </nav>;
   const emptyHeader = <div className="note-option-navigation">{navigation}</div>;
