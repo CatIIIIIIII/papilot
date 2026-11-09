@@ -94,7 +94,7 @@ async function optionComparison(app: App, name: string, edits: OptionInput['edit
   const after = await app.repo.commitWithAsync(current, Object.fromEntries(writes.map(write => [write.file, Buffer.from(write.after, 'base64')])), 'Selected note option');
   const chosen = new Set(edits.map(edit => edit.unit));
   return preserveRanges(app, before, after, candidate.units.filter(unit => chosen.has(unit.id)),
-    file => app.repo.blob(round.before, file)!.toString('utf8'), file => candidate.files[file].toString('utf8'));
+    file => app.repo.blob(round.before, file)!.toString('utf8'), file => candidate.files[file]!.toString('utf8'));
 }
 
 // An option changes wording inside an existing review unit. Keep that range

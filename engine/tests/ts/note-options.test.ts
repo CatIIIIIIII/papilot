@@ -7,7 +7,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { Fixture, fakeRound, METHOD, BODY } from './helpers.ts';
 import { acceptNoteOption, noteOptionUnits, useNoteOption } from '../../src/core/note-options.ts';
 import type { App } from '../../src/server.ts';
-import type { Task } from '../../src/types.ts';
+import type { Task, Unit } from '../../src/types.ts';
 
 let f: Fixture, app: App, task: Task;
 beforeEach(async () => {
@@ -204,7 +204,7 @@ for (const replacement of ['Procedure', 'A much longer\nprocedure', '']) it(`pre
   const selected = units().find(unit => unit.new_text === 'Approach')!;
   const original = f.read(METHOD, task.worktree);
   const candidate = optionCandidate(units(), [{ unit: selected.id, text: replacement }], () => original);
-  const source = candidate.files[METHOD].toString();
+  const source = candidate.files[METHOD]!.toString();
   expect(source).toBe(original.replace('Approach', replacement));
   expect(candidate.units.map(unit => unit.id)).toEqual(units().map(unit => unit.id));
   for (const unit of candidate.units) {
@@ -232,6 +232,10 @@ it('compiles an isolated preview and caches it without publishing, writing sourc
   expect(first.after).toBe(second.after);
   expect(first.units.find(unit => unit.id === selected.id)?.new_text).toBe('Procedure');
   await previewNoteOption(app, task.name, input);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2030-01-02T13:00:00Z'));
+  expect((await previewNoteOption(app, task.name, input)).files).toBe(first.files);
+  vi.useRealTimers();
   expect(built).toHaveBeenCalledTimes(2);
   expect(f.read(METHOD, task.worktree)).toBe(original);
   expect(f.read(METHOD)).toBe(BODY);
@@ -241,6 +245,83 @@ it('compiles an isolated preview and caches it without publishing, writing sourc
   expect(app.publisher.publish).not.toHaveBeenCalled();
   await app.review.decide(task.name, { round: 1, changes: [selected.id], action: 'accept' });
   await expect(previewNoteOption(app, task.name, input)).rejects.toThrow('reviewed');
+});
+
+it('reuses the published chapter scope, baseline and frozen date, compiling only the candidate', async () => {
+  const selected = units().find(unit => unit.new_text === 'Approach')!;
+  const round = app.review.latestRound(task.name)!;
+  const date = { SOURCE_DATE_EPOCH: '1735732800', FORCE_SOURCE_DATE: '1' };
+  const keys = ['a'.repeat(32), 'b'.repeat(32), 'c'.repeat(32)], targets = ['sections/method'];
+  app.store.execute('UPDATE rounds SET summary=? WHERE task=? AND number=1', JSON.stringify({ ...round.summary, date, targets, builds: keys }), task.name);
+  const pdf = path.join(app.state, 'preview-test.pdf'); fs.writeFileSync(pdf, 'test PDF');
+  const info = (key: string) => ({ key, tree: key, targets, root: task.worktree, cwd: task.worktree, pdf, seconds: 0, warnings: [] });
+  const completed = vi.spyOn(Builder.prototype, 'completed').mockImplementation(async key => info(key));
+  const seed = vi.spyOn(Builder.prototype, 'buildSeed');
+  const build = vi.spyOn(Builder.prototype, 'build').mockImplementation(async rev => info(rev));
+  vi.spyOn(publisher, 'render').mockImplementation(async (out, request) => {
+    expect(request.old.key).toBe(keys[1]);
+    fs.writeFileSync(path.join(out, 'round.json'), JSON.stringify({ units: {}, sections: [], loose: [] }));
+  });
+  const detail = await previewNoteOption(app, task.name, { id: 'chapter', round: 1, edits: [{ unit: selected.id, text: 'Procedure' }] });
+  expect(detail.build?.targets).toEqual(targets);
+  expect(completed.mock.calls).toEqual([[keys[0]], [keys[1]]]);
+  expect(seed).not.toHaveBeenCalled();
+  expect(build).toHaveBeenCalledExactlyOnceWith(detail.after, targets, info(keys[0]), { date });
+});
+
+it('preview caches follow rejection and undo without resurrecting a neighboring edit', async () => {
+  const selected = units().find(unit => unit.new_text === 'Approach')!, neighbor = units().find(unit => unit.new_text === 'two')!;
+  const pdf = path.join(app.state, 'preview-test.pdf'); fs.writeFileSync(pdf, 'test PDF');
+  const build = vi.spyOn(Builder.prototype, 'build').mockImplementation(async rev => ({ key: rev, tree: rev, targets: ['full'], root: task.worktree, cwd: task.worktree, pdf, seconds: 0, warnings: [] }));
+  vi.spyOn(publisher, 'render').mockImplementation(async out => {
+    fs.writeFileSync(path.join(out, 'round.json'), JSON.stringify({ units: {}, sections: [], loose: [] }));
+  });
+  const input = { id: 'respect-rejection', round: 1, edits: [{ unit: selected.id, text: 'Procedure' }], rejected: [] as string[] };
+  const first = await previewNoteOption(app, task.name, input);
+  expect(app.repo.blob(first.after, METHOD)?.toString()).toContain('Procedure sentence two.');
+  await app.review.decide(task.name, { id: 'reject-neighbor', round: 1, changes: [neighbor.id], action: 'reject' });
+  // A rejection can land after the host checks its comparison key but before
+  // the engine receives the preview request. Never cache that new state under
+  // the browser's old key, which becomes reusable after undo.
+  await expect(previewNoteOption(app, task.name, input)).rejects.toThrow('The review changed. Reload the options.');
+  const second = await previewNoteOption(app, task.name, { ...input, rejected: [neighbor.id] });
+  expect(second.files).not.toBe(first.files);
+  expect(app.repo.blob(second.after, METHOD)?.toString()).toContain('Procedure sentence 2.');
+  expect(second.units.map(unit => unit.id)).toEqual(first.units.filter(unit => unit.id !== neighbor.id).map(unit => unit.id));
+  expect(f.read(METHOD, task.worktree)).toContain('Approach sentence 2.');
+  await app.review.undo(task.name, 'reject-neighbor');
+  await expect(previewNoteOption(app, task.name, { ...input, rejected: [neighbor.id] })).rejects.toThrow('The review changed. Reload the options.');
+  expect((await previewNoteOption(app, task.name, input)).files).toBe(first.files);
+  expect(build).toHaveBeenCalledTimes(4);
+});
+
+it('restores rejected multi-range and whole-file edits while adjusting the selected candidate', () => {
+  const original = 'new word and tail';
+  const selected = { ...units()[0], id: 'selected', file: 'main.tex', old_text: 'word', new_text: 'word', text_ops: [['replace', 4, 8, 4, 8]], ops: [['replace', 0, 1, 0, 1]] } as Unit;
+  const rejected = { ...selected, id: 'rejected', text_ops: [['replace', 0, 3, 0, 3], ['replace', 13, 16, 13, 17]], ops: [['replace', 0, 1, 0, 1], ['replace', 0, 1, 0, 1]] } as typeof selected;
+  const file = { ...selected, id: 'file', file: 'added.tex', whole_file: true };
+  const candidate = optionCandidate([selected, rejected, file], [{ unit: selected.id, text: 'longer word' }], () => original,
+    { ids: new Set(['rejected', 'file']), source: file => file === 'main.tex' ? Buffer.from('old word and end') : null });
+  expect(candidate.files['main.tex']?.toString()).toBe('old longer word and end');
+  expect(candidate.files['added.tex']).toBeNull();
+  expect(candidate.units.map(unit => unit.id)).toEqual(['selected']);
+});
+
+it('a candidate restoring the original wording has no empty diff card or source row', async () => {
+  const selected = units().find(unit => unit.new_text === 'Approach')!;
+  const original = f.read(METHOD, task.worktree), round = app.review.latestRound(task.name)!;
+  const pdf = path.join(app.state, 'preview-test.pdf'); fs.writeFileSync(pdf, 'test PDF');
+  vi.spyOn(Builder.prototype, 'build').mockImplementation(async rev => ({ key: rev, tree: rev, targets: ['full'], root: task.worktree, cwd: task.worktree, pdf, seconds: 0, warnings: [] }));
+  vi.spyOn(publisher, 'render').mockImplementation(async (out, request) => {
+    expect(request.units.some(unit => unit.id === selected.id)).toBe(false);
+    expect(app.repo.blob(request.new.tree, METHOD)?.toString()).toContain('Method sentence two.');
+    fs.writeFileSync(path.join(out, 'round.json'), JSON.stringify({ units: {}, sections: [], loose: [] }));
+  });
+  const detail = await previewNoteOption(app, task.name, { id: 'restore-word', round: 1, edits: [{ unit: selected.id, text: selected.old_text }] });
+  expect(detail.units.map(unit => unit.id)).toEqual(round.units.filter(unit => unit.id !== selected.id).map(unit => unit.id));
+  expect(f.read(METHOD, task.worktree)).toBe(original);
+  expect(app.review.latestRound(task.name)).toEqual(round);
+  expect(app.review.decisions(task.name, round)[selected.id]).toBe('pending');
 });
 
 it('a failed candidate compilation leaves the published review and source intact', async () => {

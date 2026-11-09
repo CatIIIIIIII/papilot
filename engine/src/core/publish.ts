@@ -506,6 +506,7 @@ export class Publisher {
       indirect,
       warnings,
       targets,
+      date,
       builds: [seed, old, next].filter((b) => b !== null).map((b) => b.key),
     };
     try {

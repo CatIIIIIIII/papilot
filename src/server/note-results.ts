@@ -6,7 +6,8 @@ import { taskRoute, type ReviewClient } from './review.ts';
 export interface NoteRound {
   round: number;
   before?: string;
-  units: { id: string; file: string; old_start: number; old_end: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; text_ops?: [string, number, number, number, number][]; old_context?: { text: string; start: number; source_hash?: string } }[];
+  after?: string;
+  units: { id: string; file: string; old_start: number; old_end: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; formattingFor?: string; text_ops?: [string, number, number, number, number][]; old_context?: { text: string; start: number; source_hash?: string } }[];
   sections: { blocks: NoteBlock[] }[];
   loose: NoteBlock[];
 }
@@ -82,6 +83,10 @@ export function matchNoteChanges(note: NoteSummary, detail: NoteRound, decisions
     const region = !quote && anchor.round !== undefined ? sameFiles.filter(unit => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], unit.old_start) <= Math.min(place.lines[1], unit.old_end))) : [];
     const candidates = source.length ? source : textMatches ? sameFiles : region;
     const matched = candidates.filter(unit => quotedUnit(note, unit) !== false);
+    // The engine verifies these as invisible wrapping of the same paragraph.
+    // A note decision includes its formatting so no empty pending card remains.
+    const matchedIds = new Set(matched.map(unit => unit.id));
+    matched.push(...known.filter(unit => unit.formattingFor && matchedIds.has(unit.formattingFor) && !matchedIds.has(unit.id)));
     if (!matched.length) return [];
     const states = new Set(matched.map(unit => decisions[unit.id] || 'pending'));
     const state = states.size === 1 ? [...states][0] : 'mixed';

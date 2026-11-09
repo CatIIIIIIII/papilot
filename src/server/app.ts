@@ -1,4 +1,5 @@
 import { isNoteGroup } from '../note-groups.ts';
+import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES } from '../shared.ts';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
@@ -21,7 +22,7 @@ import { registerSkillRoutes } from './skill-routes.ts';
 import { type Listener, equals, guard } from './access.ts';
 import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote } from '../shared.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
-import { noteOptionContext, noteOptionsKey, parseNoteOptions } from './note-options.ts';
+import { noteOptionContext, noteOptionsKey } from './note-options.ts';
 import { taskNoteResults } from './note-results.ts';
 import type { Updates } from './updates.ts';
 import { Diagnostics } from './diagnostics.ts';
@@ -99,7 +100,6 @@ export async function buildApp(options: AppOptions) {
   // Task rounds and the manuscript's Changes both follow it.
   const indirectChanges = () => store.preference<boolean>('indirect-changes') === true;
   workspace.indirectChanges = changes.indirectChanges = indirectChanges;
-  const optionRequests = new Map<string, Promise<unknown>>();
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   guard(app, { listener, csrf: options.csrf });
   const updateRequests = new WeakMap<object, () => void>();
@@ -227,6 +227,19 @@ export async function buildApp(options: AppOptions) {
     return { quickNotes: quickNotes || null };
   });
   app.get('/api/indirect-changes', () => ({ indirectChanges: indirectChanges() }));
+  const alternativePreferences = () => ({ noteAlternatives: store.preference<boolean>('note-alternatives') !== false, noteAlternativeRange: noteAlternativeRange(store.preference('note-alternative-range')) });
+  app.get('/api/note-alternatives', alternativePreferences);
+  app.post('/api/note-alternatives', (request, reply) => {
+    const value = (request.body as any)?.noteAlternatives;
+    const range = (request.body as any)?.noteAlternativeRange;
+    if (typeof value !== 'boolean') return reply.code(400).send({ error: 'Send noteAlternatives as true or false.' });
+    if (range !== undefined && (typeof range !== 'string' || !Object.hasOwn(NOTE_ALTERNATIVE_RANGES, range))) return reply.code(400).send({ error: 'Send noteAlternativeRange as few, balanced or many.' });
+    store.transaction(() => {
+      store.savePreference('note-alternatives', value);
+      if (range !== undefined) store.savePreference('note-alternative-range', range);
+    });
+    return alternativePreferences();
+  });
   app.post('/api/indirect-changes', (request, reply) => {
     const value = (request.body as any)?.indirectChanges;
     if (typeof value !== 'boolean') return reply.code(400).send({ error: 'Send indirectChanges as true or false.' });
@@ -300,28 +313,41 @@ export async function buildApp(options: AppOptions) {
     const current = store.task(request.params.id), client = await connectReview(store.project(current.projectId).path);
     return (await noteOptionContext(store, current, string(request.query.key, 'Note key', 200), client)).options;
   });
-  app.get<{ Params: { id: string }; Querystring: { key: string; round: string; option: string } }>('/api/tasks/:id/note-options/preview', task, async request => {
+  app.get<{ Params: { id: string }; Querystring: { key: string; round: string; option: string; retry?: string; comparison?: string } }>('/api/tasks/:id/note-options/preview', task, async request => {
     const current = store.task(request.params.id), client = await connectReview(store.project(current.projectId).path);
     const context = await noteOptionContext(store, current, string(request.query.key, 'Note key', 200), client);
     if (context.options.round !== Number(request.query.round)) throw new Error('The review changed. Reload the options.');
-    if (request.query.option === context.options.selected) return rewriteReviewJson(context.detail, `/review/${current.projectId}`);
+    if (request.query.comparison && request.query.comparison !== context.options.comparisonKey) throw new Error('The review changed. Reload the options.');
+    if (request.query.option === context.options.selected && (!context.rejected.length || context.options.locked)) return rewriteReviewJson(context.detail, `/review/${current.projectId}`);
     if (context.options.locked) throw new Error(context.options.locked);
     const option = context.options.options.find(option => option.id === request.query.option);
     if (!option) throw new Error('This option is no longer available.');
-    const detail = await client.post(`${taskRoute(current.name)}/source/options/preview`, { id: option.id, round: context.options.round, edits: option.edits }, 120000);
+    if (option.previewError && request.query.retry !== '1') throw new Error(option.previewError);
+    const detail = await client.post(`${taskRoute(current.name)}/source/options/preview`, { id: option.id, round: context.options.round, edits: option.edits, rejected: context.rejected }, 120000);
+    if (option.previewError) {
+      delete option.previewError;
+      store.savePreference(noteOptionsKey(current.id, context.options.key, context.options.round), context.options);
+    }
     return rewriteReviewJson(detail, `/review/${current.projectId}`);
   });
-  app.post<{ Params: { id: string }; Body: { key: string; round: number; option?: string; id?: string; accept?: boolean } }>('/api/tasks/:id/note-options', task, async request => {
+  app.post<{ Params: { id: string }; Body: { key: string; round: number; option?: string; id?: string; accept?: boolean; reject?: boolean } }>('/api/tasks/:id/note-options', task, async request => {
     const current = store.task(request.params.id), client = await connectReview(store.project(current.projectId).path), body = request.body;
     const context = await noteOptionContext(store, current, string(body.key, 'Note key', 200), client);
     if (context.options.round !== body.round) throw new Error('The review changed. Reload the options.');
-    if (context.options.locked) throw new Error(context.options.locked);
+    if ((body.reject !== undefined && typeof body.reject !== 'boolean') || (body.accept !== undefined && typeof body.accept !== 'boolean') || (body.accept && body.reject)) throw new Error('Invalid review action.');
+    // A confirmed decision may have lost its HTTP response. Let the journal
+    // verify an exact replay even though the note is now reviewed; it rejects
+    // new IDs, changed actions and undone decisions without touching source.
+    const decision = body.reject || (body.accept && body.option === context.options.selected);
+    if (context.options.locked && !(decision && context.options.locked === 'This note includes a reviewed change. Undo that decision before replacing it.')) throw new Error(context.options.locked);
     if (body.option) {
       const option = context.options.options.find(option => option.id === body.option);
       if (!option) throw new Error('This option is no longer available.');
-      if (option.id === context.options.selected) {
-        if (!body.accept) return context.options;
-        const route = `${taskRoute(current.name)}/decide`, input = { id: string(body.id, 'Review action ID', 80), round: body.round, changes: option.edits.map(edit => edit.unit), action: 'accept' };
+      // Reject the note's published edits directly, even if an uncommitted
+      // alternative is being previewed. No candidate build or feedback draft.
+      if (body.reject || option.id === context.options.selected) {
+        if (!body.accept && !body.reject) return context.options;
+        const route = `${taskRoute(current.name)}/decide`, input = { id: string(body.id, 'Review action ID', 80), round: body.round, changes: option.edits.map(edit => edit.unit), action: body.reject ? 'reject' : 'accept' };
         const result = await workspace.reviewWrite(current.id, true, async () => {
           const response = await fetch(client.url + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Review-Token': client.token }, body: JSON.stringify(input), signal: AbortSignal.timeout(120000) });
           const value = await response.json() as { error?: string };
@@ -348,16 +374,7 @@ export async function buildApp(options: AppOptions) {
       if (value.error) throw new Error(value.error);
       return { building: true };
     }
-    if (context.options.options.length > 1) return context.options;
-    const cacheKey = noteOptionsKey(current.id, body.key, body.round);
-    const pending = optionRequests.get(cacheKey);
-    if (pending) return pending;
-    const generating = workspace.generateNoteOptions(current.id, JSON.stringify({ note: context.note.note, fragments: context.units.map(unit => ({ unit: unit.id, before: unit.old_text, current: unit.new_text, context: unit.old_context?.text })) })).then(reply => {
-      const result = { ...context.options, options: [...context.options.options, ...parseNoteOptions(reply, context.options.options[0])] };
-      if (!store.taskDeleted(current.id)) store.savePreference(cacheKey, result); return result;
-    }).finally(() => optionRequests.delete(cacheKey));
-    optionRequests.set(cacheKey, generating);
-    return generating;
+    throw new Error('Select an existing option.');
   });
   app.get<{ Params: { id: string }; Querystring: { round?: string; version?: string; download?: string } }>('/api/tasks/:id/pdf', task, async (request, reply) => {
     const task = store.task(request.params.id), project = store.project(task.projectId);

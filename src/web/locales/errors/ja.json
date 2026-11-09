@@ -252,10 +252,17 @@
   "This option is no longer available.": "この案は利用できなくなりました。",
   "The review action could not be confirmed. Check task status before retrying.": "レビュー操作の完了を確認できませんでした。再試行する前にタスクの状態を確認してください。",
   "The option save could not be confirmed. Check task status before retrying.": "案の保存を確認できませんでした。再試行する前にタスクの状態を確認してください。",
-  "The agent did not return two usable options. Try again.": "エージェントが利用可能な案を 2 つ返しませんでした。もう一度お試しください。",
   "The agent returned an incomplete option. Try again.": "エージェントが返した案は不完全です。もう一度お試しください。",
   "Each option needs a brief, specific reason. Try again.": "各案には短く具体的な理由が必要です。もう一度お試しください。",
   "The option includes an invalid change. Try again.": "この案には無効な変更が含まれています。もう一度お試しください。",
   "The agent repeated an option. Try again.": "エージェントが同じ案を繰り返しました。もう一度お試しください。",
-  "This note has no linked changes.": "この注釈に関連付けられた変更はありません。"
+  "This note has no linked changes.": "この注釈に関連付けられた変更はありません。",
+  "Send noteAlternatives as true or false.": "代替案の設定には true または false を指定してください。",
+  "Select an existing option.": "既存の案を選択してください。",
+  "The option targets an unrelated source file.": "この案は関係のないソースファイルを対象としています。",
+  "The option source is missing or ambiguous.": "この案のソースが見つからないか、一意に特定できません。",
+  "The option changes source outside this note.": "この案はこの注釈の範囲外のソースを変更します。",
+  "The option has overlapping patches.": "この案には重複する変更が含まれています。",
+  "Invalid review action.": "無効なレビュー操作です。",
+  "Send noteAlternativeRange as few, balanced or many.": "noteAlternativeRange を few、balanced、many のいずれかに設定してください。"
 }

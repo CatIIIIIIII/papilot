@@ -24,6 +24,7 @@ const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: task.proje
 snapshot.runtimes = { codex: snapshot.runtime, claude: { connected: true, authenticated: true, account: 'Claude Max', error: null, models: [{ id: 'opus', name: 'Opus 5.5', isDefault: true, efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: null }, { id: 'haiku', name: 'Haiku 5.5', isDefault: false, efforts: ['low', 'medium', 'high'], defaultEffort: null }] }, antigravity: { connected: false, authenticated: false, account: null, error: 'spawn agy ENOENT', models: [] }, kimi: { installed: true, connected: false, authenticated: false, account: null, error: null, models: [] }, cursor: { installed: false, connected: false, authenticated: false, account: null, error: null, models: [] } };
 const messages = [];
 let diagnosticFailure = true;
+let noteAlternatives = true, noteAlternativeRange = 'few';
 let latexInstallation = { distribution: 'MacTeX', version: '2025', path: '/usr/local/texlive/2025' };
 let latexFailure = false;
 const diagnosticRequests = [];
@@ -98,6 +99,10 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/updates') return json({ currentVersion: snapshot.version, latestVersion: snapshot.version, phase: 'idle', checkedAt: 1, error: null, canUpdate: true });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
+  if (url.pathname === '/api/note-alternatives') {
+    if (route.request().method() === 'POST') ({ noteAlternatives, noteAlternativeRange } = route.request().postDataJSON());
+    return route.fulfill({ json: { noteAlternatives, noteAlternativeRange } });
+  }
   if (url.pathname === '/api/state') {
     if (stateFailure) return route.fulfill({ status: 503, json: { error: 'Host unavailable.' } });
     const captured = structuredClone(snapshot);
@@ -269,6 +274,18 @@ try {
   await settingsDialog.getByRole('searchbox', { name: 'Search settings' }).fill('indirect');
   await settingsDialog.getByRole('button', { name: 'Review preferences', exact: true }).click();
   await settingsDialog.getByRole('switch', { name: 'Track indirect changes' }).waitFor();
+  const alternativesSwitch = settingsDialog.getByRole('switch', { name: 'Prepare alternatives for PDF notes' });
+  assert.equal(await alternativesSwitch.isChecked(), true);
+  await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/note-alternatives') && response.request().method() === 'POST'), alternativesSwitch.uncheck()]);
+  assert.equal(noteAlternatives, false);
+  await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/note-alternatives') && response.request().method() === 'POST'), alternativesSwitch.check()]);
+  assert.equal(noteAlternatives, true);
+  const countSlider = settingsDialog.getByRole('slider', { name: 'Extra alternatives per note' });
+  assert.equal(await countSlider.getAttribute('aria-valuetext'), 'Few · 1–2 alternatives');
+  await countSlider.focus();
+  await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/note-alternatives') && response.request().method() === 'POST'), countSlider.press('End')]);
+  assert.equal(noteAlternativeRange, 'many');
+  assert.equal(await countSlider.getAttribute('aria-valuetext'), 'More · 3–5 alternatives');
   await settingsDialog.getByRole('searchbox', { name: 'Search settings' }).fill('');
   await page.screenshot({ path: 'test-results/settings-review-desktop.png' });
   const runtimeGroup = settingsDialog.locator('.settings-category-group').filter({ has: page.getByRole('heading', { name: 'Runtime', exact: true }) });

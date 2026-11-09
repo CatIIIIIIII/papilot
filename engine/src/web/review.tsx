@@ -248,7 +248,6 @@ export function ReviewApp({
     return () => { window.removeEventListener("papilot:note-focus", changed); window.removeEventListener("papilot:option-preview", preview); };
   }, []);
   const focused = noteFocus?.round === detail?.round ? noteFocus?.units ?? undefined : undefined;
-  const fullComparison = previewing || Boolean(noteFocus && noteFocus.round === detail?.round && noteFocus.units === null);
   const inFocus = (id: string) => !focused || focused.includes(id);
   function showHelp() {
     if (window.dispatchEvent(new Event('latex-review:help', { cancelable: true }))) setHelp(true);
@@ -958,10 +957,13 @@ export function ReviewApp({
       uncited = detail!.references?.missing.filter((m) => m.unit && block.units.includes(m.unit)) ?? [],
       status = stopState(block.units, decisions),
       reviewed = !pendingUnits(stops[index], decisions).length,
-      expanded = fullComparison || Boolean(focused) || browsing || index === linkedChange,
+      // Focusing a note may reveal its own decided group. It must not expand
+      // unrelated accepted/rejected groups or turn the review into history.
+      focusedBlock = Boolean(focused?.some(id => block.units.includes(id))),
+      expanded = focusedBlock || browsing || index === linkedChange,
       // A reverted change shows the text that is back on disk; staged and
       // unstaged ones keep their before and after.
-      resolved = fullComparison || focused || history || index === linkedChange
+      resolved = focusedBlock || history || index === linkedChange
         ? undefined
         : changes
           ? status === "rejected"

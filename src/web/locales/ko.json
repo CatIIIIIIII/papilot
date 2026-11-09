@@ -1,4 +1,5 @@
 {
+  "Preparing option comparisons…": "대안 비교 준비 중…",
   ", ": ", ",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A package, font or source file may be missing. Check the details below, restore the missing file or ask for help.": "패키지, 글꼴 또는 소스 파일이 누락되었을 수 있습니다. 아래 세부 정보를 확인하고 누락된 파일을 복원하거나 도움을 요청하세요.",
@@ -1270,8 +1271,6 @@
   "Comment on {label}": "{label}에 댓글 작성",
   "Complete PDF comparison": "전체 PDF 비교",
   "Current proposal": "현재 제안",
-  "Do not use this option.": "이 옵션을 사용하지 않습니다.",
-  "Generate alternatives": "대안 생성",
   "Initial proposal": "초기 제안",
   "Loading PDF comparison…": "PDF 비교 불러오는 중…",
   "Next note": "다음 주석",
@@ -1282,7 +1281,6 @@
   "Options are not available for this source range yet.": "이 소스 범위에서는 아직 대안을 사용할 수 없습니다.",
   "Options for this note": "이 주석의 옵션",
   "Preparing this option’s PDF diff…": "이 옵션의 PDF 차이 준비 중…",
-  "Preparing two alternatives…": "두 가지 대안 준비 중…",
   "Previous note": "이전 주석",
   "Reject": "거부",
   "Reject {label}": "{label} 거부",
@@ -1293,9 +1291,18 @@
   "The choice could not be saved.": "선택을 저장하지 못했습니다.",
   "This note includes a reviewed change. Undo that decision before replacing it.": "이 주석에는 검토가 끝난 변경 사항이 포함되어 있습니다. 교체하기 전에 해당 결정을 취소하세요.",
   "Unchanged context": "변경되지 않은 주변 내용",
-  "Undo rejection": "거부 취소",
   "Wait for the current task and review actions to finish.": "현재 작업과 검토 작업이 끝날 때까지 기다려 주세요.",
   "Binary file changed.": "바이너리 파일이 변경되었습니다.",
   "LaTeX comparison": "LaTeX 비교",
-  "Long change: the source is shortened.": "긴 변경 사항: 소스가 축약되었습니다."
+  "Long change: the source is shortened.": "긴 변경 사항: 소스가 축약되었습니다.",
+  "No visible change": "시각적 변경사항 없음",
+  "Prepare alternatives for PDF notes": "PDF 주석의 대안 준비",
+  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "PDF 주석에 따라 편집할 때 기본 제안과 함께 다른 표현과 짧은 이유를 준비합니다. 이후 요청부터 적용됩니다.",
+  "Extra alternatives per note": "주석별 추가 대안",
+  "Few": "적게",
+  "Balanced": "보통",
+  "More": "많이",
+  "{min}–{max} alternatives": "대안 {min}–{max}개",
+  "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "기본 제안을 제외한 목표 범위입니다. AI가 유용한 대안을 더 적게 또는 많이 제시할 수 있습니다. 대안이 많을수록 준비 시간이 길어집니다.",
+  "Other options · {n}": "다른 대안 · {n}"
 }

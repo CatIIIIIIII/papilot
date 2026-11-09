@@ -833,6 +833,12 @@ body.resizing iframe{pointer-events:none}
 .settings-navigation-row>small{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:12px}
 .settings-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid var(--line)}
 .settings-row:first-of-type{border-top:0}
+.settings-note-count{max-width:420px;margin:0 0 14px;padding:0;border:0}
+.settings-note-count[aria-disabled="true"]{opacity:.55}
+.settings-note-count .effort-description{font-size:12px;margin-top:10px}
+.note-count-scale{display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px}
+.note-count-scale span:nth-child(2){text-align:center}
+.note-count-scale span:last-child{text-align:right}
 .settings-name{font-size:14px;font-weight:500;color:var(--text)}
 .segmented{display:inline-flex;gap:2px;padding:3px;border-radius:var(--r-md);background:var(--bg-muted)}
 .segmented label{position:relative;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:7px;font-size:13px;color:var(--text-2);cursor:pointer;transition:background-color .12s,color .12s}
@@ -1036,15 +1042,15 @@ body.resizing iframe{pointer-events:none}
 .review-copy-label{font-size:11px;white-space:nowrap;color:var(--text-3);padding:0 5px}
 @media(max-width:520px){.review-copy-label{display:none}}
 
-/* Note focus is optional. The conversation stays read-only; review controls
-   float inside the PDF pane without changing the document geometry. */
+/* Note focus is optional. The review drawer belongs to the bottom edge of
+   the PDF workspace; the document keeps its width and native layout. */
 .sent-notes li[data-note-result] { cursor: pointer; }
 .sent-notes li[data-note-result]:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.review-note-controls { position: absolute; z-index: 5; left: 64px; right: 18px; bottom: 12px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--bg); box-shadow: var(--float); max-height: min(50%, 320px); display: flex; flex-direction: column; overflow: hidden; transform: translateY(0); opacity: 1; transition: transform .18s ease, opacity .18s ease; }
-.review-note-controls[data-open="true"] { animation: note-drawer-in .2s ease-out; }
-.review-note-controls[data-open="false"] { transform: translateY(calc(100% + 16px)); opacity: 0; pointer-events: none; }
-@keyframes note-drawer-in { from { transform: translateY(calc(100% + 16px)); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .review-note-controls { transition: none; animation: none !important; } }
+.review-note-controls { position: absolute; z-index: 5; inset: auto 0 0; padding: 0 0 env(safe-area-inset-bottom, 0px); border: 0; border-top: 1px solid var(--line-strong); border-radius: 0; background: var(--bg); box-shadow: 0 -4px 16px rgb(0 0 0 / .06); max-height: min(44%, 300px); display: flex; flex-direction: column; overflow: hidden; transform: translateY(100%); transition: transform .26s var(--ease); }
+.review-note-controls[data-open="true"] { transform: translateY(0); }
+.review-note-controls[data-open="false"] { pointer-events: none; }
+@starting-style { .review-note-controls[data-open="true"] { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .review-note-controls { transition: none; } }
 .review-note-pager { display: flex; align-items: center; flex-shrink: 0; gap: 2px; margin: 0 0 4px auto; color: var(--text-2); }
 .review-note-pager .icon-button { width: 26px; height: 26px; border-radius: 5px; }
 .review-note-pager .icon-button:disabled { opacity: .35; cursor: default; }
@@ -1056,21 +1062,21 @@ body.resizing iframe{pointer-events:none}
 .note-review-scope button[aria-pressed="true"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--bg)); }
 .note-review-scope button:hover { background: var(--bg-muted); }
 .note-review-scope button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.note-options { --note-folder: var(--bg-muted); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-@media (max-width: 680px) { .review-note-controls { left: 12px; right: 12px; bottom: 12px; } }
-.note-option-navigation { display: flex; align-items: end; gap: 8px; flex-shrink: 0; min-width: 0; }
-.note-option-tabs { min-width: 0; flex: 1; display: flex; align-items: end; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 0 8px; }
-.note-option-tab { position: relative; flex-shrink: 0; padding: 8px 12px 9px; border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; white-space: nowrap; }
+.note-options { --note-folder: var(--bg); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.note-option-navigation { display: flex; align-items: end; gap: 8px; flex-shrink: 0; min-width: 0; padding: 6px 8px 0; background: var(--bg-muted); }
+.note-option-tabs { min-width: 0; flex: 1; display: flex; align-items: end; gap: 2px; overflow-x: auto; overflow-y: hidden; }
+.note-option-title { min-width: 0; flex: 1; padding: 0 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--text-2); }
+.note-option-tab { position: relative; flex-shrink: 0; padding: 7px 12px 8px; border: 0; border-radius: 5px 5px 0 0; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; white-space: nowrap; }
 .note-option-tab:hover:not(:disabled) { color: var(--text); }
 .note-option-tab[aria-selected="true"] { background: var(--note-folder); color: var(--text); }
-.note-option-tab[aria-selected="true"] .note-option-label { font-weight: 600; }
+.note-option-tab[aria-selected="true"] .note-option-label { font-weight: 500; }
 .note-option-tab[data-rejected="true"] .note-option-label { text-decoration: line-through; color: var(--text-3); }
-.note-option-content { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: auto; padding: 8px; border-radius: 8px; background: var(--note-folder); }
+.note-option-content { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0; background: var(--note-folder); }
 .note-option-label { display: flex; align-items: center; gap: 6px; font-weight: 500; }
 .note-option-label .spinner { width: 12px; height: 12px; margin-left: auto; }
-.note-option-reason { margin: 0; padding: 0 4px 2px; flex-shrink: 0; font-size: 11px; line-height: 1.4; color: var(--text-2); overflow-wrap: anywhere; }
-.note-options .note-option-hint { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); margin: 0; flex-shrink: 0; }
-.note-options .note-option-error { font-size: 12px; color: var(--danger, #b33); }
+.note-option-reason { margin: 0; padding: 8px 12px 4px; flex-shrink: 0; font-size: 11px; line-height: 1.4; color: var(--text-2); overflow-wrap: anywhere; }
+.note-options .note-option-hint { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11px; color: var(--text-2); margin: 0; flex-shrink: 0; }
+.note-options .note-option-error { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--danger, #b33); }
 .note-option-actions { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 4px; margin: 0 4px 3px 0; }
 .note-option-actions .icon-button { width: 28px; height: 28px; border-radius: 5px; }
 .note-option-actions svg { stroke-width: 2.2; }
@@ -1081,14 +1087,13 @@ body.resizing iframe{pointer-events:none}
 .note-option-actions .comment { color: var(--accent); }
 .note-option-actions .comment:hover:not(:disabled), .note-option-actions .comment[data-commented="true"] { color: var(--accent); background: var(--accent-soft); }
 .note-option-actions .source[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
-.note-option-comment { display: flex; align-items: flex-start; gap: 4px; flex-shrink: 0; }
+.note-option-comment { display: flex; align-items: flex-start; gap: 4px; padding: 6px 12px; flex-shrink: 0; }
 .note-option-comment textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 8px; background: var(--bg-subtle); font-size: 12px; line-height: 1.4; }
 .note-option-comment textarea:focus-visible { border-color: var(--accent); }
 .note-option-comment .icon-button { width: 24px; height: 24px; }
-.note-options-generate { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; color: var(--accent); font-size: 12px; }
 .note-options button:disabled { opacity: .5; cursor: default; }
 
-.note-option-comparison { --pdf-filter: var(--review-filter); --pdf-page: var(--review-page); min-height: 50px; max-height: 180px; overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; border-radius: 4px; padding: 3px 0; background: var(--pdf-page); }
+.note-option-comparison { --pdf-filter: var(--review-filter); --pdf-page: var(--review-page); min-height: 50px; max-height: 200px; overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; padding: 6px 0 10px; background: var(--pdf-page); }
 .note-option-comparison:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .note-comparison-change { margin: 3px 0; }
 .note-comparison-side { position: relative; padding: 12px 0 2px; min-height: 18px; border-left: 2px solid transparent; }
@@ -1104,8 +1109,9 @@ body.resizing iframe{pointer-events:none}
 .note-option-comparison .pdf-glyph, .note-option-comparison .pdf-line-preview { position: absolute; font-family: "Times New Roman", serif; font-weight: normal; line-height: 1; white-space: pre; transform-origin: 0 0; color: transparent; }
 .note-option-comparison .pdf-glyph::selection, .note-option-comparison .pdf-line-preview::selection { background: rgb(67 126 231 / .35); color: transparent; }
 
-.note-comparison-context { position: relative; height: 0; overflow: hidden; }
-.note-comparison-context > div { position: absolute; top: 0; left: 0; width: 100%; }
+.note-comparison-context { position: relative; width: 100%; max-height: 72px; overflow: hidden; }
+.note-comparison-context > div { position: absolute; top: 0; left: 0; width: 100%; height: 0; overflow: hidden; }
+.note-comparison-context[data-edge="end"] > div { top: auto; bottom: 0; }
 .note-option-comparison .pdf-focus-marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .note-option-source { background: var(--bg); padding: 0; }
 .note-source-unit + .note-source-unit { margin-top: 8px; }

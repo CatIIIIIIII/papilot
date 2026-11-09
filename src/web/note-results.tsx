@@ -10,12 +10,16 @@ import { browserStorage } from './storage.ts';
 import { NotePreviewCache } from './note-preview-cache.ts';
 
 export interface NoteFocus { key: string; change: NoteChange; sequence: number; historical: boolean }
-type OptionsRequest = (id: string, key: string, body?: { round: number; option?: string; id?: string; accept?: boolean }) => Promise<NoteOptions | { building: true }>;
+type OptionsRequest = (id: string, key: string, body?: { round: number; option?: string; id?: string; accept?: boolean; reject?: boolean }) => Promise<NoteOptions | { building: true }>;
 type Preview = { key: string; round: number; detail?: RoundDetail } | null;
-type PreviewRequest = (id: string, key: string, round: number, option: string) => Promise<RoundDetail>;
-const previewKey = (id: string, key: string, round: number, option: string) => JSON.stringify([id, key, round, option]);
+type PreviewRequest = (id: string, key: string, round: number, option: string, retry?: boolean, version?: string) => Promise<RoundDetail>;
+const previewKey = (id: string, key: string, round: number, option: string, version?: string) => JSON.stringify([id, key, round, option, version]);
 const comparisonCache = new NotePreviewCache<RoundDetail>();
 const optionCache = new Map<string, NoteOptions>();
+const optionStateKey = (task: Task | undefined, notes: NoteResult[], note: NoteResult) => JSON.stringify([
+  task?.id, note.key, note.round, task?.updatedAt, task?.review?.counts,
+  notes.map(note => [note.key, note.round, note.changes.map(change => [change.stop, change.state])]),
+]);
 function rememberOptions(key: string, options: NoteOptions) {
   optionCache.delete(key); optionCache.set(key, options);
   if (optionCache.size > 24) optionCache.delete(optionCache.keys().next().value!);
@@ -40,17 +44,24 @@ async function warmComparison(detail: RoundDetail) {
   const strips = [...detail.sections.flatMap(section => section.blocks), ...detail.loose].flatMap(block => block.kind === 'context' ? [block.image] : block.kind === 'change' ? [...block.before, ...block.after] : []);
   // Decode the first visible strips before swapping, so a ready comparison
   // does not briefly show a blank page while its SVGs arrive.
-  await Promise.allSettled([...new Set(strips.map(strip => detail.files + (strip.clean || strip.src)))].slice(0, 16).map(src => {
-    const image = new Image(); image.src = src; return image.decode();
-  }));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.allSettled([...new Set(strips.map(strip => detail.files + (strip.clean || strip.src)))].slice(0, 16).map(src => {
+        const image = new Image(); image.src = src; return image.decode();
+      })),
+      new Promise(resolve => { timer = setTimeout(resolve, 500); }),
+    ]);
+  } finally { clearTimeout(timer); }
   return detail;
 }
 interface Links {
   task?: Task; optionsRequest?: OptionsRequest; previewRequest?: PreviewRequest; preview: Preview; setPreview: (preview: Preview) => void;
-  cachedPreview: (id: string, key: string, round: number, option: string) => RoundDetail | undefined;
+  cachedPreview: (id: string, key: string, round: number, option: string, version?: string) => RoundDetail | undefined;
   notes: NoteResult[]; error: boolean; loading: boolean; selected: string; reveal: number;
   focus: NoteFocus | null; scope: 'all' | 'note'; setScope: (scope: 'all' | 'note') => void; reload: () => void;
   clearFocus: () => void;
+  alternativeCounts: Record<string, number>;
   focusNote: (key: string) => void;
   showChange: (key: string, change: NoteChange) => void; showNote: (key: string) => void;
 }
@@ -65,6 +76,7 @@ export function NoteResultsProvider({ task, items, read, optionsRequest, preview
   const [selected, setSelected] = useState(''), [focus, setFocus] = useState<NoteFocus | null>(null);
   const [reveal, setReveal] = useState(0), [scope, setScope] = useState<'all' | 'note'>('all');
   const [preview, setPreview] = useState<Preview>(null);
+  const [available, setAvailable] = useState<Record<string, { round: number; count: number }>>({});
   const sequence = useRef(0), actions = useRef({ read, openReview, openChat }); actions.current = { read, openReview, openChat };
   const signature = items.filter(item => item.type === 'user' && (item.meta?.notes?.length || readNotesInstructions(item.text))).map(item => item.id).join(',');
   const id = task?.id;
@@ -75,7 +87,7 @@ export function NoteResultsProvider({ task, items, read, optionsRequest, preview
   }, [id, signature]);
   const decisions = JSON.stringify(task?.review?.counts);
   useEffect(() => { reload(); return () => { ++sequence.current; }; }, [reload, task?.review?.round, task?.status, task?.updatedAt, decisions]);
-  useEffect(() => { setNotes([]); setScope('all'); setPreview(null); setFocus(null); setSelected(''); setError(false); }, [id]);
+  useEffect(() => { setNotes([]); setAvailable({}); setScope('all'); setPreview(null); setFocus(null); setSelected(''); setError(false); }, [id]);
   const showNote = (key: string) => {
     setSelected(key); setReveal(value => value + 1); actions.current.openChat();
     requestAnimationFrame(() => {
@@ -98,7 +110,35 @@ export function NoteResultsProvider({ task, items, read, optionsRequest, preview
     const note = notes.find(note => note.key === focus.key);
     if (note?.changes[0] && note.changes[0].round !== focus.change.round) setFocus({ ...focus, change: note.changes[0], sequence: focus.sequence + 1, historical: note.changes[0].round !== task?.review?.round });
   }, [notes]);
-  const value: Links = { task, optionsRequest, previewRequest: previewRequest && ((id, key, round, option) => comparisonCache.read(previewKey(id, key, round, option), () => previewRequest(id, key, round, option).then(warmComparison))), cachedPreview: (id, key, round, option) => comparisonCache.peek(previewKey(id, key, round, option)), preview: preview?.key === focus?.key && preview?.round === task?.review?.round ? preview : null, setPreview, notes, loading, error, selected, reveal, focus, scope, setScope, reload, showNote, focusNote,
+  const requests = useRef({ optionsRequest, previewRequest }); requests.current = { optionsRequest, previewRequest };
+  const noteSignature = JSON.stringify(notes.map(note => [note.key, note.round, note.changes.map(change => change.state)]));
+  useEffect(() => {
+    if (!id || task?.status !== 'reviewing') return;
+    const { optionsRequest, previewRequest } = requests.current;
+    if (!optionsRequest || !previewRequest) return;
+    let cancelled = false;
+    // Published choices are already rendered. Load their small manifests and
+    // warm the images before a note is opened, including after an app restart.
+    void (async () => {
+      for (const note of notes) {
+        if (cancelled) return;
+        if (note.round !== task.review?.round || !note.changes.length) continue;
+        try {
+          const options = await optionsRequest(id, note.key);
+          if (cancelled || !('options' in options)) continue;
+          const count = options.locked ? 0 : Math.max(0, options.options.length - 1);
+          setAvailable(previous => previous[note.key]?.round === options.round && previous[note.key]?.count === count ? previous : { ...previous, [note.key]: { round: options.round, count } });
+          if (options.locked) continue;
+          rememberOptions(optionStateKey(task, notes, note), options);
+          await Promise.allSettled(options.options.filter(option => !option.previewError).map(option =>
+            comparisonCache.read(previewKey(id, note.key, options.round, option.id, options.comparisonKey), () => previewRequest(id, note.key, options.round, option.id, false, options.comparisonKey).then(warmComparison))));
+        } catch { /* Opening the note reports errors and offers Retry. */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, task?.status, task?.review?.round, task?.updatedAt, decisions, noteSignature]);
+  const value: Links = { task, optionsRequest, previewRequest: previewRequest && ((id, key, round, option, retry, version) => comparisonCache.read(previewKey(id, key, round, option, version), () => previewRequest(id, key, round, option, retry, version).then(warmComparison))), cachedPreview: (id, key, round, option, version) => comparisonCache.peek(previewKey(id, key, round, option, version)), preview: preview?.key === focus?.key && preview?.round === task?.review?.round ? preview : null, setPreview, notes, loading, error, selected, reveal, focus, scope, setScope, reload, showNote, focusNote,
+    alternativeCounts: Object.fromEntries(notes.map(note => [note.key, task?.status === 'reviewing' && note.round === task.review?.round && note.changes.every(change => change.state === 'pending') && available[note.key]?.round === note.round ? available[note.key].count : 0])),
     clearFocus: () => { setScope('all'); setPreview(null); setFocus(null); setSelected(''); }, showChange };
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
@@ -126,14 +166,14 @@ export function NoteReviewControls({ doc }: { doc: Document | null }) {
   // Keep the contents mounted just long enough for the drawer to slide away.
   useEffect(() => {
     if (note) { setRetained(note); return; }
-    const timer = setTimeout(() => setRetained(undefined), 180);
+    const timer = setTimeout(() => setRetained(undefined), 280);
     return () => clearTimeout(timer);
   }, [note]);
   useEffect(() => {
     if (!note) return;
     const outside = (event: MouseEvent) => {
       const target = event.target as Element | null;
-      if (!event.isTrusted || !target || panel.current?.contains(target) || target.closest('[data-note-result], .papilot-note-links, .note-review-scope')) return;
+      if (!event.isTrusted || !target || panel.current?.contains(target) || target.closest('[data-note-result], .papilot-note-links, .papilot-note-options, .note-review-scope')) return;
       latest.current?.clearFocus();
     };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) latest.current?.clearFocus(); };
@@ -153,7 +193,7 @@ export function NoteReviewControls({ doc }: { doc: Document | null }) {
       if (!note) return;
       const frame = doc.defaultView?.frameElement?.getBoundingClientRect();
       const viewport = element.parentElement!.getBoundingClientRect();
-      const bottom = viewport.bottom - element.offsetHeight - 24 - (frame?.top || 0);
+      const bottom = viewport.bottom - element.offsetHeight - 12 - (frame?.top || 0);
       const marks = [...paper.querySelectorAll<SVGRectElement>('.papilot-linked-change .pdf-focus-marks rect')].map(mark => mark.getBoundingClientRect());
       if (!marks.length) return;
       const top = Math.min(...marks.map(mark => mark.top)), end = Math.max(...marks.map(mark => mark.bottom));
@@ -164,7 +204,7 @@ export function NoteReviewControls({ doc }: { doc: Document | null }) {
     };
     const sync = () => {
       root.setAttribute('data-papilot-note-drawer', '');
-      root.style.setProperty('--papilot-note-inset', `${element.offsetHeight + 24}px`);
+      root.style.setProperty('--papilot-note-inset', `${element.offsetHeight + 12}px`);
       cancelAnimationFrame(pending); pending = requestAnimationFrame(reveal);
     };
     const resize = new ResizeObserver(sync); resize.observe(element); sync();
@@ -207,19 +247,18 @@ function NoteAlternatives({ note, navigation }: { note: NoteResult; navigation: 
   const tabsId = useId();
   const tabs = useRef<HTMLDivElement>(null);
   const storageKey = `papilot:note-choice:${task?.id}:${note.key}`;
-  const decisionKey = note.changes.map(change => `${change.round}:${change.stop}:${change.state}`).join(',');
-  const optionsKey = JSON.stringify([task?.id, note.key, note.round, decisionKey]);
+  const optionsKey = optionStateKey(task, links.notes, note);
   const remembered = optionCache.get(optionsKey);
   const draft = reviewDraft(task?.id || ''), feedback = useReviewDraft(task?.id || '');
   const [editor, setEditor] = useState<string | null>(null), commentInput = useRef<HTMLTextAreaElement>(null);
-  const [actingOption, setActingOption] = useState('');
+  const [actingOption, setActingOption] = useState(''), [actingKind, setActingKind] = useState<'accept' | 'reject'>('accept');
   const [source, setSource] = useState(false);
   const [data, setData] = useState<NoteOptions | null>(remembered || null), [selected, setSelected] = useState(() => rememberedChoice(storageKey, remembered));
-  const [busy, setBusy] = useState(false), [generating, setGenerating] = useState(false), [applying, setApplying] = useState(false), [error, setError] = useState('');
-  const [baseline, setBaseline] = useState<RoundDetail | null>(() => task && remembered ? links.cachedPreview(task.id, note.key, remembered.round, remembered.selected || 'current') || null : null), [baselineError, setBaselineError] = useState('');
+  const [busy, setBusy] = useState(false), [applying, setApplying] = useState(false), [error, setError] = useState('');
+  const [baseline, setBaseline] = useState<RoundDetail | null>(() => task && remembered ? links.cachedPreview(task.id, note.key, remembered.round, remembered.selected || 'current', remembered.comparisonKey) || null : null), [baselineError, setBaselineError] = useState('');
   const [retry, setRetry] = useState(0), [previewBusy, setPreviewBusy] = useState(false);
-  const [shown, setShown] = useState<RoundDetail | null>(() => task && remembered ? links.cachedPreview(task.id, note.key, remembered.round, selected) || baseline : null);
-  const previewSequence = useRef(0), requestId = useRef<string | null>(null);
+  const [shown, setShown] = useState<RoundDetail | null>(() => task && remembered ? links.cachedPreview(task.id, note.key, remembered.round, selected, remembered.comparisonKey) || baseline : null);
+  const previewSequence = useRef(0), requestId = useRef<{ option: string; action: 'accept' | 'reject'; id: string } | null>(null);
   useEffect(() => {
     if (applying && task && ['failed', 'uncertain', 'interrupted'].includes(task.status)) {
       setApplying(false); setError(task.error || t('The choice could not be saved.'));
@@ -228,38 +267,38 @@ function NoteAlternatives({ note, navigation }: { note: NoteResult; navigation: 
   useEffect(() => {
     if (!request || !task) return;
     let cancelled = false; setBusy(true); setError('');
-    // Opening a note only reads existing choices; asking the agent is explicit.
+    // Opening a note reads the choices prepared in the original editing turn.
     void request(task.id, note.key).then(result => {
       if (cancelled || !('options' in result)) return;
       rememberOptions(optionsKey, result);
       setData(result); setSelected(rememberedChoice(storageKey, result)); setApplying(false);
     }).catch(error => { if (!cancelled) setError(error.message); }).finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; ++previewSequence.current; links.setPreview(null); };
-  }, [task?.id, note.key, note.round, decisionKey, retry]);
+  }, [optionsKey, retry]);
   const saved = data?.selected || 'current';
   useEffect(() => { if (editor) commentInput.current?.focus(); }, [editor]);
   useEffect(() => {
     if (!task || !data || !links.previewRequest) return;
-    let cancelled = false; setBaseline(links.cachedPreview(task.id, note.key, data.round, saved) || null); setBaselineError('');
-    void links.previewRequest(task.id, note.key, data.round, saved).then(detail => {
+    let cancelled = false; setBaseline(links.cachedPreview(task.id, note.key, data.round, saved, data.comparisonKey) || null); setBaselineError('');
+    void links.previewRequest(task.id, note.key, data.round, saved, false, data.comparisonKey).then(detail => {
       if (!cancelled) setBaseline(detail);
     }).catch(error => { if (!cancelled) setBaselineError(error.message); });
     return () => { cancelled = true; };
-  }, [task?.id, note.key, data?.round, saved, retry]);
+  }, [task?.id, note.key, data?.round, data?.comparisonKey, saved, retry]);
   useEffect(() => {
     const sequence = ++previewSequence.current;
     setPreviewBusy(false);
     if (!task || !data || !links.previewRequest || links.focus?.key !== note.key || selected === saved || data.locked) { links.setPreview(null); return; }
-    const cached = links.cachedPreview(task.id, note.key, data.round, selected);
+    const cached = links.cachedPreview(task.id, note.key, data.round, selected, data.comparisonKey);
     if (cached) { links.setPreview({ key: note.key, round: data.round, detail: cached }); return; }
     links.setPreview({ key: note.key, round: data.round }); setPreviewBusy(true);
-    void links.previewRequest(task.id, note.key, data.round, selected).then(detail => {
+    void links.previewRequest(task.id, note.key, data.round, selected, retry > 0, data.comparisonKey).then(detail => {
       if (previewSequence.current !== sequence) return;
       links.setPreview({ key: note.key, round: data.round, detail });
     }).catch(error => { if (previewSequence.current === sequence) setError(error.message); })
       .finally(() => { if (previewSequence.current === sequence) setPreviewBusy(false); });
     return () => { ++previewSequence.current; };
-  }, [task?.id, note.key, data?.round, data?.locked, selected, saved, retry, links.focus?.key]);
+  }, [optionsKey, task?.id, note.key, data?.round, data?.comparisonKey, data?.locked, selected, saved, retry, links.focus?.key]);
   const optionIds = data?.options.map(option => option.id).join(',');
   useLayoutEffect(() => {
     const list = tabs.current;
@@ -277,10 +316,9 @@ function NoteAlternatives({ note, navigation }: { note: NoteResult; navigation: 
   }, [selected, optionIds]);
   useEffect(() => {
     if (!task || !data || data.locked || !links.previewRequest) return;
-    // Existing alternatives compile in the background; this never asks an AI
-    // for new suggestions or writes the manuscript.
-    for (const option of data.options) void links.previewRequest(task.id, note.key, data.round, option.id).catch(() => {});
-  }, [task?.id, note.key, data?.round, data?.locked, optionIds]);
+    // Read the prepared comparisons; tab switches share the same decoded cache.
+    for (const option of data.options.filter(option => !option.previewError)) void links.previewRequest(task.id, note.key, data.round, option.id, false, data.comparisonKey).catch(() => {});
+  }, [task?.id, note.key, data?.round, data?.comparisonKey, data?.locked, optionIds]);
   const readyComparison = selected === saved ? baseline : links.preview?.detail;
   useEffect(() => { if (readyComparison) setShown(readyComparison); }, [readyComparison]);
   if (!request || !task) return null;
@@ -292,60 +330,49 @@ function NoteAlternatives({ note, navigation }: { note: NoteResult; navigation: 
     links.setScope('note'); setSelected(option); setEditor(null); requestId.current = null; setError('');
     browserStorage.setItem(storageKey, JSON.stringify({ round: data.round, option }));
   };
-  const generate = async () => {
-    if (!data || generating || locked) return;
-    setGenerating(true); setError('');
-    try {
-      const result = await request(task.id, note.key, { round: data.round });
-      if ('options' in result) { rememberOptions(optionsKey, result); setData(result); }
-    } catch (error) { setError((error as Error).message); }
-    finally { setGenerating(false); }
-  };
-  const apply = async (option: NoteOption) => {
+  const decide = async (option: NoteOption, action: 'accept' | 'reject') => {
     if (!data || applying || locked || !links.previewRequest) return;
     if (selected !== option.id) choose(option.id);
-    setApplying(true); setActingOption(option.id); setError('');
+    setApplying(true); setActingOption(option.id); setActingKind(action); setError('');
     try {
       // HTTP tailnet addresses provide random bytes without randomUUID.
-      requestId.current ??= crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(20)), byte => byte.toString(16).padStart(2, '0')).join('');
-      // Bind the action to the selected option before the async request starts.
-      await links.previewRequest(task.id, note.key, data.round, option.id);
-      const result = await request(task.id, note.key, { round: data.round, option: option.id, id: requestId.current, accept: true });
+      if (requestId.current?.option !== option.id || requestId.current.action !== action)
+        requestId.current = { option: option.id, action, id: crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(20)), byte => byte.toString(16).padStart(2, '0')).join('') };
+      // Rejection restores the original edit and never waits for an option PDF.
+      if (action === 'accept') await links.previewRequest(task.id, note.key, data.round, option.id, false, data.comparisonKey);
+      const result = await request(task.id, note.key, { round: data.round, option: option.id, id: requestId.current.id, ...(action === 'accept' ? { accept: true } : { reject: true }) });
       const rejected = optionFeedback(option.id, 'reject'); if (rejected) draft.remove(rejected.id);
       browserStorage.removeItem(storageKey);
-      if ('options' in result) { setData(result); setSelected(result.selected || 'current'); setApplying(false); }
+      if ('options' in result) { setData(result); setSelected(result.selected || 'current'); setApplying(false); links.clearFocus(); }
       links.reload();
     }
     catch (error) { setError((error as Error).message); setApplying(false); }
   };
   const saving = applying || task.status === 'building';
-  const label = (id: string, text: string) => id === 'current' ? t('Initial proposal') : id === 'latest' ? t('Current proposal') : text;
+  const label = (id: string, text: string) => id === 'latest' ? t('Current proposal')
+    : id === 'current' && (text === 'Current proposal' || text === 'Initial proposal') ? t('Initial proposal') : text;
   const optionFeedback = (id: string, kind: 'comment' | 'reject') => feedback.notes.find(item => item.round === data?.round && item.option?.note === note.key && item.option.id === id && item.option.kind === kind);
-  const addFeedback = (option: NoteOption, kind: 'comment' | 'reject') => draft.add({
+  const addFeedback = (option: NoteOption) => draft.add({
     round: data!.round, strip: '', rects: [], region: false,
     where: `Round ${data!.round} · ${note.note.where} · Note ${note.index + 1} · Option: ${label(option.id, option.label)}`,
     quote: option.edits.map(edit => edit.text).join('\n'),
-    option: { note: note.key, id: option.id, label: label(option.id, option.label), kind },
-  }, false, kind === 'reject' ? t('Do not use this option.') : '');
-  const reject = (option: NoteOption) => {
-    const existing = optionFeedback(option.id, 'reject');
-    if (existing) draft.remove(existing.id); else addFeedback(option, 'reject');
-  };
+    option: { note: note.key, id: option.id, label: label(option.id, option.label), kind: 'comment' },
+  }, false);
   const comment = (option: NoteOption) => {
     if (!locked) choose(option.id);
-    setEditor(optionFeedback(option.id, 'comment')?.id || addFeedback(option, 'comment') || null);
+    setEditor(optionFeedback(option.id, 'comment')?.id || addFeedback(option) || null);
   };
   const editing = feedback.notes.find(item => item.id === editor);
   const active = data?.options.find(option => option.id === selected);
   const name = active ? label(active.id, active.label) : '';
-  const rejected = Boolean(active && optionFeedback(active.id, 'reject'));
   const commented = Boolean(active && optionFeedback(active.id, 'comment'));
+  const multiple = (data?.options.length || 0) > 1;
   return <div className="note-options" onClick={event => event.stopPropagation()}>
     <div className="note-option-navigation">
-    {data && <div ref={tabs} className="note-option-tabs" role="tablist" aria-label={t('Options for this note')} aria-busy={saving || previewBusy}>
+    {data && (multiple ? <div ref={tabs} className="note-option-tabs" role="tablist" aria-label={t('Options for this note')} aria-busy={saving || previewBusy}>
       {data.options.map((option, index) => {
         const name = label(option.id, option.label);
-        return <button type="button" className="note-option-tab" role="tab" key={option.id} id={`${tabsId}-${option.id}`} aria-controls={`${tabsId}-panel`} data-option={option.id} data-rejected={Boolean(optionFeedback(option.id, 'reject'))} aria-selected={selected === option.id} tabIndex={selected === option.id ? 0 : -1} disabled={saving || Boolean(locked) || busy} aria-label={name} onClick={() => choose(option.id)} onKeyDown={event => {
+        return <button type="button" className="note-option-tab" role="tab" key={option.id} id={`${tabsId}-${option.id}`} aria-controls={`${tabsId}-panel`} data-option={option.id} aria-selected={selected === option.id} tabIndex={selected === option.id ? 0 : -1} disabled={saving || Boolean(locked) || busy} aria-label={name} onClick={() => choose(option.id)} onKeyDown={event => {
           const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
           if (!offset && event.key !== 'Home' && event.key !== 'End') return;
           event.preventDefault();
@@ -353,16 +380,16 @@ function NoteAlternatives({ note, navigation }: { note: NoteResult; navigation: 
           choose(data.options[next].id); (event.currentTarget.parentElement!.children[next] as HTMLButtonElement).focus();
         }}><span className="note-option-label">{name}{selected === option.id && previewBusy && <span className="spinner"/>}</span></button>;
       })}
-    </div>}
+    </div> : <span className="note-option-title" id={active ? `${tabsId}-${active.id}` : undefined} title={name}>{name}</span>)}
     {navigation}
     {active && <div className="note-option-actions" role="group" aria-label={t('Review {label}', { label: name })}>
-      <button type="button" className="icon-button accept" aria-label={t('Accept {label}', { label: name })} title={t('Accept')} disabled={saving || Boolean(locked) || busy} onClick={() => void apply(active)}>{saving && actingOption === active.id ? <span className="spinner"/> : <Icon name="check" size={18}/>}</button>
-      <button type="button" className="icon-button reject" aria-label={t('Reject {label}', { label: name })} aria-pressed={rejected} title={rejected ? t('Undo rejection') : t('Reject')} disabled={saving || feedback.busy} onClick={() => reject(active)}><Icon name="close" size={18}/></button>
+      <button type="button" className="icon-button accept" aria-label={t('Accept {label}', { label: name })} title={t('Accept')} disabled={saving || Boolean(locked) || busy} onClick={() => void decide(active, 'accept')}>{saving && actingOption === active.id && actingKind === 'accept' ? <span className="spinner"/> : <Icon name="check" size={18}/>}</button>
+      <button type="button" className="icon-button reject" aria-label={t('Reject {label}', { label: name })} title={t('Reject')} disabled={saving || Boolean(locked) || busy || feedback.busy} onClick={() => void decide(active, 'reject')}>{saving && actingOption === active.id && actingKind === 'reject' ? <span className="spinner"/> : <Icon name="close" size={18}/>}</button>
       <button type="button" className="icon-button comment" aria-label={t('Comment on {label}', { label: name })} aria-expanded={editing?.option?.id === active.id} data-commented={commented} title={t('Comment')} disabled={saving || feedback.busy} onClick={() => comment(active)}><Icon name="chat" size={18}/></button>
       <button type="button" className="icon-button source" aria-label={t('Show LaTeX source')} aria-pressed={source} title={t('Show LaTeX source')} disabled={!comparison} onClick={() => setSource(value => !value)}><Icon name="code" size={18}/></button>
     </div>}
     </div>
-    <div className="note-option-content" role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={active ? `${tabsId}-${active.id}` : undefined}>
+    <div className="note-option-content" role={multiple ? 'tabpanel' : undefined} id={`${tabsId}-panel`} aria-labelledby={active ? `${tabsId}-${active.id}` : undefined}>
     {active?.reason && <p className="note-option-reason">{active.reason}</p>}
     {editing && <div className="note-option-comment">
       <textarea ref={commentInput} rows={2} aria-label={t('Comment on {label}', { label: editing.option!.label })} placeholder={t('What should change here?')} value={editing.comment} readOnly={feedback.busy} onChange={event => draft.edit(editing.id, event.target.value)} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') setEditor(null); }}/>
@@ -371,7 +398,6 @@ function NoteAlternatives({ note, navigation }: { note: NoteResult; navigation: 
     {comparison && (source ? <NoteOptionSource detail={comparison} focus={focusedUnits}/> : <NoteOptionDiff detail={comparison} focus={focusedUnits}/>)}
     {!comparison && !baselineError && !error && <p className="note-option-hint" role="status"><span className="spinner"/>{t('Loading PDF comparison…')}</p>}
     {baselineError && !comparison && <p className="note-option-error" role="alert">{baselineError} <button type="button" onClick={() => setRetry(value => value + 1)}>{t('Retry')}</button></p>}
-    {data && data.options.length <= 1 && !locked && <button type="button" className="note-options-generate" disabled={generating || saving} onClick={() => void generate()}>{generating ? <><span className="spinner"/>{t('Preparing two alternatives…')}</> : t('Generate alternatives')}</button>}
     {(saving || previewBusy) && <span className="sr-only" role="status">{saving ? t('Saving choice…') : t('Preparing this option’s PDF diff…')}</span>}
     {locked && !saving && <p className="note-option-hint">{optionLockText(locked)}</p>}
     {error && <p role="alert" className="note-option-error">{errorText(error)} <button type="button" onClick={() => setRetry(value => value + 1)}>{t('Retry')}</button></p>}

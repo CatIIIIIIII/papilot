@@ -1,4 +1,5 @@
 {
+  "Preparing option comparisons…": "正在準備備選方案的比較…",
   ", ": "、",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A package, font or source file may be missing. Check the details below, restore the missing file or ask for help.": "可能缺少套件、字型或原始檔。請查看下方詳細資訊、還原缺少的檔案或尋求協助。",
@@ -1270,8 +1271,6 @@
   "Comment on {label}": "留言討論「{label}」",
   "Complete PDF comparison": "完整 PDF 對比",
   "Current proposal": "目前方案",
-  "Do not use this option.": "不使用此方案。",
-  "Generate alternatives": "產生備選方案",
   "Initial proposal": "初始方案",
   "Loading PDF comparison…": "正在載入 PDF 對比…",
   "Next note": "下一則註解",
@@ -1282,7 +1281,6 @@
   "Options are not available for this source range yet.": "此來源範圍暫不支援備選方案。",
   "Options for this note": "此註解的方案",
   "Preparing this option’s PDF diff…": "正在準備此方案的 PDF 差異對比…",
-  "Preparing two alternatives…": "正在準備兩個備選方案…",
   "Previous note": "上一則註解",
   "Reject": "拒絕",
   "Reject {label}": "拒絕「{label}」",
@@ -1293,9 +1291,18 @@
   "The choice could not be saved.": "無法儲存選擇。",
   "This note includes a reviewed change. Undo that decision before replacing it.": "此註解包含已審閱的修改。請先復原該決定，再替換方案。",
   "Unchanged context": "未修改的上下文",
-  "Undo rejection": "復原拒絕",
   "Wait for the current task and review actions to finish.": "請等待目前任務和審閱操作完成。",
   "Binary file changed.": "二進位檔案已變更。",
   "LaTeX comparison": "LaTeX 對比",
-  "Long change: the source is shortened.": "變更較長：原始碼已縮略。"
+  "Long change: the source is shortened.": "變更較長：原始碼已縮略。",
+  "No visible change": "無可見變更",
+  "Prepare alternatives for PDF notes": "修改時準備備選方案",
+  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "依 PDF 註解修改時，隨首選方案一起準備其他表達和簡短理由。只影響之後送出的請求。",
+  "Extra alternatives per note": "每則註解的額外備選",
+  "Few": "少量",
+  "Balanced": "適中",
+  "More": "更多",
+  "{min}–{max} alternatives": "{min}–{max} 個備選",
+  "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "不含首選方案。這是目標範圍，AI 會依內容調整實際數量；更多備選需要更長的準備時間。",
+  "Other options · {n}": "其他方案 · {n}"
 }

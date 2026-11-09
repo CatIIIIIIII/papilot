@@ -8,6 +8,8 @@ import { LANGUAGES, browserLanguage, setLanguage, t, useLanguage, type LanguageC
 import { NotificationSettings } from './notification-settings.tsx';
 import { browserStorage } from './storage.ts';
 import { loadIndirectChanges, saveIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
+import { loadNoteAlternatives } from './note-option-preferences.ts';
+import { NoteOptionSettings } from './note-option-settings.tsx';
 import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
@@ -37,6 +39,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
   const advancedGit = useAdvancedGit();
   useEffect(loadIndirectChanges, []);
+  useEffect(loadNoteAlternatives, []);
   const [page, setPage] = useState<SettingsPage>(initialPage);
   const [showCategories, setShowCategories] = useState(() => initialPage === 'general' && window.matchMedia('(max-width: 760px)').matches);
   const [query, setQuery] = useState('');
@@ -72,7 +75,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       { page: 'general', label: t('General'), icon: 'settings', keywords: `${t('Language')} ${t('Default model')} ${t('Default reasoning effort')}` },
       { page: 'appearance', label: t('Appearance'), icon: 'sun', keywords: `${t('Light')} ${t('Dark')} ${t('System')} ${t('Theme')} ${t('Accent')} ${t('Background')} ${t('Foreground')}` },
       { page: 'notifications', label: t('Notifications'), icon: 'bell' },
-      { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Track indirect changes')}` },
+      { page: 'review', label: t('Review preferences'), icon: 'diff', keywords: `${t('Open reviews on')} ${t('Check references online')} ${t('Track indirect changes')} ${t('Prepare alternatives for PDF notes')}` },
       { page: 'quickNotes', label: t('Quick notes'), icon: 'toolMagic', keywords: `${t('Magic pen')} ${t('Polish')} ${t('Shorten')} ${t('Runt')} ${t('Connect')} ${t('Verify')}` },
       { page: 'shortcuts', label: t('Keyboard shortcuts'), icon: 'keyboard' },
     ] },
@@ -132,6 +135,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         </section>}
         {page === 'appearance' && <AppearanceSettings theme={theme} onTheme={onTheme} resolved={resolved} appearance={appearance} onAppearance={onAppearance}/>}
         {page === 'review' && <section className="settings-card">
+          <NoteOptionSettings/>
           <div className="settings-row settings-choice">
             <div className="settings-text"><span className="settings-name">{t('Open reviews on')}</span><p>{t('Changes shows only the changed sections and opens fastest. PDF shows each change in place in the whole paper and takes longer for long papers. The switch in a review changes only that review.')}</p></div>
             <ModeSwitch labeled label={t('Open reviews on')} changesTitle={t('Changes')} mode={reviewView === 'paper' ? 'pdf' : 'changes'} onMode={mode => saveDefaultReviewView(mode === 'pdf' ? 'paper' : 'changes')}/>

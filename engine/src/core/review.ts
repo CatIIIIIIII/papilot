@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { applyUnits, revertUnits } from "./changes.ts";
+import { groupFormattingChanges } from "./formatting-changes.ts";
 import { now, readBytes, readJson, same, writeOrDelete } from "./files.ts";
 import { cleanPath, merge3Async } from "./git.ts";
 import type { App } from "../server.ts";
@@ -292,7 +293,7 @@ export class Review {
       const { text, hash } = sources.get(unit.file)!, offset = unit.text_ops[0][1], start = Math.max(0, offset - 2000);
       return { old_context: { text: text.slice(start, unit.text_ops.at(-1)![2] + 2000), start, ...(hash ? { source_hash: hash } : {}) } };
     };
-    return {
+    return groupFormattingChanges({
       task: name,
       round: number,
       before: round.before,
@@ -311,7 +312,7 @@ export class Review {
         ? { build: { key: round.summary.builds.at(-1)!, targets: round.summary.targets ?? ["full"] } }
         : {}),
       ...(render.references ? { references: render.references } : {}),
-    };
+    }, file => this.app.repo.blob(round.before, file)?.toString("utf8") ?? null);
   }
   history(name: string, round: Round): Record<string, History[]> {
     if (round.number === 1) return {};

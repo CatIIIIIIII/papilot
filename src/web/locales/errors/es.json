@@ -252,10 +252,17 @@
   "This option is no longer available.": "Esta opción ya no está disponible.",
   "The review action could not be confirmed. Check task status before retrying.": "No se pudo confirmar la acción de revisión. Comprueba el estado de la tarea antes de volver a intentarlo.",
   "The option save could not be confirmed. Check task status before retrying.": "No se pudo confirmar que se guardara la opción. Comprueba el estado de la tarea antes de volver a intentarlo.",
-  "The agent did not return two usable options. Try again.": "El agente no devolvió dos opciones utilizables. Vuelve a intentarlo.",
   "The agent returned an incomplete option. Try again.": "El agente devolvió una opción incompleta. Vuelve a intentarlo.",
   "Each option needs a brief, specific reason. Try again.": "Cada opción necesita una justificación breve y concreta. Vuelve a intentarlo.",
   "The option includes an invalid change. Try again.": "La opción incluye un cambio no válido. Vuelve a intentarlo.",
   "The agent repeated an option. Try again.": "El agente repitió una opción. Vuelve a intentarlo.",
-  "This note has no linked changes.": "Esta anotación no tiene cambios vinculados."
+  "This note has no linked changes.": "Esta anotación no tiene cambios vinculados.",
+  "Send noteAlternatives as true or false.": "La configuración de alternativas debe ser true o false.",
+  "Select an existing option.": "Selecciona una opción existente.",
+  "The option targets an unrelated source file.": "La opción afecta a un archivo fuente no relacionado.",
+  "The option source is missing or ambiguous.": "No se encuentra la fuente de la opción o es ambigua.",
+  "The option changes source outside this note.": "La opción modifica código fuente fuera de esta anotación.",
+  "The option has overlapping patches.": "La opción contiene cambios superpuestos.",
+  "Invalid review action.": "Acción de revisión no válida.",
+  "Send noteAlternativeRange as few, balanced or many.": "Establece noteAlternativeRange en few, balanced o many."
 }

@@ -252,10 +252,17 @@
   "This option is no longer available.": "此方案已不可用。",
   "The review action could not be confirmed. Check task status before retrying.": "无法确认审阅操作是否完成。重试前请检查任务状态。",
   "The option save could not be confirmed. Check task status before retrying.": "无法确认方案是否已保存。重试前请检查任务状态。",
-  "The agent did not return two usable options. Try again.": "智能体未返回两个可用方案，请重试。",
   "The agent returned an incomplete option. Try again.": "智能体返回的方案不完整，请重试。",
   "Each option needs a brief, specific reason. Try again.": "每个方案都需要简短、具体的理由，请重试。",
   "The option includes an invalid change. Try again.": "方案包含无效修改，请重试。",
   "The agent repeated an option. Try again.": "智能体返回了重复方案，请重试。",
-  "This note has no linked changes.": "此批注没有关联的修改。"
+  "This note has no linked changes.": "此批注没有关联的修改。",
+  "Send noteAlternatives as true or false.": "备选方案设置必须为开启或关闭。",
+  "Select an existing option.": "请选择已有方案。",
+  "The option targets an unrelated source file.": "该方案涉及无关的源文件。",
+  "The option source is missing or ambiguous.": "无法唯一定位该方案的源码。",
+  "The option changes source outside this note.": "该方案修改了本批注范围之外的源码。",
+  "The option has overlapping patches.": "该方案包含重叠的修改。",
+  "Invalid review action.": "无效的审阅操作。",
+  "Send noteAlternativeRange as few, balanced or many.": "请将 noteAlternativeRange 设为 few、balanced 或 many。"
 }

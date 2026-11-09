@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { NoteOption, NoteOptions, Task } from '../shared.ts';
+import { MAX_NOTE_ALTERNATIVES } from '../shared.ts';
 import type { Store } from './store.ts';
 import { sameFragment, taskNoteResults, type NoteRound } from './note-results.ts';
 import { taskRoute, type ReviewClient } from './review.ts';
@@ -14,7 +15,7 @@ export function rebaseNoteOptions(options: NoteOption[], previous: NoteRound['un
     const matches = next.filter(candidate => sameFragment(unit, candidate, sameBase));
     if (matches.length === 1) mapping.set(unit.id, matches[0].id);
   }
-  return options.filter(option => option.id !== 'latest').flatMap(option => {
+  return options.filter(option => option.id !== 'latest').flatMap(({ previewError: _error, ...option }) => {
     const edits = option.edits.map(edit => ({ ...edit, unit: mapping.get(edit.unit) || '' }));
     return edits.length === next.length && edits.every(edit => edit.unit) && new Set(edits.map(edit => edit.unit)).size === next.length ? [{ ...option, edits }] : [];
   });
@@ -27,25 +28,30 @@ export function selectedNoteOptions(choices: NoteOption[], current: NoteOption) 
   return selected ? { options: choices, selected: selected.id } : { options: [{ ...current, id: 'latest' }, ...choices], selected: 'latest' };
 }
 
-export function parseNoteOptions(text: string, current: NoteOption): NoteOption[] {
+export function parseNoteOptions(text: string, current: NoteOption, partial = false): NoteOption[] {
   const value = JSON.parse(text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, ''));
-  if (!Array.isArray(value.options) || value.options.length !== 2) throw new Error('The agent did not return two usable options. Try again.');
+  if (!Array.isArray(value.options) || value.options.length > MAX_NOTE_ALTERNATIVES || (!partial && !value.options.length)) throw new Error('The agent returned an incomplete option. Try again.');
   const signatures = new Set([JSON.stringify(current.edits)]);
-  return value.options.map((entry: any) => {
-    if (typeof entry?.label !== 'string' || !entry.label.trim() || entry.label.length > 80 || !Array.isArray(entry.edits)
-      || entry.edits.length !== current.edits.length || new Set(entry.edits.map((edit: any) => edit?.unit)).size !== current.edits.length)
-      throw new Error('The agent returned an incomplete option. Try again.');
-    if (typeof entry.reason !== 'string' || !entry.reason.trim() || entry.reason.length > 180 || entry.reason.includes('\0'))
-      throw new Error('Each option needs a brief, specific reason. Try again.');
-    const edits = current.edits.map(original => {
-      const edit = entry.edits.find((edit: any) => edit?.unit === original.unit);
-      if (!edit || typeof edit.text !== 'string' || edit.text.includes('\0') || edit.text.length > 20000) throw new Error('The option includes an invalid change. Try again.');
-      return { unit: original.unit, text: edit.text };
-    });
-    const signature = JSON.stringify(edits);
-    if (signatures.has(signature)) throw new Error('The agent repeated an option. Try again.');
-    signatures.add(signature);
-    return { id: randomUUID(), label: entry.label.trim(), reason: entry.reason.trim(), edits };
+  return value.options.flatMap((entry: any) => {
+    try {
+      if (typeof entry?.label !== 'string' || !entry.label.trim() || entry.label.length > 80 || !Array.isArray(entry.edits)
+        || entry.edits.length !== current.edits.length || new Set(entry.edits.map((edit: any) => edit?.unit)).size !== current.edits.length)
+        throw new Error('The agent returned an incomplete option. Try again.');
+      if (typeof entry.reason !== 'string' || !entry.reason.trim() || entry.reason.length > 180 || entry.reason.includes('\0'))
+        throw new Error('Each option needs a brief, specific reason. Try again.');
+      const edits = current.edits.map(original => {
+        const edit = entry.edits.find((edit: any) => edit?.unit === original.unit);
+        if (!edit || typeof edit.text !== 'string' || edit.text.includes('\0') || edit.text.length > 20000) throw new Error('The option includes an invalid change. Try again.');
+        return { unit: original.unit, text: edit.text };
+      });
+      const signature = JSON.stringify(edits);
+      if (signatures.has(signature)) throw new Error('The agent repeated an option. Try again.');
+      signatures.add(signature);
+      return [{ id: randomUUID(), label: entry.label.trim(), reason: entry.reason.trim(), edits }];
+    } catch (error) {
+      if (!partial) throw error;
+      return [];
+    }
   });
 }
 
@@ -86,6 +92,8 @@ export async function noteOptionContext(store: Store, task: Task, key: string, c
     if (initial.length) { cached = { ...cached, options: [...initial, ...cached.options] }; store.savePreference(cacheKey, cached); }
   }
   const choices = cached?.options.filter(option => option.id === 'current' || (option.id !== 'latest' && typeof option.reason === 'string' && option.reason.trim())) || [current];
-  const options: NoteOptions = { before: Object.fromEntries(units.map(unit => [unit.id, unit.old_text])), round: note.round, key, ...selectedNoteOptions(choices.length ? choices : [current], current), ...(locked ? { locked } : {}) };
-  return { note, notes, units, options, detail };
+  const rejected = Object.keys(state.decisions).filter(id => state.decisions[id] === 'rejected').sort();
+  const comparisonKey = createHash('sha256').update(JSON.stringify([detail.after, rejected])).digest('hex');
+  const options: NoteOptions = { before: Object.fromEntries(units.map(unit => [unit.id, unit.old_text])), round: note.round, key, comparisonKey, ...selectedNoteOptions(choices.length ? choices : [current], current), ...(locked ? { locked } : {}) };
+  return { note, notes, units, options, detail, rejected };
 }

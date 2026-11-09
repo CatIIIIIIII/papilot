@@ -3,7 +3,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { App } from "../server.ts";
 import type { Op, RenderedRound, RoundDetail, Unit } from "../types.ts";
-import { codeVersion } from "../runtime.ts";
+import { groupFormattingChanges } from "./formatting-changes.ts";
+import { splitLines } from "./changes.ts";
 import { Builder, buildDate } from "./build.ts";
 import { readJson, writeJson } from "./files.ts";
 import { render } from "./publish.ts";
@@ -11,16 +12,31 @@ import type { OptionInput } from "./note-options.ts";
 
 /** Keep annotation IDs and old ranges stable while adjusting candidate ranges.
  * This only constructs buffers: neither checkout nor review decisions change. */
-export function optionCandidate(units: Unit[], edits: OptionInput["edits"], source: (file: string) => string) {
+export function optionCandidate(units: Unit[], edits: OptionInput["edits"], source: (file: string) => string,
+  restored: { ids: Set<string>; source: (file: string) => Buffer | null } = { ids: new Set(), source: () => null }) {
   const chosen = new Map(edits.map(edit => [edit.unit, edit.text]));
-  const files: Record<string, Buffer> = {}, updated = structuredClone(units);
-  for (const file of new Set(units.filter(unit => chosen.has(unit.id)).map(unit => unit.file))) {
+  const files: Record<string, Buffer | null> = {}, updated = structuredClone(units.filter(unit => !restored.ids.has(unit.id)));
+  for (const file of new Set(units.filter(unit => chosen.has(unit.id) || restored.ids.has(unit.id)).map(unit => unit.file))) {
+    const rejected = units.filter(unit => unit.file === file && restored.ids.has(unit.id));
+    const before = rejected.length ? restored.source(file) : null;
+    if (rejected.some(unit => unit.whole_file)) {
+      if (units.some(unit => unit.file === file && chosen.has(unit.id))) throw new Error("These changes overlap and must be revised together.");
+      files[file] = before; continue;
+    }
     const original = source(file);
     const patches = units.filter(unit => unit.file === file && chosen.has(unit.id)).map(unit => {
       if (unit.text_ops?.length !== 1) throw new Error("This change cannot be previewed independently.");
       const [, , , start, end] = unit.text_ops[0];
       return { id: unit.id, start, end, text: chosen.get(unit.id)! };
-    }).sort((a, b) => a.start - b.start);
+    });
+    const offset = (text: string, line: number) => splitLines(text).slice(0, line).join("").length;
+    for (const unit of rejected) {
+      if (!before) throw new Error("The original source is unavailable.");
+      const old = before.toString("utf8");
+      const ops = unit.text_ops ?? unit.ops.map(([tag, i, j, x, y]): Op => [tag, offset(old, i), offset(old, j), offset(original, x), offset(original, y)]);
+      for (const [, i, j, start, end] of ops) patches.push({ id: unit.id, start, end, text: old.slice(i, j) });
+    }
+    patches.sort((a, b) => a.start - b.start);
     let text = original, boundary = original.length + 1;
     for (const patch of [...patches].reverse()) {
       if (patch.start < 0 || patch.end > original.length || patch.start > patch.end || patch.end >= boundary)
@@ -53,7 +69,7 @@ export function optionCandidate(units: Unit[], edits: OptionInput["edits"], sour
 }
 
 const pending = new Map<string, Promise<RoundDetail>>();
-export async function previewNoteOption(app: App, name: string, input: OptionInput): Promise<RoundDetail> {
+export async function previewNoteOption(app: App, name: string, input: OptionInput & { rejected?: string[] }): Promise<RoundDetail> {
   if (!input || !Array.isArray(input.edits) || !input.edits.length || input.edits.length > 100
     || input.edits.some(edit => !edit || typeof edit.unit !== "string" || typeof edit.text !== "string" || edit.text.includes("\0") || edit.text.length > 20000))
     throw new Error("Invalid note option.");
@@ -70,8 +86,18 @@ export async function previewNoteOption(app: App, name: string, input: OptionInp
     if (decisions[unit.id] !== "pending") throw new Error("This option overlaps a reviewed change. Undo that decision before replacing it.");
     ids.add(unit.id);
   }
-  const project = app.project, date = buildDate();
-  const key = createHash("sha256").update(JSON.stringify([round.before, round.after, input.edits, project, date, codeVersion()])).digest("hex");
+  const project = app.project;
+  // A saved round is immutable. Opening it tomorrow or after an app restart
+  // must not invalidate its comparisons (or change \today in the document).
+  const date = round.summary.date ?? buildDate(new Date(round.created * 1000), {});
+  const targets = round.summary.targets.length ? round.summary.targets : ["full"];
+  const rejected = round.units.filter(unit => decisions[unit.id] === "rejected").map(unit => unit.id).sort();
+  // The host's comparison key describes the state it read before this request.
+  // Check that state again here, before any await or cache lookup, so a racing
+  // rejection/undo cannot put a different comparison under the browser's key.
+  if (input.rejected !== undefined && JSON.stringify(input.rejected) !== JSON.stringify(rejected))
+    throw new Error("The review changed. Reload the options.");
+  const key = createHash("sha256").update(JSON.stringify([3, round.before, round.after, input.edits, rejected, project, targets, date])).digest("hex");
   const output = path.join(app.state, "cache/option-previews", name, String(round.number), key);
   const cached = readJson<RoundDetail | null>(path.join(output, "preview.json"), null);
   if (cached) return cached;
@@ -81,22 +107,32 @@ export async function previewNoteOption(app: App, name: string, input: OptionInp
       const data = app.repo.blob(round.after, file);
       if (!data) throw new Error("The proposal source is unavailable.");
       return data.toString("utf8");
-    });
+    }, { ids: new Set(rejected), source: file => app.repo.blob(round.before, file) });
     // An unreferenced Git object is safe to compile; no branch or index moves.
     const after = await app.repo.commitWithAsync(round.after, candidate.files, "Preview note option");
     const builder = new Builder(project, app.repo);
+    // Reuse precisely the baseline and chapter scope the author is reviewing.
+    // Rebuilding the whole thesis here was both slow and a different comparison.
+    const keys = round.summary.builds;
+    const seed = targets.includes("full") ? null
+      : (keys.length > 2 ? await builder.completed(keys[0]) : null) ?? await builder.buildSeed(task.base);
+    const baseline = keys.length >= 2 ? await builder.completed(keys.at(-2)!) : null;
     const [old, next] = await Promise.all([
-      builder.build(round.before, ["full"], null, { date, priority: "foreground" }),
-      builder.build(after, ["full"], null, { date, priority: "foreground" }),
+      baseline ?? builder.build(round.before, targets, seed, { date }),
+      builder.build(after, targets, seed, { date }),
     ]);
     fs.mkdirSync(output, { recursive: true });
-    await render(output, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units: candidate.units, indirect: false });
+    // A choice can restore part of the original wording (including cancelling
+    // an insertion). Keep its decision ID in the saved round, but do not render
+    // a before/after card for an edit that this candidate no longer contains.
+    const visible = candidate.units.filter(unit => unit.kind !== "text" || unit.truncated || unit.whole_file || unit.old_text !== unit.new_text);
+    await render(output, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units: visible, indirect: false });
     const rendered = readJson<RenderedRound>(path.join(output, "round.json"), { units: {}, sections: [], loose: [] });
     fs.copyFileSync(next.pdf, path.join(output, "preview.pdf"));
     const files = `/option-files/${name}/${round.number}/${key}/`;
-    const detail: RoundDetail = { ...rendered, task: name, round: round.number, before: round.before, after,
-      units: candidate.units.map(unit => ({ ...unit, ...rendered.units[unit.id] })),
-      warnings: [...old.warnings, ...next.warnings], files, pdf: files + "preview.pdf", build: { key: next.key, targets: ["full"] } };
+    const detail: RoundDetail = groupFormattingChanges({ ...rendered, task: name, round: round.number, before: round.before, after,
+      units: visible.map(unit => ({ ...unit, ...rendered.units[unit.id] })),
+      warnings: [...old.warnings, ...next.warnings], files, pdf: files + "preview.pdf", build: { key: next.key, targets } }, file => app.repo.blob(round.before, file)?.toString("utf8") ?? null);
     writeJson(path.join(output, "preview.json"), detail);
     return detail;
   })();

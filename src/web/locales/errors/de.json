@@ -252,10 +252,17 @@
   "This option is no longer available.": "Diese Option ist nicht mehr verfügbar.",
   "The review action could not be confirmed. Check task status before retrying.": "Die Überprüfungsaktion konnte nicht bestätigt werden. Prüfen Sie den Aufgabenstatus, bevor Sie es erneut versuchen.",
   "The option save could not be confirmed. Check task status before retrying.": "Das Speichern der Option konnte nicht bestätigt werden. Prüfen Sie den Aufgabenstatus, bevor Sie es erneut versuchen.",
-  "The agent did not return two usable options. Try again.": "Der Agent hat keine zwei verwendbaren Optionen zurückgegeben. Versuchen Sie es erneut.",
   "The agent returned an incomplete option. Try again.": "Der Agent hat eine unvollständige Option zurückgegeben. Versuchen Sie es erneut.",
   "Each option needs a brief, specific reason. Try again.": "Jede Option benötigt eine kurze, konkrete Begründung. Versuchen Sie es erneut.",
   "The option includes an invalid change. Try again.": "Die Option enthält eine ungültige Änderung. Versuchen Sie es erneut.",
   "The agent repeated an option. Try again.": "Der Agent hat eine Option wiederholt. Versuchen Sie es erneut.",
-  "This note has no linked changes.": "Mit dieser Anmerkung sind keine Änderungen verknüpft."
+  "This note has no linked changes.": "Mit dieser Anmerkung sind keine Änderungen verknüpft.",
+  "Send noteAlternatives as true or false.": "Die Einstellung für Alternativen muss true oder false sein.",
+  "Select an existing option.": "Wählen Sie eine vorhandene Option.",
+  "The option targets an unrelated source file.": "Die Option betrifft eine nicht zugehörige Quelldatei.",
+  "The option source is missing or ambiguous.": "Die Quelle der Option fehlt oder ist nicht eindeutig.",
+  "The option changes source outside this note.": "Die Option ändert Quelltext außerhalb dieser Anmerkung.",
+  "The option has overlapping patches.": "Die Option enthält überlappende Änderungen.",
+  "Invalid review action.": "Ungültige Prüfaktion.",
+  "Send noteAlternativeRange as few, balanced or many.": "Setze noteAlternativeRange auf few, balanced oder many."
 }

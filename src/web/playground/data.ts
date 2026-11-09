@@ -157,13 +157,16 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
     }
     if (path === '/quick-notes') { if (body !== undefined) storage.setItem('playground:quick-notes', JSON.stringify(body)); try { return JSON.parse(storage.getItem('playground:quick-notes') || '{"quickNotes":null}'); } catch { return { quickNotes: null }; } }
     if (path === '/indirect-changes') return { indirectChanges: false };
+    if (path === '/note-alternatives') {
+      if (body !== undefined && typeof (body as { noteAlternatives?: unknown }).noteAlternatives === 'boolean') storage.setItem('playground:note-alternatives', JSON.stringify(body));
+      return { noteAlternativeRange: 'few', ...JSON.parse(storage.getItem('playground:note-alternatives') || '{"noteAlternatives":true}') };
+    }
     // The note drawer uses the same prepared comparison and local decision
-    // journal as the iframe. Only an explicit request for new AI alternatives
-    // needs the installed app; opening a note never triggers a download prompt.
+    // journal as the iframe. Opening a note never calls an AI or asks for a download.
     const optionRoute = path.match(/^\/tasks\/([^/]+)\/note-options(\/preview)?$/);
     if (optionRoute && rounds[optionRoute[1]]) {
       const [, id, preview] = optionRoute, query = new URLSearchParams(route.split('?')[1]);
-      const input = body as { key?: string; round?: number; option?: string; id?: string; accept?: boolean } | undefined;
+      const input = body as { key?: string; round?: number; option?: string; id?: string; accept?: boolean; reject?: boolean } | undefined;
       const key = input?.key ?? query.get('key') ?? '', options = noteOptions(id, key);
       if (body === undefined && !preview) return options;
       if ((preview ? Number(query.get('round')) : input?.round) !== options.round) throw new Error('The review changed. Reload the options.');
@@ -171,11 +174,12 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
         if (body !== undefined || query.get('option') !== 'current') throw new Error('This option is no longer available.');
         return rounds[id];
       }
-      if (!input?.option) throw new PlaygroundDownloadRequired();
+      if (!input?.option) throw new Error('Select an existing option.');
       if (input.option !== 'current') throw new Error('This option is no longer available.');
-      if (!input.accept) return options;
+      if ((input.reject !== undefined && typeof input.reject !== 'boolean') || (input.accept !== undefined && typeof input.accept !== 'boolean') || (input.accept && input.reject)) throw new Error('Invalid review action.');
+      if (!input.accept && !input.reject) return options;
       if (options.locked) throw new Error(options.locked);
-      read(`/playground-reviews/${id}/decide`, { id: input.id, round: 1, action: 'accept', changes: options.options[0].edits.map(edit => edit.unit) });
+      read(`/playground-reviews/${id}/decide`, { id: input.id, round: 1, action: input.reject ? 'reject' : 'accept', changes: options.options[0].edits.map(edit => edit.unit) });
       return noteOptions(id, key);
     }
     const match = path.match(/^\/playground-reviews\/([^/]+)(\/.*)$/);

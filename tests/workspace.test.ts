@@ -14,6 +14,7 @@ import { RpcResponseError, Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
 import { AGENT_IDS, type PendingReview, type Run, type Task } from '../src/shared.ts';
 import { visibleTimeline } from '../src/web/refresh.ts';
+import { noteOptionsKey } from '../src/server/note-options.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -21,6 +22,95 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test('publication stays building until all saved option comparisons are ready', async () => {
+  const gate = deferred<unknown>(), started = deferred<void>();
+  const detail = { round: 1, before: 'before', after: 'after', units: [{ id: 'word', file: 'main.tex', old_start: 1, old_end: 1, old_text: 'fast', new_text: 'efficient', text_ops: [['replace', 0, 4, 0, 9]] }], sections: [], loose: [{ kind: 'change', units: ['word'] }] };
+  const f = fixture(async (_method, route) => {
+    if (route.endsWith('/source/options/preview')) { started.resolve(); return gate.promise; }
+    if (route.includes('/rounds/')) return detail;
+    if (route.includes('/state?')) return { latest: 1, closed: false, decisions: { word: 'pending' } };
+    if (route.endsWith('/publish')) return { job: 'job' };
+    if (route.includes('/jobs/')) return { status: 'done', phase: 'render', outcome: 'published', round: 1 };
+    if (route.includes('/feedback')) return feedback;
+    return summary;
+  });
+  try {
+    const run = { id: 'prepared-run', taskId: f.task.id, requestKey: 'prepared-run', prompt: '', status: 'completed', createdAt: 1, reviewRound: 0, noteOptions: [{ note: 1 }] } as Run;
+    f.store.saveRun(run);
+    f.store.saveItem({ id: run.id, taskId: f.task.id, type: 'user', text: '', createdAt: 1, meta: { notes: [{ where: 'main.tex line 1', quote: 'fast', comment: 'Clarify speed.' }] } });
+    f.store.savePreference(noteOptionsKey(f.task.id, run.id + ':0', 1), { round: 1, key: run.id + ':0', selected: 'current', options: [
+      { id: 'current', label: 'Current', edits: [{ unit: 'word', text: 'efficient' }] },
+      { id: 'quick', label: 'Concise', reason: 'A familiar term.', edits: [{ unit: 'word', text: 'quick' }] },
+    ] });
+    const published = f.workspace.publish(f.task.id, run);
+    await started.promise;
+    assert.equal(f.store.task(f.task.id).status, 'building');
+    assert.equal(f.store.task(f.task.id).review?.job?.phase, 'options');
+    assert.deepEqual(f.store.task(f.task.id).review?.job?.options, { completed: 0, total: 1 });
+    assert.ok(f.store.task(f.task.id).pendingBuild, 'The preparation can recover after restart');
+    gate.resolve({});
+    await published;
+    assert.equal(f.store.task(f.task.id).status, 'reviewing');
+    assert.equal(f.store.task(f.task.id).pendingBuild, null);
+    assert.equal(f.store.task(f.task.id).review?.job?.status, 'done');
+  } finally { gate.resolve({}); f.close(); }
+});
+
+test('note alternatives are requested in the editing turn, respect the saved default, and preserve the original message', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = false;
+    const notes = [{ where: 'main.tex line 1', quote: 'The model is fast.', comment: 'Clarify speed.' }];
+    const on = await f.workspace.enqueue(f.task.id, 'Keep the facts.', 'with-options', false, { reviewNotes: notes });
+    assert.equal(on.noteOptionsRequested, true);
+    assert.match(on.prompt, /aim for 1–2 extra alternatives/);
+    assert.match(on.prompt, /papilot-note-options/);
+    const original = f.store.items(f.task.id).find(item => item.id === on.id)!;
+    assert.equal(original.text, 'Keep the facts.');
+    assert.deepEqual(original.meta?.notes, notes);
+    f.store.saveRun({ ...on, status: 'completed' });
+    f.store.savePreference('note-alternative-range', 'many');
+    const more = await f.workspace.enqueue(f.task.id, 'Keep the facts.', 'more-options', false, { reviewNotes: notes });
+    assert.match(more.prompt, /aim for 3–5 extra alternatives/);
+    assert.match(more.prompt, /target range, not a quota/);
+    assert.match(f.store.runByKey('with-options')!.prompt, /aim for 1–2 extra alternatives/, 'Changing the preference affects only future requests');
+    f.store.saveRun({ ...more, status: 'completed' });
+    f.store.savePreference('note-alternatives', false);
+    const off = await f.workspace.enqueue(f.task.id, 'Keep the facts.', 'without-options', false, { reviewNotes: notes });
+    assert.equal(off.noteOptionsRequested, undefined);
+    assert.doesNotMatch(off.prompt, /papilot-note-options/);
+    f.store.saveRun({ ...off, status: 'completed' });
+    f.store.savePreference('note-alternatives', true);
+    const plain = await f.workspace.enqueue(f.task.id, 'Explain the result.', 'no-notes', false);
+    assert.equal(plain.noteOptionsRequested, undefined);
+  } finally { f.close(); }
+});
+
+test('the editing response carries prepared choices into publication without putting JSON in the conversation', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = false;
+    const run = await f.workspace.enqueue(f.task.id, 'Polish this.', 'prepared-response', false, { reviewNotes: [{ where: 'main.tex line 1', quote: 'fast', comment: 'Clarify.' }] });
+    (f.workspace as any).active.set(f.task.id, run);
+    f.store.updateTask(f.task.id, { status: 'running', turnId: 'editing-turn' });
+    const choices = [{ note: 1, current: { label: 'Clear', reason: 'Clarify speed.' }, options: ['quick', 'efficient'].map(text => ({ label: text, reason: 'Use ' + text + '.', edits: [{ file: 'main.tex', find: 'fast', replace: text }] })) }];
+    const reply = 'Clarified the wording.\n\n```papilot-note-options\n' + JSON.stringify({ notes: choices }) + '\n```';
+    const params = { threadId: 'thread', turnId: 'editing-turn', itemId: 'reply' };
+    await (f.workspace as any).notification({ method: 'item/agentMessage/delta', params: { ...params, delta: reply } });
+    (f.workspace as any).flush();
+    assert.equal(f.store.items(f.task.id).find(item => item.type === 'assistant')?.text, 'Clarified the wording.');
+    await (f.workspace as any).notification({ method: 'item/completed', params: { ...params, item: { id: 'reply', type: 'agentMessage', text: reply } } });
+    let published = false;
+    f.workspace.publish = async (_id, submitted) => { published = true; assert.deepEqual(submitted?.noteOptions, choices); };
+    await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'editing-turn', status: 'completed' } } });
+    assert.equal(published, true);
+    assert.deepEqual(f.store.runByKey('prepared-response')?.noteOptions, choices);
+    const assistant = f.store.items(f.task.id).find(item => item.type === 'assistant')!;
+    assert.equal(assistant.text, 'Clarified the wording.');
+    assert.equal(assistant.rawText, reply);
+  } finally { f.close(); }
+});
 const feedback = { cursor: 7, feedback: [{ body: 'Preserve the boundary condition.' }] };
 const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 

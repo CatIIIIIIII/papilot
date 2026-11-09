@@ -691,6 +691,31 @@ test('indirect changes stay off until enabled in settings', async () => {
   } finally { await f.close(); }
 });
 
+test('the note alternatives default is validated and saved for future editing turns', async () => {
+  const f = await fixture();
+  try {
+    const read = async () => (await f.local.inject({ url: '/api/note-alternatives', headers: LOCAL })).json().noteAlternatives;
+    assert.equal(await read(), true);
+    const preferences = async () => (await f.local.inject({ url: '/api/note-alternatives', headers: LOCAL })).json();
+    assert.equal((await preferences()).noteAlternativeRange, 'few');
+    for (const range of ['few', 'balanced', 'many']) {
+      assert.equal((await f.local.inject({ method: 'POST', url: '/api/note-alternatives', headers: f.as, payload: { noteAlternatives: true, noteAlternativeRange: range } })).statusCode, 200);
+      assert.equal((await preferences()).noteAlternativeRange, range);
+    }
+    for (const range of ['unknown', 2, null]) {
+      assert.equal((await f.local.inject({ method: 'POST', url: '/api/note-alternatives', headers: f.as, payload: { noteAlternatives: false, noteAlternativeRange: range } })).statusCode, 400);
+      assert.deepEqual(await preferences(), { noteAlternatives: true, noteAlternativeRange: 'many' });
+    }
+    for (const payload of [{}, { noteAlternatives: 'false' }]) assert.equal((await f.local.inject({ method: 'POST', url: '/api/note-alternatives', headers: f.as, payload })).statusCode, 400);
+    for (const value of [false, true]) {
+      assert.equal((await f.local.inject({ method: 'POST', url: '/api/note-alternatives', headers: f.as, payload: { noteAlternatives: value } })).statusCode, 200);
+      assert.equal(await read(), value);
+      assert.equal(f.store.preference('note-alternatives'), value);
+      assert.equal((await preferences()).noteAlternativeRange, 'many', 'Legacy toggle requests preserve the chosen range');
+    }
+  } finally { await f.close(); }
+});
+
 test('group-specific instructions are scoped to selected notes and preserved in the agent prompt and chat', async () => {
   const f = await fixture();
   try {

@@ -201,7 +201,7 @@ test('prepared note options preview locally and accept only the focused note thr
   const comparison = await api<import('../engine/src/types.ts').RoundDetail>(`${route}/preview?key=${encodeURIComponent(key)}&round=1&option=current`);
   assert.ok(comparison.units.length > chosen.length, 'a focused note still previews the complete prepared comparison');
   assert.equal(comparison.files, `/demo/fixtures/${id}/`);
-  await assert.rejects(api(route, { key, round: 1 }), PlaygroundDownloadRequired, 'only explicit AI generation asks for the installed app');
+  await assert.rejects(api(route, { key, round: 1 }), /Select an existing option/, 'review cannot generate new AI alternatives');
   await assert.rejects(api(`${route}?key=missing`), /no linked changes/);
   await assert.rejects(api(`${route}/preview?key=${encodeURIComponent(key)}&round=2&option=current`), /review changed/);
   await assert.rejects(api(route, { key, round: 1, option: 'unprepared', accept: true, id: 'bad' }), /no longer available/);
@@ -213,6 +213,12 @@ test('prepared note options preview locally and accept only the focused note thr
   assert.deepEqual(Object.keys(decisions).filter(unit => decisions[unit] === 'accepted'), chosen);
   assert.ok(notes[1].changes.flatMap(change => change.units).every(unit => decisions[unit] === 'pending'));
   await reload(`/playground-reviews/${id}/undo`, { id: 'note-accept' });
+  assert.equal((await reload<NoteOptions>(`${route}?key=${encodeURIComponent(key)}`)).locked, undefined);
+  await reload(route, { key, round: 1, option: 'current', reject: true, id: 'note-reject' });
+  const rejected = (await reload<{ decisions: Record<string, string> }>(`/playground-reviews/${id}/state`)).decisions;
+  assert.deepEqual(Object.keys(rejected).filter(unit => rejected[unit] === 'rejected'), chosen);
+  assert.ok(notes[1].changes.flatMap(change => change.units).every(unit => rejected[unit] === 'pending'));
+  await reload(`/playground-reviews/${id}/undo`, { id: 'note-reject' });
   assert.equal((await reload<NoteOptions>(`${route}?key=${encodeURIComponent(key)}`)).locked, undefined);
 });
 test('demo replay reveals progress and streams the answer before publishing the diff, with pause and reload support', async () => {

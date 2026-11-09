@@ -9,6 +9,15 @@ import { diffUnits } from '../engine/src/core/changes.ts';
 import { Fixture, fakeRound, METHOD } from '../engine/tests/ts/helpers.ts';
 
 const note: NoteSummary = { id: 'n1', where: 'Page 2 · main.tex lines 10–12', quote: 'The original technical sentence.', comment: 'Shorten it.', anchor: { sources: [{ file: 'main.tex', lines: [10, 12] }] } };
+
+test('a focused note includes its verified wrapping changes without accepting another word on that line', () => {
+  const text = 'The model is fast and\nthe result is stable.\n';
+  const unit = (id: string, start: number, old: string, next: string, formattingFor?: string): NoteRound['units'][number] => ({ id, file: 'main.tex', old_start: 1, old_end: 2, old_text: old, new_text: next, formattingFor, text_ops: [['replace', start, start + old.length, start, start + next.length]], old_context: { text, start: 0 } });
+  const units = [unit('word', text.indexOf('fast'), 'fast', 'efficient'), unit('space', text.indexOf('\n'), '\n', ' ', 'word'), unit('other', text.indexOf('stable'), 'stable', 'robust')];
+  const detail: NoteRound = { round: 1, units, sections: [], loose: [{ kind: 'change', units: units.map(unit => unit.id) }] };
+  const changes = matchNoteChanges({ where: 'main.tex line 1', quote: 'The model is fast', comment: 'Clarify speed.' }, detail, { word: 'pending', space: 'pending', other: 'pending' });
+  assert.deepEqual(changes.map(change => change.units), [['word', 'space']]);
+});
 const detail: NoteRound = {
   round: 1,
   units: [

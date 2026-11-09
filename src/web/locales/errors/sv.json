@@ -252,10 +252,17 @@
   "This option is no longer available.": "Detta alternativ är inte längre tillgängligt.",
   "The review action could not be confirmed. Check task status before retrying.": "Granskningsåtgärden kunde inte bekräftas. Kontrollera uppgiftens status innan du försöker igen.",
   "The option save could not be confirmed. Check task status before retrying.": "Det gick inte att bekräfta att alternativet sparades. Kontrollera uppgiftens status innan du försöker igen.",
-  "The agent did not return two usable options. Try again.": "Agenten returnerade inte två användbara alternativ. Försök igen.",
   "The agent returned an incomplete option. Try again.": "Agenten returnerade ett ofullständigt alternativ. Försök igen.",
   "Each option needs a brief, specific reason. Try again.": "Varje alternativ behöver en kort, konkret motivering. Försök igen.",
   "The option includes an invalid change. Try again.": "Alternativet innehåller en ogiltig ändring. Försök igen.",
   "The agent repeated an option. Try again.": "Agenten upprepade ett alternativ. Försök igen.",
-  "This note has no linked changes.": "Denna anteckning har inga länkade ändringar."
+  "This note has no linked changes.": "Denna anteckning har inga länkade ändringar.",
+  "Send noteAlternatives as true or false.": "Inställningen för alternativ måste vara true eller false.",
+  "Select an existing option.": "Välj ett befintligt alternativ.",
+  "The option targets an unrelated source file.": "Alternativet berör en orelaterad källfil.",
+  "The option source is missing or ambiguous.": "Alternativets källtext saknas eller är tvetydig.",
+  "The option changes source outside this note.": "Alternativet ändrar källtext utanför den här anteckningen.",
+  "The option has overlapping patches.": "Alternativet innehåller överlappande ändringar.",
+  "Invalid review action.": "Ogiltig granskningsåtgärd.",
+  "Send noteAlternativeRange as few, balanced or many.": "Ange noteAlternativeRange som few, balanced eller many."
 }

@@ -548,6 +548,10 @@ export class Builder {
     const value = readJson<{ key?: string } | null>(this.preferredFile(key), null);
     return typeof value?.key === "string" && /^[0-9a-f]{32}$/.test(value.key) ? value.key : null;
   }
+  /** Reuse an immutable published build while its cached PDF is available. */
+  async completed(key: string) {
+    return /^[a-f0-9]{32}$/.test(key) ? this.finished(path.join(this.cache, key)) : null;
+  }
   // A completed build in this folder, whose PDF is still there.
   private async finished(folder: string) {
     try {

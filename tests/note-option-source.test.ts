@@ -6,10 +6,13 @@ import type { RoundDetail, Unit } from '../engine/src/types.ts';
 import { NoteOptionSource } from '../src/web/note-option-diff.tsx';
 
 const unit = (id: string, old_text: string, new_text: string): Unit => ({ id, file: 'main.tex', kind: 'text', status: 'modified', whole_file: false, truncated: false, ops: [], old_start: 10, old_end: 10, new_start: 10, new_end: 10, old_text, new_text });
-const candidate = (text: string) => ({ after: text, units: [unit('focused', 'fast', text), unit('unrelated', 'three', 'five')] }) as RoundDetail;
+const candidate = (text: string): RoundDetail => ({ task: 'fixture', round: 1, before: 'original', after: text, files: '', warnings: [],
+  units: [unit('focused', 'fast', text), unit('unrelated', 'three', 'five'), unit('outside', 'stable', 'robust')], sections: [],
+  loose: [{ kind: 'change', identical: false, units: ['focused', 'unrelated'], before: [], after: [] }, { kind: 'change', identical: false, units: ['outside'], before: [], after: [] }],
+});
 const render = (detail: RoundDetail) => renderToStaticMarkup(createElement(NoteOptionSource, { detail, focus: ['focused'] }));
 
-test('LaTeX comparison uses the selected candidate and retains every other source edit without highlighting it', () => {
+test('LaTeX comparison keeps shared-group context without highlighting it and excludes other groups', () => {
   const html = render(candidate('\\emph{computationally efficient}'));
   assert.match(html, /main\.tex/);
   assert.match(html, /10 → 10/);
@@ -19,6 +22,7 @@ test('LaTeX comparison uses the selected candidate and retains every other sourc
   assert.match(unrelated, />three<\/pre>/);
   assert.match(unrelated, />five<\/pre>/);
   assert.doesNotMatch(unrelated, /<(?:ins|del)>/);
+  assert.doesNotMatch(html, /data-unit="outside"|robust/);
 });
 
 test('switching alternatives replaces source content without mutating the previous candidate', () => {

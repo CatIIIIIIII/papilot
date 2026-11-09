@@ -5290,9 +5290,9 @@
     "model": "gemini-4-argon-medium"
   },
   "{current} of {total}": {
-    "revision": "0d23cfc29b5d6b54b2e812d05e54bbde38636908eb928b8e19cae6e1ce1cadf2",
+    "revision": "7b80040d7d692f75e7fb32d3ef08ac86af196d5e09b417174ee7e3269dd695fd",
     "textHash": "4cfdff4c9bae329e7a097636014c41d32ab2f894cac9c742c9401822cc9e2eb8",
-    "model": "gemini-4-argon-medium"
+    "model": "manual"
   },
   "{differences} (record: {url}).": {
     "revision": "e81da50d784fc59b54b8bd19394eb24f4654c425dd17698e04bbbfacbf041654",

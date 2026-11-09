@@ -90,6 +90,7 @@ export interface Round {
     warnings: string[];
     targets: string[];
     builds: string[];
+    date?: { SOURCE_DATE_EPOCH: string; FORCE_SOURCE_DATE?: string };
     renderer?: string;
     /** Whether the round lists indirect changes; absent in older rounds,
      * which did. */
@@ -446,7 +447,7 @@ export interface RoundDetail extends Omit<RenderedRound, "units"> {
   round: number;
   before: string;
   after: string;
-  units: (Unit & Partial<VisualUnit> & { history?: History[] })[];
+  units: (Unit & Partial<VisualUnit> & { history?: History[]; formattingFor?: string })[];
   warnings: string[];
   files: string;
   references?: References;

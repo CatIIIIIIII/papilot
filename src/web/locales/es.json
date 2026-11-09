@@ -1,4 +1,5 @@
 {
+  "Preparing option comparisons…": "Preparando las comparaciones de las opciones…",
   ", ": ", ",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A package, font or source file may be missing. Check the details below, restore the missing file or ask for help.": "Puede que falte un paquete, una fuente o un archivo fuente. Consulta los detalles a continuación, restaura el archivo que falta o pide ayuda.",
@@ -1270,8 +1271,6 @@
   "Comment on {label}": "Comentar {label}",
   "Complete PDF comparison": "Comparación completa del PDF",
   "Current proposal": "Propuesta actual",
-  "Do not use this option.": "No usar esta opción.",
-  "Generate alternatives": "Generar alternativas",
   "Initial proposal": "Propuesta inicial",
   "Loading PDF comparison…": "Cargando la comparación del PDF…",
   "Next note": "Siguiente anotación",
@@ -1282,7 +1281,6 @@
   "Options are not available for this source range yet.": "Las opciones aún no están disponibles para este fragmento del código fuente.",
   "Options for this note": "Opciones para esta anotación",
   "Preparing this option’s PDF diff…": "Preparando la comparación del PDF de esta opción…",
-  "Preparing two alternatives…": "Preparando dos alternativas…",
   "Previous note": "Anotación anterior",
   "Reject": "Rechazar",
   "Reject {label}": "Rechazar {label}",
@@ -1293,9 +1291,18 @@
   "The choice could not be saved.": "No se pudo guardar la selección.",
   "This note includes a reviewed change. Undo that decision before replacing it.": "Esta anotación incluye un cambio ya revisado. Deshaz esa decisión antes de sustituirlo.",
   "Unchanged context": "Contexto sin cambios",
-  "Undo rejection": "Deshacer rechazo",
   "Wait for the current task and review actions to finish.": "Espera a que finalicen la tarea y las acciones de revisión en curso.",
   "Binary file changed.": "Archivo binario modificado.",
   "LaTeX comparison": "Comparación de LaTeX",
-  "Long change: the source is shortened.": "Cambio extenso: el código fuente se ha abreviado."
+  "Long change: the source is shortened.": "Cambio extenso: el código fuente se ha abreviado.",
+  "No visible change": "Sin cambios visibles",
+  "Prepare alternatives for PDF notes": "Preparar alternativas para las notas del PDF",
+  "When editing from PDF notes, prepare other wording and brief reasons alongside the main proposal. Applies to future requests.": "Al editar a partir de notas del PDF, preparar otras formulaciones y breves razones junto con la propuesta principal. Se aplica a futuras solicitudes.",
+  "Extra alternatives per note": "Alternativas adicionales por nota",
+  "Few": "Pocas",
+  "Balanced": "Equilibrado",
+  "More": "Más",
+  "{min}–{max} alternatives": "{min}–{max} alternativas",
+  "A target range, excluding the main proposal. The AI may return fewer or more useful choices. More choices take longer to prepare.": "Un intervalo orientativo, sin contar la propuesta principal. La IA puede ofrecer menos o más alternativas útiles. Más alternativas requieren más tiempo de preparación.",
+  "Other options · {n}": "Otras opciones · {n}"
 }

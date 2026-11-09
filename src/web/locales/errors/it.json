@@ -252,10 +252,17 @@
   "This option is no longer available.": "Questa opzione non è più disponibile.",
   "The review action could not be confirmed. Check task status before retrying.": "Impossibile confermare l’azione di revisione. Controlla lo stato dell’attività prima di riprovare.",
   "The option save could not be confirmed. Check task status before retrying.": "Impossibile confermare il salvataggio dell’opzione. Controlla lo stato dell’attività prima di riprovare.",
-  "The agent did not return two usable options. Try again.": "L’agente non ha restituito due opzioni utilizzabili. Riprova.",
   "The agent returned an incomplete option. Try again.": "L’agente ha restituito un’opzione incompleta. Riprova.",
   "Each option needs a brief, specific reason. Try again.": "Ogni opzione richiede una motivazione breve e specifica. Riprova.",
   "The option includes an invalid change. Try again.": "L’opzione include una modifica non valida. Riprova.",
   "The agent repeated an option. Try again.": "L’agente ha ripetuto un’opzione. Riprova.",
-  "This note has no linked changes.": "Questa annotazione non ha modifiche collegate."
+  "This note has no linked changes.": "Questa annotazione non ha modifiche collegate.",
+  "Send noteAlternatives as true or false.": "L’impostazione delle alternative deve essere true o false.",
+  "Select an existing option.": "Seleziona un’opzione esistente.",
+  "The option targets an unrelated source file.": "L’opzione riguarda un file sorgente non correlato.",
+  "The option source is missing or ambiguous.": "Il sorgente dell’opzione è assente o ambiguo.",
+  "The option changes source outside this note.": "L’opzione modifica il sorgente al di fuori di questa annotazione.",
+  "The option has overlapping patches.": "L’opzione contiene modifiche sovrapposte.",
+  "Invalid review action.": "Azione di revisione non valida.",
+  "Send noteAlternativeRange as few, balanced or many.": "Imposta noteAlternativeRange su few, balanced o many."
 }

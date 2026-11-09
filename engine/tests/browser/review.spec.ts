@@ -9,6 +9,44 @@ async function totalUnits(page: Page) {
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
   return Number(await progress.getAttribute("aria-valuemax"));
 }
+test("focusing a note and switching options preserves unrelated resolved groups", async ({ page }) => {
+  const groups = await page.locator('.change[data-units]').evaluateAll(elements => elements.map(element => element.getAttribute('data-units')!.split(' ')));
+  expect(groups.length).toBeGreaterThan(1);
+  const accepted = groups[0], focused = groups.find(group => group.every(id => !accepted.includes(id)))!;
+  expect(focused).toBeTruthy();
+  let round = 0;
+  await page.route('**/api/tasks/tighten-design/state*', async route => {
+    const response = await route.fetch(), state = await response.json();
+    round = state.round;
+    for (const id of accepted) state.decisions[id] = 'accepted';
+    await route.fulfill({ response, json: state });
+  });
+  await page.reload();
+  const resolved = page.locator('.change[data-state="accepted"]').first();
+  await expect(resolved).toHaveAttribute('data-resolved', 'after');
+  await expect(resolved.locator('.change-head')).toBeHidden();
+  const visibleGroups = () => page.locator('.change > .change-head:visible').count();
+  const originalCount = await visibleGroups();
+  const show = (units: string[] | null, preview = false) => page.evaluate(({ round, units, preview }) => {
+    window.dispatchEvent(new CustomEvent('papilot:note-focus', { detail: { round, units } }));
+    window.dispatchEvent(new CustomEvent('papilot:option-preview', { detail: preview ? { key: 'note:0', round } : null }));
+  }, { round, units, preview });
+  for (const preview of [false, true, false]) {
+    await show(focused, preview);
+    await expect(resolved).toHaveAttribute('data-resolved', 'after');
+    await expect(resolved.locator('.side.before')).toBeHidden();
+    await expect(resolved.locator('.change-head')).toBeHidden();
+    expect(await visibleGroups()).toBe(originalCount);
+  }
+  await show(null, true); // Show all changes changes highlights, not history.
+  await expect(resolved.locator('.change-head')).toBeHidden();
+  expect(await visibleGroups()).toBe(originalCount);
+  await show(accepted);
+  await expect(resolved.locator('.change-head')).toBeVisible();
+  await show(focused);
+  await expect(resolved.locator('.change-head')).toBeHidden();
+  expect(await visibleGroups()).toBe(originalCount);
+});
 test("renders vectors and selectable text without browser errors", async ({
   page,
 }) => {
