@@ -3,7 +3,7 @@ import { GroupPicker, GroupAction, groupName, groupStyle } from './note-groups.t
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import * as pdfjs from 'pdfjs-dist';
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { EventBus, FindState, LinkTarget, PDFFindController, PDFLinkService, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import viewerStyles from 'pdfjs-dist/web/pdf_viewer.css?inline';
 import worker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -46,6 +46,9 @@ const bounds = (rects: Rect[]): Rect => [Math.min(...rects.map(r => r[0])), Math
 const center = (rect: Rect): React.CSSProperties => ({ left: `${(rect[0] + rect[2]) * 50}%`, top: `${(rect[1] + rect[3]) * 50}%` });
 const typing = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]'));
 
+function closeDocument(task?: PDFDocumentLoadingTask) {
+  void task?.destroy().catch(failure => console.error('Unable to close PDF', failure));
+}
 
 // A point is a small box where the author clicked. Its quote is the line of
 // text at or beside it, with ‸ where the point falls, so the agent can find it.
@@ -563,30 +566,38 @@ export const PdfView = forwardRef<PdfHandle, {
       box.removeEventListener('pointerdown', pressNote); box.removeEventListener('scroll', cancelPress);
       document.removeEventListener('pointermove', moveNote); document.removeEventListener('pointerup', releaseNote); document.removeEventListener('pointercancel', cancelPress);
       box.removeEventListener('wheel', wheel); box.removeEventListener('touchstart', touchStart); box.removeEventListener('touchmove', touchMove); box.removeEventListener('touchend', touchEnd);
-      viewer.setDocument(null); lifetime.abort(); void loaded.current?.loadingTask.destroy(); loaded.current = null; tools.current = null; layerMap.current.clear();
+      viewer.setDocument(null); lifetime.abort(); closeDocument(loaded.current?.loadingTask); loaded.current = null; tools.current = null; layerMap.current.clear();
     };
   }, []);
 
   // A recompiled manuscript opens at the same place and zoom.
   useEffect(() => {
     const current = tools.current!, box = container.current!;
-    let cancelled = false, settled = false;
+    let cancelled = false, attached = false;
     if (loaded.current) restore.current = { scale: current.viewer.currentScaleValue, top: box.scrollTop, left: box.scrollLeft };
     setLoading(!loaded.current); setError('');
     const task = pdfjs.getDocument({ url: props.url, enableXfa: false, BinaryDataFactory: CMapData });
-    task.promise.then(async document => {
-      settled = true;
-      if (cancelled) { void document.loadingTask.destroy(); return; }
+    void task.promise.then(async document => {
+      if (cancelled) return;
+      // PDFViewer's first-page rejection handler can outlive setDocument(null)
+      // and reject its replacement state. Keep that request in our cancellable
+      // load phase, before the viewer takes ownership of the document.
+      await document.getPage(1);
+      if (cancelled) return;
       const previous = loaded.current;
-      loaded.current = document; layerMap.current.clear(); setLayers(new Map()); setSelection(null); setEditing(null);
+      loaded.current = document; attached = true; layerMap.current.clear(); setLayers(new Map()); setSelection(null); setEditing(null);
       if (latest.current.words) exactText(document, latest.current.words);
       current.viewer.setDocument(document); current.links.setDocument(document, null);
       setPages(document.numPages); setLoading(false);
-      void previous?.loadingTask.destroy();
+      closeDocument(previous?.loadingTask);
       const items = await readOutline(document).catch(() => []);
       if (!cancelled) latest.current.onOutline(items);
-    }, failure => { settled = true; if (!cancelled) { setError(failure instanceof Error ? failure.message : String(failure)); setLoading(false); } });
-    return () => { cancelled = true; if (!settled) void task.destroy(); };
+    }).catch(failure => {
+      if (cancelled) return;
+      if (!attached) closeDocument(task);
+      setError(failure instanceof Error ? failure.message : String(failure)); setLoading(false);
+    });
+    return () => { cancelled = true; if (!attached) closeDocument(task); };
   }, [props.url]);
 
   // Opening a suggestion from the task or navigation reveals its passage.

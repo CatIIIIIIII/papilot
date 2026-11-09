@@ -22,6 +22,7 @@ Review edits by PDF note, compare prepared alternatives in context, and choose h
 
 - **Workspace switching stays responsive after saving a PDF note.** Decorative note animations no longer block the keyboard switcher. Interrupted view transitions no longer leave uncaught browser errors.
 - **Embedded alternative previews follow the workspace language.** Shared PDF components no longer reset the page's language on reload, and their accessible page labels update with the selected language.
+- **Switching away while a PDF opens cleans up the pending load.** Rapid manuscript and task navigation no longer leaves uncaught PDF transport errors.
 - **Rejecting a note restores its original source immediately.** The undoable operation affects only that note's edits and invalidates stale alternative previews. ([#93](https://github.com/PapilotAI/papilot/pull/93))
 - **AI PDF review preparation keeps the server responsive.** Expensive PDF work runs outside the server's event loop. ([#97](https://github.com/PapilotAI/papilot/pull/97))
 - **Short PDF changes keep their labels readable.** Before/After labels no longer overflow short comparison strips. ([#89](https://github.com/PapilotAI/papilot/pull/89))

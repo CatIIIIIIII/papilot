@@ -15,6 +15,7 @@ In **Settings → Review preferences**, one compact slider offers **Off**, **Few
 - AI PDF review preparation keeps the server responsive during expensive PDF work.
 - Keyboard switching works while saved notes animate, and interrupted view animations recover cleanly.
 - Embedded alternative previews preserve the workspace language and translated page labels.
+- Switching between manuscripts and tasks cancels pending PDF loads cleanly.
 - Before/After labels fit short PDF changes.
 - Startup tool detection and platform installation guidance are clearer.
 - Failed attachment uploads remove partial files, and oversized update downloads stop early.

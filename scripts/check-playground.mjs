@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { checkPdfLifecycle } from './check-pdf-lifecycle.mjs';
 
 // A plain file server, with no Papilot server, route mocking or API handlers.
 const root = path.resolve('_site');
@@ -38,6 +39,7 @@ const markersFit = () => page.locator('.note-tag').evaluateAll(elements => {
     boxes.slice(index + 1).every(other => box.right <= other.left || other.right <= box.left || box.bottom + 3 <= other.top || other.bottom + 3 <= box.top));
 });
 try {
+  await checkPdfLifecycle(browser, origin);
   await page.goto(origin + '/demo');
   assert.ok(['/demo', '/demo/'].includes(new URL(page.url()).pathname));
   await expect(page.getByRole('region', { name: 'Demo', exact: true })).toBeVisible();
