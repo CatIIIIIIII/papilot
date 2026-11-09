@@ -3420,7 +3420,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Request failed. Please try again.": {
-    "revision": "a88fe620a4bc6ae63b3b39b61203709928eed1c05e28a257231df94576c2241d",
+    "revision": "0e9f1b1a25cb0e8c8e1f40661ae3c7b82287649097e20d93e61ecfee0d8327af",
     "textHash": "117542b4dfccf02f8af21f6ccad9a4bc0e578c514acc623b67442d0e3e113235",
     "model": "gemini-4-argon-medium"
   },
@@ -4297,11 +4297,6 @@
   "The position in the new PDF could not be confirmed. The original text and note are kept.": {
     "revision": "ee1c9b33dd6c58c93a9dc8bd984c04168842388191afb79b635d9372c54890bc",
     "textHash": "c377a64dddedc53952c80374efbfa551b893a2ca231c2dc4f71c13b0809899b5",
-    "model": "gemini-4-argon-medium"
-  },
-  "The request timed out and may still be processing. Check the task status before retrying.": {
-    "revision": "0941b002638561dcbd665abf007251ea00508865b6ae6917290ab671271d6f18",
-    "textHash": "4786d4bb208c025c559d52fc7e863b9db3b403d61cea700c2d4633ace6b3db18",
     "model": "gemini-4-argon-medium"
   },
   "The skill must contain instructions.": {

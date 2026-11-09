@@ -925,8 +925,6 @@
   "The merge was abandoned.": "병합이 취소되었습니다.",
   "The paper needs a little help": "논문에 약간의 조치가 필요합니다",
   "The position in the new PDF could not be confirmed. The original text and note are kept.": "새 PDF에서 위치를 확인할 수 없습니다. 원본 텍스트와 주석이 유지됩니다.",
-  "The request timed out and may still be processing. Check the task status before retrying.": "요청 시간이 초과되었으며 아직 처리 중일 수 있습니다. 다시 시도하기 전에 작업 상태를 확인하세요.",
-  "The request timed out. Please try again.": "요청 시간이 초과되었습니다. 다시 시도해 주세요.",
   "The skill must contain instructions.": "스킬에는 지침이 포함되어야 합니다.",
   "The update did not finish. Your current version is still available. You can retry here.": "업데이트가 완료되지 않았습니다. 현재 버전을 계속 사용할 수 있으며, 여기서 다시 시도할 수 있습니다.",
   "The update is ready. Waiting for tasks and PDF builds to finish before restarting.": "업데이트가 준비되었습니다. 다시 시작하기 전에 작업 및 PDF 빌드가 완료되기를 기다리는 중입니다.",

@@ -1,3 +1,4 @@
+import { requestApi } from './api.ts';
 import { isPlayground, pdfAsset, wordAsset, requestPlaygroundDownload } from './playground-mode.ts';
 import { canonicalGroup, groupsWithoutInstructions, noteGroups, type NoteGroup } from '../note-groups.ts';
 import { GroupCard, GroupInstruction } from './note-groups.tsx';
@@ -89,24 +90,17 @@ import './note-controls.css';
 
 let token = '';
 const uuid = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(20)), b => b.toString(16).padStart(2, '0')).join('');
-async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal, wait = body === undefined ? 15000 : 30000): Promise<T> {
+async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   if (import.meta.env.MODE === 'playground') return (await import('./playground/api.ts')).playgroundApi<T>(route, body, signal);
-  const timeout = AbortSignal.timeout(wait);
-  try { const response = await fetch('/api' + route, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': body instanceof File ? 'application/octet-stream' : 'application/json', 'X-Papilot-Token': token, ...(body instanceof File ? { 'X-Papilot-Filename': encodeURIComponent(body.name) } : {}) }, ...(body === undefined ? {} : { body: body instanceof File ? body : JSON.stringify(body) }), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-    const value = await response.json(); if (!response.ok) throw new Error(value.error ? errorText(value.error) : t('Request failed. Please try again.')); return value;
-  }
-  catch (error) {
-    if (timeout.aborted) throw new Error(body === undefined ? t('The request timed out. Please try again.') : t('The request timed out and may still be processing. Check the task status before retrying.'));
-    throw error;
-  }
+  return requestApi<T>(route, token, body, signal);
 }
 connectStamps(api);
 connectIndirectChanges(api);
 connectNoteAlternatives(api);
-const uploadAttachment = (projectId: string, file: File, signal: AbortSignal) => api<Attachment>(`/projects/${projectId}/attachments`, file, signal, 120000);
-const detectLatexInstallation = (signal: AbortSignal) => api<LatexInstallation | null>('/runtime/latex', undefined, signal, 30000);
-const loadRequirements = (signal: AbortSignal) => api<SystemRequirements>('/runtime/requirements', undefined, signal, 35000);
-const checkDiagnostics = (projectId: string | undefined, signal: AbortSignal) => api<DiagnosticReport>('/diagnostics', { projectId }, signal, 60000);
+const uploadAttachment = (projectId: string, file: File, signal: AbortSignal) => api<Attachment>(`/projects/${projectId}/attachments`, file, signal);
+const detectLatexInstallation = (signal: AbortSignal) => api<LatexInstallation | null>('/runtime/latex', undefined, signal);
+const loadRequirements = (signal: AbortSignal) => api<SystemRequirements>('/runtime/requirements', undefined, signal);
+const checkDiagnostics = (projectId: string | undefined, signal: AbortSignal) => api<DiagnosticReport>('/diagnostics', { projectId }, signal);
 const AGENT_LABELS = AGENT_NAMES;
 const agentName = (task: Task) => AGENT_LABELS[task.agent || 'codex'] || 'Codex';
 // A finished publication with no round is a valid answer-only result. Keep
@@ -457,7 +451,7 @@ function DiscardDialog({ files, onCancel, onConfirm }: { files: GitFile[]; onCan
 
 function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter }) {
   const advanced = useAdvancedGit();
-  const loadOverview = useCallback((signal: AbortSignal) => api<GitOverview>(`/projects/${projectId}/git/overview`, undefined, signal, 60000), [projectId]);
+  const loadOverview = useCallback((signal: AbortSignal) => api<GitOverview>(`/projects/${projectId}/git/overview`, undefined, signal), [projectId]);
   const loadHistory = useCallback((before: string | null, signal: AbortSignal) => api<GitHistory>(`/projects/${projectId}/git/history${before ? '?before=' + before : ''}`, undefined, signal), [projectId]);
   const loadVersion = useCallback((hash: string, signal: AbortSignal) => api<GitVersionDetail>(`/projects/${projectId}/git/history/${hash}`, undefined, signal), [projectId]);
   const draftKey = `papilot:commit:${projectId}`;
@@ -500,7 +494,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
       if (document.hidden || latest.current.busy || fetching || Date.now() - checkedAt < 60_000) return;
       fetching = true; checkedAt = Date.now();
       try {
-        const result = await api<{ git: GitStatus }>(`/projects/${projectId}/git/fetch`, {}, controller.signal, 130000);
+        const result = await api<{ git: GitStatus }>(`/projects/${projectId}/git/fetch`, {}, controller.signal);
         if (!controller.signal.aborted && !latest.current.busy) latest.current.onStatus(result.git);
       } catch { /* A manual sync reports network or authentication failures. */ }
       finally { fetching = false; }
@@ -530,7 +524,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   const merging = git.merging, publish = !git.upstream && git.remote && git.branch;
   const canPush = Boolean(git.remote && (git.upstream || publish) && !merging);
   const canSync = Boolean(canPush && git.branch);
-  const synchronize = () => api<{ git: GitStatus }>(`/projects/${projectId}/git/sync`, {}, undefined, 380000);
+  const synchronize = () => api<{ git: GitStatus }>(`/projects/${projectId}/git/sync`, {});
   const syncNotice = (status: GitStatus) => status.merging ? t('The merge stopped at conflicts.') : t('Synced with the remote. Uncommitted changes are kept.');
   const syncRemote = () => void run('sync', synchronize, result => syncNotice(result.git));
   // A failed sync or push leaves the successful local commit in place.
@@ -543,7 +537,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
       if (action !== 'push' && action !== 'sync') return result;
       onStatus(result.git);
       setBusy(action);
-      return { ...await (action === 'sync' ? synchronize() : api<{ git: GitStatus }>(`/projects/${projectId}/git/push`, {}, undefined, 130000)), commit: result.commit };
+      return { ...await (action === 'sync' ? synchronize() : api<{ git: GitStatus }>(`/projects/${projectId}/git/push`, {})), commit: result.commit };
     }, result => action === 'sync' ? (result.git.merging ? t('Committed {hash}.', { hash: result.commit }) + ' ' + t('The merge stopped at conflicts.') : t('Committed {hash} and synced.', { hash: result.commit }))
       : action === 'push' ? t('Committed {hash} and pushed.', { hash: result.commit }) : t('Committed {hash}.', { hash: result.commit }));
   };
@@ -552,7 +546,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   async function generate() {
     if (busy || !chosen.length) return;
     setBusy('message'); setError(''); setNotice('');
-    try { saveMessage((await api<{ message: string }>(`/projects/${projectId}/git/message`, { paths: chosen.map(file => file.path), staged: staged.length > 0, agent: writer.agent, fresh: Boolean(message.trim()) }, undefined, 130000)).message); }
+    try { saveMessage((await api<{ message: string }>(`/projects/${projectId}/git/message`, { paths: chosen.map(file => file.path), staged: staged.length > 0, agent: writer.agent, fresh: Boolean(message.trim()) })).message); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
   }
@@ -560,7 +554,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   const reload = () => void run('reload', async () => ({ git: await api<GitStatus>(`/projects/${projectId}/git`) }), () => '');
   const ignored = files.filter(ignorable), patterns = [...new Set(ignored.map(file => ignorePattern(file.path)))];
   const ignore = () => void run('ignore', () => api(`/projects/${projectId}/git/ignore`, { paths: ignored.map(file => file.path) }), () => tn(patterns.length, 'Added {n} pattern to .gitignore.', 'Added {n} patterns to .gitignore.'));
-  const remote = (action: 'fetch' | 'pull' | 'merge' | 'push') => void run(action, () => api<{ git: GitStatus }>(`/projects/${projectId}/git/${action}`, {}, undefined, 130000),
+  const remote = (action: 'fetch' | 'pull' | 'merge' | 'push') => void run(action, () => api<{ git: GitStatus }>(`/projects/${projectId}/git/${action}`, {}),
     result => action === 'fetch' ? (result.git.behind ? tn(result.git.behind, '{n} new commit on {upstream}.', '{n} new commits on {upstream}.', { upstream: result.git.upstream ?? '' }) : t('Up to date with the remote.'))
       : action === 'pull' ? t('Pulled the latest commits.')
       : action === 'merge' ? (result.git.merging ? t('The merge stopped at conflicts.') : t('Merged {upstream}.', { upstream: git.upstream ?? '' }))
@@ -568,7 +562,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   // A branch and its upstream that have both moved on are merged; conflicts
   // go to an agent, then the author reads the diffs and commits the merge.
   const diverged = Boolean(git.upstream && git.ahead > 0 && git.behind > 0 && !merging);
-  const resolve = () => void run('resolve', () => api<{ git: GitStatus; summary: string; remaining: string[]; agent: AgentId }>(`/projects/${projectId}/git/resolve`, { agent: writer.agent, model: writer.model || undefined }, undefined, 620000),
+  const resolve = () => void run('resolve', () => api<{ git: GitStatus; summary: string; remaining: string[]; agent: AgentId }>(`/projects/${projectId}/git/resolve`, { agent: writer.agent, model: writer.model || undefined }),
     result => { setResolution({ agent: AGENT_LABELS[result.agent], summary: result.summary }); return result.remaining.length ? tn(result.remaining.length, '{n} file still has conflicts.', '{n} files still have conflicts.') : t('Conflicts resolved. Read the diffs, then commit the merge.'); });
   const finish = () => void run('finish', () => api<{ git: GitStatus; commit: string }>(`/projects/${projectId}/git/finish`, {}), result => { setResolution(null); return t('Committed {hash}.', { hash: result.commit }); });
   const abort = () => void run('abort', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/abort`, {}), () => { setResolution(null); return t('The merge was abandoned.'); });
@@ -697,7 +691,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
       if (busy) return;
       setBusy('restore'); setError(''); setNotice('');
       try {
-        const result = await api<{ git: GitStatus }>(`/projects/${projectId}/git/restore`, { hash, head }, undefined, 130000);
+        const result = await api<{ git: GitStatus }>(`/projects/${projectId}/git/restore`, { hash, head });
         onStatus(result.git); selectSource(null); showDetail('history'); setNotice(t('Version restored. Previous versions are kept in history.'));
       } catch (error) {
         try { onStatus(await api<GitStatus>(`/projects/${projectId}/git`)); } catch { /* Preserve the restoration error. */ }
@@ -971,7 +965,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
   // The last build's problems sit beside Recompile and open only when asked.
   const problems = useRef<ProblemsHandle>(null);
   const problemsButton = <ProblemsButton ref={problems} counts={build?.problems} status={build?.status} pdfKey={build?.key} logUrl={`/api/projects/${project.id}/manuscript/log`}
-    load={() => api<ManuscriptProblems>(`/projects/${project.id}/manuscript/problems`, undefined, undefined, 60000)}
+    load={() => api<ManuscriptProblems>(`/projects/${project.id}/manuscript/problems`)}
     onJump={problem => { if (problem.page === undefined || !problem.rect) return; if (phone()) setView('pdf'); const { page, rect } = problem; requestAnimationFrame(() => pdf.current?.showPlace(page, rect)); }}
     onFix={onFixProblems && (list => { onFixProblems(fixRequest(list)); setView('task'); setCollapsed(false); })}/>;
   const pdfTools = <>{tools}{problemsButton}<button type="button" data-notes-home="library" className={'icon-button' + (readingNotes ? ' active' : '')} aria-label={t('My notes')} title={t('My notes')} aria-pressed={readingNotes} onClick={() => { if (readingNotes) void closeReadingNotes(); else { setActive(''); setReadingNotes(true); } }}><Icon name="notes" size={16}/></button>{!hidden && !sideBySide && share}{hidden && togglePanel}</>;
@@ -1028,9 +1022,9 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
       {newTask(<TaskNotes cards={taskCards} controller={taskNotes} notes={notes} currentKey={build?.key} actions={actions} onShow={show}/>)}
     </aside>
     {committing && <CommitDialog branch={git?.branch ?? null} files={staged} staged remote={Boolean(git?.remote)} agent={AGENT_LABELS[writer.agent]} onClose={() => setCommitting(false)}
-      generate={fresh => api<{ message: string }>(`/projects/${project.id}/git/message`, { paths: staged, staged: true, agent: writer.agent, fresh }, undefined, 130000).then(result => result.message)}
+      generate={fresh => api<{ message: string }>(`/projects/${project.id}/git/message`, { paths: staged, staged: true, agent: writer.agent, fresh }).then(result => result.message)}
       commit={async (message, push) => {
-        const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/projects/${project.id}/git/commit`, { message, staged: true, push }, undefined, 130000);
+        const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/projects/${project.id}/git/commit`, { message, staged: true, push });
         onGit(result.git); setCommitting(false);
         // The commit stands even when the push fails; the author can push again.
         if (result.pushError) reportError(result.pushError);
@@ -1337,7 +1331,7 @@ function App() {
       const path = folder ?? await chooseDirectory();
       if (!path) return;
       setOpeningFolder(true); setError('');
-      const opened = await api<{ project: Project } | { name: string; candidates: string[] }>('/projects/open', { path, ...(main ? { main } : {}) }, undefined, 120000);
+      const opened = await api<{ project: Project } | { name: string; candidates: string[] }>('/projects/open', { path, ...(main ? { main } : {}) });
       if ('candidates' in opened) { setMainChoice({ path, ...opened }); return; }
       // Select the paper once the state lists it; an unknown ID falls back to the first paper.
       await refresh(true);
@@ -1410,7 +1404,7 @@ function App() {
       const body = { projectId: target, title, instructions: text, ...(skill ? { skill: skill.id } : {}), ...(attached.length ? { annotations: [...submittedNotes] } : {}), ...(Object.keys(groupInstructions).length ? { groupInstructions } : {}), ...(files.length ? { attachments: files.map(file => file.id) } : {}), agent: agent.agent, model: agent.model, effort: agent.effort, serviceTier: agent.serviceTier, permissions: !reviewing && runtimes[agent.agent]?.permissionOptions?.some(option => option.value === newPermissions) ? newPermissions : 'workspace' };
       const id = requestId(browserStorage, 'papilot:new-task-request', JSON.stringify([target, text, skill?.id || '', [...submittedNotes], groupInstructions, files.map(file => file.id)]), uuid);
       // AI review compiles the task's manuscript copy before it answers.
-      const created = await api<Task>('/tasks', { ...body, id }, undefined, reviewing ? 600000 : 30000);
+      const created = await api<Task>('/tasks', { ...body, id });
       const source = input?.getBoundingClientRect();
       browserStorage.removeItem('papilot:new-task-request');
       newFiles.draft.clear(files); setNewDraft(''); setNewSkill(null); setTaskSearch(''); setShowArchived(false);
@@ -1781,7 +1775,7 @@ function App() {
   if (deliveryReady && !applyStates.current.has(applyKey)) applyStates.current.set(applyKey, new TaskApplyState(merging?.intent?.message || task!.title));
   const saveTask = async (mode: 'workspace' | 'commit', message?: string, confirmation?: string) => {
     if (!task) return;
-    const result = await api<{ git?: GitStatus; commitReview?: TaskCommitReview }>(`/tasks/${task.id}/apply`, { mode, message, confirmation, keepCurrent: mergeWaiting && merging?.ready }, undefined, 130000);
+    const result = await api<{ git?: GitStatus; commitReview?: TaskCommitReview }>(`/tasks/${task.id}/apply`, { mode, message, confirmation, keepCurrent: mergeWaiting && merging?.ready });
     if (result.git) updateGit(task.projectId, result.git);
     await refresh(true);
     return result;
@@ -1793,9 +1787,9 @@ function App() {
   const legacyKey = JSON.stringify([task?.id, legacyFiles, task?.committed?.accepted, projectGit?.branch]);
   if (legacyFiles.length && !commitDrafts.current.has(legacyKey)) commitDrafts.current.set(legacyKey, new TaskCommitDraft());
   const legacySave = task && legacyFiles.length ? <TaskCommit draft={commitDrafts.current.get(legacyKey)!} branch={projectGit?.branch ?? null} isolated={false} remote={Boolean(projectGit?.remote)} agent={agentName(task)} disabled={taskActionBusy}
-    generate={fresh => api<{ message: string }>(`/projects/${task.projectId}/git/message`, { paths: legacyFiles, agent: task.agent || 'codex', fresh }, undefined, 130000).then(result => result.message)}
+    generate={fresh => api<{ message: string }>(`/projects/${task.projectId}/git/message`, { paths: legacyFiles, agent: task.agent || 'codex', fresh }).then(result => result.message)}
     commit={async (message, push) => {
-      const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/tasks/${task.id}/commit`, { message, push }, undefined, 130000);
+      const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/tasks/${task.id}/commit`, { message, push });
       updateGit(task.projectId, result.git);
       if (result.pushError) reportError(result.pushError);
       await refresh(true);
@@ -1805,7 +1799,7 @@ function App() {
     branch={projectGit?.branch ?? null} canCommit={Boolean(task.review?.files?.length || task.delivery?.mode === 'branch' || task.delivery?.pending)} preferred={merging?.intent?.mode}
     pending={task.delivery?.pending && task.delivery.mode !== 'branch' ? task.delivery.mode : undefined}
     apply={() => saveTask('workspace')} commit={(message, confirmation) => saveTask('commit', message, confirmation)}
-    generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { fresh: true }, undefined, 130000).then(result => result.message)}/>
+    generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { fresh: true }).then(result => result.message)}/>
     : merging ? <TaskConflict status={task.status} waiting={mergeWaiting} onChat={() => selectLayout('conversation')}/>
     : saved === 'committed' && task.delivery ? savedResult(t('Committed {hash} to {branch}', { hash: task.delivery.commit?.slice(0, 7) || '', branch: task.delivery.branch || '' }))
     : !task.deferred ? legacySave : saved === 'applied' ? savedResult(t('Applied to manuscript')) : null);
@@ -1903,7 +1897,7 @@ function App() {
     </div>
   </section>;
 
-  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} optionsRequest={(id, key, body) => body ? api(`/tasks/${id}/note-options`, { key, ...body }, undefined, 150000) : api(`/tasks/${id}/note-options?key=${encodeURIComponent(key)}`)} previewRequest={(id, key, round, option, retry, version) => api(`/tasks/${id}/note-options/preview?key=${encodeURIComponent(key)}&round=${round}&option=${encodeURIComponent(option)}${retry ? '&retry=1' : ''}${version ? '&comparison=' + encodeURIComponent(version) : ''}`, undefined, undefined, 150000)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
+  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} optionsRequest={(id, key, body) => body ? api(`/tasks/${id}/note-options`, { key, ...body }) : api(`/tasks/${id}/note-options?key=${encodeURIComponent(key)}`)} previewRequest={(id, key, round, option, retry, version) => api(`/tasks/${id}/note-options/preview?key=${encodeURIComponent(key)}&round=${round}&option=${encodeURIComponent(option)}${retry ? '&retry=1' : ''}${version ? '&comparison=' + encodeURIComponent(version) : ''}`)} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
     <DesktopWindowChrome/>
     {project && <WorkspaceSwitcher key={project.id} active={task?.id ?? (manuscriptOpen ? '' : null)}
       items={[{ id: '', title: t('Manuscript') }, ...[...tasks].reverse().filter(item => item.status !== 'deleting' && (!item.archivedAt || item.id === task?.id)).map(item => ({ id: item.id, title: item.title }))]}

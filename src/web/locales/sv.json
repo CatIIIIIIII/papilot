@@ -925,8 +925,6 @@
   "The merge was abandoned.": "Sammanslagningen avbröts.",
   "The paper needs a little help": "Artikeln behöver lite hjälp",
   "The position in the new PDF could not be confirmed. The original text and note are kept.": "Positionen i den nya PDF-filen kunde inte bekräftas. Den ursprungliga texten och anteckningen behålls.",
-  "The request timed out and may still be processing. Check the task status before retrying.": "Begäran tog för lång tid och bearbetas eventuellt fortfarande. Kontrollera uppgiftens status innan du försöker igen.",
-  "The request timed out. Please try again.": "Begäran tog för lång tid. Försök igen.",
   "The skill must contain instructions.": "Färdigheten måste innehålla instruktioner.",
   "The update did not finish. Your current version is still available. You can retry here.": "Uppdateringen slutfördes inte. Din nuvarande version är fortfarande tillgänglig. Du kan försöka igen här.",
   "The update is ready. Waiting for tasks and PDF builds to finish before restarting.": "Uppdateringen är klar. Väntar på att uppgifter och PDF-byggen ska slutföras före omstart.",

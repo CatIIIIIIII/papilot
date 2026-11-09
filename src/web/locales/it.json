@@ -925,8 +925,6 @@
   "The merge was abandoned.": "L'unione è stata annullata.",
   "The paper needs a little help": "L'articolo ha bisogno di un piccolo aiuto",
   "The position in the new PDF could not be confirmed. The original text and note are kept.": "Impossibile confermare la posizione nel nuovo PDF. Il testo e l'annotazione originali sono stati mantenuti.",
-  "The request timed out and may still be processing. Check the task status before retrying.": "La richiesta è scaduta ma potrebbe essere ancora in elaborazione. Controlla lo stato dell'attività prima di riprovare.",
-  "The request timed out. Please try again.": "La richiesta è scaduta. Riprova.",
   "The skill must contain instructions.": "L'abilità deve contenere delle istruzioni.",
   "The update did not finish. Your current version is still available. You can retry here.": "L'aggiornamento non è stato completato. La versione attuale è ancora disponibile. Puoi riprovare qui.",
   "The update is ready. Waiting for tasks and PDF builds to finish before restarting.": "L'aggiornamento è pronto. In attesa del completamento delle attività e delle compilazioni dei PDF prima del riavvio.",

@@ -925,8 +925,6 @@
   "The merge was abandoned.": "マージが中止されました。",
   "The paper needs a little help": "論文の調整が必要です",
   "The position in the new PDF could not be confirmed. The original text and note are kept.": "新しい PDF 内の位置を確認できませんでした。元のテキストと注釈は保持されます。",
-  "The request timed out and may still be processing. Check the task status before retrying.": "リクエストがタイムアウトしましたが、まだ処理中の可能性があります。再試行する前にタスクのステータスを確認してください。",
-  "The request timed out. Please try again.": "リクエストがタイムアウトしました。もう一度お試しください。",
   "The skill must contain instructions.": "スキルには指示を含める必要があります。",
   "The update did not finish. Your current version is still available. You can retry here.": "更新が完了しませんでした。現在のバージョンは引き続き利用できます。ここから再試行できます。",
   "The update is ready. Waiting for tasks and PDF builds to finish before restarting.": "更新の準備ができました。再起動する前にタスクと PDF ビルドの完了を待機しています。",

@@ -233,8 +233,6 @@ export const zhCN: Record<string, string> = {
 
   // Requests
   'Request failed. Please try again.': '请求失败，请重试。',
-  'The request timed out. Please try again.': '请求超时，请重试。',
-  'The request timed out and may still be processing. Check the task status before retrying.': '请求超时，可能仍在处理中。重试前请先检查任务状态。',
 
   // Task status
   'Ready': '就绪', 'Queued': '排队中', 'Needs your reply': '等待你的回复', 'Preparing task results': '正在整理任务结果', 'Ready for review': '待审阅',

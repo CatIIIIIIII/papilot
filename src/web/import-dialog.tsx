@@ -8,7 +8,7 @@ import { browserStorage } from './storage.ts';
 import { checkUpload, droppedFolder, ignoredImportPath, type ImportFile } from './import-files.ts';
 import './import-dialog.css';
 
-type Api = <T = any>(route: string, body?: unknown, signal?: AbortSignal, wait?: number) => Promise<T>;
+type Api = <T = any>(route: string, body?: unknown, signal?: AbortSignal) => Promise<T>;
 const memoryKey = 'papilot:paper-import';
 function base64(file: File): Promise<string> {
   return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error(t('Could not read the selected file.'))); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.readAsDataURL(file); });
@@ -80,10 +80,10 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
     if (archive && (files.length !== 1 || !/\.zip$/i.test(files[0].file.name))) throw new Error(t('Drop one folder or LaTeX ZIP file.'));
     const name = archive ? files[0].file.name.replace(/\.zip$/i, '') : files[0].path.split('/')[0];
     const body = archive ? { zip: await base64(files[0].file), name: name.slice(0, 120) } : { files: await Promise.all(files.map(async item => ({ path: item.path, data: await base64(item.file) }))), name: name.slice(0, 120) };
-    await start(await api<PaperImport>('/imports', body, undefined, 120000));
+    await start(await api<PaperImport>('/imports', body));
   }
   const upload = (list: File[], archive: boolean) => run(() => uploadFiles(list.map(file => ({ file, path: file.webkitRelativePath || file.name })), archive));
-  const openFolder = async (path: string) => start(await api<PaperImport>('/imports', { path }, undefined, 120000));
+  const openFolder = async (path: string) => start(await api<PaperImport>('/imports', { path }));
   function drop(transfer: DataTransfer) {
     // Capture entries while the drop event still owns access to the data store.
     const files = Array.from(transfer.files), entries = Array.from(transfer.items).filter(item => item.kind === 'file').map(item => item.webkitGetAsEntry?.());
