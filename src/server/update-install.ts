@@ -113,13 +113,31 @@ export async function download(url: string, fetcher: typeof fetch, limit: number
   for (let hop = 0; hop < 5; hop++) {
     if (!trusted(address)) throw new Error(INSTALL_FAILED);
     const response = await fetcher(address.href, { signal: AbortSignal.timeout(300000), redirect: 'manual', headers: { Accept: 'application/octet-stream', 'User-Agent': 'Papilot' } });
-    const location = response.headers.get('location');
-    if (response.status >= 300 && response.status < 400 && location) { address = new URL(location, address); continue; }
-    if (missing && response.status === 404) return null;
-    if (!response.ok || Number(response.headers.get('content-length') || 0) > limit) throw new Error(INSTALL_FAILED);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > limit) throw new Error(INSTALL_FAILED);
-    return bytes;
+    try {
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location) { address = new URL(location, address); continue; }
+      if (missing && response.status === 404) return null;
+      if (!response.ok || Number(response.headers.get('content-length') || 0) > limit) throw new Error(INSTALL_FAILED);
+      if (!response.body) return Buffer.alloc(0);
+      const reader = response.body.getReader(), chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Count decoded bytes before retaining them: Content-Length can be
+          // missing or describe compressed data rather than the fetched body.
+          size += value.byteLength;
+          if (size > limit) throw new Error(INSTALL_FAILED);
+          chunks.push(value);
+        }
+        return Buffer.concat(chunks, size);
+      } finally { reader.releaseLock(); }
+    } finally {
+      // Stop oversized downloads and discard unused redirect/error bodies.
+      // A cancellation failure must not replace the original download error.
+      await response.body?.cancel().catch(() => {});
+    }
   }
   throw new Error(INSTALL_FAILED);
 }
