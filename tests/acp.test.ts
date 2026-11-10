@@ -5,6 +5,7 @@ import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ROOT } from '../src/server/paths.ts';
 import { ACP_PROFILES, AcpAgent, KimiAgent, opencodeConfig } from '../src/server/acp.ts';
 import { findExecutable } from '../src/server/agents.ts';
 import { GrokAgent } from '../src/server/grok.ts';
@@ -265,11 +266,11 @@ for (const [answer, optionId] of [['Model', 'model'], ['Skip', 'skip']]) {
 // A fake ACP agent for any profile: initialize, session/new with the given
 // session result, and prompts answered by onPrompt.
 function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES], session: any, onPrompt: (message: any, rpc: ReturnType<typeof peer>) => void,
-  capabilities = { sessionCapabilities: { resume: {}, close: {} } } as any, authMethods: string[] = [], authError = false) {
-  const calls: any[] = [], launches: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
+  capabilities = { sessionCapabilities: { resume: {}, close: {} } } as any, authMethods: string[] = [], authError = false, binary = 'fake-agent') {
+  const calls: any[] = [], launches: { binary: string; args: string[]; env: NodeJS.ProcessEnv }[] = [];
   let serial = 0, rpc!: ReturnType<typeof peer>;
   const launch = (_binary: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
-    launches.push({ args, env: options.env });
+    launches.push({ binary: _binary, args, env: options.env });
     rpc = peer(message => {
       calls.push(message);
       if (!message.method) return;
@@ -283,7 +284,7 @@ function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES],
     });
     return rpc.child;
   };
-  const agent = new AcpAgent(profile, 'fake-agent', launch as any);
+  const agent = new AcpAgent(profile, binary, launch as any);
   const notifications: any[] = [], requests: any[] = [];
   agent.on('notification', message => notifications.push(message));
   agent.on('request', message => requests.push(message));
@@ -800,6 +801,29 @@ test('Qwen prefers its auto-edit mode, and an agent without any accepted mode is
   } finally { f.agent.close(); }
   const yolo = profileFixture(ACP_PROFILES.qwen, { modes: { availableModes: [{ id: 'yolo' }] } }, () => {});
   try { await assert.rejects(yolo.agent.start(), /Qwen does not offer manual approvals/); } finally { yolo.agent.close(); }
+});
+
+test('DeepSeek desktop launch uses its selected app bundle and loads permissions before the CLI', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-dsh-launch-'));
+  const resources = path.join(dir, 'Custom DeepSeek.app', 'Contents', 'Resources');
+  const binary = path.join(resources, 'dsh', 'node_modules', '.bin', 'dsh');
+  const electron = path.resolve(resources, '../MacOS/DeepSeek Harness');
+  fs.mkdirSync(path.dirname(binary), { recursive: true });
+  fs.mkdirSync(path.dirname(electron), { recursive: true });
+  fs.writeFileSync(binary, 'fixture only');
+  fs.writeFileSync(electron, 'fixture only');
+  fs.writeFileSync(path.join(resources, 'app.asar'), 'fixture only');
+  const f = profileFixture(ACP_PROFILES.deepseek, { configOptions: [structuredClone(deepseekPermissionOption)] },
+    () => assert.fail('Discovery must not prompt'), undefined, [], false, binary);
+  try {
+    await f.agent.start();
+    const resolvedResources = fs.realpathSync(resources), launch = f.launches[0];
+    assert.equal(launch.binary, path.resolve(resolvedResources, '../MacOS/DeepSeek Harness'));
+    assert.deepEqual(launch.args, ['--expose-internals', '--import', path.join(ROOT, 'bin/dsh-permissions.mjs'),
+      path.join(resolvedResources, 'app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'), 'acp']);
+    assert.equal(launch.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(launch.env.DSH_PERMISSION_MODE, 'workspace-write');
+  } finally { f.agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('DeepSeek keeps its sandbox preset and its "other" tools show as commands and edits', { timeout: 5000 }, async () => {
