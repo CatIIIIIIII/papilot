@@ -39,6 +39,8 @@ function permissionDetail(detail: string) {
     "Ask before commands": t("Ask before commands"),
     "Fixed ACP preset": t("Fixed ACP preset"),
     "Plan first": t("Plan first"),
+    "Sandboxed; exceptions need approval": t("Sandboxed; exceptions need approval"),
+    "Bypass sandbox and approvals": t("Bypass sandbox and approvals"),
     "Write within the workspace and configured writable roots, with network access. Ask before exceeding sandbox restrictions.": t("Sandboxed; exceptions need approval"),
     "Disable the sandbox and run tools without approval, subject to managed settings.": t("Bypass sandbox and approvals"),
     "Automatically approve edits and sandboxed commands. Other permission requests are denied in print mode.": t("Sandboxed; other requests denied"),
