@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync, spawn } from 'node:child_process';
 import { buildLayer, desktopVersion, shellFingerprint } from './desktop-layer.mjs';
+import { dedupeEngine } from './desktop-dedupe.mjs';
 import { tarCommand } from '../bin/agent-paths.mjs';
 import { buildWindowsIcon } from './build-windows-icon.mjs';
 
@@ -78,13 +79,12 @@ if (process.argv[2] === 'layer') {
   const serverPackage = JSON.parse(fs.readFileSync('.desktop/server/package.json', 'utf8'));
   // A main build reports the same dev version as its update layer.
   serverPackage.version = desktopVersion(pkg.version);
-  // The CLI installs this tested Codex on first run; desktop carries it so
-  // opening the app for the first time works without an npm download.
-  serverPackage.dependencies['@openai/codex'] = pkg.devDependencies['@openai/codex'];
-  delete serverPackage.devDependencies['@openai/codex'];
+  // Codex is not bundled: the server uses the Codex installed on the computer
+  // (src/server/codex-binary.ts).
   fs.writeFileSync('.desktop/server/package.json', JSON.stringify(serverPackage, null, 2) + '\n');
   runNpm(['install', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server'));
   runNpm(['ci', '--omit=dev', '--no-audit', '--no-fund'], path.join(root, '.desktop/server/engine'));
+  console.log(`Removed ${(dedupeEngine(path.join(root, '.desktop/server')) / 1048576).toFixed(1)} MB of engine dependencies the server already has.`);
   if (process.platform === 'win32') {
     // Code and lockfiles only. Linux installs its own native dependencies;
     // Windows node_modules and Windows Node must never run inside WSL.

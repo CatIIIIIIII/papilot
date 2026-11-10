@@ -337,7 +337,7 @@ export class Workspace extends EventEmitter {
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
     // A retried request returns its task, preparing it again if that failed;
     // an ID from another paper is refused.
-    const existing = this.store.tasks().find(t => t.id === input.id);
+    const existing = this.store.findTask(input.id);
     if (existing) {
       if (existing.projectId !== input.projectId || (existing.mode === 'review') !== Boolean(input.prepareReview)) throw new Error('Invalid task ID.');
       if (input.prepareReview && existing.preparation) this.reviewCopies.set(existing.id, input.prepareReview);
@@ -680,7 +680,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   private appendDelta(task: Task, params: any, type: string) {
     const id = `${task.id}:${params.turnId}:${params.itemId}`;
-    const item = this.liveItems.get(id) || this.store.items(task.id).find(item => item.id === id) || { id, taskId: task.id, type, text: '', createdAt: Date.now() };
+    const item = this.liveItems.get(id) || this.store.item(task.id, id) || { id, taskId: task.id, type, text: '', createdAt: Date.now() };
     if (type === 'command') item.detail = ((item.detail || '') + (params.delta || '')).slice(-40000);
     else {
       if (type === 'assistant' && this.active.get(task.id)?.noteOptionsRequested) {
@@ -709,7 +709,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       this.usageTimers.set(agent, setTimeout(() => { this.usageTimers.delete(agent); void this.readUsage(agent); }, 1500));
       return;
     }
-    const task = this.store.tasks().find(t => t.threadId === p.threadId);
+    const task = this.store.taskByThread(p.threadId);
     if (!task || task.status === 'deleting') return;
     const eventTurn = p.turnId || p.turn?.id;
     if (eventTurn && task.turnId && eventTurn !== task.turnId) return;
@@ -719,7 +719,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const item = p.item, id = `${task.id}:${p.turnId}:${item.id}`;
       if (['userMessage', 'reasoning'].includes(item.type)) return;
       this.flush();
-      const previous = this.store.items(task.id).find(i => i.id === id);
+      const previous = this.store.item(task.id, id);
       const entry: TimelineItem = { id, taskId: task.id, createdAt: previous?.createdAt || Date.now(), type: item.type, text: item.text || item.command || '', status: item.status || (method === 'item/completed' ? 'completed' : 'inProgress') };
       if (item.type === 'agentMessage') entry.type = task.mode === 'review' ? 'reviewOutput' : 'assistant';
       if (item.type === 'agentMessage' && this.active.get(task.id)?.noteOptionsRequested) {
@@ -781,7 +781,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   private serverRequest(message: any, agent: AgentId = 'codex') {
     if (this.closing) return;
-    const task = this.store.tasks().find(t => t.threadId === message.params?.threadId), runtime = this.agents[agent];
+    const task = this.store.taskByThread(message.params?.threadId), runtime = this.agents[agent];
     const allowed = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput', 'item/tool/call'];
     if (!task || this.agentOf(task) !== agent || !this.active.has(task.id) || !allowed.includes(message.method)) { runtime.reject(message.id, 'This request is not supported or its turn is no longer active.'); return; }
     if (message.params?.turnId && task.turnId && message.params.turnId !== task.turnId) { runtime.reject(message.id, 'This turn is no longer active.'); return; }
@@ -1304,12 +1304,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.store.updateTask(taskId, { titleGeneration: 'pending' });
     const written = this.oneOff(id, { cwd: this.store.project(task.projectId).path, sandbox: 'read-only', instructions: taskCaptionInstructions, prompt, model, effort: model?.efforts[0], timeout: 45000, what: 'generate a task title' }).then(reply => {
       if (this.closing) return null;
-      const current = this.store.tasks().find(item => item.id === taskId);
+      const current = this.store.findTask(taskId);
       if (!current || current.status === 'deleting' || (current.titleRevision || 0) !== revision) return current || null;
       return this.store.updateTask(taskId, { title: taskCaptionFrom(reply), titleSource: 'generated', titleRevision: revision + 1, titleGeneration: null });
     }).catch(error => {
       if (!this.closing) {
-        const current = this.store.tasks().find(item => item.id === taskId);
+        const current = this.store.findTask(taskId);
         if (current && current.status !== 'deleting' && (current.titleRevision || 0) === revision) this.store.updateTask(taskId, { titleGeneration: 'failed' });
       }
       throw error;
@@ -1523,7 +1523,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   async deleteTask(taskId: string): Promise<{ ok: true }> {
     if (this.preparing.has(taskId)) throw new Error('Wait for task creation to finish before deleting it.');
     if (this.deletions.has(taskId)) throw new Error('Deletion is already in progress. Wait for it to finish.');
-    const task = this.store.tasks().find(t => t.id === taskId);
+    const task = this.store.findTask(taskId);
     if (!task) return { ok: true };
     // A task that was never prepared has only its first message, which never ran.
     const unprepared = Boolean(task.preparation);

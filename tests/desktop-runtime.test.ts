@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { activeLayer, BackendStopError, backendEnvironment, linkBundle, removeLayers, startBackend, startServer, STARTUP_FAILED, switchServer, type Bundle } from '../desktop/runtime.ts';
+import { activeLayer, BackendStopError, backendEnvironment, linkBundle, npmBinFolder, removeLayers, startBackend, startServer, STARTUP_FAILED, switchServer, type Bundle } from '../desktop/runtime.ts';
 import { readJson, writeJson } from '../bin/installation.mjs';
 
 test('desktop backend environment clears legacy npm activation settings', () => {
@@ -14,6 +14,43 @@ test('desktop backend environment clears legacy npm activation settings', () => 
   assert.equal(env.PAPILOT_DESKTOP, '1'); assert.equal(env.PAPILOT_DATA, '/app/data');
   assert.equal(env.PAPILOT_PUBLIC_ORIGIN, ''); assert.ok(env.PATH.startsWith('/runtime/bin'));
   for (const key of ['PAPILOT_DESKTOP_SHELL', 'PAPILOT_DESKTOP_INSTALLER', 'PAPILOT_DESKTOP_CODEX', 'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE']) assert.equal((env as NodeJS.ProcessEnv)[key], undefined);
+});
+
+test('desktop PATH includes Node/npm install folders without a shell environment', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-home-'));
+  const node = path.join(home, 'runtime/bin/node'), root = path.join(home, 'app'), data = path.join(home, 'data');
+  const paths = (extra: NodeJS.ProcessEnv = {}) => backendEnvironment(node, root, data, { HOME: home, USERPROFILE: home, PATH: path.join(home, 'inherited'), ...extra }).PATH.split(path.delimiter);
+  try {
+    const defaults = paths();
+    for (const dir of ['Library/pnpm', '.local/share/pnpm', '.local/share/mise/shims', '.yarn/bin',
+      '.local/share/fnm/aliases/default/bin', 'Library/Application Support/fnm/aliases/default/bin']) {
+      assert.ok(defaults.includes(path.join(home, dir)), dir);
+      assert.ok(defaults.indexOf(path.join(home, dir)) > defaults.indexOf(path.join(home, '.asdf/shims')), 'existing home folders keep their precedence');
+    }
+    fs.writeFileSync(path.join(home, '.npmrc'), '# user configuration\nprefix=~/custom npm\n');
+    const custom = paths({ PNPM_HOME: path.join(home, 'custom-pnpm'), FNM_DIR: path.join(home, 'custom-fnm') });
+    for (const dir of ['custom-pnpm', 'custom-fnm/aliases/default/bin']) assert.ok(custom.includes(path.join(home, dir)), dir);
+    assert.ok(custom.includes(npmBinFolder(path.join(home, 'custom npm'))));
+    assert.equal(custom[0], path.dirname(node), 'the bundled Node stays first');
+    assert.ok(custom.indexOf(path.join(home, 'inherited')) < custom.indexOf(path.join(home, 'custom-pnpm')));
+    fs.writeFileSync(path.join(home, '.npmrc'), `prefix="${path.join(home, 'absolute npm')}"\n`);
+    assert.ok(paths().includes(npmBinFolder(path.join(home, 'absolute npm'))), 'absolute and quoted prefixes work');
+    fs.writeFileSync(path.join(home, '.npmrc'), 'prefix=${HOME}/npm-x\n');
+    assert.ok(paths().includes(npmBinFolder(path.join(home, 'npm-x'))), 'npm variables use the inherited environment');
+    fs.writeFileSync(path.join(home, '.npmrc'), 'prefix=~/npm-home\n');
+    const otherHome = path.join(home, 'unused');
+    const selectedHome = paths(process.platform === 'win32' ? { HOME: otherHome } : { USERPROFILE: otherHome });
+    assert.ok(selectedHome.includes(npmBinFolder(path.join(home, 'npm-home'))), 'home discovery agrees with agentDirs on this platform');
+    fs.rmSync(path.join(home, '.npmrc'));
+    fs.mkdirSync(path.join(home, '.npmrc'));
+    assert.deepEqual(paths(), defaults, 'an unreadable npmrc does not prevent startup');
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('npm global executables live in the prefix on Windows and bin on POSIX', () => {
+  assert.equal(npmBinFolder('C:\\Users\\author\\npm-x', 'win32'), 'C:\\Users\\author\\npm-x');
+  assert.equal(npmBinFolder('/home/author/npm-x', 'linux'), '/home/author/npm-x/bin');
+  assert.equal(npmBinFolder('/Users/author/npm-x', 'darwin'), '/Users/author/npm-x/bin');
 });
 
 test('the development desktop app ignores legacy web update state and rejects install and channel requests', async () => {

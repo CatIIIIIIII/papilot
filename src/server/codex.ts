@@ -3,7 +3,9 @@ import { type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import type { TaskPermissions, TaskPermissionOption } from '../shared.ts';
-import { CODEX, ROOT, VERSION } from './paths.ts';
+import { DATA, ROOT, VERSION } from './paths.ts';
+import { codexBinary } from './codex-binary.ts';
+import { codexCandidates } from '../../bin/codex-lookup.mjs';
 import { taskAccessInstructions } from './task-permissions.ts';
 
 export class RpcResponseError extends Error {}
@@ -39,21 +41,33 @@ export class Codex extends EventEmitter {
   private sequence = 0;
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   private starting: Promise<void> | null = null;
+  private launchAbort: AbortController | null = null;
   ready = false;
   stderr = '';
-  constructor(private binary = CODEX, private args = ['app-server', '--listen', 'stdio://'], private env: NodeJS.ProcessEnv = process.env) { super(); }
+  // Without a binary of its own, this host's Codex is used (see codex-binary.ts).
+  constructor(private binary?: string, private args = ['app-server', '--listen', 'stdio://'], private env: NodeJS.ProcessEnv = process.env) { super(); }
+  detect() { return Boolean(this.binary || codexCandidates(this.env, DATA, ROOT).length); }
   start(): Promise<void> {
     if (this.ready) return Promise.resolve();
     if (this.starting) return this.starting;
-    this.starting = this.launch().finally(() => { this.starting = null; });
-    return this.starting;
+    const starting = this.launch().finally(() => { if (this.starting === starting) this.starting = null; });
+    this.starting = starting;
+    return starting;
   }
+  // close() invalidates both the lookup and initialization of that launch.
+  private generation = 0;
   private async launch() {
     this.stderr = '';
-    const child = spawnCommand(this.binary, this.args, { cwd: ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const controller = new AbortController();
+    this.launchAbort = controller;
+    const generation = this.generation;
+    const binary = this.binary || await codexBinary(this.env, DATA, controller.signal);
+    if (generation !== this.generation) throw new Error('Codex is not connected.');
+    const child = spawnCommand(binary, this.args, { cwd: ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     const lines = createInterface({ input: child.stdout! });
-    lines.on('line', line => { try { this.receive(JSON.parse(line)); } catch { /* non-protocol stdout is ignored */ } });
+    // A closed launch's child may still print before it exits; only the current one speaks for Codex.
+    lines.on('line', line => { if (this.child !== child) return; try { this.receive(JSON.parse(line)); } catch { /* non-protocol stdout is ignored */ } });
     child.stderr!.on('data', chunk => { this.stderr = (this.stderr + chunk.toString()).slice(-12000); });
     const failed = (error: Error) => {
       if (this.child !== child) return;
@@ -65,6 +79,7 @@ export class Codex extends EventEmitter {
     child.once('exit', (code, signal) => failed(new Error(`Codex exited (${signal || code})`)));
     // The experimental API carries the tools Papilot gives its threads (see VIEW_PDF_TOOL).
     await this.request('initialize', { clientInfo: { name: 'papilot', title: 'Papilot', version: VERSION }, capabilities: { experimentalApi: true } });
+    if (generation !== this.generation) throw new Error('Codex is not connected.');
     this.notify('initialized', {}); this.ready = true;
   }
   private receive(message: any) {
@@ -89,5 +104,10 @@ export class Codex extends EventEmitter {
   notify(method: string, params: unknown) { this.child?.stdin?.write(JSON.stringify({ method, params }) + '\n'); }
   respond(id: string | number, result: unknown) { if (!this.child) throw new Error('Codex disconnected. Resume the task before retrying.'); this.child.stdin!.write(JSON.stringify({ id, result }) + '\n'); }
   reject(id: string | number, message: string) { this.child?.stdin?.write(JSON.stringify({ id, error: { code: -32601, message } }) + '\n'); }
-  close() { this.child?.stdin?.end(); this.child?.kill('SIGTERM'); }
+  close() {
+    this.generation++; this.launchAbort?.abort(); this.launchAbort = null; this.starting = null; this.ready = false;
+    for (const wait of this.pending.values()) { clearTimeout(wait.timer); wait.reject(new Error('Codex is not connected.')); }
+    this.pending.clear();
+    this.child?.stdin?.end(); this.child?.kill('SIGTERM'); this.child = null;
+  }
 }

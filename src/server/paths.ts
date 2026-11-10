@@ -1,4 +1,3 @@
-import { findExecutable } from '../../bin/agent-paths.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,4 +8,3 @@ export const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'packa
 export const PORT = Number(process.env.PAPILOT_PORT || 7274);
 export const PUBLIC_ORIGIN = process.env.PAPILOT_PUBLIC_ORIGIN || '';
 export const OWNER = process.env.PAPILOT_TAILSCALE_LOGIN || '';
-export const CODEX = process.env.PAPILOT_CODEX_BIN || findExecutable('codex') || [path.join(ROOT, 'node_modules/.bin/codex'), path.join(DATA, 'agents/node_modules/.bin/codex')].find(file => fs.existsSync(file)) || 'codex';

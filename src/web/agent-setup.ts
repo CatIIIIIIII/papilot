@@ -28,8 +28,7 @@ export function agentSetup(id: AgentId) {
       ? t('The last connection attempt found neither Claude Code nor supported API credentials in the Papilot server environment.')
       : t('The last connection attempt could not find a runnable {command} CLI in the Papilot server environment. It may still be installed in another location or for another user.', { command }),
     steps: [
-      id === 'codex' ? t('Run papilot codex login on the host. It installs a supported Codex CLI when needed.')
-        : t('Install {command} on the host running Papilot, then complete its login or provider setup below.', { command }),
+      t('Install {command} on the host running Papilot, then complete its login or provider setup below.', { command }),
       t('If it is already installed, set {variable} to its executable path in the environment that starts Papilot, then restart Papilot.', { variable }),
       ...(id === 'claude' ? [t('For the SDK instead, start Papilot with ANTHROPIC_API_KEY or a supported cloud provider configured. Restart Papilot after changing its environment.')] : []),
     ],

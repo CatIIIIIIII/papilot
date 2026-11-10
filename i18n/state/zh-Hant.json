@@ -3654,11 +3654,6 @@
     "textHash": "2fb18a455e427842c5b799a24cebab72a42b6fa2444f6b769e218fdb69b84712",
     "model": "gemini-4-argon-medium"
   },
-  "Run papilot codex login on the host. It installs a supported Codex CLI when needed.": {
-    "revision": "fcd1a48f49ffc18d8f5f62e51c64601d0ed1f6d3208fd007ee9e53ad98637d43",
-    "textHash": "9e52dd65252982f78c1bd91f1959aa31248479003ae1153deb5488ad236401d3",
-    "model": "gemini-4-argon-medium"
-  },
   "Run tool": {
     "revision": "cafafc1994775d4daa81228b0f1217da417566a4f830181bb74a6c86bf71f783",
     "textHash": "f81c160ab853d896b719b24a7243580f49e5196460ecb5b5119a31da923f873b",
@@ -4782,11 +4777,6 @@
   "Uses Qwen Code and its saved login through ACP.": {
     "revision": "2ae12c5a27de027c1a835deb883b110c4d95b6b0d1444671da048aaebd222b1a",
     "textHash": "3385e4a8c2f7aeb6d65600902b0944df3dcdbf3565f00baea0000aef7a2a77ff",
-    "model": "gemini-4-argon-medium"
-  },
-  "Uses a compatible local Codex CLI. Papilot installs its own copy when needed.": {
-    "revision": "e013d91e1ea58aefb0b607bafb57ed5be9f8b8c3704517353c8f225f42ed532d",
-    "textHash": "c48fdfd68984f69772607cfe804f4e1e393febbcffa2ff7b77576fcbf71c5d6d",
     "model": "gemini-4-argon-medium"
   },
   "Uses the Cursor SDK with CURSOR_API_KEY. Papilot installs the SDK on first use.": {

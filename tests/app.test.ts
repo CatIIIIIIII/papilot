@@ -203,6 +203,28 @@ test('paper path and removal require CSRF and an idle paper', async () => {
   } finally { await f.close(); }
 });
 
+test('an unchanged workspace state is answered with an empty 304', async () => {
+  const f = await fixture();
+  try {
+    const first = await f.local.inject({ url: '/api/state', headers: LOCAL });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.headers['cache-control'], 'no-store');
+    const tag = String(first.headers.etag);
+    assert.match(tag, /^"[\w-]+"$/);
+    assert.equal(first.json().csrf, 'local-csrf');
+    const same = await f.local.inject({ url: '/api/state', headers: { ...LOCAL, 'if-none-match': tag } });
+    assert.equal(same.statusCode, 304);
+    assert.equal(same.headers['cache-control'], 'no-store');
+    assert.equal(same.body, '');
+    assert.equal((await f.local.inject({ url: '/api/state', headers: { ...LOCAL, 'if-none-match': 'W/' + tag } })).statusCode, 304, 'a proxy may weaken the tag');
+    f.store.updateTask('grant-task', { title: 'Renamed' });
+    const changed = await f.local.inject({ url: '/api/state', headers: { ...LOCAL, 'if-none-match': tag } });
+    assert.equal(changed.statusCode, 200);
+    assert.notEqual(changed.headers.etag, tag);
+    assert.equal(changed.json().tasks.find((task: any) => task.id === 'grant-task').title, 'Renamed');
+  } finally { await f.close(); }
+});
+
 test('LaTeX installation information is read-only', async () => {
   const f = await fixture();
   try {

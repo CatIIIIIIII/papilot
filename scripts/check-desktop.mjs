@@ -34,7 +34,8 @@ if (packaged) {
   const node = path.join(resources, 'runtime/bin', process.platform === 'win32' ? 'node.exe' : 'node'), server = path.join(resources, 'server');
   assert.match(execFileSync(node, ['--version'], { encoding: 'utf8' }), /^v\d+\./);
   assert.match(execFileSync(node, [path.join(resources, 'runtime/lib/node_modules/npm/bin/npm-cli.js'), '--version'], { encoding: 'utf8' }), /^\d+\./);
-  assert.match(execFileSync(node, [path.join(server, 'node_modules/@openai/codex/bin/codex.js'), '--version'], { encoding: 'utf8' }), /codex-cli/);
+  // Codex is a host tool; the installer does not carry it.
+  assert.ok(!fs.existsSync(path.join(server, 'node_modules/@openai/codex')), 'the installer does not bundle Codex');
   const help = execFileSync(node, ['--import', pathToFileURL(path.join(server, 'node_modules/tsx/dist/loader.mjs')).href, path.join(server, 'engine/src/cli.ts'), '--help'], { encoding: 'utf8', cwd: data, env });
   assert.match(help, /Usage:/);
 }

@@ -27,7 +27,17 @@ export async function checkDesktopNotifications(application, page, snapshot) {
   const route = route => route.fulfill({ json: fixture });
   await page.route('**/api/state', route);
   await page.route('**/api/tasks/notification-fixture/items*', route => route.fulfill({ json: { items: [] } }));
-  let focusSession;
+  const nativeWindowState = () => application.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    return { hidden: !window.isVisible() || window.isMinimized(), focused: window.isFocused() };
+  });
+  const expectBackgroundWindow = () => expect.poll(nativeWindowState).toEqual({ hidden: true, focused: false });
+  let focusSession, windowState;
+  const restoreWindowState = async () => {
+    if (!windowState) return;
+    await windowState.evaluate(fixture => fixture.restore());
+    await windowState.dispose(); windowState = undefined;
+  };
   try {
     await page.evaluate(projectId => { localStorage.setItem('papilot:language', 'en'); localStorage.setItem('papilot:task', ''); localStorage.setItem('papilot:project', projectId); }, task.projectId);
     await page.reload();
@@ -64,8 +74,6 @@ export async function checkDesktopNotifications(application, page, snapshot) {
     else await expect(sound).toHaveCount(0);
     await page.screenshot({ path: 'test-results/desktop-notifications.png' });
 
-    // Playwright normally forces document.hasFocus() to true, even for a hidden
-    // Electron window. Use actual OS focus for this background-delivery check.
     focusSession = await page.context().newCDPSession(page);
     await focusSession.send('Emulation.setFocusEmulationEnabled', { enabled: false });
     // Closing the Mac window must keep observing tasks. Other systems minimize.
@@ -73,15 +81,41 @@ export async function checkDesktopNotifications(application, page, snapshot) {
       const window = BrowserWindow.getAllWindows()[0];
       if (process.platform === 'darwin') window.close(); else window.minimize();
     });
+    await expectBackgroundWindow();
+    // Playwright forces renderer focus on its own CDP session. A second
+    // session cannot reliably clear that override. After checking the native
+    // window, supply its verified state to this notification fixture only.
+    // The real preload, notification IPC and click handler still run below.
+    if (!await page.evaluate(() => document.hidden || !document.hasFocus())) {
+      windowState = await page.evaluateHandle(state => {
+        const keys = ['hidden', 'visibilityState', 'hasFocus'];
+        const descriptors = keys.map(key => Object.getOwnPropertyDescriptor(document, key));
+        Object.defineProperties(document, {
+          hidden: { configurable: true, get: () => state.hidden },
+          visibilityState: { configurable: true, get: () => state.hidden ? 'hidden' : 'visible' },
+          hasFocus: { configurable: true, value: () => state.focused },
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+        return { restore() {
+          keys.forEach((key, index) => {
+            if (descriptors[index]) Object.defineProperty(document, key, descriptors[index]);
+            else delete document[key];
+          });
+          document.dispatchEvent(new Event('visibilitychange'));
+        } };
+      }, await nativeWindowState());
+    }
     await expect.poll(() => page.evaluate(() => document.hidden || !document.hasFocus())).toBe(true);
     task.status = 'reviewing'; task.review = { state: 'done', round: null, counts: {} };
     await expect.poll(async () => (await calls()).length, { timeout: 20000 }).toBe(4);
     assert.deepEqual((await calls())[3], { title: 'Codex finished', body: task.title, silent: soundControl });
+    await expectBackgroundWindow();
     await application.evaluate(() => globalThis.notificationCalls[3].emit('click'));
     await expect.poll(() => application.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];
       return window.isVisible() && !window.isMinimized();
     })).toBe(true);
+    await restoreWindowState();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.locator('.task-link.active .task-title')).toHaveText(task.title);
 
@@ -97,6 +131,7 @@ export async function checkDesktopNotifications(application, page, snapshot) {
     assert.equal((await calls()).length, 4);
     console.log('PASS: Native notifications, sound, failure feedback, preferences, background completion, click navigation and IPC isolation');
   } finally {
+    await restoreWindowState();
     if (focusSession) { await focusSession.send('Emulation.setFocusEmulationEnabled', { enabled: true }); await focusSession.detach(); }
     await page.unroute('**/api/state', route);
     await page.unroute('**/api/tasks/notification-fixture/items*');

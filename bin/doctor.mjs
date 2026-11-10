@@ -1,4 +1,5 @@
-import { findExecutable, killTree, spawnCommand } from './agent-paths.mjs';
+import { agentPath, findExecutable, killTree, spawnCommand } from './agent-paths.mjs';
+import { codexCandidates } from './codex-lookup.mjs';
 // Deliberately uses only Node built-ins: diagnostics must work before npm setup.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -128,28 +129,61 @@ export async function doctor(args) {
   const availableEngines = texEngines.filter(Boolean);
   check('tex-engines', availableEngines.length > 0, 'error', availableEngines.length ? `TeX engines: ${availableEngines.join(', ')}.` : 'No working pdflatex, xelatex or lualatex was found.', 'Install a full TeX distribution and add its binaries to PATH.');
 
+  async function desktopCodexCheck() {
+    const configured = process.env.PAPILOT_CODEX_BIN;
+    const candidates = codexCandidates(process.env, data, root);
+    const env = { ...process.env, PATH: agentPath(process.env) };
+    // Probes and login share a budget within the diagnostics deadline.
+    const deadline = Date.now() + 20000;
+    const tried = [];
+    for (const file of candidates) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      tried.push(file);
+      const result = await command(file, ['--version'], { timeout: Math.min(10000, remaining), env });
+      if (!result.ok) continue;
+      const version = result.stdout.match(/\d+\.\d+\.\d+/)?.[0];
+      const login = await command(file, ['login', 'status'], { timeout: Math.max(3000, Math.min(10000, deadline - Date.now())), env });
+      const ready = login.ok && /^\s*logged in\b/im.test(login.stdout + '\n' + login.stderr);
+      check('agent.codex', ready, 'warn', `${version ? `Codex ${version}` : 'Codex'} (${file}): ${ready ? 'signed in' : login.reason || 'login could not be confirmed'}.`, 'Run codex login, then select Reconnect.');
+      return ready;
+    }
+    const untried = candidates.slice(tried.length);
+    const failure = [tried.length ? `Codex could not be run (${tried.join(', ')}).` : '', untried.length ? `Codex candidates not checked in time (${untried.join(', ')}).` : ''].filter(Boolean).join(' ');
+    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : !candidates.length ? 'Codex is not installed.' : failure,
+      process.env.PAPILOT_INSTALL_METHOD === 'nix' ? 'Install a supported Codex separately with Nix or set PAPILOT_CODEX_BIN to an existing installation.'
+        : configured ? 'Correct PAPILOT_CODEX_BIN.'
+        : `${candidates.length ? 'Reinstall' : 'Install'} Codex (npm install -g @openai/codex), then select Reconnect.`);
+    return false;
+  }
   async function codexCheck() {
+    if (process.env.PAPILOT_DESKTOP === '1') return desktopCodexCheck();
+    // The npm command installs the tested version when the installed one is older.
     const minimum = pkg.devDependencies['@openai/codex'];
     const configured = process.env.PAPILOT_CODEX_BIN;
-    const candidates = configured ? [configured] : ['codex', path.join(data, 'agents/node_modules/.bin/codex')];
-    let found = false;
+    const managed = path.join(data, 'agents/node_modules/.bin');
+    const candidates = configured ? [configured] : ['codex', path.join(managed, 'codex')];
+    const found = [];
     for (const candidate of candidates) {
       const file = agentExecutable(candidate);
       if (!file) continue;
-      found = true;
       const result = await command(file, ['--version']);
       const version = result.stdout.match(/\d+\.\d+\.\d+/)?.[0];
-      if (!result.ok || !version || !atLeast(version, minimum)) {
+      found.push(file);
+      if (!result.ok || (minimum && (!version || !atLeast(version, minimum)))) {
         if (!configured) continue;
-        check('agent.codex', false, 'warn', `Configured Codex ${result.ok ? 'is older than the supported version or its version is unknown' : result.reason}.`, `Set PAPILOT_CODEX_BIN to Codex ${minimum} or newer.`);
+        check('agent.codex', false, 'warn', `Configured Codex ${result.ok ? 'is older than the supported version or its version is unknown' : result.reason}.`, minimum ? `Set PAPILOT_CODEX_BIN to Codex ${minimum} or newer.` : 'Correct PAPILOT_CODEX_BIN.');
         return false;
       }
       const login = await command(file, ['login', 'status']);
       const ready = login.ok && /^\s*logged in\b/im.test(login.stdout + '\n' + login.stderr);
-      check('agent.codex', ready, 'warn', `Codex ${version} (${file}): ${ready ? 'signed in' : login.reason || 'login could not be confirmed'}.`, 'Run papilot codex login, then rerun doctor.');
+      check('agent.codex', ready, 'warn', `${version ? `Codex ${version}` : 'Codex'} (${file}): ${ready ? 'signed in' : login.reason || 'login could not be confirmed'}.`, 'Run papilot codex login, then rerun doctor.');
       return ready;
     }
-    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : found ? `No installed Codex meets version ${minimum}.` : 'Codex is not installed.', process.env.PAPILOT_INSTALL_METHOD === 'nix' ? 'Install a supported Codex separately with Nix or set PAPILOT_CODEX_BIN to an existing installation.' : configured ? 'Correct PAPILOT_CODEX_BIN or unset it to use automatic installation.' : 'Run papilot codex login; it installs the supported Codex when needed.');
+    check('agent.codex', false, 'warn', configured ? 'PAPILOT_CODEX_BIN does not point to an executable.' : !found.length ? 'Codex is not installed.' : `No installed Codex meets version ${minimum}.`,
+      process.env.PAPILOT_INSTALL_METHOD === 'nix' ? 'Install a supported Codex separately with Nix or set PAPILOT_CODEX_BIN to an existing installation.'
+        : configured ? 'Correct PAPILOT_CODEX_BIN or unset it to use automatic installation.'
+        : 'Run papilot codex login; it installs the supported Codex when needed.');
     return false;
   }
   async function claudeCheck() {

@@ -539,6 +539,9 @@ body.resizing iframe{pointer-events:none}
 .agent-connection>button:hover:not(:disabled){background:var(--bg-hover)}
 .agent-connection>button:disabled{opacity:.6;cursor:wait}
 .composer-wrap>.agent-connection{max-width:760px;margin:0 auto 8px}
+.agent-connection.no-agent{padding:10px 12px;margin:0 0 10px}
+.agent-connection.no-agent .agent-connection-message{flex-basis:100%;font-size:13px}
+.agent-connection-actions{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0 21px}
 .agent-fast{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:14px;border-top:1px solid var(--line);cursor:pointer}
 .agent-fast>span{display:flex;flex-direction:column;gap:3px;min-width:0}
 .agent-fast strong{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500}
@@ -998,7 +1001,7 @@ body.resizing iframe{pointer-events:none}
   .task-rename input{height:44px;font-size:16px}
   .message-action{height:36px}
   .tool-item summary{min-height:40px}
-  .request-card button,.question input,.connection-banner>button,.agent-connection>button,.jump-latest,.delete-dialog .button,.modal .button{min-height:44px}
+  .request-card button,.question input,.connection-banner>button,.agent-connection>button,.agent-connection-actions>.button,.jump-latest,.delete-dialog .button,.modal .button{min-height:44px}
   .question input,.modal input{font-size:16px}
   .modal-backdrop{top:var(--viewport-top,0px);bottom:auto;height:var(--viewport-height,100dvh);padding:12px;align-items:flex-end}
   .modal{max-height:100%;padding:22px 18px}

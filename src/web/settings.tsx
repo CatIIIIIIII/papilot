@@ -26,7 +26,7 @@ import { SkillLibraryPanel, type SkillLibraryControls, type SkillLibraryOptions 
 import { ModelDefaultSettings, type ModelDefaultSettingsProps } from './model-default-settings.tsx';
 
 type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'git' | 'latex' | 'skills' | 'updates';
-export type SettingsInitialPage = 'general' | 'shortcuts' | 'quickNotes' | 'git' | 'latex';
+export type SettingsInitialPage = 'general' | 'shortcuts' | 'quickNotes' | 'git' | 'latex' | 'agents';
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.

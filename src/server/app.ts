@@ -6,7 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
@@ -136,8 +136,8 @@ export async function buildApp(options: AppOptions) {
     const resource = request.routeOptions.config.resource, params = request.params as Record<string, string>;
     if (!resource) return;
     const id = 'project' in resource ? (resource.from === 'body' ? request.body as Record<string, string> : params)?.[resource.project]
-      : 'task' in resource ? store.tasks().find(task => task.id === params[resource.task])?.projectId
-      : store.tasks().find(task => task.id === workspace.requests.get(params[resource.request])?.taskId)?.projectId;
+      : 'task' in resource ? store.taskProject(params[resource.task])
+      : store.taskProject(workspace.requests.get(params[resource.request])?.taskId || '');
     if (id) projectRequests.set(request, workspace.enterProjectRequest(id));
   });
   app.addHook('onSend', async (request, _reply, payload) => { projectRequests.get(request)?.(); return payload; });
@@ -225,11 +225,17 @@ export async function buildApp(options: AppOptions) {
     app.post('/api/updates/channel', request => options.updates!.setChannel((request.body as any)?.channel));
     app.post('/api/updates/install', request => options.updates!.install((request.body as any)?.version));
   }
-  app.get('/api/state', async () => {
+  app.get('/api/state', async (request, reply) => {
     await options.prepareDemo?.();
     // Check the backend environment (Linux when using WSL), again on each poll
     // so installing Git unlocks version management without a page reload.
-    return { ...workspace.snapshot(), gitAvailable: Boolean(findExecutable('git')), csrf: options.csrf };
+    const body = JSON.stringify({ ...workspace.snapshot(), gitAvailable: Boolean(findExecutable('git')), csrf: options.csrf });
+    // The app polls every second or two and most polls find nothing new: those
+    // get an empty 304 instead of every task again to download and parse.
+    const tag = `"${createHash('sha1').update(body).digest('base64url')}"`;
+    reply.header('ETag', tag);
+    if (request.headers['if-none-match']?.replace(/^W\//, '') === tag) return reply.code(304).send();
+    return reply.type('application/json; charset=utf-8').send(body);
   });
   // Quick notes for the magic pen. None saved means the presets.
   app.get('/api/quick-notes', () => ({ quickNotes: store.preference<QuickNote[]>('quick-notes') || null }));
@@ -316,7 +322,7 @@ export async function buildApp(options: AppOptions) {
     const id = string(b.id, 'Task ID', 64), projectId = string(b.projectId, 'Paper ID', 64);
     // A skill submission uses the same task endpoint and retry identity as
     // editing. A retry returns the task, preparing it again if that failed.
-    const existing = store.tasks().find(task => task.id === id);
+    const existing = store.findTask(id);
     if (existing) { if (existing.projectId !== projectId) throw new Error('Invalid task ID.'); return workspace.retryTask(existing.id); }
     // AI review compiles the task's own copy of the manuscript, so it does not wait for the preview.
     const reviewing = Boolean(skill && findSkill(store.project(projectId).path, skill).output === 'annotations');
@@ -639,7 +645,7 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/projects/:id/annotations/send', project(), async request => {
     const project = store.project(request.params.id), b = request.body as any, id = string(b.id, 'Task ID', 64);
     // A retried send returns its task; an ID from another paper is refused.
-    const existing = store.tasks().find(task => task.id === id);
+    const existing = store.findTask(id);
     if (existing) { if (existing.projectId !== project.id) throw new Error('Invalid task ID.'); return workspace.retryTask(existing.id); }
     if (!Array.isArray(b.annotations) || !b.annotations.length || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64)) throw new Error('Select valid PDF notes for this task.');
     // The note-only send path needs the same source lookup as task creation.
