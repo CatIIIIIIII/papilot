@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **DeepSeek task permissions.** Choose sandboxed editing or bypass permissions for each task. Papilot applies the selected native Harness preset to new, resumed and continuing sessions; read-only remains enforced for restricted tasks. ([#111](https://github.com/PapilotAI/papilot/pull/111))
+
 ### Changed
 
 - **Compilation never holds up review.** Accepting or rejecting a change takes effect at once, and the next comparison is already loaded. Each decision starts compiling the paper as decided in the background; the next decision replaces that build, as latexmk's live mode does, and unchanged work is reused. The PDF view shows that paper, or the previous one while it compiles, and nothing locks meanwhile. ([#112](https://github.com/PapilotAI/papilot/pull/112))

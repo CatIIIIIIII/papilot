@@ -5,10 +5,11 @@ import { createInterface } from 'node:readline';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { AgentId, TaskPermissionOption, TaskPermissions } from '../shared.ts';
 import { Adapter, findExecutable, type Item, type Thread, type Turn } from './agents.ts';
 import { imageType } from './attachments.ts';
-import { VERSION } from './paths.ts';
+import { ROOT, VERSION } from './paths.ts';
 
 interface Choice { value: string; name: string }
 interface ConfigOption { id: string; category?: string; currentValue: string; options: (Choice | { options: Choice[] })[] }
@@ -46,6 +47,31 @@ const permissionModes = {
   auto: { label: 'Auto', detail: 'Approve safe operations' },
   yolo: { label: 'YOLO', detail: 'Approve all tools' },
 };
+
+function deepseekLaunch(binary: string, args: string[], env: NodeJS.ProcessEnv) {
+  const executable = findExecutable(binary, env) || binary;
+  let resolved = executable;
+  try { resolved = fs.realpathSync(executable); } catch { /* Let spawn report a missing CLI. */ }
+
+  // The desktop CLI is a small shell shim inside the Harness app. Invoke its
+  // bundled Electron runtime as Node so the ACP adapter can be loaded before
+  // the Harness CLI. Resolving from the selected dsh executable keeps custom
+  // PAPILOT_DSH_BIN installs working without an application-specific path.
+  const resources = path.resolve(path.dirname(resolved), '../../..');
+  const electron = path.resolve(resources, '../MacOS/DeepSeek Harness');
+  const cli = path.join(resources, 'app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js');
+  const asar = path.join(resources, 'app.asar');
+  const adapter = path.join(ROOT, 'bin/dsh-permissions.mjs');
+  if (fs.existsSync(electron) && fs.existsSync(asar)) {
+    return { command: electron, args: ['--expose-internals', '--import', adapter, cli, ...args], env: { ...env, ELECTRON_RUN_AS_NODE: '1' } };
+  }
+
+  // Standalone Node based installations inherit NODE_OPTIONS through their
+  // launcher. Keep any options configured by the user.
+  const loader = pathToFileURL(adapter).href;
+  const nodeOptions = [env.NODE_OPTIONS, `--import=${loader}`].filter(Boolean).join(' ');
+  return { command: executable, args, env: { ...env, NODE_OPTIONS: nodeOptions } };
+}
 export const ACP_PROFILES = {
   // Grok owns authentication and tools. A dedicated process and explicit
   // session metadata keep new and restored sessions out of yolo/auto mode.
@@ -62,11 +88,16 @@ export const ACP_PROFILES = {
     setup: 'Install Kimi Code CLI and run kimi login on this host, then select Reconnect. Set PAPILOT_KIMI_BIN if kimi is not on PATH.' },
   qwen: { id: 'qwen', name: 'Qwen', bin: 'qwen', binEnv: 'PAPILOT_QWEN_BIN', args: ['--acp'], modes: ['auto-edit', 'default'], permissionModes,
     setup: 'Install Qwen Code and sign in by running qwen once on this host, then select Reconnect. Set PAPILOT_QWEN_BIN if qwen is not on PATH.' },
-  // DeepSeek Harness has no session modes: its ACP profile sandboxes writes and
-  // commands to the session folder and asks before leaving it. Papilot pins
-  // that preset so a looser DSH_PERMISSION_MODE in the environment is not used.
-  deepseek: { id: 'deepseek', name: 'DeepSeek', bin: 'dsh', binEnv: 'PAPILOT_DSH_BIN', args: ['acp'], modes: [],
-    setup: 'Install DeepSeek Harness (npm install -g @deepseek-ai/dsh) and set up a model with dsh web or the dsh TUI, then select Reconnect. Set PAPILOT_DSH_BIN if dsh is not on PATH.',
+  // Papilot adds a per-session permission config option to DSH's ACP adapter.
+  // Read-only remains available for restricted task sessions, while the picker
+  // offers sandboxed editing and full access.
+  deepseek: { id: 'deepseek', name: 'DeepSeek', bin: 'dsh', binEnv: 'PAPILOT_DSH_BIN', args: ['acp'], modes: ['workspace-write'],
+    permissionModes: {
+      'read-only': { label: 'Read only', detail: 'Read files; writing requires approval.' },
+      'workspace-write': { label: 'Sandboxed edits', detail: 'Sandboxed; exceptions need approval' },
+      'danger-full-access': { value: 'full', label: 'Bypass permissions', detail: 'Bypass sandbox and approvals' },
+    },
+    setup: 'Install DeepSeek Harness, sign in with dsh web, then select Reconnect. Set PAPILOT_DSH_BIN if dsh is not on PATH. Papilot requires a compatible Harness ACP adapter.',
     env: () => ({ ...process.env, DSH_PERMISSION_MODE: 'workspace-write' }) },
   // OpenCode runs tools without asking by default. Its highest-precedence
   // config layer makes it ask before shell commands and anything outside the
@@ -132,7 +163,11 @@ export class AcpAgent extends Adapter {
     try {
       // The probe folder is removed below, so the agent itself runs from the home folder.
       const env = this.profile.env?.() || process.env;
-      const child = this.launch(findExecutable(this.binary) || this.binary, this.profile.args, { cwd: os.homedir(), env: { ...env, PATH: agentPath(env) }, stdio: ['pipe', 'pipe', 'pipe'] });
+      const launchEnv = { ...env, PATH: agentPath(env) };
+      const invocation = this.profile.id === 'deepseek'
+        ? deepseekLaunch(this.binary, this.profile.args, launchEnv)
+        : { command: findExecutable(this.binary) || this.binary, args: this.profile.args, env: launchEnv };
+      const child = this.launch(invocation.command, invocation.args, { cwd: os.homedir(), env: invocation.env, stdio: ['pipe', 'pipe', 'pipe'] });
       this.child = child;
       const failed = (error: Error) => { if (this.child === child) this.disconnect(error); };
       createInterface({ input: child.stdout! }).on('line', line => {
@@ -158,7 +193,9 @@ export class AcpAgent extends Adapter {
       this.catalog = [];
       if (this.profile.modes.length) this.mode(probe);
       this.config(probe);
-      this.availablePermissions = this.permissions(probe).map(({ native: _, ...option }) => option);
+      this.availablePermissions = this.permissions(probe)
+        .filter(option => this.profile.id !== 'deepseek' || option.value !== 'read-only')
+        .map(({ native: _, ...option }) => option);
       this.readModels(probe, true);
       if (this.profile.modelEfforts) await this.learnEfforts(probe);
       const sessionCapabilities = this.capabilities.sessionCapabilities || {};
@@ -177,10 +214,12 @@ export class AcpAgent extends Adapter {
     if (method === 'thread/start' || method === 'thread/resume') {
       const resumed = method === 'thread/resume';
       const readOnly = params.sandbox === 'read-only';
-      const permissions = readOnly ? 'workspace' : params.taskPermissions || 'workspace';
+      const permissions = readOnly ? (this.profile.id === 'deepseek' ? 'read-only' : 'workspace') : params.taskPermissions || 'workspace';
+      // Local model metadata is authoritative only for a still-cached session.
+      // After reconnecting, the CLI may restore a different model from disk.
+      const known = resumed && this.sessions.has(String(params.threadId)) ? this.threads.get(String(params.threadId)) : undefined;
       const session = await this.session(resumed ? String(params.threadId) : null, params.cwd, params.model, permissions);
-      const known = this.threads.get(session.sessionId);
-      const model = params.model || sessionModel(session) || known?.model || null;
+      const model = params.model || known?.model || sessionModel(session) || null;
       this.threads.set(session.sessionId, { cwd: params.cwd, instructions: params.developerInstructions || '', model, started: resumed, permissions, readOnly });
       return { thread: { id: session.sessionId }, model };
     }
@@ -242,7 +281,9 @@ export class AcpAgent extends Adapter {
   private permissions(session: Session): (TaskPermissionOption & { native: string })[] {
     if (this.profile.permissionModes) {
       const { mode, option } = this.mode(session);
-      const offered = session.modes ? session.modes.availableModes.map(mode => mode.id) : choices(option).map(choice => choice.value);
+      const offered = this.profile.id === 'deepseek' || !session.modes
+        ? choices(option).map(choice => choice.value)
+        : session.modes.availableModes.map(mode => mode.id);
       return offered.flatMap(id => {
         const entry = this.profile.permissionModes![id];
         return entry ? [{ ...entry, native: id, value: id === mode ? 'workspace' : entry.value || (id === 'yolo' ? 'full' : id) }] : [];
@@ -260,7 +301,9 @@ export class AcpAgent extends Adapter {
   private async applyPermissions(session: Session, value: TaskPermissions) {
     const selected = this.permissions(session).find(option => option.value === value);
     if (!selected) throw new Error(`${this.name} does not support the selected permissions. Reconnect to refresh its modes.`);
-    if (this.profile.modes.length) {
+    if (this.profile.id === 'deepseek') {
+      await this.setConfig(session, 'permission_mode', selected.native);
+    } else if (this.profile.modes.length) {
       const fallback = this.mode(session), mode = this.profile.permissionModes ? selected.native : fallback.mode;
       // Apply on every turn: a cached or restored session may retain a broader mode.
       if (session.modes) await this.rpc('session/set_mode', { sessionId: session.sessionId, modeId: mode });
@@ -279,8 +322,12 @@ export class AcpAgent extends Adapter {
   }
   // The accepted mode a session offers, as a session mode or a mode option.
   private mode(session: Session) {
-    const option = session.configOptions?.find(option => option.category === 'mode' || option.id === 'mode');
-    const offered = session.modes ? session.modes.availableModes.map(mode => mode.id) : choices(option).map(choice => choice.value);
+    const option = session.configOptions?.find(option => this.profile.id === 'deepseek'
+      ? option.id === 'permission_mode'
+      : option.category === 'mode' || option.id === 'mode');
+    const offered = this.profile.id === 'deepseek' || !session.modes
+      ? choices(option).map(choice => choice.value)
+      : session.modes.availableModes.map(mode => mode.id);
     const mode = this.profile.modes.find(id => offered.includes(id));
     if (!mode) throw new Error(`${this.name} does not offer manual approvals. Update it.`);
     return { mode, option };
@@ -327,7 +374,8 @@ export class AcpAgent extends Adapter {
       }
     };
     try {
-      const session = await this.session(turn.threadId, thread.cwd, thread.model, thread.readOnly ? 'workspace' : thread.permissions);
+      const permissions = thread.readOnly ? (this.profile.id === 'deepseek' ? 'read-only' : 'workspace') : thread.permissions;
+      const session = await this.session(turn.threadId, thread.cwd, thread.model, permissions);
       const option = session.configOptions?.find(option => option.category === 'thought_level' || option.id === 'thinking');
       const defaultEffort = choices(option).some(choice => choice.value === 'default') ? 'default' : this.catalog.find(model => model.model === thread.model)?.defaultReasoningEffort;
       const chosenEffort = effort || defaultEffort;

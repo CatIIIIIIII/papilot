@@ -5,7 +5,9 @@ import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ROOT } from '../src/server/paths.ts';
 import { ACP_PROFILES, AcpAgent, KimiAgent, opencodeConfig } from '../src/server/acp.ts';
+import { findExecutable } from '../src/server/agents.ts';
 import { GrokAgent } from '../src/server/grok.ts';
 import { RpcResponseError } from '../src/server/codex.ts';
 
@@ -264,11 +266,11 @@ for (const [answer, optionId] of [['Model', 'model'], ['Skip', 'skip']]) {
 // A fake ACP agent for any profile: initialize, session/new with the given
 // session result, and prompts answered by onPrompt.
 function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES], session: any, onPrompt: (message: any, rpc: ReturnType<typeof peer>) => void,
-  capabilities = { sessionCapabilities: { resume: {}, close: {} } } as any, authMethods: string[] = [], authError = false) {
-  const calls: any[] = [], launches: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
+  capabilities = { sessionCapabilities: { resume: {}, close: {} } } as any, authMethods: string[] = [], authError = false, binary = 'fake-agent') {
+  const calls: any[] = [], launches: { binary: string; args: string[]; env: NodeJS.ProcessEnv }[] = [];
   let serial = 0, rpc!: ReturnType<typeof peer>;
   const launch = (_binary: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
-    launches.push({ args, env: options.env });
+    launches.push({ binary: _binary, args, env: options.env });
     rpc = peer(message => {
       calls.push(message);
       if (!message.method) return;
@@ -282,7 +284,7 @@ function profileFixture(profile: typeof ACP_PROFILES[keyof typeof ACP_PROFILES],
     });
     return rpc.child;
   };
-  const agent = new AcpAgent(profile, 'fake-agent', launch as any);
+  const agent = new AcpAgent(profile, binary, launch as any);
   const notifications: any[] = [], requests: any[] = [];
   agent.on('notification', message => notifications.push(message));
   agent.on('request', message => requests.push(message));
@@ -296,6 +298,14 @@ const copilotSession = {
   configOptions: [{ id: 'allow_all', category: 'permissions', currentValue: 'on', options: [{ value: 'on', name: 'On' }, { value: 'off', name: 'Off' }] }],
 };
 const copilotCapabilities = { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { close: {} } };
+const deepseekPermissionOption = {
+  id: 'permission_mode', category: 'mode', currentValue: 'workspace-write',
+  options: [
+    { value: 'read-only', name: 'Read only' },
+    { value: 'workspace-write', name: 'Sandboxed edits' },
+    { value: 'danger-full-access', name: 'Bypass permissions' },
+  ],
+};
 
 for (const provider of ['kimi', 'qwen', 'copilot', 'opencode'] as const) {
   test(`${provider} applies native permission changes before prompts and after reconnecting`, async () => {
@@ -493,8 +503,8 @@ test('Grok restores idle threads after reconnect without an extra thread/resume 
 for (const legacy of [false, true]) {
   test(`ACP reports each session's current model instead of the probe default (${legacy ? 'legacy' : 'config options'})`, async () => {
     const session: any = legacy
-      ? { models: { currentModelId: 'probe-model', availableModels: [{ modelId: 'probe-model', name: 'Probe' }, { modelId: 'paper-model', name: 'Paper' }] } }
-      : { configOptions: [{ id: 'model', category: 'model', currentValue: 'probe-model', options: [{ value: 'probe-model', name: 'Probe' }, { value: 'paper-model', name: 'Paper' }] }] };
+      ? { models: { currentModelId: 'probe-model', availableModels: [{ modelId: 'probe-model', name: 'Probe' }, { modelId: 'paper-model', name: 'Paper' }] }, configOptions: [structuredClone(deepseekPermissionOption)] }
+      : { configOptions: [{ id: 'model', category: 'model', currentValue: 'probe-model', options: [{ value: 'probe-model', name: 'Probe' }, { value: 'paper-model', name: 'Paper' }] }, structuredClone(deepseekPermissionOption)] };
     const f = profileFixture(ACP_PROFILES.deepseek, session, (m, rpc) => {
       rpc.update(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done.' } });
       rpc.reply(m.id, { stopReason: 'end_turn' });
@@ -514,6 +524,13 @@ for (const legacy of [false, true]) {
         : call.method === 'session/set_config_option' && call.params.configId === 'model' && call.params.value === 'paper-model'));
       await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper', model: 'probe-model' });
       assert.equal((await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper' })).model, 'probe-model', 'resuming a known session retains its last explicit selection');
+      f.agent.close();
+      await f.agent.start();
+      assert.equal((await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper' })).model, 'paper-model', 'after reconnecting, the restored session reports its current model instead of stale local metadata');
+      const restored = await run(f.agent, created.thread.id, { effort: '' });
+      assert.equal(restored.status, 'completed', restored.error?.message);
+      assert.equal(f.calls.filter(call => legacy ? call.method === 'session/set_model'
+        : call.method === 'session/set_config_option' && call.params.configId === 'model').at(-1)?.params[legacy ? 'modelId' : 'value'], 'paper-model');
     } finally { f.agent.close(); }
   });
 }
@@ -793,8 +810,31 @@ test('Qwen prefers its auto-edit mode, and an agent without any accepted mode is
   try { await assert.rejects(yolo.agent.start(), /Qwen does not offer manual approvals/); } finally { yolo.agent.close(); }
 });
 
+test('DeepSeek desktop launch uses its selected app bundle and loads permissions before the CLI', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-dsh-launch-'));
+  const resources = path.join(dir, 'Custom DeepSeek.app', 'Contents', 'Resources');
+  const binary = path.join(resources, 'dsh', 'node_modules', '.bin', 'dsh');
+  const electron = path.resolve(resources, '../MacOS/DeepSeek Harness');
+  fs.mkdirSync(path.dirname(binary), { recursive: true });
+  fs.mkdirSync(path.dirname(electron), { recursive: true });
+  fs.writeFileSync(binary, 'fixture only');
+  fs.writeFileSync(electron, 'fixture only');
+  fs.writeFileSync(path.join(resources, 'app.asar'), 'fixture only');
+  const f = profileFixture(ACP_PROFILES.deepseek, { configOptions: [structuredClone(deepseekPermissionOption)] },
+    () => assert.fail('Discovery must not prompt'), undefined, [], false, binary);
+  try {
+    await f.agent.start();
+    const resolvedResources = fs.realpathSync(resources), launch = f.launches[0];
+    assert.equal(launch.binary, path.resolve(resolvedResources, '../MacOS/DeepSeek Harness'));
+    assert.deepEqual(launch.args, ['--expose-internals', '--import', path.join(ROOT, 'bin/dsh-permissions.mjs'),
+      path.join(resolvedResources, 'app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'), 'acp']);
+    assert.equal(launch.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(launch.env.DSH_PERMISSION_MODE, 'workspace-write');
+  } finally { f.agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('DeepSeek keeps its sandbox preset and its "other" tools show as commands and edits', { timeout: 5000 }, async () => {
-  const session = { configOptions: [{ id: 'model', category: 'model', currentValue: 'v4', options: [{ value: 'v4', name: 'DeepSeek V4' }] }] };
+  const session = { configOptions: [{ id: 'model', category: 'model', currentValue: 'v4', options: [{ value: 'v4', name: 'DeepSeek V4' }] }, structuredClone(deepseekPermissionOption)] };
   const f = profileFixture(ACP_PROFILES.deepseek, session, (m, rpc) => {
     const id = m.params.sessionId;
     rpc.update(id, { sessionUpdate: 'tool_call', toolCallId: 'ls', title: 'bash', kind: 'other', status: 'in_progress', rawInput: { command: 'ls' } });
@@ -810,7 +850,16 @@ test('DeepSeek keeps its sandbox preset and its "other" tools show as commands a
     await f.agent.start();
     assert.deepEqual(f.launches[0].args, ['acp']);
     assert.equal(f.launches[0].env.DSH_PERMISSION_MODE, 'workspace-write');
+    assert.ok(f.launches[0].env.NODE_OPTIONS?.includes('dsh-permissions.mjs'));
+    assert.deepEqual(f.agent.permissionOptions().map(option => option.value), ['workspace', 'full']);
     const id = (await f.agent.request('thread/start', { cwd: '/paper' })).thread.id;
+    assert.equal(f.calls.find(call => call.method === 'session/set_config_option' && call.params.configId === 'permission_mode')?.params.value, 'workspace-write');
+    await f.agent.request('thread/resume', { threadId: id, cwd: '/paper', taskPermissions: 'full' });
+    assert.equal(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'permission_mode').at(-1)?.params.value, 'danger-full-access');
+    await f.agent.request('thread/resume', { threadId: id, cwd: '/paper', taskPermissions: 'workspace' });
+    assert.equal(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'permission_mode').at(-1)?.params.value, 'workspace-write');
+    await f.agent.request('thread/resume', { threadId: id, cwd: '/paper', sandbox: 'read-only' });
+    assert.equal(f.calls.filter(call => call.method === 'session/set_config_option' && call.params.configId === 'permission_mode').at(-1)?.params.value, 'read-only');
     const done = completion(f.agent as unknown as KimiAgent);
     const requested = new Promise<any>(resolve => f.agent.once('request', resolve));
     await f.agent.request('turn/start', { threadId: id, input: [{ type: 'text', text: 'Fix it.' }] });
@@ -845,7 +894,8 @@ test('ACP agents are detected by their executable', () => {
     const previous = { PATH: process.env.PATH, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
     Object.assign(process.env, { PATH: dir, HOME: dir, USERPROFILE: dir });
     try {
-      assert.equal(new AcpAgent(ACP_PROFILES.qwen).detect(), true); assert.equal(new AcpAgent(ACP_PROFILES.opencode).detect(), false);
+      assert.equal(new AcpAgent(ACP_PROFILES.qwen).detect(), true);
+      assert.equal(new AcpAgent(ACP_PROFILES.opencode).detect(), Boolean(findExecutable('opencode', process.env)));
       // A service's PATH may lack the folder a CLI installs itself in.
       fs.mkdirSync(path.join(dir, '.opencode/bin'), { recursive: true });
       const opencode = path.join(dir, '.opencode/bin/opencode');
