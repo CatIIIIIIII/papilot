@@ -650,3 +650,28 @@ test("an edit that prints in two changes names the other and goes there", async 
   await expect(page.locator(".change.current")).toHaveAttribute("data-stop", String(target));
   await expect(page.locator(`.change[data-stop="${target}"] .change-linked`)).toHaveText("Same edit as change 1");
 });
+test("a whitespace edit beside visible ones does not call the change invisible", async ({ page }) => {
+  let mixed = -1, invisible = -1, handled!: () => void;
+  const rewritten = new Promise<void>(resolve => { handled = resolve; });
+  await page.route("**/rounds/1", async route => {
+    const response = await route.fetch(), detail = await response.json();
+    const blocks = detail.sections.flatMap((s: { blocks: { kind: string; units: string[] }[] }) => s.blocks.filter(b => b.kind === "change"));
+    const unit = (id: string) => detail.units.find((u: { id: string }) => u.id === id);
+    // The first change gets the second change's edit too, which only swapped
+    // a space for a line break; the third change has no visible edit at all.
+    const [first, second, third] = blocks;
+    first.units = [...first.units, ...second.units];
+    for (const section of detail.sections) section.blocks = section.blocks.filter((b: object) => b !== second);
+    for (const id of first.units) unit(id).visual = "text";
+    for (const id of second.units) unit(id).visual = "identical";
+    for (const id of third.units) unit(id).visual = "identical";
+    mixed = 0; invisible = 1;
+    await route.fulfill({ response, json: detail });
+    handled();
+  });
+  await page.reload();
+  await rewritten;
+  await expect(page.locator(`.change[data-stop="${mixed}"] .change-head`)).toBeVisible();
+  await expect(page.locator(`.change[data-stop="${mixed}"] .change-kind`)).toHaveCount(0);
+  await expect(page.locator(`.change[data-stop="${invisible}"] .change-kind`)).toHaveText("No visible change");
+});

@@ -149,8 +149,14 @@ try {
   await notePanel.getByRole('textbox', { name: 'Comment on Initial proposal', exact: true }).fill('Keep the author’s emphasis here.');
   await page.screenshot({ path: 'test-results/demo-prepared-task.png' });
   await notePanel.getByRole('button', { name: 'Reject Initial proposal', exact: true }).click();
-  await expect(notePanel).toBeHidden();
+  await expect(notePanel).toBeVisible();
+  await expect(notePanel.getByRole('button', { name: 'Reject Initial proposal', exact: true })).toBeDisabled();
+  await expect(notePanel.getByRole('textbox', { name: 'Comment on Initial proposal', exact: true })).toHaveValue('Keep the author’s emphasis here.');
   const rejectedChange = page.frameLocator('iframe.review-frame').locator('.change[data-state="rejected"]');
+  await expect(rejectedChange).toHaveAttribute('data-note-focus', 'true');
+  // The final note remains inspectable until the author explicitly closes it.
+  await rejectedChange.locator('.change-where').click();
+  await expect(notePanel).toBeHidden();
   await expect(rejectedChange).toHaveAttribute('data-resolved', 'before');
   await expect(rejectedChange.locator('.side.after')).toBeHidden();
   await page.reload();
@@ -178,7 +184,9 @@ try {
   await expect(notePanel.locator('.note-comparison-change[data-related="true"]')).toHaveCount(1);
   await notePanel.getByRole('button', { name: 'Accept Initial proposal', exact: true }).click();
   await expect(page.locator('[data-task="example-note-math"] .task-badge')).toHaveText('1');
-  await expect(notePanel.getByRole('button', { name: 'Accept Initial proposal', exact: true })).toBeDisabled();
+  await expect(notePanel.getByLabel('Note 1 of 2', { exact: true })).toBeVisible();
+  await expect(notePanel.getByRole('button', { name: 'Accept Initial proposal', exact: true })).toBeEnabled();
+  await expect(page.frameLocator('iframe.review-frame').locator('[data-papilot-link=target][data-state="pending"]')).toHaveCount(1);
   await expect(page.frameLocator('iframe.review-frame').locator('.change[data-state="accepted"]')).toHaveCount(1);
   await expect(page.frameLocator('iframe.review-frame').locator('.change[data-state="pending"]')).toHaveCount(1);
   await openManuscript();
@@ -390,4 +398,9 @@ try {
   assert.deepEqual(failed, [], 'all static assets resolve under /demo/');
   assert.deepEqual(errors, []);
   console.log('PASS: precise notes, prepared tasks and note-to-diff links, review decisions, model controls, local Git diff/stage/commit/sync/restore/history, demo reset, dismissible banner, download gates, mobile layout and zero API requests.');
-} catch (error) { await page.screenshot({ path: 'test-results/playground-failure.png' }); console.error({ errors, failed, apiRequests }); throw error; } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+} catch (error) {
+  await page.screenshot({ path: 'test-results/playground-failure.png' });
+  const changes = await page.frameLocator('iframe.review-frame').locator('.change').evaluateAll(elements => elements.map(el => ({ data: { ...el.dataset }, classes: el.className, round: el.ownerDocument.documentElement.dataset.papilotRound }))).catch(() => []);
+  console.error(JSON.stringify({ errors, failed, apiRequests, changes }));
+  throw error;
+} finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -600,8 +600,12 @@ export async function serve(root: string, port = 0, idle = 12 * 3600) {
 async function run(root: string, port: number, idle: number, owner?: Owner) {
   root = new Repo(root).toplevel();
   process.chdir(root);
+  // Losing the server lock means another engine now serves this paper. Stop,
+  // closing open requests, rather than write its review state beside it;
+  // Papilot's next request connects to that engine.
+  let lost = false, stop = () => {};
   const home = path.join(new Repo(root).gitDir(), "latex-review/server"),
-    release = await acquireLock(path.join(home, "server.lock"), false),
+    release = await acquireLock(path.join(home, "server.lock"), false, { onLost: () => { lost = true; stop(); } }),
     app = new App(root),
     server = createServer(app);
   let timer: NodeJS.Timeout | undefined;
@@ -618,6 +622,8 @@ async function run(root: string, port: number, idle: number, owner?: Owner) {
     if (!address || typeof address === "string")
       throw new Error("No server address");
     app.url = `http://127.0.0.1:${address.port}`;
+    // Lost while starting: the paper's connection belongs to the new owner.
+    if (lost) { await server.close(); return; }
     const info = {
       url: app.url,
       port: address.port,
@@ -636,12 +642,13 @@ async function run(root: string, port: number, idle: number, owner?: Owner) {
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
     // Requests still open, such as a CLI waiting on feedback, end with it.
+    stop = () => {
+      shutdown();
+      server.server.closeAllConnections();
+    };
     if (owner) {
-      owner.stop = () => {
-        shutdown();
-        server.server.closeAllConnections();
-      };
-      if (owner.left) owner.stop();
+      owner.stop = stop;
+      if (owner.left) stop();
     }
     timer = setInterval(
       () => {

@@ -239,6 +239,9 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     /* Reserve the outer tools' row when there is too little room. Keep
        progress, batch counts and history; shorten only the batch labels. */
     .bar{container:review-bar/inline-size;height:auto;gap:8px}
+    /* The host's compile button already shows build activity. Keep the phase
+       available to screen readers without pushing decisions into another row. */
+    :root[data-papilot-build-indicator] .bar .status[data-state="building"]{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%)}
     .bar .accept-all,.bar .reject-all{flex-shrink:0;white-space:nowrap}
     .bar .batch-count{margin-left:0;background:var(--bg-muted);color:var(--text-2)}
     :root[data-papilot-toolbar-stacked] .bar{padding:calc(var(--papilot-bar-height,44px) + 4px) 8px 4px;min-height:calc(var(--papilot-bar-height,44px) + 44px)}
@@ -382,6 +385,11 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   useEffect(() => {
     document?.defaultView?.dispatchEvent(new CustomEvent(VIEW_EVENT, { detail: view }));
   }, [document, view]);
+  useEffect(() => {
+    // Manuscript comparisons have their own build. Hide the duplicate phase
+    // only while the task's host toolbar is showing its compilation spinner.
+    document?.documentElement.toggleAttribute('data-papilot-build-indicator', task?.status === 'building');
+  }, [document, task?.status]);
   useEffect(() => {
     const target = document?.defaultView;
     if (!target) return;

@@ -72,6 +72,42 @@ jobs:
       - name: Pack
         run: npm pack --ignore-scripts --dry-run
 
+  # Reviewing in the app's real interface, with real LaTeX builds: note
+  # review, batched decisions and compilation. A job of its own beside the
+  # checks above, so its browser time does not count against theirs.
+  review:
+    name: Review in a browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            engine/package-lock.json
+      - run: npm ci
+      - run: npm run setup:review
+      - name: Install TeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-xetex texlive-lang-chinese poppler-utils
+      - name: Install browser
+        working-directory: engine
+        run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Review batching, compilation and note review
+        run: |
+          node --import tsx scripts/check-review-batching.mjs
+          node --import tsx scripts/check-review-application.mjs
+          node --import tsx scripts/check-review-flow.mjs
+          node --import tsx scripts/check-note-results.mjs
+          node --import tsx scripts/check-note-options-flow.mjs
+        env:
+          PAPILOT_BROWSER_CHANNEL: chromium
+
   # The same checks on a native Windows host: the CLI, server and review engine
   # run there too, and the tests that need POSIX signals skip themselves.
   windows:
@@ -134,13 +170,14 @@ jobs:
   passed:
     name: CI passed
     if: always()
-    needs: [check, windows, changes, desktop]
+    needs: [check, review, windows, changes, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: Require explicit success from every required job
         env:
           CHECK_RESULT: ${{ needs.check.result }}
+          REVIEW_RESULT: ${{ needs.review.result }}
           WINDOWS_RESULT: ${{ needs.windows.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
