@@ -271,10 +271,9 @@ it("renders shared ink once across sections and floating edits, retaining every 
         ),
       ).length;
   expect(cards).toEqual(original);
-  expect(changes.map((b) => b.units)).toEqual([
-    ["a", "b", "figure"],
-    ["a", "b", "figure"],
-  ]);
+  // One change in two sections is still one block, never two of the same edits.
+  expect(changes.map((b) => b.units)).toEqual([["a", "b", "figure"]]);
+  expect(changes[0].after.length).toBeGreaterThan(1);
   expect(changes.filter((b) => b.before.length)).toHaveLength(1);
   const svg = changes[0].before
     .map((s) => fs.readFileSync(path.join(folder, s.src), "utf8"))
@@ -370,11 +369,15 @@ it("keeps separated fragments and intervening context in reading order", () => {
     strips = blocks.flatMap((b) =>
       b.kind === "context" ? [b.image] : b.kind === "change" ? b.after : [],
     );
-  expect(changes.map((b) => b.units)).toEqual([["a"], ["b"], ["a"]]);
-  expect(changes.map((b) => b.before.length)).toEqual([1, 1, 0]);
-  expect(strips.map((s) => s.top)).toEqual(
-    strips.map((s) => s.top).sort((a, b) => a! - b!),
-  );
+  // Edit a's second piece joins a's block; b and the context keep their
+  // reading order around it.
+  expect(changes.map((b) => b.units)).toEqual([["a"], ["b"]]);
+  expect(changes.map((b) => b.before.length)).toEqual([1, 1]);
+  const tops = (list: Strip[]) => list.map((s) => s.top!);
+  expect(tops(changes[0].after)).toEqual(tops(changes[0].after).sort((a, b) => a - b));
+  expect(changes[0].after.some((s) => s.top! >= 180)).toBe(true);
+  const flow = blocks.flatMap((b) => (b.kind === "context" ? [b.image] : b.kind === "change" ? [b.after[0]] : []));
+  expect(tops(flow)).toEqual(tops(flow).sort((a, b) => a - b));
   expect(
     strips
       .flatMap((s) => s.text ?? [])
@@ -545,9 +548,15 @@ it("splits a wide source crop into the page's reading lanes and sections", () =>
         s.top!,
       );
   expect(result.loose).toEqual([]);
-  for (let i = 1; i < shown.length; i++)
-    expect(byReading(key(shown[i - 1]), key(shown[i]))).toBeLessThanOrEqual(0);
-  expect(changes.map((b) => b.units)).toEqual([["figure"], ["figure"]]);
+  // The crop's pieces in both lanes form one block, read in order; the
+  // page's other strips keep their reading order around it.
+  const pieces = changes.flatMap((b) => (b.kind === "change" ? b.after : [])),
+    rest = shown.filter((s) => !pieces.includes(s));
+  for (const list of [pieces, rest])
+    for (let i = 1; i < list.length; i++)
+      expect(byReading(key(list[i - 1]), key(list[i]))).toBeLessThanOrEqual(0);
+  expect(changes.map((b) => b.units)).toEqual([["figure"]]);
+  expect(pieces.length).toBeGreaterThan(1);
   expect(changes.filter((b) => b.before.length)).toHaveLength(1);
   expect(changes.flatMap((b) => b.after).every((s) => s.width <= 300)).toBe(
     true,
@@ -759,4 +768,67 @@ it("comment-only lines neither create paragraphs nor introduce spaces", () => {
   );
   expect(typesetWords("100\\% sure")).not.toEqual(typesetWords("100% sure"));
   expect(typesetWords("a\\\\% comment\nb")).toEqual(typesetWords("a\\\\b"));
+});
+
+it("never makes the blank space a crop reaches into a change of its own", () => {
+  // Lines 5 and 6 are blank, the end of section 0; section 1 starts at
+  // line 7. The edit's crop reaches from that blank space into section 1,
+  // and a speck of ink at its top edge, such as the foot of a glyph above,
+  // keeps trimming from removing the space.
+  const raw = new mupdf.PDFDocument(),
+    font = new mupdf.Font("Helvetica"),
+    resource = raw.addSimpleFont(font),
+    lines = Array.from({ length: 12 }, (_, i) => (i === 5 || i === 6 ? "" : `Line ${i} has distinct words here`)),
+    content = "BT /F1 12 Tf 30 550 Td 18 TL " + lines.map((line, i) => (i ? "T* " : "") + "(" + line + ") Tj").join("\n") + " ET 0 0 0 rg 300 471.5 0.3 0.3 re f",
+    page = raw.addPage([0, 0, 600, 600], 0, { Font: { F1: resource } }, content);
+  raw.insertPage(-1, page);
+  const buffer = raw.saveToBuffer(""),
+    doc = new PdfDocument(buffer.asUint8Array());
+  buffer.destroy(); page.destroy(); resource.destroy(); font.destroy(); raw.destroy();
+  documents.push(doc);
+  const build = sectioned(doc, [0, 7]),
+    top = doc.page(0).search("Line 4")[0][3] + 1,
+    bottom = doc.page(0).search("Line 8")[0][3] + 1,
+    crop = { page: 0, clip: [0, top, 600, bottom] as [number, number, number, number], label: "1" },
+    cards: Card[] = [{ id: "edit", file: "paper.tex", context_node: "1", comparison: "text", aligned: true,
+      pairs: [{ old: crop, new: crop, group: 0, before_marks: [], after_marks: [] }] }],
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-blank-"));
+  folders.push(folder);
+  const result = renderDocument(build, build, cards, new Strips(folder), () => false),
+    changes = (blocks: { kind: string }[]) => blocks.filter((b) => b.kind === "change");
+  expect(result.loose).toEqual([]);
+  // Section 0 may show context, but holds no change.
+  const counts = Object.fromEntries(result.sections.map((s) => [s.node, changes(s.blocks).length]));
+  expect(counts).toMatchObject({ "1": 1 });
+  expect(counts["0"] ?? 0).toBe(0);
+  const one = changes(result.sections.find((s) => s.node === "1")!.blocks)[0];
+  expect(one).toMatchObject({ units: ["edit"], before: [expect.anything()], after: [expect.anything()] });
+});
+
+it("never repeats a block of the same edits and says why an edit is in several", () => {
+  const doc = document([Array.from({ length: 14 }, (_, i) => `Line ${i} has distinct words here`).join("\n")]),
+    build = sectioned(doc, [0]),
+    line = (i: number) => { const r = doc.page(0).search(`Line ${i} `)[0]; return { page: 0, clip: [0, r[1] - 1, 600, r[3] + 1] as [number, number, number, number], label: "1" }; },
+    pair = (at: Position, group: number) => ({ old: at, new: at, group, before_marks: [], after_marks: [] }),
+    card = (id: string, pairs: Card["pairs"]): Card => ({ id, file: "paper.tex", context_node: "0", comparison: "text", aligned: true, pairs }),
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), "review-linked-"));
+  folders.push(folder);
+  // "macro" prints at line 2, next to "word", and alone at line 10; "far"
+  // prints at lines 5 and 12, two places of the same edit alone.
+  const cards = [
+      card("macro", [pair(line(2), 0), pair(line(10), 1)]),
+      card("word", [pair(line(2), 0)]),
+      card("far", [pair(line(5), 0), pair(line(12), 1)]),
+    ],
+    result = renderDocument(build, build, cards, new Strips(folder), () => false),
+    changes = [...result.sections.flatMap((s) => s.blocks), ...result.loose].filter((b) => b.kind === "change");
+  const sets = changes.map((b) => JSON.stringify(b.units));
+  expect(new Set(sets).size).toBe(sets.length);
+  const far = changes.filter((b) => b.units.includes("far"));
+  expect(far).toHaveLength(1);
+  expect(far[0].after).toHaveLength(2);
+  expect(far[0].linked).toBeUndefined();
+  const macro = changes.filter((b) => b.units.includes("macro"));
+  expect(macro.map((b) => b.units)).toEqual([["macro", "word"], ["macro"]]);
+  for (const block of macro) expect(block.linked).toEqual([{ unit: "macro", reason: "places" }]);
 });

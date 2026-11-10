@@ -10,7 +10,15 @@ export const zhCN: Record<string, string> = {
   "Save and update PDF": "保存并更新 PDF",
   "Reset to saved source": "恢复已保存的源码",
   "Source saved. Updating the PDF…": "源码已保存，正在更新 PDF…",
-  "Wait for the PDF build before editing source.": "请等待 PDF 构建完成后再编辑源码。",
+  "PDF comparison in progress": "正在生成 PDF 对比",
+  "PDF comparison failed": "PDF 对比生成失败",
+  "Wait for the PDF comparison of this change before accepting or rejecting it.": "请等待此修改的 PDF 对比生成后，再接受或拒绝它。",
+  "No PDF comparison": "暂无 PDF 对比",
+  "PDF from {time}": "{time} 的 PDF",
+  "Earlier PDF": "先前的 PDF",
+  "This change's own PDF comparison is still rendering. This comparison was rendered for the same change in the changes published at {time}.": "此修改的 PDF 对比仍在生成中。当前显示的是 {time} 发布时为同一修改生成的对比。",
+  "Review again": "请再次审阅",
+  "The PDF comparison changed after your decision.": "你作出决定后，PDF 对比发生了变化。",
   "This change was rejected. Undo that decision before editing it.": "这处改动已被拒绝，请先撤销该决定再编辑。",
   "The source changed while you were editing. Copy your draft before resetting to the saved source.": "编辑期间源码发生了变化。请复制保留需要的草稿，再恢复已保存的源码重新修改。草稿已保留。",
   "A newer round is available. Reload the page.": "有新一轮修改，请重新加载页面。",
@@ -107,6 +115,9 @@ export const zhCN: Record<string, string> = {
   Text: "文本",
   Layout: "版式",
   Moved: "位置移动",
+  "Same edit as change {list}": "与修改 {list} 是同一处改动",
+  "The same edit prints in several places in the PDF.": "这处源码改动在 PDF 中出现在多个位置。",
+  "The same edit now prints elsewhere, on another page or in a float.": "这处改动的文字现在排到了别处：另一页或浮动体中。",
   "No visible change": "无可见变化",
   "Source only": "仅源码",
   Reflow: "重新排版",
@@ -172,6 +183,8 @@ export const zhCN: Record<string, string> = {
     "所有修改均已审阅，你的决定已保存。",
   "Last decision undone. The restored changes need review again.":
     "已撤销上一次决定，恢复的修改需要重新审阅。",
+  "{n} later decision was not sent.": "之后的 {n} 项决定未发送。",
+  "{n} later decisions were not sent.": "之后的 {n} 项决定未发送。",
   "Copied selected text with file, lines and PDF page.":
     "已复制选中的文本及其文件、行号和 PDF 页码。",
   "Copied the change location.": "已复制修改的位置。",
@@ -185,10 +198,10 @@ export const zhCN: Record<string, string> = {
     "此任务正在删除，无法审阅或评论。",
   "Select Check status in Papilot before accepting, rejecting, or undoing changes. You can still add comments.":
     "请先在 Papilot 中选择“检查状态”，再接受、拒绝或撤销修改。你仍可以添加评论。",
-  "Wait for the PDF build before accepting, rejecting, or undoing changes. You can still add comments.":
-    "请等待 PDF 构建完成后再接受、拒绝或撤销修改。你仍可以添加评论。",
   "Pause this task in Papilot before accepting, rejecting, or undoing changes. You can still add comments.":
     "请先在 Papilot 中暂停此任务，再接受、拒绝或撤销修改。你仍可以添加评论。",
+  "The agent is editing this task's files. Pause it before editing changes or undoing a rejection. You can still accept, reject and comment.":
+    "智能体正在编辑此任务的文件。请先暂停它，再编辑修改或撤销拒绝。你仍可以接受、拒绝修改和添加评论。",
   "Wait for the current review action before accepting, rejecting, or undoing changes. You can still add comments.":
     "请等待当前审阅操作完成后再接受、拒绝或撤销修改。你仍可以添加评论。",
 
@@ -316,4 +329,11 @@ export const zhCN: Record<string, string> = {
   "You checked this entry yourself.": "你已人工确认过这个条目。",
   "I checked it myself": "我已人工确认",
   "{n} checked by you": "{n} 个已人工确认",
+  "Compiling your decisions…": "正在编译你的决定…",
+  "Your accepted changes do not compile together.": "已接受的修改合在一起无法编译。",
+  "Details": "详情",
+  "Updating with your latest decisions…": "正在按你最新的决定更新…",
+  "PDF page {page}": "PDF 第 {page} 页",
+  "Rejected; reverted when the agent stops": "已拒绝；智能体停下后撤回",
+  "Rejected · reverted when the agent stops": "已拒绝 · 智能体停下后撤回",
 };

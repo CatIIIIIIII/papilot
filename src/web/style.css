@@ -131,6 +131,9 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 /* A note that just joined the task lights up where it landed. */
 .task-note-reference.note-arrived,.task-note-cards>.note-arrived>.pdf-note-card{animation:note-arrived 1.3s ease-out}
 [data-task-home].task-received{animation:task-received .45s cubic-bezier(.3,1.5,.5,1)}
+[data-notes-home] .notes-count{position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:var(--primary);color:#fff;box-shadow:0 0 0 2px var(--bg);font:600 10px/16px var(--sans);font-variant-numeric:tabular-nums;text-align:center;pointer-events:none}
+[data-notes-home].notes-received .notes-count{animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
+[data-notes-home]:has(.notes-count).notes-received::after{content:none}
 [data-notes-home].notes-received{z-index:1;color:var(--accent);background:var(--accent-soft);animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
 .notes-received::after{content:attr(data-received);position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:var(--primary);color:#fff;box-shadow:0 0 0 2px var(--bg);font:600 10px/16px var(--sans);font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;animation:notes-received-count 1.6s ease-out both}
 .task-link{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;text-align:left;padding:8px 4px 8px 10px;border-radius:var(--r-md)}
@@ -175,8 +178,8 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 /* Status */
 .status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);white-space:nowrap}
 .status i{width:6px;height:6px;display:block;border-radius:50%;background:currentColor;flex-shrink:0}
-.status.running,.status.building,.status.queued{color:var(--accent)}
-.status.running i,.status.building i{animation:pulse 1.4s ease-in-out infinite}
+.status.running,.status.building,.status.queued,.status.preparing{color:var(--accent)}
+.status.running i,.status.building i,.status.preparing i{animation:pulse 1.4s ease-in-out infinite}
 .status.reviewing{color:var(--green)}
 .status.reviewing.done,.status.idle,.status.interrupted{color:var(--text-3)}
 .status.waiting_input{color:var(--purple)}
@@ -413,6 +416,7 @@ body.resizing iframe{pointer-events:none}
 .task-error>div{min-width:0}
 .task-error strong{font-weight:600}
 .task-error p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;margin:4px 0 0;max-height:240px;overflow:auto;color:var(--text);font:13px/1.55 var(--mono)}
+.task-error-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .conversation-error{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding:10px 12px;border-radius:var(--r-md);background:var(--amber-soft);border:1px solid var(--amber-line);font-size:14px;line-height:1.5;color:var(--amber-text)}
 .conversation-error p{margin:0;overflow-wrap:anywhere}
 .jump-latest{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;white-space:nowrap;height:32px;padding:0 14px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--text);box-shadow:var(--float);font-size:13px;font-weight:500}

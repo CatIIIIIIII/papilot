@@ -174,7 +174,7 @@ try {
   );
   build.key = 'pdf-next';
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await page.getByText('Keep this instruction.', { exact: true }).waitFor();
   await page.getByText('Keep this comment even when the figure changes.', { exact: true }).waitFor();
   await page.getByRole('status').filter({ hasText: 'Some note positions need confirmation.' }).waitFor();

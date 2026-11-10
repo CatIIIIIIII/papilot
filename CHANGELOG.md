@@ -4,6 +4,24 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **Compilation never holds up review.** Accepting or rejecting a change takes effect at once, and the next comparison is already loaded. Each decision starts compiling the paper as decided in the background; the next decision replaces that build, as latexmk's live mode does, and unchanged work is reused. The PDF view shows that paper, or the previous one while it compiles, and nothing locks meanwhile. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Comparisons are ready when the agent finishes.** While the agent edits, Papilot compiles and renders the round it will publish, so only the last edit's incremental build can remain when the turn ends. Accepting works while the agent edits; rejections are queued until its turn ends. Apply finds the manuscript PDF already compiled once the decisions settle, and starting a task returns at once. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Background TeX runs at full speed.** Builds no longer run at background priority, which on Apple silicon moved them to efficiency cores and made each pass about four times slower. At most two TeX runs share the machine, in the order of what the author is reading, across tasks. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Changes are located more precisely.** Edits join one change only where they print on the same line; blank space, running heads and page numbers no longer become changes of their own; and one change no longer appears as several cards. The Moved label is gone, and a change that genuinely shares an edit with another names it and says why. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Shorter change locations.** A change shows its file's name and line span; hovering shows the full path, every line and the page. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Note alternatives are off until chosen.** Pick a count in Review preferences to have edits prepare them; a saved choice is kept. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Smoother review scrolling.** The review scrolls natively, and selectable PDF text is laid out once scrolling rests. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+
+### Fixed
+
+- **Notes on an older PDF are kept.** A note written while a newer PDF compiles is saved and placed in the current source, and a new PDF arriving leaves an open note box as it is. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Saving a PDF note no longer waits for SyncTeX.** The note appears at once and its source fills in afterwards. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Saving is offered after rejecting changes.** Rejections no longer hide Apply and Commit; sending them to the agent stays optional. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **Decisions made on an iPhone survive locking or switching apps.** They are kept in the browser and sent once the page reopens. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+- **My notes shows how many notes it holds**, and each edit's buttons in the LaTeX view match the change's own. ([#112](https://github.com/PapilotAI/papilot/pull/112))
+
 ## [0.9.4] - 2026-11-09
 
 Review edits by PDF note, compare prepared alternatives in context, and choose how many alternatives future requests should prepare.

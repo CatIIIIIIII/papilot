@@ -31,6 +31,28 @@ function style(glyph: TextGlyph, image: Strip): CSSProperties {
     transform: `scaleX(${scaleX})`,
   };
 }
+// Glyph boxes are hundreds of positioned spans per strip. Building or dropping
+// them as strips cross the viewport stalled every scroll for 0.1–0.5 s, so
+// they change only once the scroll has settled, one strip per idle moment.
+const SETTLE = 200;
+let scrolled = 0, pumping = false;
+const settling = new Set<() => void>();
+if (typeof document !== "undefined")
+  document.addEventListener("scroll", () => { scrolled = performance.now(); }, { capture: true, passive: true });
+const idle = (run: () => void) =>
+  typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout: 500 }) : setTimeout(run, 16);
+function pump() {
+  const wait = scrolled + SETTLE - performance.now();
+  if (wait > 0) return void setTimeout(pump, wait);
+  const [next] = settling;
+  if (next) { settling.delete(next); next(); }
+  if (settling.size) idle(pump);
+  else pumping = false;
+}
+function whenSettled(run: () => void) {
+  settling.add(run);
+  if (!pumping) { pumping = true; setTimeout(pump, SETTLE); }
+}
 // A line wrapper survives changes between line and glyph text. Save selection
 // endpoints relative to that wrapper so native Find can receive precise boxes
 // without losing the selected text or the direction of the selection.
@@ -39,6 +61,12 @@ function selectionPoint(node: Node, offset: number): () => [Node, number] {
     node.nodeType === 1 ? (node as Element) : node.parentElement
   )?.closest(".pdf-text-line");
   if (!line) return () => [node, offset];
+  // These stable element boundaries are not interchangeable with the final
+  // newline text node: Chromium may include a neighboring, absolutely
+  // positioned equation number when copying through that newline.
+  if (node === line && offset === 0) return () => [line, 0];
+  if (node === line && offset === line.childNodes.length)
+    return () => [line, line.childNodes.length];
   const prefix = document.createRange();
   prefix.selectNodeContents(line);
   prefix.setEnd(node, offset);
@@ -84,27 +112,31 @@ export const PdfStrip = memo(function PdfStrip({
   useEffect(() => {
     const element = box.current!;
     let nearby = false;
-    const update = () => {
+    const apply = () => {
       if (nearby === rendered.current) return;
       const selected = window.getSelection();
       if (
-        selected &&
-        !selected.isCollapsed &&
-        (element.contains(selected.anchorNode) ||
-          element.contains(selected.focusNode))
+        selected && !selected.isCollapsed &&
+        (element.contains(selected.anchorNode) || element.contains(selected.focusNode))
       ) {
         // Keep precise selected glyphs alive outside the viewport. A Find
         // result in a compact line must instead expand as it comes into view.
         if (rendered.current) return;
-        const anchor = selectionPoint(
-            selected.anchorNode!,
-            selected.anchorOffset,
-          ),
+        const anchor = selectionPoint(selected.anchorNode!, selected.anchorOffset),
           focus = selectionPoint(selected.focusNode!, selected.focusOffset);
-        restoreSelection.current = () =>
-          selected.setBaseAndExtent(...anchor(), ...focus());
+        restoreSelection.current = () => selected.setBaseAndExtent(...anchor(), ...focus());
       }
       setDetailed(nearby);
+    };
+    const update = () => {
+      if (nearby === rendered.current) return;
+      const selected = window.getSelection();
+      if (selected && !selected.isCollapsed &&
+        (element.contains(selected.anchorNode) || element.contains(selected.focusNode)))
+        apply();
+      // Recheck the selection when the queued update actually runs: it may
+      // have changed while scrolling settled, before selectionchange fires.
+      else whenSettled(apply);
     };
     const observer = new IntersectionObserver(
       (entries) => {
@@ -116,6 +148,7 @@ export const PdfStrip = memo(function PdfStrip({
     observer.observe(element);
     document.addEventListener("selectionchange", update);
     return () => {
+      settling.delete(apply);
       observer.disconnect();
       document.removeEventListener("selectionchange", update);
     };

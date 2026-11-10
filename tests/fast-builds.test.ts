@@ -109,9 +109,10 @@ test('each TeX pass that latexmk follows with more work is shown before the buil
   } finally { f.close(); }
 });
 
-test('a background build stops while another build compiles, and someone waiting for it promotes it', { skip: process.platform === 'win32' && 'uses POSIX signals', timeout: 60000 }, async () => {
+test('a background build compiles beside another at full speed, lends its slot only when none is free, and gets it back once someone waits for it', { skip: process.platform === 'win32' && 'uses POSIX signals', timeout: 60000 }, async () => {
   const f = paper({ 'main.tex': document('Text.\n') });
-  const bin = path.join(f.base, 'bin'), previousPath = process.env.PATH;
+  const bin = path.join(f.base, 'bin'), previousPath = process.env.PATH, previousPool = process.env.PAPILOT_TEX_POOL;
+  const pool = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-pool-'));
   try {
     // A latexmk that records its process ID and finishes when told to, or
     // after a minute, so that a test stopped midway leaves nothing running.
@@ -119,6 +120,7 @@ test('a background build stops while another build compiles, and someone waiting
     fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX 3.14 (fake)"\n', { mode: 0o755 });
     fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\necho $$ > "${f.base}/pid-$(basename "$(dirname "$PWD")")"\ni=0; while [ ! -e "${f.base}/go-$(basename "$(dirname "$PWD")")" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
     process.env.PATH = `${bin}:${previousPath}`;
+    process.env.PAPILOT_TEX_POOL = pool;
     const builder = new Builder(loadProject(f.root), f.repo), keyOf = (folder: string) => path.basename(path.dirname(folder));
     const state = (pid: string) => execFileSync('ps', ['-o', 'stat=', '-p', pid]).toString().trim();
     const waitFor = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(r => setTimeout(r, 25)); assert.ok(check()); };
@@ -127,28 +129,39 @@ test('a background build stops while another build compiles, and someone waiting
     const background = builder.build(f.repo.rev('HEAD'), ['full'], null, { priority: 'background' });
     await waitFor(() => pids().length === 1);
     const [speculative] = pids();
-    assert.doesNotMatch(state(pidOf(speculative)), /T/);
+    // Another build takes the free slot; both compile.
     const other = f.commit({ 'main.tex': document('Other.\n') });
     const normal = builder.build(other);
     await waitFor(() => pids().length === 2);
-    const [foreground] = pids().filter(key => key !== speculative);
-    await waitFor(() => /T/.test(state(pidOf(speculative))));
-    fs.writeFileSync(path.join(f.base, `go-${foreground}`), '');
-    assert.equal(keyOf((await normal).root), foreground);
-    await waitFor(() => !/T/.test(state(pidOf(speculative))));
-    // Waiting for the same build promotes it: another build no longer stops it.
+    const [busy] = pids().filter(key => key !== speculative);
+    await new Promise(r => setTimeout(r, 400));
+    assert.doesNotMatch(state(pidOf(speculative)), /T/, 'a free slot is used at full speed');
+    // A third finds no free slot and borrows the background build's.
     const third = builder.build(f.commit({ 'main.tex': document('Third.\n') }));
     await waitFor(() => pids().length === 3);
+    const [borrower] = pids().filter(key => key !== speculative && key !== busy);
     await waitFor(() => /T/.test(state(pidOf(speculative))));
+    // Someone starts waiting for the lent build: it gets its slot back, and
+    // the borrower waits, stopped, for a slot of its own.
     f.repo.run(['checkout', '-q', 'HEAD~2']);
     const waiting = builder.build(f.repo.rev('HEAD'), ['full'], null, { priority: 'foreground' });
     await waitFor(() => !/T/.test(state(pidOf(speculative))));
+    await waitFor(() => /T/.test(state(pidOf(borrower))));
     fs.writeFileSync(path.join(f.base, `go-${speculative}`), '');
     const [first, again] = await Promise.all([background, waiting]);
     assert.equal(first.key, again.key, 'the foreground request received the speculative build');
-    fs.writeFileSync(path.join(f.base, `go-${pids().find(key => key !== speculative && key !== foreground)}`), '');
+    // The borrower continues on the slot that became free.
+    await waitFor(() => !/T/.test(state(pidOf(borrower))));
+    fs.writeFileSync(path.join(f.base, `go-${busy}`), '');
+    assert.equal(keyOf((await normal).root), busy);
+    fs.writeFileSync(path.join(f.base, `go-${borrower}`), '');
     await third;
-  } finally { process.env.PATH = previousPath; f.close(); }
+  } finally {
+    for (const key of fs.readdirSync(f.base).filter(n => n.startsWith('pid-')).map(n => n.slice(4))) fs.writeFileSync(path.join(f.base, `go-${key}`), '');
+    process.env.PATH = previousPath;
+    if (previousPool === undefined) delete process.env.PAPILOT_TEX_POOL; else process.env.PAPILOT_TEX_POOL = previousPool;
+    f.close(); fs.rmSync(pool, { recursive: true, force: true });
+  }
 });
 
 test('a foreground waiter promotes recovery of a pruned preferred build and receives its progress', { skip: process.platform === 'win32' && 'uses POSIX signals', timeout: 60000 }, async () => {
@@ -185,7 +198,9 @@ echo result > build/main.pdf
     assert.notEqual(target.key, first.key, 'Recovery writes fresh immutable output');
     const competing = builder.build(other); pending.push(competing);
     await waitFor(() => pids().length === 2);
-    await waitFor(() => /T/.test(state(target.pid)));
+    // Both compile, each on its own slot.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.doesNotMatch(state(target.pid), /T/);
     const progress: number[] = [];
     const foreground = builder.build(rev, ['full'], null, { priority: 'foreground', progress: value => progress.push(value.pass) }); pending.push(foreground);
     await waitFor(() => !/T/.test(state(target.pid)));
@@ -295,6 +310,61 @@ test('the review full paper shows the round\'s changed chapters at once, then ea
     // Once the whole paper is there, it is shown right away.
     assert.deepEqual(await nextPaperPass(connect, f.root, 'p-task', 1, 0, 0), { pass: null });
   } finally { teX.restore(); f.close(); }
+});
+
+test('the full paper of a round that compiled the whole paper is that round\'s own PDF', { skip: process.platform === 'win32' && 'uses a POSIX shell script', timeout: 60000 }, async () => {
+  const { nextPaperPass, fullPaperPdf } = await import('../src/server/pdf.ts');
+  const f = paper({ 'main.tex': document('Text.\n') });
+  const bin = path.join(f.base, 'bin'), calls = path.join(f.base, 'calls'), previousPath = process.env.PATH;
+  try {
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX 3.14 (fake)"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh\necho run >> "${calls}"\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
+    process.env.PATH = `${bin}${path.delimiter}${previousPath}`;
+    const project = loadProject(f.root), rev = f.repo.rev('HEAD'), other = f.commit({ 'main.tex': document('Other.\n') });
+    // A build the round published, with its own date, as the publisher leaves it.
+    const publish = async (key: string, revision: string) => {
+      const folder = path.join(project.state, 'cache/builds', key), pdf = path.join(folder, 'src/build/main.pdf');
+      fs.mkdirSync(path.dirname(pdf), { recursive: true });
+      fs.writeFileSync(pdf, '%PDF-1.4 round');
+      fs.writeFileSync(path.join(folder, 'result.json'), JSON.stringify({ key, tree: await f.repo.treeIdAsync(revision, project.source_dir), targets: ['full'], root: path.join(folder, 'src'), cwd: path.join(folder, 'src'), pdf, seconds: 1, warnings: [] }));
+      return pdf;
+    };
+    const round = (after: string, key: string) => async () => ({ get: async () => ({ before: after, after, build: { key, targets: ['full'] } }) as any });
+    const published = await publish('d'.repeat(32), rev), whole = round(rev, 'd'.repeat(32));
+    assert.deepEqual(await nextPaperPass(whole, f.root, 'p-task', 1, 0, 0), { pass: null }, 'the complete PDF is there at once');
+    assert.equal(await fullPaperPdf(whole, f.root, 'p-task', 1, 'after'), published);
+    const baseline = await publish('b'.repeat(32), other);
+    const both = async () => ({ get: async () => ({ before: other, after: rev, builds: ['b'.repeat(32), 'd'.repeat(32)], build: { key: 'd'.repeat(32), targets: ['full'] } }) as any });
+    assert.equal(await fullPaperPdf(both, f.root, 'p-task', 3, 'before'), baseline, 'the before side adopts its dated baseline PDF too');
+    assert.ok(!fs.existsSync(calls), 'nothing compiled that version again');
+    // A published build of another version, such as an empty round's
+    // baseline, is not shown for this one.
+    const different = f.commit({ 'main.tex': document('Different.\n') });
+    const stray = round(different, 'e'.repeat(32));
+    await publish('e'.repeat(32), rev);
+    assert.notEqual(await fullPaperPdf(stray, f.root, 'p-task', 2, 'after'), published);
+    assert.equal(fs.readFileSync(calls, 'utf8').trim().split('\n').length, 1);
+  } finally { process.env.PATH = previousPath; f.close(); }
+});
+
+test('the full paper remembers only the versions and builds of a round, not its whole detail', async () => {
+  const { paperPassPdf } = await import('../src/server/pdf.ts');
+  const { setFlagsFromString } = await import('node:v8');
+  const { runInNewContext } = await import('node:vm');
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc') as () => void;
+  let units: WeakRef<object> | undefined;
+  const connect = async () => ({ get: async () => {
+    // A round's detail carries every change; only a few of its fields matter here.
+    const detail = { before: 'a'.repeat(40), after: 'b'.repeat(40), builds: ['c'.repeat(32)], build: { key: 'c'.repeat(32), targets: ['full'] }, units: Array.from({ length: 1000 }, (_, i) => ({ id: 'c' + i, old_text: 'old', new_text: 'new' })) };
+    units = new WeakRef(detail.units);
+    return detail;
+  } }) as any;
+  await assert.rejects(paperPassPdf(connect, '/unused-round-info', 'p-task', 1, 1));
+  await new Promise(resolve => setImmediate(resolve));
+  gc();
+  assert.equal(units?.deref(), undefined, 'the round\'s changes are not kept');
 });
 
 test('a delivery preview is exactly what applying the task writes, with pending changes accepted', async () => {

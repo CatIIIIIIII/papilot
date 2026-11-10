@@ -189,8 +189,8 @@ test('review builds of a chapter continue from the previous one and take other c
     const first = commit('First');
     const builder = new Builder(loadProject(f.root), f.repo), targets = ['chapters/a'];
     const seed = await builder.build(first);
-    const clean = await builder.build(first, targets, seed);
-    assert.ok(runs(path.dirname(clean.root)) >= 2, 'The first build of a chapter starts clean');
+    const initial = await builder.build(first, targets, seed);
+    assert.doesNotMatch(fs.readFileSync(path.join(path.dirname(initial.root), 'latexmk.log'), 'utf8'), /Category 'never_run'/, 'The first build of a chapter continues from its seed');
 
     fs.writeFileSync(path.join(f.root, 'chapters/a.tex'), chapterA('Second draft.'));
     const second = commit('Second');

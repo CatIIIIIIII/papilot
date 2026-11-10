@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Manuscripts, workingTree } from '../src/server/manuscript.ts';
-import { PdfDocument } from '../engine/src/render/pdf.ts';
+import { PdfDocument, containsCenter } from '../engine/src/render/pdf.ts';
+import { locateMark } from '../src/server/note-location.ts';
 import type { Annotation } from '../src/shared.ts';
 
 const latexmk = (() => {
@@ -136,6 +137,11 @@ test('AI review freezes the task copy and repositions only a surviving passage w
     fs.writeFileSync(path.join(root, 'main.tex'), changed);
     const captured = await manuscript.captureReview(root, worktree, 'review-copy');
     assert.ok(captured.pdf && fs.existsSync(captured.pdf));
+    // Another review of the same build, even after a restart, reuses its lines.
+    const restarted = new Manuscripts();
+    restarted.snapshotPdf = async () => { throw new Error('The pages were read again'); };
+    const again = await restarted.captureReview(root, worktree, 'review-copy-again');
+    assert.deepEqual([again.key, again.lines], [captured.key, captured.lines]);
     const originalPdf = fs.readFileSync(captured.pdf!);
     assert.ok(captured.lines.some(line => line.text === passage));
     assert.ok(!captured.lines.some(line => line.text.includes('New introductory')));
@@ -169,4 +175,71 @@ test('AI review reports a task copy that does not compile and keeps no PDF for i
     await assert.rejects(manuscript.captureReview(root, worktree, 'broken-copy'), /could not be compiled for AI review/);
     assert.equal(await manuscript.savedReviewPdf(root, 'broken-copy'), null);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a note on pages that a newer build replaced is still located, in the file as it is now', { skip: !latexmk && 'needs latexmk and pdflatex', timeout: 60000 }, async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-older-pages-'));
+  const root = path.join(base, 'paper'), file = path.join(root, 'main.tex');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root }).toString().trim();
+  const tex = (...body: string[]) => ['\\documentclass{article}', '\\begin{document}', ...body, '\\end{document}', ''].join('\n');
+  const manuscripts = new Manuscripts();
+  async function settled() {
+    for (let attempt = 0; attempt < 300; attempt++) {
+      const { build } = await manuscripts.state('paper', root);
+      if (build.status !== 'building') return build;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('Compilation did not finish');
+  }
+  try {
+    fs.mkdirSync(root);
+    fs.writeFileSync(file, tex('An opening paragraph.', '', 'Mark this sentence on the older pages.'));
+    git('init', '-q'); git('add', '.'); git('-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', 'Initial paper');
+    const first = await settled();
+    assert.equal(first.status, 'ready', first.error);
+    const document = new PdfDocument(manuscripts.pdf('paper', first.key!)), page = document.page(0);
+    const rects = page.search('Mark this sentence on the older pages.').map(([x0, y0, x1, y1]): Annotation['rect'] => [x0 / page.width, y0 / page.height, x1 / page.width, y1 / page.height]);
+    document.close();
+    assert.equal(rects.length, 1);
+
+    // The author is still looking at the first pages while a newer build lands.
+    fs.writeFileSync(file, tex('A new first paragraph.', '', 'Another new paragraph.', '', 'An opening paragraph.', '', 'Mark this sentence on the older pages.'));
+    const second = await settled();
+    assert.equal(second.status, 'ready', second.error);
+    assert.notEqual(second.key, first.key);
+    assert.ok(fs.existsSync(manuscripts.pdf('paper', first.key!)), 'The pages on screen stay readable');
+    assert.ok((await manuscripts.words('paper', first.key!, 0)).words.length > 0, 'Their words stay selectable');
+    const located = await manuscripts.locate('paper', first.key!, 0, rects[0], rects);
+    assert.equal(located.quote, 'Mark this sentence on the older pages.');
+    assert.equal(located.source?.file, 'main.tex');
+    assert.deepEqual(located.source?.lines, [9, 9], 'Lines name the passage in the file as it is now');
+    assert.equal(located.source?.excerpt, 'Mark this sentence on the older pages.');
+
+    // A bounded diff that times out cannot prove where the old passage moved.
+    // Keep the selected quote, but never attach its stale compiled line number.
+    const oldPdf = manuscripts.pdf('paper', first.key!), oldDocument = new PdfDocument(oldPdf);
+    let comparisons = 0;
+    try {
+      const unknown = await locateMark(oldDocument, { pdf: oldPdf, page: 0, rect: rects[0], rects, selected: '', working: root }, {
+        containsCenter,
+        opcodesWithin: () => { comparisons++; return null; },
+      });
+      assert.equal(comparisons, 1);
+      assert.equal(unknown?.quote, 'Mark this sentence on the older pages.');
+      assert.equal(unknown?.source, null, 'A timed-out diff does not identify current source lines');
+    } finally { oldDocument.close(); }
+
+    // A passage deleted since keeps its quote and names no lines.
+    fs.writeFileSync(file, tex('A new first paragraph.'));
+    const gone = await manuscripts.locate('paper', first.key!, 0, rects[0], rects);
+    assert.equal(gone.quote, 'Mark this sentence on the older pages.');
+    assert.equal(gone.source, null);
+    fs.unlinkSync(file);
+    const removed = await manuscripts.locate('paper', first.key!, 0, rects[0], rects);
+    assert.equal(removed.quote, 'Mark this sentence on the older pages.');
+    assert.equal(removed.source, null, 'A deleted source file cannot supply current coordinates');
+  } finally {
+    await manuscripts.stop();
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });

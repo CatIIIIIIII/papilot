@@ -7,7 +7,8 @@ type Api = <T>(route: string, body?: unknown) => Promise<T>;
 type Preference = { enabled: boolean; range: NoteAlternativeRange };
 type Response = { noteAlternatives: boolean; noteAlternativeRange?: unknown };
 let request: Api | null = null, version = 0, pending = 0;
-let snapshot: Preference = { enabled: browserStorage.getItem(key) !== 'off', range: noteAlternativeRange(browserStorage.getItem(rangeKey)) };
+// Alternatives are prepared only once the author turns them on.
+let snapshot: Preference = { enabled: browserStorage.getItem(key) === 'on', range: noteAlternativeRange(browserStorage.getItem(rangeKey)) };
 let writes: Promise<unknown> = Promise.resolve();
 const listeners = new Set<() => void>();
 function apply(value: Preference, keep = true) {
@@ -29,7 +30,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', event => {
     if (event.key === key || event.key === rangeKey || event.key === null) {
       version++;
-      apply({ enabled: browserStorage.getItem(key) !== 'off', range: noteAlternativeRange(browserStorage.getItem(rangeKey)) }, false);
+      apply({ enabled: browserStorage.getItem(key) === 'on', range: noteAlternativeRange(browserStorage.getItem(rangeKey)) }, false);
     }
   });
 }

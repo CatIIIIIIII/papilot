@@ -137,7 +137,7 @@ export async function acceptNoteOption(app: App, name: string, job: string) {
     if (matches.length !== 1) throw new Error('The selected source range changed. Review it before accepting.');
     return matches[0].id;
   });
-  await app.review.decide(name, { id: saved.accept.id, round: round.number, changes, action: 'accept' });
+  await app.review.decide(name, { id: saved.accept.id, round: round.number, changes, action: 'accept' }, { previewed: true });
 }
 
 /** Replace only pending source ranges. The existing source-save build and

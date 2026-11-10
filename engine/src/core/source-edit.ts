@@ -57,7 +57,7 @@ export class SourceEdits {
   }
 
   save(name: string, input: SourceEditRequest) {
-    return this.app.exclusive(() => {
+    return this.app.exclusive(async () => {
       const identity = input.id;
       if (!/^[A-Za-z0-9-]{1,80}$/.test(identity) || typeof input.text !== "string" || input.text.includes("\0") || input.text.length > 200000)
         throw new Error("Invalid source edit.");
@@ -65,7 +65,6 @@ export class SourceEdits {
       let saved = this.app.store.one<{ task: string; data: SavedEdit }>("SELECT task,data FROM source_edits WHERE id=?", identity);
       if (saved && (saved.task !== name || saved.data.request !== request)) throw new Error("This edit ID was already used for another edit.");
       if (!saved) {
-        if (this.app.publisher.busy(name)) throw new Error("Wait for the PDF build before editing source.");
         const source = this.read(name, input.round, input.change);
         if (source.revision !== input.revision) throw new Error("The source changed while you were editing. Copy your draft before resetting to the saved source.");
         const task = this.app.tasks.get(name), file = safePath(task.worktree, source.file), current = readBytes(file);
@@ -91,7 +90,10 @@ export class SourceEdits {
       }
       // The write and build have persistent identities. Retrying a lost
       // response must never apply the edit twice or start a second build.
-      this.app.publisher.submit(name, `source-${hash(identity)}`);
+      const job = this.app.publisher.submit(name, `source-${hash(identity)}`);
+      // The edit's round is inserted now even while an earlier round renders:
+      // only the changes the edit can affect wait for its comparison.
+      await this.app.publisher.insertBehind(job);
       return this.app.review.pageState(name);
     });
   }

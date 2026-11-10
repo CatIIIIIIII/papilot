@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { anchor, annotationTask, commitChanges, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStamp, gitStatus, mergeConflicts, parseStatus, parseSynctex, pdfWords, settleLines, sourceExcerpt, workingTree } from '../src/server/manuscript.ts';
+import { anchor, annotationTask, commitChanges, followLines, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStamp, gitStatus, mergeConflicts, parseStatus, parseSynctex, pdfWords, settleLines, sourceExcerpt, workingTree } from '../src/server/manuscript.ts';
+import { opcodes } from '../engine/src/core/diff.ts';
 import { readNotesInstructions } from '../src/notes.ts';
 import type { Annotation } from '../src/shared.ts';
 
@@ -47,6 +48,19 @@ test('the working tree snapshot includes uncommitted edits without touching the 
       assert.equal(status.head?.subject, 'Initial');
     }).finally(() => fs.rmSync(root, { recursive: true, force: true }));
   } catch (error) { fs.rmSync(root, { recursive: true, force: true }); throw error; }
+});
+
+test('located lines follow the passage into the file as it is now', () => {
+  const before = ['intro', 'a', 'marked one', 'marked two', 'b', 'end'];
+  const follow = (after: string[], lines: [number, number]) => followLines(opcodes(before, after), lines);
+  assert.deepEqual(follow(['new', 'lines', ...before], [3, 4]), [5, 6], 'edits above shift the passage');
+  assert.deepEqual(follow([...before.slice(0, 5), 'added', 'end'], [3, 4]), [3, 4], 'edits below leave it');
+  assert.deepEqual(follow(['intro', 'a', 'marked one', 'reworded', 'b', 'end'], [3, 4]), [3, 4], 'an edit inside keeps its lines');
+  assert.deepEqual(follow(['intro', 'a', 'marked one', 'inserted', 'marked two', 'b', 'end'], [3, 4]), [3, 5], 'an insertion inside widens it');
+  assert.deepEqual(follow(['intro', 'a', 'added', 'marked one', 'marked two', 'added', 'b', 'end'], [3, 4]), [4, 5], 'lines added just outside stay outside');
+  assert.deepEqual(follow(['intro', 'a', 'marked once', 'marked two', 'b', 'end'], [3, 3]), [3, 3], 'a line reworded in place is followed');
+  assert.equal(follow(['intro', 'a', 'b', 'end'], [3, 4]), null, 'a deleted passage has no lines');
+  assert.equal(follow(['intro', 'something else entirely', 'end'], [3, 4]), null, 'nor one rewritten with its neighbours');
 });
 
 test('SyncTeX output resolves to a normalized source path and line', () => {

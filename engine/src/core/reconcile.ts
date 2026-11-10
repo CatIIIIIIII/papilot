@@ -93,6 +93,7 @@ export class Reconciliations {
       app.store.execute("UPDATE tasks SET base=?,accepted=?,scope=? WHERE name=?", data.reviewBase, data.reviewBase, JSON.stringify(scope), name);
       app.store.execute("UPDATE reconciliations SET data=? WHERE task=?", JSON.stringify({ ...data, ready: true }), name);
     });
+    app.applied.refresh(name);
     return { ...data, ready: true };
   }
   // At start, before any other write.

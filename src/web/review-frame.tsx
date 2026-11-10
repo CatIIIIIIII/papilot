@@ -137,6 +137,17 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     .change-head .actions .unstage:hover:not(:disabled){background:var(--bg-hover)}
     .change-head .actions .unstage:disabled{opacity:.4}
     .unit-actions .unstage{color:var(--text-2)}
+    /* Each edit's own decisions in the LaTeX view use the change bar's icons. */
+    .unit-actions button:is(.accept,.reject,.comment,.unstage){display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink);font-size:0;flex:none;transition:background-color .15s}
+    .unit-actions button:is(.accept,.reject,.comment,.unstage)::before{content:"";flex:none;width:15px;height:15px;-webkit-mask:var(--icon) center/contain no-repeat;mask:var(--icon) center/contain no-repeat}
+    .unit-actions .accept{--icon:var(--icon-check)}.unit-actions .reject{--icon:var(--icon-cross)}.unit-actions .comment{--icon:var(--icon-comment)}.unit-actions .unstage{--icon:var(--icon-minus)}
+    [data-mode=changes] .unit-actions .reject{--icon:var(--icon-revert)}
+    .unit-actions .accept::before{background:var(--accept)}.unit-actions .reject::before{background:var(--reject)}.unit-actions .comment::before{background:var(--accent)}.unit-actions .unstage::before{background:var(--text-2)}
+    .unit-actions .accept:hover:not(:disabled){background:var(--green-soft)}.unit-actions .reject:hover:not(:disabled){background:var(--red-soft)}.unit-actions .comment:hover:not(:disabled){background:var(--accent-soft)}.unit-actions .unstage:hover:not(:disabled){background:var(--bg-hover)}
+    .unit-actions button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+    .unit-actions button:is(.accept,.reject,.comment,.unstage):disabled{opacity:.4}
+    :root[data-papilot-phone] .unit-actions button:is(.accept,.reject,.comment,.unstage){width:40px;height:36px}
+    :root[data-papilot-phone] .unit-actions button:is(.accept,.reject,.comment,.unstage)::before{width:18px;height:18px}
     .bar .ghost.undo{flex-shrink:0;white-space:nowrap}
     /* A single compact row: location yields space to the change's controls. */
     .change-head{flex-wrap:nowrap;align-items:center;gap:4px;padding:4px 8px;min-height:36px}

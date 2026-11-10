@@ -11,10 +11,16 @@ export interface Region {
   new: Position[];
 }
 
+/** Whether two crops of one version, on the same page, are one place. */
+export type SamePlace = (side: "old" | "new", a: Position, b: Position) => boolean;
 /** Crops sharing space on either version are one region, across all edits
  * and sections. Corresponding crops stay together even across page breaks.
- * Each region owns the exact union of its footprints on each side. */
-export function regions(cards: Card[]): Region[] {
+ * Each region owns the exact union of its footprints on each side. `same`
+ * says what sharing space means; by default, overlapping at all. */
+export function regions(
+  cards: Card[],
+  same: SamePlace = (_side, a, b) => intersects(a.clip, b.clip),
+): Region[] {
   const groups: Region[] = [];
   cards.forEach((card, i) => {
     const byGroup = new Map<number, Region>();
@@ -48,7 +54,8 @@ export function regions(cards: Card[]): Region[] {
         const a = crops[i],
           b = crops[j];
         if (a.page !== b.page || b.clip[1] >= a.clip[3]) break;
-        if (intersects(a.clip, b.clip)) parents[root(b.i)] = root(a.i);
+        if (intersects(a.clip, b.clip) && same(side, a, b))
+          parents[root(b.i)] = root(a.i);
       }
   }
   const merged = new Map<number, Region>();

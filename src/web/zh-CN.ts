@@ -696,4 +696,8 @@ export const zhCN: Record<string, string> = {
   'Short name': '简称', 'Instruction': '要求', 'A word or two for the wheel': '一两个词，显示在圆盘上', 'What the agent should do with the marked text': '希望 agent 怎样处理标出的文字',
   'Line break': '换行', 'Expand': '展开', 'Question': '疑问', 'Flag': '旗标',
   'Install Git in this environment to use version management.': '请在当前环境中安装 Git 后使用版本管理。',
+  'Preparing…': '正在准备…',
+  'Preparing the review PDF…': '正在准备审阅 PDF…',
+  'Could not prepare this task': '无法准备此任务',
+  'Send more instructions once the task has started.': '任务开始后即可继续发送指令。',
 };

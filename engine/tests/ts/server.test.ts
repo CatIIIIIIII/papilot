@@ -361,3 +361,17 @@ it("read-only reconnection does not wait for the startup lock or upgrade a runni
     expect(result).toMatchObject({ url, token: app.csrf });
   } finally { await release(); }
 });
+
+it("a running server of this version is reached without the startup lock", async () => {
+  const url = await server.listen({ host: "127.0.0.1", port: 0 });
+  app.url = url;
+  const home = serverHome(f.root);
+  writeJson(path.join(home, "connection.json"), { url, pid: process.pid });
+  // Another process holds the lock, as one connecting at the same moment does.
+  const release = await acquireLock(path.join(home, "start.lock"));
+  try {
+    const result = await Promise.race([connect(f.root), sleep(1000).then(() => "blocked")]);
+    expect(result).not.toBe("blocked");
+    expect(result).toMatchObject({ url, token: app.csrf });
+  } finally { await release(); }
+});

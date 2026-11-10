@@ -60,6 +60,13 @@ test('review proxy only exposes review routes and keeps assets on the remote ori
   assert.equal(allowedReviewRoute('/api/tasks', 'POST'), false);
   assert.equal(allowedReviewRoute('/files/p-test/1/secret.sqlite', 'GET'), false);
   assert.equal(allowedReviewRoute('/assets/../secret', 'GET'), false);
+  // The paper as decided: its state, its PDFs by build key, and which view the page shows.
+  assert.ok(allowedReviewRoute('/api/tasks/p-test/applied', 'GET'));
+  assert.ok(allowedReviewRoute('/applied/p-test/0123456789abcdef0123456789abcdef.pdf', 'GET'));
+  assert.equal(allowedReviewRoute('/applied/p-test/secret.sqlite', 'GET'), false);
+  assert.ok(allowedReviewRoute('/api/tasks/p-test/look', 'POST'));
+  assert.equal(allowedReviewRoute('/api/tasks/p-test/look', 'GET'), false);
+  assert.equal(rewriteReviewJson({ pdf: '/applied/p-test/0123456789abcdef0123456789abcdef.pdf' }, '/review/project').pdf, '/review/project/applied/p-test/0123456789abcdef0123456789abcdef.pdf');
   const value = rewriteReviewJson({ files: '/files/p-test/1/', url: 'http://127.0.0.1:1234/?task=p-test', body: 'Keep my text' }, '/review/project');
   assert.equal(value.files, '/review/project/files/p-test/1/');
   assert.equal(value.url, '/review/project/?task=p-test');

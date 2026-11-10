@@ -74,6 +74,11 @@ export class ReviewDraft {
   edit(id: string, comment: string) {
     if (!this.value.busy) this.update({ notes: this.value.notes.map(note => note.id === id ? { ...note, comment } : note) });
   }
+  /** Says where a note's marked text is in the source, once that is known. */
+  place(id: string, where: string) {
+    if (this.value.notes.some(note => note.id === id && note.where !== where))
+      this.update({ notes: this.value.notes.map(note => note.id === id ? { ...note, where } : note) });
+  }
   focus(id: string) { this.update({ editing: { id, sequence: ++this.sequence } }); }
   reveal(note: ReviewNote) { this.update({ reveal: { note, sequence: ++this.sequence } }); }
   clearReveal() { if (this.value.reveal) this.update({ reveal: undefined }); }

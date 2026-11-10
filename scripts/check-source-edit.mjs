@@ -23,7 +23,10 @@ const errors = []; page.on('pageerror', error => errors.push(error.message));
 const edit = () => page.locator('.source-editor').getByRole('button', { name: '编辑', exact: true });
 const field = () => page.getByRole('textbox', { name: '编辑 LaTeX 源码' });
 const save = () => page.getByRole('button', { name: '保存并更新 PDF', exact: true });
-const waitRound = number => expect.poll(() => app.review.latestRound(task.name)?.number, { timeout: 90000 }).toBe(number);
+const waitRound = async number => {
+  await expect.poll(() => app.review.latestRound(task.name)?.number, { timeout: 90000 }).toBe(number);
+  await expect.poll(() => app.review.latestRound(task.name)?.visuals, { timeout: 90000 }).toBe('ready');
+};
 const open = async () => {
   const source = page.locator('.source');
   if (!await source.isVisible()) await page.getByRole('button', { name: 'LaTeX', exact: true }).click();
@@ -77,7 +80,7 @@ Literal symbols: \% and \$; \verb|% $ { }|.
   await field().fill('A precise manual correction.');
   await field().press('Control+Enter');
   await waitRound(2);
-  await expect(page.locator('.source-code')).toContainText('A precise manual correction.', { timeout: 15000 });
+  await expect(page.locator('.source-code')).toContainText('A precise manual correction', { timeout: 15000 });
   assert.match(f.read(METHOD, task.worktree), /A precise manual correction\.\n/);
   assert.match(f.read(METHOD), /Original sentence/);
   assert.equal(app.review.pageState(task.name).decisions.c001, 'pending');
@@ -92,9 +95,14 @@ Literal symbols: \% and \$; \verb|% $ { }|.
   await page.getByRole('button', { name: '恢复已保存的源码' }).click();
   await expect(field()).toHaveValue('External edit.\n');
 
-  // Compilation failure keeps saved text editable and leaves the prior PDF.
+  // Compilation failure inserts a failed round and keeps its source editable.
   await field().fill('\\unknownSourceEditCommand'); await save().click();
   await expect.poll(() => app.publisher.current(task.name)?.status, { timeout: 90000 }).toBe('failed');
+  assert.equal(app.review.latestRound(task.name)?.number, 3);
+  assert.equal(app.review.latestRound(task.name)?.visuals, 'failed');
+  // The publisher can fail before the browser has loaded its new round.
+  // Wait for that round's source before opening its editor.
+  await expect(page.locator('.source-code')).toContainText('\\unknownSourceEditCommand', { timeout: 15000 });
   await expect(edit()).toBeEnabled({ timeout: 15000 }); await edit().click();
   await expect(field()).toHaveValue('\\unknownSourceEditCommand\n');
   await field().fill('Repaired by hand.');
@@ -102,12 +110,12 @@ Literal symbols: \% and \$; \verb|% $ { }|.
   await page.screenshot({ path: 'test-results/source-edit-mobile.png' });
   const fits = await field().evaluate(element => element.getBoundingClientRect().right <= window.innerWidth);
   assert.equal(fits, true);
-  await save().click(); await waitRound(3);
-  await expect(page.locator('.source-code')).toContainText('Repaired by hand.', { timeout: 15000 });
+  await save().click(); await waitRound(4);
+  await expect(page.locator('.source-code')).toContainText('Repaired by hand', { timeout: 15000 });
 
   // Reverting the last proposal produces an empty current review.
   await edit().click(); await field().fill('Original sentence.'); await save().click();
-  await waitRound(4);
+  await waitRound(5);
   await expect(page.locator('.change')).toHaveCount(0, { timeout: 15000 });
   assert.deepEqual(app.review.pageState(task.name).decisions, {});
   assert.equal(f.read(METHOD, task.worktree), f.read(METHOD));

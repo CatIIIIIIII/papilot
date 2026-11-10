@@ -424,6 +424,11 @@
     "textHash": "edad9907fdbffd4aa507ebb8298e6049caff49807b6143e5043d20fb11e73458",
     "model": "gemini-4-argon-medium"
   },
+  "Mark text on a page first.": {
+    "revision": "0ea7663bc34f67b1c48917a29182d2bcd304a47507bc0c17e605b591e8db3f51",
+    "textHash": "e097bf4a8f5932336091356ab21354f0f42f81e2a8428118a19f88c35fd53753",
+    "model": "gemini-4-argon-medium"
+  },
   "Missing update restart job.": {
     "revision": "b85c35da7e2a0356fd16708193f8f5c9eaf44403635a8c4badbb6b1558abf7c5",
     "textHash": "672b115deb7c725045275e56c47c449be7c3e133132a0115f8d00d300155b580",
@@ -499,9 +504,9 @@
     "textHash": "12c07830dd2aad7b7a82bcac0302194c143c70b81405e0804644cb6dba59f047",
     "model": "gemini-4-argon-medium"
   },
-  "Pause the task before accepting, rejecting, or undoing changes. Wait for any PDF build to finish.": {
-    "revision": "46e381e4cbbc8d6265adb23065c0654ee517e8fd1a3a7473de246d53344c62d1",
-    "textHash": "830f035dca4c5ba1ff78e2e011f482e0dcec962df8f30a2fc7d0a23cc47ec74d",
+  "Pause the task before accepting, rejecting, or undoing changes.": {
+    "revision": "2fc38707540f4bb4b4cdfaa7b2113694f66362952e52ea15f76c7e7017af19f5",
+    "textHash": "80c9868b556dbc469ebce6138c23242e6364e37d4817d3b43acc999aeba78d05",
     "model": "gemini-4-argon-medium"
   },
   "Pause this paper’s active tasks and wait for current work to finish before changing its path or removing it. Resolve any uncertain action first.": {
@@ -522,6 +527,11 @@
   "Retry deletion to confirm this task was removed.": {
     "revision": "ebaa8c6cc6d16ffa34bbdd835766d7d2326a80398273cded0c7d75b08cc782b0",
     "textHash": "1ea227f645490a490231fc521a67ecb80940aef11763f96f80b872e92f3ca15f",
+    "model": "gemini-4-argon-medium"
+  },
+  "Retry preparing this task before sending more instructions.": {
+    "revision": "4f05482ba98fec6028be8fd67671e2def0aa99e4c64fb62a1f8b438f6abc8d03",
+    "textHash": "78ec08c2b81debe47138b99324bbfbc1910644a3711c0f516d92288c1ca88d76",
     "model": "gemini-4-argon-medium"
   },
   "Retry the pending delivery before sending more instructions.": {
@@ -672,6 +682,11 @@
   "The ZIP expands beyond 64 MB or 5,000 files.": {
     "revision": "b95a9147397ac1370c8a8630b8421a5406e9c1520ccdd80ae3daa9adac907e8f",
     "textHash": "e62eaa6958d47ef439a564add0aa05897ad1e969ba8b14968d5fa3169ae7f942",
+    "model": "gemini-4-argon-medium"
+  },
+  "The agent is editing this task's files. Pause the task before rejecting or editing changes.": {
+    "revision": "b674c01825fd46eeadfab0c49779a1aaf10105de72250193f107d5088aea1c22",
+    "textHash": "a97adf5ea99315055cfd3c5065a0814d9db12da4c1bacdf965bbb2db1e35b423",
     "model": "gemini-4-argon-medium"
   },
   "The dev build needs at least 2 GB of free disk space. Free some space and retry.": {
@@ -834,14 +849,14 @@
     "textHash": "f5dbf2ab0d9b6520f2a5b07a4b8f7eaf7e4dbc8c5a53c921b0739e442581ff1c",
     "model": "gemini-4-argon-medium"
   },
+  "This PDF is no longer available.": {
+    "revision": "3b22c38c652cb71af109958e4d48a2430236d6c9dd3c01226c2f72430960d85c",
+    "textHash": "26d403a8df71be4eb7af16a4b14f71327283b60f5571f1e7798f1cd233293bad",
+    "model": "gemini-4-argon-medium"
+  },
   "This agent does not report usage.": {
     "revision": "40926cf69836728945471609b7bfeec47dd9a86273b72074eee9232eb7978d82",
     "textHash": "5724be04c3d46d8f5aa364aae0727374eebd79ce1818d725ba036106ea30399d",
-    "model": "gemini-4-argon-medium"
-  },
-  "This attachment is already being sent to another task.": {
-    "revision": "01424e715cd2606a9cc985e22e9494276080488d41b93040347cfbee0262afa5",
-    "textHash": "07d907ed537268f4122cbdcf2b9ec9c4365813452ef2e8d5033dfdfa5883cf10",
     "model": "gemini-4-argon-medium"
   },
   "This attachment is not available for this task.": {
@@ -994,9 +1009,9 @@
     "textHash": "01116c6dfd6f8eadf51b890371696a13fc83bcf1f4cec328955a080e80fef503",
     "model": "gemini-4-argon-medium"
   },
-  "This task is being created. Refresh in a moment.": {
-    "revision": "6593e7364f6e54835652e87027788556f2d5cf0191db1f362af78500f3f10287",
-    "textHash": "43813ee96af8e009a8ff5cc7efb9eea7f9ab83375e25ee033b97fe8a3ac52ec1",
+  "This task has not started yet.": {
+    "revision": "354b4885c779513923d2d1220a25938cfdd4b6ea2730165955845a3bc8eda2b8",
+    "textHash": "ca00971a6ecdf1ab3cc2f95f29dd1de679f486ffa3f85b8e1723b134cb2d7041",
     "model": "gemini-4-argon-medium"
   },
   "This task is being deleted.": {
@@ -1024,6 +1039,11 @@
     "textHash": "6e2c863fae43f44fe97513fafe2206c60015be250b6c2eb1f562765425e17136",
     "model": "gemini-4-argon-medium"
   },
+  "This task is still being prepared. Send more instructions once it starts.": {
+    "revision": "98eb8984e649a10536088db520f2365207350b1ae7bbe639401397849286c07a",
+    "textHash": "3f31f856d9a9767a076a7ffdc4c38e75b6e763da5e6d8801a36f81d39d138ea6",
+    "model": "gemini-4-argon-medium"
+  },
   "This task was deleted. Create a new task instead.": {
     "revision": "374b25e4e969ef85c7f48b415c3cad49e3cd3c74d391a1f9f21643c62ed0b572",
     "textHash": "f28d159e025783811c2f2ceccda0846e2284686b748c2b64a0b5dd1bbb1a057e",
@@ -1032,6 +1052,11 @@
   "Unknown Git action.": {
     "revision": "e3151523cb290acda6f05a77fed31d612961550ffa0c0a946d464578480fbaa9",
     "textHash": "58dcbe49d32de97c69feb85f174898709201f9f8b9ee315aaf2ded9e98a06fce",
+    "model": "gemini-4-argon-medium"
+  },
+  "Unknown PDF.": {
+    "revision": "8b3e99bd4d333c7f26de742111d5b6e4bd6ab30daeb05291a3b40b5d0357b458",
+    "textHash": "aae1c89e75c6cc9b5a0e74286522855687ce3a4347ca00a19cc3526026da5200",
     "model": "gemini-4-argon-medium"
   },
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": {

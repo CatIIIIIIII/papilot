@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Repo, within } from "./git.ts";
 import { groups, opcodes } from "./diff.ts";
 import { entrySpans } from "./bib.ts";
@@ -181,6 +182,49 @@ function edits(units: Unit[], old: string, next: string, index: 1 | 3): Op[] {
         ]),
     )
     .sort((a, b) => b[index] - a[index]);
+}
+const sha = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
+// The text from the start of the line before `start` to the end of the line
+// after the one that holds `end`.
+function surroundings(text: string, start: number, end: number): [string, string] {
+  const lineStart = (at: number) => text.lastIndexOf("\n", at - 1) + 1,
+    lineEnd = (at: number) => {
+      const found = text.indexOf("\n", at);
+      return found < 0 ? text.length : found + 1;
+    },
+    first = lineStart(start);
+  return [
+    text.slice(first > 0 ? lineStart(first - 1) : 0, start),
+    text.slice(end, lineEnd(lineEnd(end))),
+  ];
+}
+/** A version hash of a change: its file and its complete old and new content,
+ *  binary content included, with the lines around it. The same proposal hashes
+ *  the same in another round even when other changes shift its offsets or its
+ *  numbering; two identical edits on identical lines hash alike, and callers
+ *  treat such a hash as ambiguous. */
+export function versionHash(unit: Unit, old: Buffer | null, next: Buffer | null) {
+  const whole = unit.kind === "binary" || unit.whole_file,
+    a = whole ? null : textOf(old),
+    b = whole ? null : textOf(next);
+  if (a === null || b === null)
+    return sha(JSON.stringify([1, unit.file, unit.status, unit.kind, old && sha(old), next && sha(next)]));
+  let i: number, j: number, x: number, y: number;
+  if (unit.text_ops?.length)
+    [i, j, x, y] = [unit.text_ops[0][1], unit.text_ops.at(-1)![2], unit.text_ops[0][3], unit.text_ops.at(-1)![4]];
+  else {
+    const offset = (text: string, line: number) => splitLines(text).slice(0, line).join("").length;
+    [i, j, x, y] = [offset(a, unit.ops[0][1]), offset(a, unit.ops.at(-1)![2]), offset(b, unit.ops[0][3]), offset(b, unit.ops.at(-1)![4])];
+  }
+  const [p, s] = surroundings(a, i, j), [q, t] = surroundings(b, x, y);
+  return sha(JSON.stringify([1, unit.file, unit.status, unit.kind, p, a.slice(i, j), s, q, b.slice(x, y), t]));
+}
+/** The units with their version hashes, for the round from `before` to
+ *  `after`. Units derived from another round's are hashed again. */
+export async function withHashesAsync(repo: Repo, before: string, after: string, units: Unit[]) {
+  const files = [...new Set(units.map((u) => u.file))],
+    [old, next] = await Promise.all([repo.blobsAsync(before, files), repo.blobsAsync(after, files)]);
+  return units.map((u) => ({ ...u, hash: versionHash(u, old[u.file] ?? null, next[u.file] ?? null) }));
 }
 export function applyUnits(
   old: Buffer | null,

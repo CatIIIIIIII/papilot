@@ -1,6 +1,6 @@
 import type { GroupInstructions, NoteGroup } from './note-groups.ts';
 import type { SkillIcon } from './skill-icons.ts';
-export type TaskStatus = 'idle' | 'queued' | 'running' | 'waiting_input' | 'building' | 'reviewing' | 'interrupted' | 'failed' | 'uncertain' | 'deleting';
+export type TaskStatus = 'preparing' | 'idle' | 'queued' | 'running' | 'waiting_input' | 'building' | 'reviewing' | 'interrupted' | 'failed' | 'uncertain' | 'deleting';
 export interface Project { id: string; name: string; path: string; createdAt: number }
 export const MAX_ATTACHMENTS = 10;
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
@@ -21,9 +21,17 @@ export interface UpdateStatus {
 // ones that ask for a revision. files are the manuscript files this task's
 // accepted changes touched since its last commit, relative to the repository root.
 export interface ReviewJob { id?: string; phase: string; status: string; error?: string; details?: string[]; createdAt?: number; options?: { completed: number; total: number }; progress?: Partial<Record<'baseline' | 'revised', Omit<BuildProgress, 'startedAt'>>> }
-export interface ReviewSummary { state: string; round: number | null; counts: Record<string, number>; unsent?: number; comments?: number; files?: string[]; next?: string; job?: ReviewJob | null }
+export interface ReviewSummary { ready?: number; state: string; round: number | null; counts: Record<string, number>; unsent?: number; comments?: number; files?: string[]; next?: string; job?: ReviewJob | null }
 export interface PendingBuild { requestId: string; job?: string; runs: string[]; sendBack: boolean; restarts: number }
-export interface PendingReview { route: string; body: Record<string, unknown>; previousStatus: TaskStatus }
+// previousStatus and previousError are where Check status returns the task
+// once the engine confirms the action.
+export interface PendingReview { route: string; body: Record<string, unknown>; previousStatus: TaskStatus; previousError?: string | null }
+// A task is saved with its first message queued before its manuscript copy
+// exists, and prepared in the background: the review engine checks out the
+// copy, and an AI review also compiles its PDF. A failed preparation keeps
+// this record for Retry. submitted is saved before the engine is asked, so a
+// task it never saw is deleted without it.
+export interface TaskPreparation { submitted?: boolean }
 export interface TaskCommitReview { token: string; files: string[]; diff: string }
 export interface TaskReconciliation {
   id: string; round: number; files: string[];
@@ -53,6 +61,8 @@ export interface Task {
   pendingReview?: PendingReview | null;
   // Persist before submission so reconnects resume the same build and run links.
   pendingBuild?: PendingBuild | null;
+  // Present until the task's manuscript copy exists (see TaskPreparation).
+  preparation?: TaskPreparation | null;
   // The task's last commit from its review, and the accepted text it included.
   committed?: { hash: string; accepted: string; at: number; pushed?: boolean } | null;
 }

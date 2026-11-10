@@ -226,6 +226,11 @@ await page.route('**/api/**', async route => {
     if (!snapshot.tasks.some(t => t.id === createResult.id)) snapshot.tasks.push(createResult);
     return json(createResult);
   }
+  if (url.pathname.endsWith('/prepare')) {
+    const pending = snapshot.tasks.find(t => t.id === url.pathname.split('/')[3]);
+    pending.status = 'preparing'; pending.error = null;
+    return json(pending);
+  }
   throw new Error(`Unexpected fixture request: ${url.pathname}`);
 });
 await page.route('**/review/**', route => reviewFailure ? route.fulfill({ status: 503, json: { error: 'Review server unavailable.' } }) : reviewStarting ? route.fulfill({ contentType: 'text/html', body: '<html><head></head><body><div id="root"></div></body></html>' }) : route.fulfill({ contentType: 'text/html', body: '<html lang="en"><head></head><body><div class="bar">Review round 1</div><main id="paper"><h2>Introduction</h2><p>PDF review fixture</p></main></body></html>' }));
@@ -787,14 +792,14 @@ try {
   const originalPdfWidth = await page.locator('.pdf-container').evaluate(box => box.clientWidth);
   await manuscriptDivider.focus(); await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(width => Math.round(document.querySelector('.manuscript-side').getBoundingClientRect().width) === width, originalSideWidth + 24);
-  await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page').getBoundingClientRect().width - (width - 24)) < 2, originalPdfWidth);
+  await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page')?.getBoundingClientRect().width - (width - 24)) < 2, originalPdfWidth);
   await selectOption(page.getByRole('combobox', { name: 'Zoom', exact: true }), '1');
   const manuscriptHandle = await manuscriptDivider.boundingBox();
   await page.mouse.move(manuscriptHandle.x + 4, manuscriptHandle.y + 300); await page.mouse.down();
   await page.mouse.move(manuscriptHandle.x - 116, manuscriptHandle.y + 300, { steps: 5 }); await page.mouse.up();
   const widenedSide = Math.round((await manuscriptSide.boundingBox()).width);
   assert.equal(widenedSide, originalSideWidth + 144);
-  await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page').getBoundingClientRect().width - (width - 144)) < 2, originalPdfWidth);
+  await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page')?.getBoundingClientRect().width - (width - 144)) < 2, originalPdfWidth);
   assert.equal(await page.evaluate(() => localStorage.getItem('papilot:pdf-zoom')), 'page-width');
   assert.equal(await page.evaluate(() => localStorage.getItem('papilot:manuscript-width')), String(widenedSide));
   await page.reload(); await manuscriptDivider.waitFor();
@@ -811,7 +816,7 @@ try {
   await manuscriptDivider.dblclick();
   assert.equal(Math.round((await manuscriptSide.boundingBox()).width), originalSideWidth);
   assert.equal(await page.evaluate(() => localStorage.getItem('papilot:manuscript-width')), null);
-  await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page').getBoundingClientRect().width - width) < 2, originalPdfWidth);
+  await page.waitForFunction(width => Math.abs(document.querySelector('.pdfViewer .page')?.getBoundingClientRect().width - width) < 2, originalPdfWidth);
   await page.locator('.textLayer span').filter({ hasText: /^Fixture ?$/ }).first().waitFor();
   console.log('PASS: Manuscript panel resizes with pointer and keyboard, persists, clamps on narrow screens and resets');
   // A wide window can still contain a narrow PDF pane. Every control stays inside it.
@@ -821,7 +826,7 @@ try {
   for (const paneWidth of [360, 384, 408]) {
     await expect.poll(() => narrowPdfToolbar.evaluate(el => Math.round(el.clientWidth))).toBe(paneWidth);
     assert.equal(await narrowPdfToolbar.evaluate(el => el.scrollWidth <= el.clientWidth), true);
-    const toolbarBox = await narrowPdfToolbar.boundingBox(), notesBox = await narrowPdfToolbar.getByRole('button', { name: 'My notes', exact: true }).boundingBox();
+    const toolbarBox = await narrowPdfToolbar.boundingBox(), notesBox = await narrowPdfToolbar.getByRole('button', { name: /^My notes(?: · .+)?$/ }).boundingBox();
     assert.ok(notesBox.x >= toolbarBox.x && notesBox.x + notesBox.width <= toolbarBox.x + toolbarBox.width);
     await page.keyboard.press('ArrowRight');
   }
@@ -1053,7 +1058,7 @@ try {
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', { name: 'Note 1: Only these words, please.', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.getByRole('region', { name: 'PDF notes' })).toContainText('Only these words, please.');
   await page.getByRole('button', { name: 'Show note 1 on the page', exact: true }).click();
   await expect(notesPanel).toBeVisible();
@@ -1758,7 +1763,7 @@ try {
   const stateCaptured = new Promise(resolve => { stateStarted = resolve; });
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await stateCaptured;
-  createResult = { ...secondTask, id: 'fixture-task-0003', title: 'A newly created task' };
+  createResult = { ...secondTask, id: 'fixture-task-0003', title: 'A newly created task', status: 'preparing', preparation: {}, review: null, worktree: '' };
   await page.locator('.manuscript-link').click();
   await page.getByRole('tab', { name: 'New task', exact: true }).click();
   await prompt.fill(createResult.title + '\nKeep the manuscript open.');
@@ -1767,8 +1772,13 @@ try {
   releaseState();
   assert.equal(await page.locator('.task-link.active').count(), 0);
   assert.equal(await prompt.isVisible(), true);
+  await expect(page.locator(`[data-task="${createResult.id}"] .status`)).toHaveText('Preparing…');
+  // Retry, failure and phone layouts are covered by check-task-preparation.
+  createResult.status = 'reviewing'; createResult.preparation = null;
+  createResult.review = secondTask.review; createResult.worktree = secondTask.worktree;
   createResult = task;
   await page.getByRole('button', { name: /^Clarify the introduction/ }).click();
+  await selectWorkspaceView('Split');
   console.log('PASS: A stale pre-creation snapshot cannot erase the new task or navigate away from the manuscript');
 
   await page.frameLocator('.review-frame').locator('#paper').waitFor({ state: 'visible' });

@@ -1,15 +1,18 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
 import type { TaskApplyState } from './task-apply-state.ts';
 import './task-commit.css';
 
-export function TaskApply({ draft, merging, keepCurrent, disabled, branch, canCommit, pending, preferred, apply, commit, generate }: {
+export function TaskApply({ draft, merging, keepCurrent, disabled, branch, canCommit, pending, preferred, apply, commit, generate, shown }: {
   draft: TaskApplyState; merging: boolean; keepCurrent?: boolean; disabled: boolean; branch: string | null;
   canCommit: boolean; pending?: 'workspace' | 'commit'; preferred?: 'workspace' | 'commit';
   apply: () => Promise<unknown>; commit: (message: string, confirmation?: string) => Promise<unknown>; generate: () => Promise<string>;
+  /** Called once when this step appears, to prepare what saving will need. */
+  shown?: () => void;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot), busy = disabled || state.busy;
+  useEffect(() => { shown?.(); }, []);
   const applyFirst = preferred === 'workspace' || !canCommit;
   return <div className="task-commit task-apply" aria-label={t('Save accepted changes')}>
     {(state.commitReview || keepCurrent) && <p className="task-commit-hint">{state.commitReview ? t('This passage includes earlier edits that have not been committed. You can commit the reviewed result together, or apply it without committing.') : t('Keep the latest wording in overlapping passages and save the other accepted changes.')}</p>}

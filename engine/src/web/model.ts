@@ -4,6 +4,8 @@ export interface Stop {
   key: string;
   units: string[];
   section: number | null;
+  /** Its PDF comparison is still rendering: it cannot be decided yet. */
+  waiting?: boolean;
 }
 export function buildStops(
   detail: Pick<RoundDetail, "sections" | "loose">,
@@ -12,7 +14,7 @@ export function buildStops(
     ...detail.sections.flatMap((section, s) =>
       section.blocks.flatMap((b, i) =>
         b.kind === "change"
-          ? [{ key: `s${s}b${i}`, units: b.units, section: s }]
+          ? [{ key: `s${s}b${i}`, units: b.units, section: s, ...(b.waiting ? { waiting: true } : {}) }]
           : [],
       ),
     ),
@@ -20,6 +22,7 @@ export function buildStops(
       key: `l${l}`,
       units: b.units,
       section: null,
+      ...(b.waiting ? { waiting: true } : {}),
     })),
   ];
 }
@@ -27,17 +30,23 @@ export const pendingUnits = (
   stop: Stop | undefined,
   decisions: Record<string, Decision>,
 ) => (stop?.units ?? []).filter((id) => decisions[id] === "pending");
+// The next undecided change after `current`, preferring one whose PDF
+// comparison is ready over one still rendering.
 export function nextPending(
   stops: Stop[],
   decisions: Record<string, Decision>,
   current = -1,
   focused?: readonly string[],
 ) {
+  let waiting = -1;
   for (let step = 1; step <= stops.length; step++) {
     const index = ((current < 0 ? -1 : current) + step) % stops.length;
-    if (pendingUnits(stops[index], decisions).some(id => !focused || focused.includes(id))) return index;
+    if (pendingUnits(stops[index], decisions).some(id => !focused || focused.includes(id))) {
+      if (!stops[index].waiting) return index;
+      if (waiting < 0) waiting = index;
+    }
   }
-  return -1;
+  return waiting;
 }
 // The host drafts comments from these exact units, not the merged PDF block.
 export function commentScope(units: (Unit & Partial<VisualUnit>)[]) {
@@ -169,6 +178,30 @@ export function describeLocation(
       .join("; ") +
     (pages.length ? ` · ${say("p. {pages}", { pages: pages.join(", ") })}` : "")
   );
+}
+/** The location as a change's bar shows it: each file's name, without its
+ *  folders, and the span of its edited lines. describeLocation's full paths,
+ *  every line and the pages are what hovering shows and tools quote. */
+export function shortLocation(
+  units: (Unit & Partial<VisualUnit>)[],
+  say: Say = english,
+) {
+  const files = new Map<string, number[] | string>();
+  for (const unit of units) {
+    const seen = files.get(unit.file);
+    if (typeof seen === "string") continue;
+    if (unit.status === "added" || unit.status === "deleted")
+      files.set(unit.file, say(unit.status === "added" ? "new file" : "deleted"));
+    else files.set(unit.file, [...(seen ?? []), unit.new_start, unit.new_end]);
+  }
+  return [...files]
+    .map(([file, lines]) => {
+      const name = file.slice(file.lastIndexOf("/") + 1);
+      if (typeof lines === "string") return `${name}:${lines}`;
+      const from = Math.min(...lines), to = Math.max(...lines);
+      return `${name}:${from === to ? from : `${from}–${to}`}`;
+    })
+    .join("; ");
 }
 export function copyReference(
   title: string,
