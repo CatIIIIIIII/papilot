@@ -52,6 +52,7 @@ import {
   STATE,
   buildStops,
   copyReference,
+  changeKinds,
   describeLocation,
   shortLocation,
   nextPending,
@@ -570,15 +571,18 @@ export function ReviewApp({
         setOnline(true);
         setError("");
         setSettling(false);
+        const unavailable = (value: PageState) => value.state === "building" || value.state === "build_failed" || Boolean(value.rendering);
+        // A new source round can precede its PDF, or retain a failed build.
+        // Clear only the previous build's success message, not action feedback.
+        if (unavailable(next)) setToast(message => message === t("Changes are ready") ? "" : message);
         const target = pinned || next.latest;
-        if (
+        const changed = Boolean(
           target &&
           (target !== previous.detail?.round ||
             (next.revision && next.revision !== previous.detail?.after) ||
             // The round's own comparison arrived, or failed.
-            (next.round === previous.detail?.round && (next.rendering ?? null) !== (previous.detail?.rendering ?? null))) &&
-          !snapshot.current.composer && !paper.current?.querySelector('.source-editor[data-dirty="true"]')
-        ) {
+            (next.round === previous.detail?.round && (next.rendering ?? null) !== (previous.detail?.rendering ?? null))));
+        if (changed && !snapshot.current.composer && !paper.current?.querySelector('.source-editor[data-dirty="true"]')) {
           const [loadedState, loaded] = await Promise.all([
             api<PageState>(stateRoute(target)),
             api<RoundDetail>(`/rounds/${target}`),
@@ -641,9 +645,18 @@ export function ReviewApp({
               const shown = paper.current?.querySelector<HTMLElement>(`[data-stop="${index}"]`);
               if (shown) reveal(shown);
             });
-          else if (previous.detail)
+          if (previous.detail && !loaded.rendering && !unavailable(loadedState) && (!same || previous.detail.rendering))
             setToast(t("Changes are ready"));
-        } else setState(next);
+        } else {
+          setState(next);
+          // The PDF and job status are read separately. If the PDF arrived
+          // first, announce it when the publication's status catches up. A
+          // newer version held back by an open composer or unsaved source is
+          // not shown yet, so it is not ready.
+          if (!changed && previous.detail && !previous.detail.rendering && !unavailable(next) &&
+              (previous.state?.state === "building" || previous.state?.state === "build_failed"))
+            setToast(t("Changes are ready"));
+        }
       } catch (e) {
         if (!cancelled) {
           setOnline(false);
@@ -1183,15 +1196,7 @@ export function ReviewApp({
         ? t("Bibliography")
         : block.reflow
         ? t("Reflow")
-        : [
-            ...new Set([
-              ...known
-                .filter((u) => !(u.effects && u.visual === "unmapped"))
-                .map((u) => u.visual ?? "unmapped"),
-            ]),
-          ]
-            // Where text moved, its marks show it; a label only puzzled.
-            .filter((kind) => kind !== "text" && kind !== "position")
+        : changeKinds(known)
             .map((kind) => t(KIND[kind]))
             .join(", ");
     const images = (items: Strip[], side: "before" | "after") => (

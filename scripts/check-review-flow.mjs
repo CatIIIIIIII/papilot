@@ -25,7 +25,7 @@ const actions = [], writes = [], messageRequests = [], commitRequests = [], appl
 let gitFiles = [];
 let pushError, conflictOnApply = false, combinedOnCommit = false;
 let timeline = [];
-const state = round => ({ task: 'flow', title: task.title, csrf: 'fixture', closed: false, state: task.review.state, latest, history: Object.keys(rounds).map(number => ({ number: Number(number), created: 1793322000 + Number(number) * 120 })), round, revision: `after-${round}`, decisions: rounds[round], comments: {}, undo, job: null });
+const state = round => ({ task: 'flow', title: task.title, csrf: 'fixture', closed: false, state: task.review.state, latest, history: Object.keys(rounds).map(number => ({ number: Number(number), created: 1793322000 + Number(number) * 120 })), round, revision: `after-${round}`, decisions: rounds[round], comments: {}, undo, job: task.review.job || null });
 function update() {
   const values = Object.values(rounds[latest]);
   task.review.counts = Object.fromEntries(['pending', 'accepted', 'rejected', 'commented'].map(value => [value, values.filter(v => v === value).length]));
@@ -372,6 +372,44 @@ try {
     await expect(viewer().getByRole('progressbar')).toBeInViewport();
     await expect.poll(() => viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position)).not.toBe('fixed');
   }
+  // An engine-side build without a host spinner must keep its own progress.
+  task.review.state = 'building'; task.review.job = { id: 'engine-build', status: 'running', phase: 'build' };
+  await sync();
+  await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'false');
+  await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCSS('clip-path', 'none');
+  delete task.review.job; update(); await sync();
+  // Rebuilding an existing comparison keeps the toolbar's height. In
+  // particular, the phase label must not wrap below the batch buttons.
+  for (const language of ['en', 'zh-CN']) {
+    await page.evaluate(language => localStorage.setItem('papilot:language', language), language);
+    await page.reload();
+    await viewer().locator('.bar .accept-all').waitFor();
+    for (const width of [1440, 1100, 900]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const bar = viewer().locator('.bar');
+      await expect(bar.locator('.status[data-state="building"]')).toHaveCount(0);
+      await bar.evaluate(el => el.ownerDocument.fonts.ready);
+      // Platform fonts can wrap the ready toolbar at narrow desktop widths.
+      // Compilation must preserve that layout, whatever its initial height.
+      const height = await bar.evaluate(el => el.offsetHeight);
+      task.status = 'building'; task.review.state = 'building';
+      task.review.job = { id: 'toolbar-build', status: 'running', phase: 'build' };
+      await sync();
+      await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'true');
+      await expect(bar.locator('.status[data-state="building"]')).toHaveCSS('clip-path', 'inset(50%)');
+      // These comparisons are already usable while the next round builds.
+      await expect(bar.locator('.accept-all')).toBeEnabled();
+      await expect(bar.locator('.reject-all')).toBeEnabled();
+      assert.equal(await bar.evaluate(el => el.offsetHeight), height, `compilation preserves the ${language} toolbar at ${width}px`);
+      if (language === 'zh-CN' && width === 1100) await page.screenshot({ path: 'test-results/review-building-zh.png' });
+      task.status = 'reviewing'; delete task.review.job; update(); await sync();
+      await expect(bar.locator('.accept-all')).toBeEnabled();
+      await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'false');
+    }
+  }
+  await page.evaluate(() => localStorage.setItem('papilot:language', 'en'));
+  await page.reload();
+  await viewer().locator('.change.current').waitFor();
   // The shared reader switches to phone controls at 680px. The toolbar can
   // take a second row, preserving progress, navigation and tools.
   for (const width of [680, 640, 390, 320]) {
@@ -385,6 +423,16 @@ try {
     await expect(page.locator('.review-tools .review-rebuild')).toBeInViewport();
     await expect.poll(() => viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position)).toBe('fixed');
     assert.equal(await viewer().locator('#paper').evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
+    await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCount(0);
+    const height = await viewer().locator('.bar').evaluate(el => el.offsetHeight);
+    task.status = 'building'; task.review.state = 'building'; task.review.job = { id: 'phone-build', status: 'running', phase: 'build' };
+    await sync();
+    await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'true');
+    await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCSS('clip-path', 'inset(50%)');
+    assert.equal(await viewer().locator('.bar').evaluate(el => el.offsetHeight), height, 'phone compilation preserves toolbar height');
+    task.status = 'reviewing'; delete task.review.job; update(); await sync();
+    await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'false');
+    await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCount(0);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   // Resizing can make a different change the visible navigation target.

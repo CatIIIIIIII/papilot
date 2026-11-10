@@ -119,6 +119,9 @@ export class Workspace extends EventEmitter {
   // Settles when the task's review write in reviewWrite finishes.
   private reviewWriting = new Map<string, Promise<void>>();
   private refreshes = new Map<string, { done: Promise<void>; again: boolean }>();
+  // The final selection each task last announced as 'decided' (null while a
+  // change is pending), see announceSelection.
+  private announced = new Map<string, string | null>();
   // Papers with a commit in progress: no review write may change their files meanwhile.
   private committing = new Set<string>();
   private commentWrites = new Map<string, number>();
@@ -1098,6 +1101,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
           this.emit('publishing', taskId, compiling);
         }
         const summary = await request(client => client.get(taskRoute(task.name)));
+        this.seedSelection(this.store.task(taskId));
         this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, ready: summary.ready, job: { ...current, id: pending.job } } });
         if (['done', 'completed', 'succeeded', 'failed'].includes(current.status)) {
           const latest = this.store.task(taskId).pendingBuild;
@@ -1201,13 +1205,10 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const reconciliation = summary.reconciliation ?? null;
       const files = await acceptedFiles(project.path, task.name, deferred ? reconciliation?.base ?? (delivery && delivery.mode !== 'branch' ? delivery.accepted : undefined) : task.committed?.accepted);
       const current = this.store.task(taskId);
-      if (current.status !== 'deleting') this.store.updateTask(taskId, { deferred, delivery, reconciliation, review: { state: summary.state, round: summary.round, counts: summary.counts, ready: summary.ready, job: current.review?.job, unsent, comments, files } });
-      // The last pending change was just decided, or the decisions changed
-      // with none pending: what applying writes can compile now.
-      const decided = deferred && summary.counts?.pending === 0 && Object.values(summary.counts ?? {}).some(n => Number(n) > 0),
-        before = current.review;
-      if (decided && current.status !== 'deleting' && ((before?.counts?.pending ?? 1) > 0 || before?.round !== summary.round || JSON.stringify(before?.files) !== JSON.stringify(files) || JSON.stringify(before?.counts) !== JSON.stringify(summary.counts)))
-        this.emit('decided', taskId);
+      if (current.status === 'deleting') return;
+      const review = { state: summary.state, round: summary.round, counts: summary.counts, ready: summary.ready, job: current.review?.job, unsent, comments, files };
+      this.store.updateTask(taskId, { deferred, delivery, reconciliation, review });
+      this.announceSelection(current, review);
       // Recover an application interrupted after the engine prepared its
       // proposal but before Papilot persisted the agent run.
       if (reconciliation?.ready && (summary.round ?? 0) <= reconciliation.round && current.status === 'reviewing' && !this.committing.has(task.projectId) && !this.reviewWrites.has(taskId)
@@ -1216,6 +1217,26 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         await this.queueMergeSuggestion(taskId, reconciliation);
     } catch { /* The task remains visible even if its project is temporarily unavailable. */ }
     finally { release?.(); }
+  }
+  // Announces a task's final selection once: its last pending change was
+  // just decided, or the decisions changed with none pending. What applying
+  // writes, or what a task writing accepted changes directly wrote, can
+  // compile now. A build still producing the task's next round announces
+  // its own result when it finishes.
+  private announceSelection(before: Task, review: NonNullable<Task['review']>) {
+    this.seedSelection(before);
+    const next = finalSelection(review);
+    if (!next) this.announced.set(before.id, null);
+    else if (next !== this.announced.get(before.id) && !before.pendingBuild && before.status !== 'building') {
+      this.announced.set(before.id, next);
+      this.emit('decided', before.id);
+    }
+  }
+  // Before a task's summary is first stored in this process, take the stored
+  // one as announced, so a restart does not announce every finished review
+  // again. A build in flight may have held its announcement back: none then.
+  private seedSelection(task: Task) {
+    if (!this.announced.has(task.id)) this.announced.set(task.id, task.pendingBuild || task.status === 'building' ? null : finalSelection(task.review));
   }
   // Review decisions, comments and undo updates the agent has not received yet.
   // The engine excludes decisions undone before delivery. A queued or in-flight message
@@ -1565,7 +1586,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       if (task.threadId) this.loaded.delete(task.threadId);
       // Notes the agent never received go back to the manuscript.
       if (unprepared) for (const { taskId: _, ...note } of this.store.annotations(task.projectId).filter(note => note.taskId === taskId)) this.store.saveAnnotation(note);
-      this.reviewCopies.delete(taskId);
+      this.reviewCopies.delete(taskId); this.announced.delete(taskId);
       this.attachments.removeTask(taskId);
       this.store.deleteTask(taskId);
       return { ok: true };
@@ -1581,6 +1602,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
 // one it started from; their difference is what the task put in the
 // manuscript, and the difference from the accepted text at the task's last
 // commit is what it has added since. A rename counts as both of its paths.
+/** A summary's final selection, when none of its changes is pending. */
+function finalSelection(review?: Task['review'] | null) {
+  return review?.counts?.pending === 0 && Object.values(review.counts).some(n => Number(n) > 0)
+    ? JSON.stringify([review.round, review.counts, review.files]) : null;
+}
 export async function acceptedFiles(root: string, name: string, since?: string) {
   try {
     const { stdout } = await execute('git', ['-C', root, 'diff', '--name-only', '--no-renames', '-z', since || `refs/latex-review/${name}/base`, `refs/latex-review/${name}/accepted`, '--']);

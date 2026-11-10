@@ -99,17 +99,38 @@ export function readJson<T>(file: string, fallback: T): T {
 export function writeJson(file: string, value: unknown, mode?: number) {
   atomicWrite(file, JSON.stringify(value, null, 2) + "\n", mode);
 }
-export async function acquireLock(file: string, retry = true) {
+export async function acquireLock(
+  file: string,
+  retry = true,
+  options: { stale?: number; update?: number; onLost?: () => void } = {},
+) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.closeSync(fs.openSync(file, "a"));
   for (let attempt = 0; ; attempt++) {
     try {
-      return await lockfile.lock(file, {
+      let lost = false;
+      const release = await lockfile.lock(file, {
         realpath: false,
-        stale: 30000,
-        update: 10000,
+        stale: options.stale ?? 30000,
+        update: options.update ?? 10000,
         retries: 0,
+        // A lock judged stale and taken over, or whose folder another process
+        // removed, is lost. The default handler throws from a timer, which
+        // took the whole app down. The work under it finishes, unless its
+        // owner says what losing it means (onLost).
+        onCompromised: (error) => {
+          lost = true;
+          console.warn(`Lost the lock on ${file}: ${error.message}`);
+          options.onLost?.();
+        },
       });
+      return async () => {
+        try {
+          await release();
+        } catch (error) {
+          if (!lost) throw error;
+        }
+      };
     } catch (error) {
       // Only contention can be resolved by waiting for another owner. A
       // removed build directory or a permission error must not keep a

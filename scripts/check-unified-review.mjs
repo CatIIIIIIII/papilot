@@ -255,12 +255,12 @@ try {
     await expect(page.locator('.review-frame')).not.toHaveAttribute('src', /[?&](round|history)=/);
     await expect(viewer().locator('html')).toHaveAttribute('data-papilot-round', '2');
     await expect(viewer().locator('.change[data-units="new"]')).toBeVisible();
-    await expect(viewer().locator('.papilot-linked-change[data-stop="0"]')).toBeVisible();
+    await expect(viewer().locator('[data-papilot-link][data-stop="0"]')).toBeVisible();
     await page.getByRole('button', { name: /Before revision.*Page 1/ }).click();
     await expect(page.locator('.review-frame')).toHaveAttribute('src', /round=1/);
     await expect(viewer().locator('html')).toHaveAttribute('data-papilot-round', '1');
     await expect(viewer().locator('.review-note-tag').first()).toBeVisible();
-    await expect(viewer().locator('.papilot-linked-change')).toHaveCount(0);
+    await expect(viewer().locator('[data-papilot-link]')).toHaveCount(0);
   }
   // Phone: comment selection opens Chat, and the quote brings the PDF back.
   latest = 1; delete rounds[2]; task.review.round = 1; update();

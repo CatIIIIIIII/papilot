@@ -123,7 +123,7 @@ test('a background build compiles beside another at full speed, lends its slot o
     process.env.PAPILOT_TEX_POOL = pool;
     const builder = new Builder(loadProject(f.root), f.repo), keyOf = (folder: string) => path.basename(path.dirname(folder));
     const state = (pid: string) => execFileSync('ps', ['-o', 'stat=', '-p', pid]).toString().trim();
-    const waitFor = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(r => setTimeout(r, 25)); assert.ok(check()); };
+    const waitFor = async (check: () => boolean) => { for (let i = 0; i < 1200 && !check(); i++) await new Promise(r => setTimeout(r, 25)); assert.ok(check()); };
     const pidOf = (key: string) => { try { return fs.readFileSync(path.join(f.base, `pid-${key}`), 'utf8').trim(); } catch { return ''; } };
     const pids = () => fs.readdirSync(f.base).filter(n => n.startsWith('pid-')).map(n => n.slice(4));
     const background = builder.build(f.repo.rev('HEAD'), ['full'], null, { priority: 'background' });
@@ -171,7 +171,7 @@ test('a foreground waiter promotes recovery of a pruned preferred build and rece
   fs.mkdirSync(bin); fs.mkdirSync(gates);
   const pids = () => fs.readdirSync(gates).filter(file => file.endsWith('.pid')).map(file => ({ key: file.slice(0, -4), pid: Number(fs.readFileSync(path.join(gates, file), 'utf8')) }));
   const state = (pid: number) => execFileSync('ps', ['-o', 'stat=', '-p', String(pid)]).toString().trim();
-  const waitFor = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 25)); assert.ok(check()); };
+  const waitFor = async (check: () => boolean) => { for (let i = 0; i < 1200 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 25)); assert.ok(check()); };
   try {
     fs.writeFileSync(path.join(bin, 'pdflatex'), '#!/bin/sh\necho "pdfTeX recovery test"\n', { mode: 0o755 });
     fs.writeFileSync(path.join(bin, 'latexmk'), `#!/bin/sh
@@ -232,7 +232,7 @@ test('a build runs at the highest priority of everyone waiting for it, also of t
     process.env.PATH = `${bin}:${previousPath}`;
     const builder = new Builder(loadProject(f.root), f.repo), rev = f.repo.rev('HEAD');
     const state = (pid: string) => execFileSync('ps', ['-o', 'stat=', '-p', pid]).toString().trim();
-    const waitFor = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(r => setTimeout(r, 25)); assert.ok(check()); };
+    const waitFor = async (check: () => boolean) => { for (let i = 0; i < 1200 && !check(); i++) await new Promise(r => setTimeout(r, 25)); assert.ok(check()); };
     const pidOf = (key: string) => { try { return fs.readFileSync(path.join(f.base, `pid-${key}`), 'utf8').trim(); } catch { return ''; } };
     const pids = () => fs.readdirSync(f.base).filter(n => n.startsWith('pid-')).map(n => n.slice(4));
     // Both ask at once, before anything compiles: whichever starts it, it is

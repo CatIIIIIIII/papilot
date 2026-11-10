@@ -39,7 +39,7 @@ const rounds = Object.fromEntries([1, 2].map(round => [round, { round, units: un
 const decisions = { 1: { c1: 'pending', c2: 'rejected', c3: 'accepted' }, 2: { c1: 'pending' } };
 const client = { get: async route => route.includes('/rounds/') ? rounds[Number(route.split('/').at(-1))] : { decisions: decisions[Number(new URL(route, origin).searchParams.get('round'))] } };
 let failResults = true;
-const optionWrites = [];
+const optionWrites = [], optionReads = [], previewReads = [];
 let rejectFails = false;
 let comparisonVersion = 'initial';
 const alternateSource = '\\emph{A concise alternative preserving the technical term.}';
@@ -65,6 +65,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/note-options/preview')) {
     assert.equal(url.searchParams.get('comparison'), comparisonVersion);
     const round = Number(url.searchParams.get('round')), option = url.searchParams.get('option');
+    previewReads.push({ key: url.searchParams.get('key'), round, option });
     const candidate = round === 2 ? [...units[round].map(unit => ({ ...unit, new_text: option === 'brief' ? alternateSource : unit.new_text })), unit('other', 80, 'Three datasets.', 'Five datasets.')] : units[round];
     const blocks = round === 2 ? [{ kind: 'change', units: candidate.map(unit => unit.id), before: [strip('Unrelated leading strip'), sharedStrip(candidate[0].old_text)], after: [strip('Unrelated leading strip'), sharedStrip(candidate[0].new_text)] }] : candidate.map(unit => ({ kind: 'change', units: [unit.id], before: [strip(unit.old_text)], after: [strip(unit.new_text)] }));
     return route.fulfill({ json: { ...rounds[round], units: candidate, task: task.name, before: 'before', after: `candidate-${option}-${comparisonVersion}`, files: '', warnings: [], loose: [...blocks, ...Array.from({ length: 5 }, (_, i) => ({ kind: 'change', units: ['space-' + i], identical: true, before: [], after: [] }))] } });
@@ -75,7 +76,7 @@ await page.route('**/api/**', async route => {
       optionWrites.push(body);
       if (body.reject && rejectFails) return route.fulfill({ status: 400, json: { error: 'The source changed. Try again.' } });
       if (body.reject) decisions[2].c1 = 'rejected';
-    }
+    } else optionReads.push(url.searchParams.get('key'));
     const round = (body?.key || url.searchParams.get('key'))?.startsWith('request-1:') ? 1 : 2;
     return route.fulfill({ json: { round, comparisonKey: comparisonVersion, key: url.searchParams.get('key'), ...(round === 1 ? { options: [], locked: 'Options are not available for this source range yet.' } : { options: [
       { id: 'current', label: 'Keep terminology', reason: 'Preserve the author’s technical term.', edits: [{ unit: 'c1', text: units[2][0].new_text }] },
@@ -106,8 +107,12 @@ try {
   await controls().getByRole('button', { name: 'Retry linking changes', exact: true }).click();
   await frame().getByRole('button', { name: 'Show note 1: Keep the technical term.', exact: true }).waitFor();
   assert.equal(await frame().getByRole('button', { name: 'Show note 1: Shorten the opening.', exact: true }).count(), 0, 'an older note must not label a newer round');
+  assert.deepEqual(optionReads.sort(), ['request-2:0', 'request-2:1', 'request-2:2'], 'Every current note\'s small manifest is read, so each change can offer its options');
+  assert.deepEqual(previewReads, [], 'Opening the review never prefetches option PDFs');
   await frame().getByRole('button', { name: 'Other options · 1', exact: true }).click();
   await controls().getByRole('tab', { name: 'Concise', exact: true }).waitFor();
+  assert.equal(optionReads.length, 3, 'Opening a cached note does not repeat its manifest request');
+  assert.deepEqual(previewReads[0], { key: 'request-2:0', round: 2, option: 'current' }, 'The visible comparison loads first; the note\'s other options follow while the author reads');
   await frame().locator('.source-fixture p').first().click();
   await controls().waitFor({ state: 'hidden' });
   const original = await page.locator('[data-note-result]').allTextContents();
@@ -118,10 +123,10 @@ try {
   await controls().getByText('No linked change', { exact: true }).waitFor();
   await sent(1).click();
   await frame().locator('html[data-papilot-round="1"]').waitFor();
-  await frame().locator('.papilot-linked-change[data-stop="1"]').waitFor();
+  await frame().locator('[data-papilot-link][data-stop="1"]').waitFor();
   assert.equal(await frame().locator('.papilot-note-options button').count(), 0, 'Historical changes do not advertise unavailable alternatives');
   assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 2 / 3');
-  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '1');
+  await expect(frame().locator('[data-papilot-link=target]')).toHaveAttribute('data-stop', '1');
   await expect(controls().locator('.note-review-targets')).toHaveCount(0);
   assert.equal(await controls().getByRole('button', { name: 'Previous note', exact: true }).isEnabled(), true);
   assert.equal(await controls().getByRole('button', { name: 'Next note', exact: true }).isEnabled(), true);
@@ -131,29 +136,29 @@ try {
   await frame().locator('body').evaluate(element => element.ownerDocument.defaultView.dispatchEvent(new Event('latex-review:decided')));
   await sent(0).click();
   assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 1 / 3');
-  await expect(frame().locator('.papilot-linked-change')).toHaveCount(2);
+  await expect(frame().locator('[data-papilot-link]')).toHaveCount(2);
   await frame().locator('.change[data-stop="2"] .papilot-note-links button').click();
-  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '2');
-  const selectedColor = await frame().locator('.papilot-linked-target').evaluate(element => getComputedStyle(element).outlineColor);
+  await expect(frame().locator('[data-papilot-link=target]')).toHaveAttribute('data-stop', '2');
+  const selectedColor = await frame().locator('[data-papilot-link=target]').evaluate(element => getComputedStyle(element).outlineColor);
   assert.equal(await controls().evaluate(element => getComputedStyle(element).borderTopColor), selectedColor, 'The drawer and its exact source change share a selection accent');
-  assert.notEqual(await frame().locator('.change[data-stop="0"] .change-head').evaluate(element => getComputedStyle(element).backgroundColor), await frame().locator('.papilot-linked-target .change-head').evaluate(element => getComputedStyle(element).backgroundColor), 'Other related fragments do not look like the selected target');
-  assert.ok(await frame().locator('.papilot-linked-target').evaluate(element => {
+  assert.notEqual(await frame().locator('.change[data-stop="0"] .change-head').evaluate(element => getComputedStyle(element).backgroundColor), await frame().locator('[data-papilot-link=target] .change-head').evaluate(element => getComputedStyle(element).backgroundColor), 'Other related fragments do not look like the selected target');
+  assert.ok(await frame().locator('[data-papilot-link=target]').evaluate(element => {
     const bounds = element.getBoundingClientRect();
     return bounds.top < window.innerHeight && bounds.bottom > 0;
   }), 'A note badge reveals its own change instead of the note’s first change');
   await frame().locator('.change[data-stop="0"] .papilot-note-links button').click();
-  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '0');
+  await expect(frame().locator('[data-papilot-link=target]')).toHaveAttribute('data-stop', '0');
   await frame().locator('.change[data-stop="2"] .papilot-note-links button').click();
-  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '2');
-  const linkedHeader = await frame().locator('.papilot-linked-target .change-head').boundingBox();
+  await expect(frame().locator('[data-papilot-link=target]')).toHaveAttribute('data-stop', '2');
+  const linkedHeader = await frame().locator('[data-papilot-link=target] .change-head').boundingBox();
   const linkedDrawer = await controls().boundingBox();
   assert.ok(linkedHeader.y + linkedHeader.height <= linkedDrawer.y, 'The linked header stays above the drawer');
   assert.equal(await controls().getByRole('button', { name: 'Previous note', exact: true }).isEnabled(), false);
   const currentNote = page.locator('[data-note-result="request-2:0"]');
   await currentNote.click();
   await frame().locator('html[data-papilot-round="2"]').waitFor();
-  await frame().locator('.papilot-linked-change[data-stop="0"]').waitFor();
-  await expect(frame().locator('.papilot-linked-target')).toHaveAttribute('data-stop', '0');
+  await frame().locator('[data-papilot-link][data-stop="0"]').waitFor();
+  await expect(frame().locator('[data-papilot-link=target]')).toHaveAttribute('data-stop', '0');
   const noteLinks = frame().locator('.change[data-stop="0"] .papilot-note-links');
   await expect(noteLinks.locator('button')).toHaveCount(3);
   await expect(noteLinks.locator('svg')).toHaveCount(1);
@@ -186,9 +191,17 @@ try {
   assert.equal(await sourceToggle.getAttribute('aria-pressed'), 'false', 'PDF remains the default');
   await sourceToggle.click();
   await controls().getByRole('region', { name: 'LaTeX comparison', exact: true }).waitFor();
+  const navigationBefore = await controls().locator('.note-option-navigation').boundingBox();
   await controls().getByRole('tab', { name: 'Concise', exact: true }).click();
+  await expect(controls().getByRole('tablist')).toHaveAttribute('aria-busy', 'true');
+  // The previous comparison keeps its place, dimmed and inert, while the next loads.
+  await controls().locator('.note-option-source[data-revision="candidate-current-initial"][data-stale]').waitFor();
+  assert.equal(await controls().getByRole('button', { name: 'Accept Concise', exact: true }).isDisabled(), true, 'An option cannot be accepted before its own comparison shows');
+  assert.deepEqual(await controls().locator('.note-option-navigation').boundingBox(), navigationBefore, 'Switching options keeps the toolbar stable');
+  assert.deepEqual(await page.locator('[data-note-result]').allTextContents(), original, 'Switching options never rearranges the review list');
   const sourceView = controls().locator('.note-option-source[data-revision="candidate-brief-initial"]');
   await sourceView.waitFor();
+  assert.equal(previewReads.filter(read => read.key === 'request-2:0' && read.option === 'brief').length, 1, 'A newly visible option loads its preview once');
   assert.ok((await sourceView.locator('.note-source-unit[data-unit="c1"]').textContent()).includes(alternateSource), 'source follows the selected alternative');
   assert.equal(await sourceView.locator('.note-source-unit[data-unit="other"]').count(), 0, 'other groups are excluded from this note’s drawer');
   assert.equal(await sourceView.locator('.note-source-unit[data-unit="other"] ins, .note-source-unit[data-unit="other"] del').count(), 0, 'unrelated edits retain context without focused colors');
@@ -203,7 +216,7 @@ try {
   assert.equal(await controls().locator('.note-option-source').count(), 0, 'toggle restores the selected candidate PDF');
   assert.equal(await controls().getByRole('button', { name: 'Show all changes', exact: true }).count(), 0);
   await page.locator('.review-host-bar').getByRole('button', { name: 'Show all changes', exact: true }).click();
-  await frame().locator('.papilot-linked-change').waitFor({ state: 'hidden' });
+  await frame().locator('[data-papilot-link]').waitFor({ state: 'hidden' });
   assert.equal(await controls().isVisible(), true, 'all changes keeps the selected note options open');
   await frame().locator('.source-fixture p').first().click();
   await controls().waitFor({ state: 'hidden' });
@@ -220,7 +233,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await sent(0).click();
-  await frame().locator('.papilot-linked-change[data-stop="0"]').waitFor();
+  await frame().locator('[data-papilot-link][data-stop="0"]').waitFor();
   assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 1 / 3');
   assert.equal(await page.locator('.review-frame').isVisible(), true);
   await frame().getByRole('button', { name: 'Show note 1: Shorten the opening.', exact: true }).first().click();
@@ -235,9 +248,11 @@ try {
   await controls().getByRole('region', { name: 'LaTeX comparison', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, 'LaTeX wraps within the narrow PDF pane');
   const toolbar = await controls().locator('.note-option-navigation').boundingBox();
-  assert.ok(toolbar.height < 50, 'tabs, pager, review actions and LaTeX toggle stay in one row');
+  assert.ok(toolbar.height < 90, 'narrow screens give tabs their own row above the pager and review actions');
   const tabs = await controls().getByRole('tablist').boundingBox(), selectedTab = await controls().getByRole('tab', { selected: true }).boundingBox();
   assert.ok(selectedTab.x >= tabs.x - 1 && selectedTab.x + selectedTab.width <= tabs.x + tabs.width + 1, 'the remembered selected option stays visible in the narrow tab strip');
+  const conciseTab = await controls().getByRole('tab', { name: 'Concise', exact: true }).boundingBox();
+  assert.ok(conciseTab.x >= tabs.x - 1 && conciseTab.x + conciseTab.width <= tabs.x + tabs.width + 1, 'both choices are directly visible on a phone');
   for (const button of await controls().locator('.note-option-actions button').all()) {
     const bounds = await button.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390, 'every action remains reachable on mobile');
@@ -251,13 +266,13 @@ try {
   assert.equal(decisions[2].c1, 'pending');
   rejectFails = false;
   await controls().getByRole('button', { name: 'Reject Concise', exact: true }).click();
-  await controls().waitFor({ state: 'hidden' });
-  assert.equal(decisions[2].c1, 'rejected');
+  await expect.poll(() => decisions[2].c1).toBe('rejected');
+  await expect(controls()).toHaveAttribute('data-open', 'true');
   await frame().locator('.papilot-note-options button').waitFor({ state: 'hidden' });
   assert.equal(optionWrites.length, 2);
   assert.ok(optionWrites.every(body => body.reject === true && body.accept === undefined && body.option === 'brief'));
   assert.equal(optionWrites[0].id, optionWrites[1].id, 'A retry keeps the same decision identity');
   assert.equal(await page.evaluate(id => localStorage.getItem('papilot:review-notes:' + id), task.id), draftBefore, 'Rejecting never creates a feedback draft');
   assert.deepEqual(errors, []);
-  console.log('PASS: Original messages preserved; PDF note controls; load retry; selected candidate PDF/LaTeX comparisons; no writes on option switches; single-row mobile actions');
+  console.log('PASS: Original messages preserved; PDF note controls; load retry; selected candidate PDF/LaTeX comparisons; no writes on option switches; responsive mobile actions');
 } finally { await browser.close(); await server.close(); }

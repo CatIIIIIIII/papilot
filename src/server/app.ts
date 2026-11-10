@@ -10,7 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
-import { AGENT_TURN, reviewClient, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
+import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
 import { fullPaperPdf, nextPaperPass, paperPassPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
@@ -20,7 +20,7 @@ import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
 import { type Listener, equals, guard } from './access.ts';
-import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote } from '../shared.ts';
+import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote, type Task } from '../shared.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
 import { noteOptionContext, noteOptionsKey } from './note-options.ts';
 import { taskNoteResults } from './note-results.ts';
@@ -141,23 +141,21 @@ export async function buildApp(options: AppOptions) {
     if (id) projectRequests.set(request, workspace.enterProjectRequest(id));
   });
   app.addHook('onSend', async (request, _reply, payload) => { projectRequests.get(request)?.(); return payload; });
-  // Refresh when manuscript files can have changed. Deferred decisions and
-  // source edits affect only the task copy; its manuscript waits for Apply.
-  const WRITES = /^\/api\/projects\/:id\/git\/|^\/api\/tasks\/:id\/(?:commit|apply|reconcile)$|^\/review\/:projectId\/(?:api\/changes\/(?:decide|undo)|\*)$/;
+  const refreshManuscript = (projectId: string) => {
+    try {
+      const project = store.project(projectId);
+      void manuscripts.refresh(project.id, project.path).catch(() => undefined);
+    } catch { /* The paper is gone. */ }
+  };
+  // Refresh when a Git action or a decision on the paper's own uncommitted
+  // changes can have changed its files. A task changes them when it is
+  // applied, or, for one that writes accepted changes directly, once its
+  // last pending change is decided ('decided' below).
+  const WRITES = /^\/api\/projects\/:id\/git\/|^\/review\/:projectId\/api\/changes\/(?:decide|undo)$/;
   app.addHook('onResponse', async (request, reply) => {
     if (request.method !== 'POST' || reply.statusCode >= 400 || !WRITES.test(request.routeOptions.url || '')) return;
-    if (request.url.startsWith('/review/')) {
-      const review = /^\/review\/[^/]+\/api\/tasks\/([^/]+)\/(decide|undo)(?:\?|$)/.exec(request.url);
-      if (review) {
-        const current = store.tasks().find(task => task.name === decodeURIComponent(review[1]));
-        if (current?.deferred || (request.body as { action?: string } | undefined)?.action === 'comment') return;
-      } else if (!/^\/review\/[^/]+\/api\/changes\/(decide|undo)(?:\?|$)/.test(request.url)) return;
-    }
     const params = (request.params || {}) as Record<string, string>;
-    try {
-      const project = store.project(params.projectId ?? (request.routeOptions.url!.startsWith('/api/tasks/') ? store.task(params.id).projectId : params.id));
-      void manuscripts.refresh(project.id, project.path).catch(() => undefined);
-    } catch { /* The paper or task is gone. */ }
+    refreshManuscript(params.projectId ?? params.id);
   });
   app.addHook('onError', async request => { projectRequests.get(request)?.(); });
   await app.register(compress);
@@ -336,25 +334,29 @@ export async function buildApp(options: AppOptions) {
     return { notes: await taskNoteResults(task, store.items(task.id), store.runs().filter(run => run.taskId === task.id), client) };
   });
   app.get<{ Params: { id: string }; Querystring: { key: string } }>('/api/tasks/:id/note-options', task, async request => {
-    const current = store.task(request.params.id), client = await connectReview(store.project(current.projectId).path);
-    return (await noteOptionContext(store, current, string(request.query.key, 'Note key', 200), client)).options;
+    const project = store.project(store.task(request.params.id).projectId);
+    return retryReviewRead(connectReview, project.path, async client =>
+      (await noteOptionContext(store, store.task(request.params.id), string(request.query.key, 'Note key', 200), client)).options);
   });
   app.get<{ Params: { id: string }; Querystring: { key: string; round: string; option: string; retry?: string; comparison?: string } }>('/api/tasks/:id/note-options/preview', task, async request => {
-    const current = store.task(request.params.id), client = await connectReview(store.project(current.projectId).path);
-    const context = await noteOptionContext(store, current, string(request.query.key, 'Note key', 200), client);
-    if (context.options.round !== Number(request.query.round)) throw new Error('The review changed. Reload the options.');
-    if (request.query.comparison && request.query.comparison !== context.options.comparisonKey) throw new Error('The review changed. Reload the options.');
-    if (request.query.option === context.options.selected && (!context.rejected.length || context.options.locked)) return rewriteReviewJson(context.detail, `/review/${current.projectId}`);
-    if (context.options.locked) throw new Error(context.options.locked);
-    const option = context.options.options.find(option => option.id === request.query.option);
-    if (!option) throw new Error('This option is no longer available.');
-    if (option.previewError && request.query.retry !== '1') throw new Error(option.previewError);
-    const detail = await client.post(`${taskRoute(current.name)}/source/options/preview`, { id: option.id, round: context.options.round, edits: option.edits, rejected: context.rejected }, 120000);
-    if (option.previewError) {
-      delete option.previewError;
-      store.savePreference(noteOptionsKey(current.id, context.options.key, context.options.round), context.options);
-    }
-    return rewriteReviewJson(detail, `/review/${current.projectId}`);
+    const project = store.project(store.task(request.params.id).projectId);
+    return retryReviewRead(connectReview, project.path, async client => {
+      const current = store.task(request.params.id);
+      const context = await noteOptionContext(store, current, string(request.query.key, 'Note key', 200), client);
+      if (context.options.round !== Number(request.query.round)) throw new Error('The review changed. Reload the options.');
+      if (request.query.comparison && request.query.comparison !== context.options.comparisonKey) throw new Error('The review changed. Reload the options.');
+      if (request.query.option === context.options.selected && (!context.rejected.length || context.options.locked)) return rewriteReviewJson(context.detail, `/review/${current.projectId}`);
+      if (context.options.locked) throw new Error(context.options.locked);
+      const option = context.options.options.find(option => option.id === request.query.option);
+      if (!option) throw new Error('This option is no longer available.');
+      if (option.previewError && request.query.retry !== '1') throw new Error(option.previewError);
+      const detail = await client.post(`${taskRoute(current.name)}/source/options/preview`, { id: option.id, round: context.options.round, edits: option.edits, rejected: context.rejected }, 120000);
+      if (option.previewError) {
+        delete option.previewError;
+        store.savePreference(noteOptionsKey(current.id, context.options.key, context.options.round), context.options);
+      }
+      return rewriteReviewJson(detail, `/review/${current.projectId}`);
+    });
   });
   app.post<{ Params: { id: string }; Body: { key: string; round: number; option?: string; id?: string; accept?: boolean; reject?: boolean } }>('/api/tasks/:id/note-options', task, async request => {
     const current = store.task(request.params.id), client = await connectReview(store.project(current.projectId).path), body = request.body;
@@ -402,11 +404,9 @@ export async function buildApp(options: AppOptions) {
     }
     throw new Error('Select an existing option.');
   });
-  // The Apply and Commit step is on screen: compile in the background what
-  // applying the decided task will write, so the manuscript's PDF is ready or
-  // on its way when the author saves it. Individual decisions start no build.
-  // Once every change of a task is decided, its manuscript as applying it
-  // would write compiles at once, so the PDF is ready when the author applies.
+  // Once every change of a task is decided, compile in the background what
+  // applying it will write, so the manuscript's PDF is ready or on its way
+  // when the author saves it. Individual decisions start no build.
   const predict = (taskId: string) => {
     const current = store.task(taskId), project = store.project(current.projectId);
     if (!current.deferred || current.mode === 'review' || current.delivery?.pending || current.status === 'deleting' || (current.review?.counts.pending ?? 0) > 0) return;
@@ -418,7 +418,15 @@ export async function buildApp(options: AppOptions) {
       if (preview.files) await manuscripts.predict(project.id, project.path, Object.fromEntries(Object.entries(preview.files).map(([file, data]) => [file, data === null ? null : Buffer.from(data, 'base64')])));
     })().catch(() => undefined);
   };
-  workspace.on('decided', predict);
+  // A task's final selection: predict what applying it writes, or compile
+  // the manuscript that a task writing accepted changes directly has changed.
+  const decided = (taskId: string) => {
+    const current = store.findTask(taskId);
+    if (current?.deferred) predict(taskId);
+    else if (current) refreshManuscript(current.projectId);
+  };
+  workspace.on('decided', decided);
+  app.addHook('onClose', async () => { workspace.off('decided', decided); });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/predict', task, request => {
     predict(store.task(request.params.id).id);
     return { ok: true };
@@ -470,14 +478,21 @@ export async function buildApp(options: AppOptions) {
     return workspace.enqueue(task.id, text, string(b.requestKey, 'Request ID', 100), true, { skill, feedback, reviewNotes, attachments });
   });
   // Commits what the author accepted from this task, with the message they confirmed.
-  app.post<{ Params: { id: string } }>('/api/tasks/:id/commit', task, request => {
+  // Applying writes the manuscript only once its delivery is complete: not
+  // for a confirmation, a merge suggestion, a pending delivery or a branch.
+  const delivered = (delivery: Task['delivery']) => Boolean(delivery && !delivery.pending && delivery.mode !== 'branch');
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/commit', task, async request => {
     const task = store.task(request.params.id), b = request.body as any;
-    return serialGit(task.projectId, () => workspace.commitTask(task.id, string(b.message, 'Commit message', 5000), b.push === true));
+    const result = await serialGit(task.projectId, () => workspace.commitTask(task.id, string(b.message, 'Commit message', 5000), b.push === true));
+    if ('delivery' in result ? delivered(result.delivery) : result.commit) refreshManuscript(task.projectId);
+    return result;
   });
-  app.post<{ Params: { id: string } }>('/api/tasks/:id/apply', task, request => {
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/apply', task, async request => {
     const task = store.task(request.params.id), b = (request.body || {}) as any;
     if (b.mode !== undefined && b.mode !== 'workspace' && b.mode !== 'commit') throw new Error('Invalid save action.');
-    return serialGit(task.projectId, () => workspace.applyTask(task.id, b.keepCurrent === true, b.mode === 'commit' ? { message: string(b.message, 'Commit message', 5000), ...(b.confirmation ? { confirmation: string(b.confirmation, 'Commit confirmation', 100) } : {}) } : undefined));
+    const result = await serialGit(task.projectId, () => workspace.applyTask(task.id, b.keepCurrent === true, b.mode === 'commit' ? { message: string(b.message, 'Commit message', 5000), ...(b.confirmation ? { confirmation: string(b.confirmation, 'Commit confirmation', 100) } : {}) } : undefined));
+    if (delivered(result.delivery)) refreshManuscript(task.projectId);
+    return result;
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/commit-message', task, request => {
     const task = store.task(request.params.id);

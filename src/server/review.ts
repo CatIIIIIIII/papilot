@@ -20,6 +20,19 @@ export function reviewConnectionError(error: unknown): boolean {
   return ['AbortError', 'TimeoutError'].includes(error.name) || /fetch failed|ECONNREFUSED|ECONNRESET|socket hang up|The review server failed to start/.test(error.message);
 }
 
+// A repeatable read, even when the engine prepares its cache for it.
+// Reconnect once if the engine restarted between connecting and reading.
+// An engine that failed to start, or a read that timed out on a live one,
+// would only fail again after the same wait.
+export async function retryReviewRead<T>(connect: (root: string) => Promise<ReviewClient>, root: string, read: (client: ReviewClient) => Promise<T>): Promise<T> {
+  const client = await connect(root);
+  try { return await read(client); }
+  catch (error) {
+    if (!reviewConnectionError(error) || ['AbortError', 'TimeoutError'].includes((error as Error).name)) throw error;
+    return read(await connect(root));
+  }
+}
+
 export function confirmedReviewResponse(status: number, value: unknown, task: string): boolean {
   if (!value || typeof value !== 'object') return false;
   const result = value as Record<string, unknown>;

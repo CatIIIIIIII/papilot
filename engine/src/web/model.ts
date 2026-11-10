@@ -1,5 +1,5 @@
 import { opcodes } from "../core/diff.ts";
-import type { Decision, RoundDetail, Unit, VisualUnit } from "../types.ts";
+import type { Decision, RoundDetail, Unit, Visual, VisualUnit } from "../types.ts";
 export interface Stop {
   key: string;
   units: string[];
@@ -147,6 +147,24 @@ export function wordDiff(before: string, after: string) {
     if (added) result.push({ type: "ins", text: added });
   }
   return result;
+}
+/** The kinds of change a change's label names. Where text moved, its marks
+ *  show it, so a label would only puzzle. "No visible change" and "Source
+ *  only" describe the whole change: an edit that only swapped a space for a
+ *  line break, beside visible ones, does not make the change invisible. */
+export function changeKinds(units: Partial<Pick<VisualUnit, "visual" | "effects">>[]): Visual[] {
+  const kinds = new Set(
+    units
+      .filter((u) => !(u.effects && u.visual === "unmapped"))
+      .map((u) => u.visual ?? "unmapped"),
+  );
+  const visible = kinds.has("text") || kinds.has("layout") || kinds.has("position");
+  return [...kinds].filter(
+    (kind) =>
+      kind !== "text" &&
+      kind !== "position" &&
+      !(visible && (kind === "identical" || kind === "unmapped")),
+  );
 }
 type Say = (text: string, values?: Record<string, string | number>) => string;
 const english: Say = (text, values = {}) =>

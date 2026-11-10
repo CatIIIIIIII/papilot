@@ -54,7 +54,9 @@ function CompactContext({ image, base, edge }: { image: Strip; base: string; edg
 
 /** Compare this note's groups in the complete candidate's native layout,
  * attributing highlights only to the note's exact edits. */
-export function NoteOptionDiff({ detail, focus }: { detail: RoundDetail; focus: string[] }) {
+// A stale comparison is the previous one, kept in place while the selected
+// option's loads so the drawer does not jump; it is dimmed and inert.
+export function NoteOptionDiff({ detail, focus, stale = false }: { detail: RoundDetail; focus: string[]; stale?: boolean }) {
   const { language } = useLanguage();
   const scoped = noteComparisonScope(detail, focus);
   const strips = (images: Strip[], label: string) => images.map((image, index) => {
@@ -80,7 +82,7 @@ export function NoteOptionDiff({ detail, focus }: { detail: RoundDetail; focus: 
       </div>
     </div>;
   };
-  return <div className="note-option-comparison" role="region" aria-label={t('Complete PDF comparison')} tabIndex={0} data-revision={detail.after}>
+  return <div className="note-option-comparison" role="region" aria-label={t('Complete PDF comparison')} tabIndex={stale ? -1 : 0} data-revision={detail.after} data-stale={stale || undefined} inert={stale} aria-hidden={stale || undefined}>
     {scoped.sections.map((section, index) => <section key={`${section.node}:${index}`} aria-label={`${section.number} ${section.title}`}>{section.blocks.map(block)}</section>)}
     {scoped.loose.map(block)}
     {!scoped.sections.length && !scoped.loose.length && <p className="note-option-hint">{t('No visible change')}</p>}
@@ -89,10 +91,10 @@ export function NoteOptionDiff({ detail, focus }: { detail: RoundDetail; focus: 
 
 /** The same groups as the PDF, including shared edits within those groups.
  * Only the focused note receives colored source marks. */
-export function NoteOptionSource({ detail, focus }: { detail: RoundDetail; focus: string[] }) {
+export function NoteOptionSource({ detail, focus, stale = false }: { detail: RoundDetail; focus: string[]; stale?: boolean }) {
   const scoped = noteComparisonScope(detail, focus);
   const lines = (start: number, end: number) => end <= start ? String(start) : `${start}–${end}`;
-  return <div className="note-option-comparison note-option-source" role="region" aria-label={t('LaTeX comparison')} tabIndex={0} data-revision={detail.after}>
+  return <div className="note-option-comparison note-option-source" role="region" aria-label={t('LaTeX comparison')} tabIndex={stale ? -1 : 0} data-revision={detail.after} data-stale={stale || undefined} inert={stale} aria-hidden={stale || undefined}>
     {scoped.units.map(unit => {
       const related = focus.includes(unit.id), parts = wordDiff(unit.old_text, unit.new_text);
       return <section className="note-source-unit" key={unit.id} data-unit={unit.id} data-related={related}>
