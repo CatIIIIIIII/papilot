@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **DeepSeek task permissions.** Choose sandboxed editing or bypass permissions for each task. Papilot applies the selected native Harness preset to new, resumed and continuing sessions; read-only remains enforced for restricted tasks.
+
 ## [0.9.4] - 2026-11-09
 
 Review edits by PDF note, compare prepared alternatives in context, and choose how many alternatives future requests should prepare.
