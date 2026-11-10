@@ -99,3 +99,14 @@ for (const method of ['configOptions(signal)', 'setConfig(configId, value, signa
     assert.doesNotMatch(result.stderr, /An incompatible adapter must not execute/);
   });
 }
+
+for (const layout of ['missing', 'ambiguous']) {
+  test(`DeepSeek loader rejects ${layout} dependency injection before running it`, () => {
+    const changed = layout === 'missing' ? source.replace('const inject = [', 'const inject=[')
+      : `${source}\nfunction unrelated() { const inject = []; return inject; }`;
+    const result = runFixture(changed, "assert.fail('An incompatible adapter must not execute');");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /This dsh version needs an updated Papilot permission adapter/);
+    assert.doesNotMatch(result.stderr, /An incompatible adapter must not execute/);
+  });
+}

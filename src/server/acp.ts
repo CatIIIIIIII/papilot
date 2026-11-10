@@ -215,8 +215,10 @@ export class AcpAgent extends Adapter {
       const resumed = method === 'thread/resume';
       const readOnly = params.sandbox === 'read-only';
       const permissions = readOnly ? (this.profile.id === 'deepseek' ? 'read-only' : 'workspace') : params.taskPermissions || 'workspace';
+      // Local model metadata is authoritative only for a still-cached session.
+      // After reconnecting, the CLI may restore a different model from disk.
+      const known = resumed && this.sessions.has(String(params.threadId)) ? this.threads.get(String(params.threadId)) : undefined;
       const session = await this.session(resumed ? String(params.threadId) : null, params.cwd, params.model, permissions);
-      const known = this.threads.get(session.sessionId);
       const model = params.model || known?.model || sessionModel(session) || null;
       this.threads.set(session.sessionId, { cwd: params.cwd, instructions: params.developerInstructions || '', model, started: resumed, permissions, readOnly });
       return { thread: { id: session.sessionId }, model };

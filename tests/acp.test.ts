@@ -524,6 +524,13 @@ for (const legacy of [false, true]) {
         : call.method === 'session/set_config_option' && call.params.configId === 'model' && call.params.value === 'paper-model'));
       await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper', model: 'probe-model' });
       assert.equal((await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper' })).model, 'probe-model', 'resuming a known session retains its last explicit selection');
+      f.agent.close();
+      await f.agent.start();
+      assert.equal((await f.agent.request('thread/resume', { threadId: created.thread.id, cwd: '/paper' })).model, 'paper-model', 'after reconnecting, the restored session reports its current model instead of stale local metadata');
+      const restored = await run(f.agent, created.thread.id, { effort: '' });
+      assert.equal(restored.status, 'completed', restored.error?.message);
+      assert.equal(f.calls.filter(call => legacy ? call.method === 'session/set_model'
+        : call.method === 'session/set_config_option' && call.params.configId === 'model').at(-1)?.params[legacy ? 'modelId' : 'value'], 'paper-model');
     } finally { f.agent.close(); }
   });
 }

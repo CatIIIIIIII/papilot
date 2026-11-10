@@ -2,6 +2,7 @@
 // per-session permission presets without changing the user's regular dsh CLI.
 import { registerHooks } from 'node:module';
 
+const injectBefore = 'const inject = [';
 const optionsBefore = `\tconfigOptions(signal) {
 \t\tthis.assertActive();
 \t\treturn this.modelControl.options(signal);
@@ -36,12 +37,12 @@ registerHooks({
     if (!url.endsWith('/@deepseek-ai/dsh-acp/lib/index.js')) return result;
     const source = typeof result.source === 'string' ? result.source : Buffer.from(result.source).toString('utf8');
     // Refuse unknown source layouts rather than show a control that does nothing.
-    if (source.split(optionsBefore).length !== 2 || source.split(setBefore).length !== 2)
+    if ([optionsBefore, setBefore, injectBefore].some(before => source.split(before).length !== 2))
       throw new Error('This dsh version needs an updated Papilot permission adapter.');
     return {
       ...result,
       source: source.replace(optionsBefore, optionsAfter).replace(setBefore, setAfter)
-        .replace('const inject = [', 'const inject = [\n\t"permissionPresets",\n\t"approval",'),
+        .replace(injectBefore, `${injectBefore}\n\t"permissionPresets",\n\t"approval",`),
     };
   },
 });
