@@ -29,7 +29,7 @@ const git = { branch: 'main', remote: true, upstream: 'origin/main', ahead: 1, b
 const actions = [];
 const note = { id: 'note-1', projectId: project.id, key: 'fixture', page: 0, rect: [72, 72, 200, 90], rects: [[72, 72, 200, 90]], source: null, quote: 'Fixture', comment: 'Original note', createdAt: 1 };
 let failNoteSave = false, gitRequests = 0;
-let diffText = 'New', diffRequests = 0, diffGate = null;
+let diffText = 'New', diffRequests = 0, diffGate = null, diffError = null;
 const words = JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'));
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
@@ -55,6 +55,7 @@ await page.route('**/api/**', async route => {
     const file = url.searchParams.get('path'), text = diffText;
     diffRequests++;
     if (diffGate) await diffGate;
+    if (diffError) return route.fulfill({ status: 503, json: { error: diffError } });
     return json({ path: file, diff: `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-Old ${file}\n+${text} ${file}\n`, truncated: false });
   }
   if (url.pathname.endsWith('/git/stage')) {
@@ -84,7 +85,7 @@ try {
   await page.locator('.manuscript-link').click();
   await page.locator('.textLayer span').first().waitFor();
   // Leaving the manuscript saves note edits, and a failed save keeps the editor open.
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await page.locator('.pdf-reading-notes').getByRole('button', { name: 'Edit note 1', exact: true }).click();
   const noteEditor = page.locator('.pdf-reading-notes').getByRole('textbox', { name: 'Edit note 1', exact: true });
   await noteEditor.fill('Save before opening version management');
@@ -129,8 +130,7 @@ try {
   const beforeSlow = diffRequests, failuresBeforeSlow = diffFailures.length;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => diffRequests).toBe(beforeSlow + 1);
-  // Cross multiple polling intervals while staying below the API's 15s deadline.
-  // Passing that deadline legitimately aborts the request and permits a retry.
+  // Cross multiple polling intervals without replacing the pending request.
   for (let interval = 0; interval < 2; interval++) {
     await page.clock.runFor(5100);
     await page.evaluate(() => {
@@ -142,22 +142,29 @@ try {
   }
   diffGate = null; releaseDiff();
   await expect(details.locator('.git-diff-view')).toContainText('Slow update main.tex');
-  // A genuine timeout ends the pending request; Retry must then load fresh text.
-  let releaseTimeout;
-  diffGate = new Promise(resolve => { releaseTimeout = resolve; });
-  diffText = 'Recovered after timeout';
-  const beforeTimeout = diffRequests, failuresBeforeTimeout = diffFailures.length;
+  // Operations longer than the former fixed deadline still finish normally.
+  let releaseLong;
+  diffGate = new Promise(resolve => { releaseLong = resolve; });
+  diffText = 'Finished a long request';
+  const beforeLong = diffRequests, failuresBeforeLong = diffFailures.length;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect.poll(() => diffRequests).toBe(beforeTimeout + 1);
-  await page.clock.runFor(15100);
-  await expect(details.getByRole('alert')).toHaveText('The request timed out. Please try again.');
-  await expect.poll(() => diffFailures.length).toBe(failuresBeforeTimeout + 1);
-  assert.equal(diffRequests, beforeTimeout + 1, 'A timed-out diff must wait for the next poll or an explicit retry');
-  diffGate = null; releaseTimeout();
-  await details.getByRole('button', { name: 'Retry', exact: true }).click();
-  await expect(details.locator('.git-diff-view')).toContainText('Recovered after timeout main.tex');
+  await expect.poll(() => diffRequests).toBe(beforeLong + 1);
+  await page.clock.runFor(30100);
   await expect(details.getByRole('alert')).toHaveCount(0);
-  assert.equal(diffRequests, beforeTimeout + 2, 'Retry must issue one replacement diff request');
+  assert.equal(diffFailures.length, failuresBeforeLong);
+  assert.equal(diffRequests, beforeLong + 1, 'A long diff keeps its one pending request');
+  diffGate = null; releaseLong();
+  await expect(details.locator('.git-diff-view')).toContainText('Finished a long request main.tex');
+  // A server failure still offers Retry and recovers with a fresh request.
+  diffError = 'The diff could not be read.';
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(details.getByRole('alert')).toHaveText(diffError);
+  const beforeRetry = diffRequests;
+  diffError = null; diffText = 'Recovered after failure';
+  await details.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(details.locator('.git-diff-view')).toContainText('Recovered after failure main.tex');
+  await expect(details.getByRole('alert')).toHaveCount(0);
+  assert.equal(diffRequests, beforeRetry + 1, 'Retry must issue one replacement diff request');
   diffText = 'New';
   await panel.getByRole('button', { name: 'references.bib', exact: true }).click();
   await expect(details.getByRole('region', { name: 'Changes in references.bib', exact: true })).toContainText('New references.bib');
@@ -257,7 +264,7 @@ try {
   await openGit();
   await expect(workspace).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Git workspace passed: left-side controls, separate diff/history, navigation and draft restoration, live and slow diff refresh, timeout recovery, pinned commit controls, staging/commit/push, responsive and short-window layouts, missing-Git gate and installation recovery.');
+  console.log('Git workspace passed: left-side controls, separate diff/history, navigation and draft restoration, live and slow diff refresh, long request and server-error recovery, pinned commit controls, staging/commit/push, responsive and short-window layouts, missing-Git gate and installation recovery.');
 } catch (error) {
   if (errors.length) console.error('Page errors:', errors);
   await page.screenshot({ path: 'test-results/git-workspace-failure.png' });

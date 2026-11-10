@@ -90,7 +90,7 @@ async function setSelection(control, selected) {
   await expect(control).toHaveAttribute('aria-pressed', String(selected));
 }
 async function notesReady() {
-  if (!await page.getByRole('complementary', { name: 'PDF note library' }).isVisible()) await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  if (!await page.getByRole('complementary', { name: 'PDF note library' }).isVisible()) await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(all()).toBeVisible();
 }
 async function switchPaper(name) {
@@ -132,7 +132,7 @@ try {
       await deletingCard.getByRole('textbox').press('Enter');
     }
     await expect(deletingCard.getByRole('textbox')).toHaveCount(0);
-    await page.getByRole('button', { name: 'My notes', exact: true }).click();
+    await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
     const before = firstFails ? 'Revise n1.' : 'First draft.';
     await historyTool('Undo').click(); await expect.poll(() => notes[0].comment).toBe(before);
     await historyTool('Redo').click(); await expect.poll(() => notes[0].comment).toBe('Second draft.');
@@ -145,7 +145,7 @@ try {
   assert.ok(notes.some(note => note.id === 'n1'));
   await expect(check('n1')).toHaveAttribute('aria-pressed', 'false');
   await setSelection(check('n1'), true);
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.locator('.note-tag[data-note="n1"]')).toHaveCount(1);
   // Undo and redo must finish before a task can snapshot its selected notes.
   await deletingCard.getByRole('button', { name: 'Edit note 1', exact: true }).click();
@@ -446,7 +446,7 @@ try {
   }
   // The library's deselection button must also save the task's draft before
   // removing the card, including when activated without a pointer event.
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await editTaskNote().click();
   await taskEditor.fill('Keep this draft when deselecting elsewhere.');
   failEdit = true;

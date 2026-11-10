@@ -750,6 +750,53 @@ function renderSlides(
 
 /** Plan the whole round before assigning sections. Source edits identify
  * regions; sections provide context, but never own a second copy of ink. */
+// Whether a part of a page prints anything: a character or a dark shape or
+// image, not merely the edge of a glyph next to it.
+export function prints(document: PdfDocument, page: number, rect: Rect) {
+  const p = document.page(page);
+  return (
+    p.lines.some((line) =>
+      line.chars.some((c) => c.text.trim() && containsCenter(rect, c.rect)),
+    ) ||
+    p.drawings.some(
+      (d) =>
+        Math.min(d[2], rect[2]) - Math.max(d[0], rect[0]) > 0.5 &&
+        Math.min(d[3], rect[3]) - Math.max(d[1], rect[1]) > 0.5,
+    )
+  );
+}
+// Two edits' crops are one place when they print a line in common. The boxes
+// of adjacent lines touch or overlap by a point or two, which does not make
+// separate edits one change. A crop without text, such as a figure, is one
+// place with another when they overlap by much of the smaller one.
+export function sharesLine(document: PdfDocument) {
+  return (a: Position, b: Position) => {
+    if (a.page !== b.page || !intersects(a.clip, b.clip)) return false;
+    const lines = document
+        .page(a.page)
+        .lines.filter((l) => l.chars.some((c) => c.text.trim())),
+      within = (p: Position) =>
+        lines.filter((l) => {
+          const middle = (l.rect[1] + l.rect[3]) / 2;
+          return (
+            middle > p.clip[1] &&
+            middle < p.clip[3] &&
+            l.rect[2] > p.clip[0] &&
+            l.rect[0] < p.clip[2]
+          );
+        }),
+      first = within(a),
+      second = within(b);
+    if (first.length && second.length)
+      return first.some((line) => second.includes(line));
+    const overlap =
+      Math.min(a.clip[3], b.clip[3]) - Math.max(a.clip[1], b.clip[1]);
+    return (
+      overlap >=
+      0.4 * Math.min(a.clip[3] - a.clip[1], b.clip[3] - b.clip[1])
+    );
+  };
+}
 export function renderDocument(
   old: Build,
   next: Build,
@@ -803,7 +850,8 @@ export function renderDocument(
         readingKey(document, laneAt(document, a.page, a.clip), a.clip[1]),
         readingKey(document, laneAt(document, b.page, b.clip), b.clip[1]),
       ) || a.clip[0] - b.clip[0],
-    areas = regions(cards),
+    lines = { old: sharesLine(old.document), new: sharesLine(next.document) },
+    areas = regions(cards, (side, a, b) => lines[side](a, b)),
     sectionAreas = sections.flatMap(({ intervals }, value) =>
       [...intervals].flatMap(([id, spans]) =>
         spans.map(([top, bottom]) => {
@@ -883,30 +931,37 @@ export function renderDocument(
     area.new = area.new
       .flatMap((p) => readingParts(next.document, p))
       .sort((a, b) => order(next.document, a, b));
-    for (const position of area.new) {
-      // Cut at both reading lanes and headings before assigning a section.
-      // A fragment keeps its region's complete correspondence and source IDs.
-      const pieces = partition(
-        [
-          ...boundaries.filter(
-            (c) =>
-              c.page === position.page && intersects(c.rect, position.clip),
-          ),
-          { page: position.page, rect: position.clip, value: sections.length },
-        ],
-        (values) =>
-          values.includes(sections.length) ? Math.min(...values) : undefined,
+    // Cut at both reading lanes and headings before assigning a section.
+    // A fragment keeps its region's complete correspondence and source IDs.
+    const pieces = area.new.flatMap((position) =>
+        partition(
+          [
+            ...boundaries.filter(
+              (c) =>
+                c.page === position.page && intersects(c.rect, position.clip),
+            ),
+            { page: position.page, rect: position.clip, value: sections.length },
+          ],
+          (values) =>
+            values.includes(sections.length) ? Math.min(...values) : undefined,
+        ).map((piece) => ({ position, piece })),
+      ),
+      // The blank space a crop reaches into, such as the gap above a heading
+      // that the next section owns, is no place of the change: on its own it
+      // showed an empty strip as a separate change, in the section before or
+      // under no section at all.
+      printing = pieces.filter(({ position, piece }) =>
+        prints(next.document, position.page, piece.rect),
       );
-      for (const piece of pieces) {
-        const placed = piece.value < sections.length;
-        (placed ? plan : loosePlan).push(
-          display(
-            { ...position, clip: piece.rect },
-            placed ? piece.value : -1,
-            region,
-          ),
-        );
-      }
+    for (const { position, piece } of printing.length ? printing : pieces) {
+      const placed = piece.value < sections.length;
+      (placed ? plan : loosePlan).push(
+        display(
+          { ...position, clip: piece.rect },
+          placed ? piece.value : -1,
+          region,
+        ),
+      );
     }
   });
   const change = (index: number, positions: Position[]): ChangeBlock => {
@@ -994,14 +1049,17 @@ export function renderDocument(
         kept.push({ section: piece.section, pieces: [piece] });
       else last?.pieces.push(piece);
     }
+  // One block per region, wherever its pieces print: a later piece joins the
+  // region's block rather than starting a second block of the same edits.
+  // Short context between two pieces in one section joins it too, so the
+  // block reads straight through instead of jumping over those lines.
+  const shown = new Map<number, ChangeBlock>(),
+    JOIN = 120;
   const render = (pieces: (Display | { kind: "gap" })[]): Block[] => {
     const blocks: Block[] = [];
-    let previous: number | undefined;
     for (const piece of pieces) {
-      if (piece.kind === "gap") {
-        blocks.push({ kind: "gap" });
-        previous = undefined;
-      } else if (piece.region === undefined) {
+      if (piece.kind === "gap") blocks.push({ kind: "gap" });
+      else if (piece.region === undefined) {
         const image = strips.write(
           next.document,
           piece.page,
@@ -1011,21 +1069,30 @@ export function renderDocument(
           "",
           [piece.rect[0], piece.rect[2]],
         );
-        if (image) {
-          blocks.push({ kind: "context", image });
-          previous = undefined;
-        }
+        if (image) blocks.push({ kind: "context", image });
       } else {
         const block = change(piece.region, [
             { page: piece.page, clip: piece.rect, label: "" },
           ]),
-          last = blocks.at(-1);
-        // Adjacent fragments can share a block. Intervening printed context
-        // or another change stays in reading order, never inside an envelope.
-        if (previous === piece.region && last?.kind === "change")
-          last.after.push(...block.after);
-        else blocks.push(block);
-        previous = piece.region;
+          earlier = shown.get(piece.region);
+        if (!earlier) {
+          shown.set(piece.region, block);
+          blocks.push(block);
+          continue;
+        }
+        const at = blocks.indexOf(earlier),
+          between = at < 0 ? [] : blocks.slice(at + 1);
+        if (
+          at >= 0 &&
+          between.every((b) => b.kind === "context") &&
+          between.reduce((sum, b) => sum + (b.kind === "context" ? b.image.height : 0), 0) <= JOIN
+        ) {
+          blocks.splice(at + 1);
+          earlier.after.push(
+            ...between.flatMap((b) => (b.kind === "context" ? [b.image] : [])),
+          );
+        }
+        earlier.after.push(...block.after);
       }
     }
     return blocks;
@@ -1045,5 +1112,65 @@ export function renderDocument(
   areas.forEach((area, index) => {
     if (!area.new.length) loose.push(change(index, []));
   });
-  return { sections: rendered, loose };
+  return linkBlocks(rendered, loose, cards);
+}
+// Blocks of the same edits are one block; edits that remain in several
+// blocks say why. An edit is in several regions when its crops form
+// separate groups: its source prints in several places, or its text left
+// one place for another far from it.
+function linkBlocks(
+  sections: RenderedRound["sections"],
+  loose: ChangeBlock[],
+  cards: Card[],
+): Pick<RenderedRound, "sections" | "loose"> {
+  const all = [
+      ...sections.flatMap((s) => s.blocks),
+      ...loose,
+    ].filter((b): b is ChangeBlock => b.kind === "change"),
+    first = new Map<string, ChangeBlock>(),
+    dropped = new Set<ChangeBlock>();
+  for (const block of all) {
+    const key = JSON.stringify(block.units),
+      earlier = first.get(key);
+    if (!earlier) {
+      first.set(key, block);
+      continue;
+    }
+    earlier.before.push(...block.before);
+    earlier.after.push(...block.after);
+    earlier.identical &&= block.identical;
+    if (block.moved) earlier.moved = true;
+    if (!block.reflow) delete earlier.reflow;
+    dropped.add(block);
+  }
+  const kept = all.filter((b) => !dropped.has(b)),
+    count = new Map<string, number>();
+  for (const block of kept)
+    for (const unit of block.units) count.set(unit, (count.get(unit) ?? 0) + 1);
+  const reason = (unit: string): "places" | "moved" => {
+    const groups = new Map<number, { old: boolean; new: boolean }>();
+    for (const pair of cards.find((c) => c.id === unit)?.pairs ?? []) {
+      const group = groups.get(pair.group ?? 0) ?? { old: false, new: false };
+      group.old ||= Boolean(pair.old);
+      group.new ||= Boolean(pair.new);
+      groups.set(pair.group ?? 0, group);
+    }
+    const sides = [...groups.values()];
+    return sides.some((g) => g.old && !g.new) && sides.some((g) => g.new && !g.old)
+      ? "moved"
+      : "places";
+  };
+  for (const block of kept) {
+    const linked = block.units
+      .filter((unit) => (count.get(unit) ?? 0) > 1)
+      .map((unit) => ({ unit, reason: reason(unit) }));
+    if (linked.length) block.linked = linked;
+  }
+  return {
+    sections: sections.map((s) => ({
+      ...s,
+      blocks: s.blocks.filter((b) => b.kind !== "change" || !dropped.has(b)),
+    })),
+    loose: loose.filter((b) => !dropped.has(b)),
+  };
 }

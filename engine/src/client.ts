@@ -184,6 +184,14 @@ export async function connect(
     const answer = await probe(root, info);
     return answer ? new Client(info!.url, answer.csrf) : null;
   }
+  // A running server of this version needs no lock: the lock only keeps two
+  // processes from starting or replacing one at once. Every request an app
+  // forwards connects first; taking the lock each time made overlapping
+  // requests wait for each other's lock, at least 100 ms for each retry.
+  const running = readJson<Connection | null>(path.join(home, "connection.json"), null),
+    current = await probe(root, running);
+  if (current && current.version === codeVersion() && current.environment === environmentVersion())
+    return new Client(running!.url, current.csrf);
   return withLock(path.join(home, "start.lock"), async () => {
     const last = readJson<{ port: number } | null>(
       path.join(home, "last.json"),

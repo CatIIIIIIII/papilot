@@ -169,7 +169,7 @@ try {
   await page.getByRole('tab', { name: 'New task', exact: true }).click();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByRole('region', { name: 'Notes in this task', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await page.getByRole('button', { name: 'Select all notes for this task', exact: true }).click();
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Notes', exact: true })).toHaveCount(0);

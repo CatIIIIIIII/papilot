@@ -280,6 +280,9 @@ kbd {
   padding: var(--paper-top) 24px 90px;
   scroll-padding: 70px 0 90px;
   overflow-anchor: none;
+  /* The review scrolls natively; at its ends a wheel never moves the
+     workspace around an embedded review. */
+  overscroll-behavior: contain;
   outline: none;
 }
 .document {
@@ -384,6 +387,15 @@ kbd {
     SFMono-Regular,
     Menlo,
     monospace;
+}
+.change-linked {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--comment);
+  cursor: pointer;
+  text-decoration: underline dotted;
 }
 .change-kind {
   white-space: nowrap;
@@ -976,6 +988,22 @@ kbd {
   border-radius: 3px;
   margin-bottom: 14px;
 }
+/* The paper as decided: plain pages, each painted at the screen's pixel
+   density into a canvas that fills it, under its selectable text. */
+.applied-page {
+  background: var(--pdf-page, var(--paper));
+  box-shadow: var(--shadow);
+  border-radius: 3px;
+  margin-bottom: 14px;
+}
+.applied-page canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: var(--pdf-filter, none);
+}
 .paper-context {
   line-height: 0;
 }
@@ -1042,6 +1070,28 @@ kbd {
 .waiting p {
   margin: 6px 0;
 }
+.comparison-pending, .change-carried, .change-again {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.change-again, .comparison-pending[data-state="failed"] { color: var(--warn); }
+.comparison-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.comparison-waiting .pulse { width: 6px; height: 6px; margin: 0; flex: 0 0 auto; }
 .pulse {
   width: 12px;
   height: 12px;

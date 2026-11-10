@@ -205,3 +205,18 @@ test('short note sources retain their identity after accepting another file', as
     assert.deepEqual(result.changes.map(change => change.state), ['accepted']);
   } finally { await fixture.close(); }
 });
+
+test('a rendered round is read once for a burst of note requests; one still rendering is read afresh', async () => {
+  const { readRound } = await import('../src/server/note-results.ts');
+  let reads = 0, rendering: string | undefined = 'pending';
+  const client = { url: 'http://engine-reuse-test', token: '', get: async () => { reads++; return { round: 1, units: [], sections: [], loose: [], ...(rendering ? { rendering } : {}) }; }, post: async () => ({}) };
+  await readRound(client as any, { name: 'reuse' }, 1);
+  await readRound(client as any, { name: 'reuse' }, 1);
+  assert.equal(reads, 2, 'A round still rendering is not shared');
+  rendering = undefined;
+  await readRound(client as any, { name: 'reuse' }, 1);
+  await Promise.all([readRound(client as any, { name: 'reuse' }, 1), readRound(client as any, { name: 'reuse' }, 1)]);
+  assert.equal(reads, 3, 'Once rendered, the round is read once');
+  await readRound(client as any, { name: 'reuse' }, 2);
+  assert.equal(reads, 4, 'Each round is its own read');
+});

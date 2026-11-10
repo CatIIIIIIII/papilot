@@ -179,7 +179,9 @@ export const PdfView = forwardRef<PdfHandle, {
   readOnly?: boolean;
   group?: NoteGroup | null; onGroupChange?: (group: NoteGroup | null) => void; markingDisabled?: boolean;
   url: string; words?: string; notes: { note: Annotation; number: number }[]; active: string; region: boolean; setRegion: (on: boolean) => void;
-  onCreate: (page: number, rect: Rect, rects: Rect[], quote: string, comment: string, group?: NoteGroup, options?: { reveal?: boolean; quote?: boolean; kind?: MarkKind; stamp?: string }) => Promise<void>;
+  /** The build `url` shows; new marks name the build whose pages they were made on. */
+  pdfKey?: string;
+  onCreate: (page: number, rect: Rect, rects: Rect[], quote: string, comment: string, group?: NoteGroup, options?: { reveal?: boolean; quote?: boolean; kind?: MarkKind; stamp?: string; key?: string }) => Promise<void>;
   onSelect: (note: Annotation) => void; outline: OutlineItem[]; section: number;
   noteActions?: PdfNoteActions; onDeselect?: () => void;
   history?: PdfHistoryActions;
@@ -213,6 +215,13 @@ export const PdfView = forwardRef<PdfHandle, {
   // A place shown from elsewhere, such as a compilation problem, marked briefly.
   const [flash, setFlash] = useState<{ page: number; rect: Rect; id: number } | null>(null);
   const [editing, setEditing] = useState<Target | null>(null), editingRef = useRef(editing); editingRef.current = editing;
+  // A recompiled manuscript waits while a note is being written: replacing the
+  // pages would close the card and lose its place. The pages on screen, their
+  // notes and their key stay together until the card closes.
+  const [shown, setShown] = useState({ url: props.url, words: props.words, key: props.pdfKey }), shownRef = useRef(shown); shownRef.current = shown;
+  const heldNotes = useRef(props.notes), held = shown.url !== props.url;
+  if (!held) heldNotes.current = props.notes;
+  const notes = held ? heldNotes.current : props.notes, notesRef = useRef(notes); notesRef.current = notes;
   const picking = useRef<ReturnType<typeof touchSelection> | null>(null);
   const [draft, updateDraft] = useState<{ page: number; rect: Rect } | null>(null), draftRef = useRef(draft);
   const setDraft = (value: typeof draft) => { draftRef.current = value; updateDraft(value); };
@@ -239,10 +248,10 @@ export const PdfView = forwardRef<PdfHandle, {
   const groupFor = (tool: PdfTool) => tool === 'note' || tool === 'region' ? latest.current.group || null : null;
   useEffect(() => { setTool(current => props.region ? 'region' : current === 'region' ? 'select' : current); }, [props.region]);
   useEffect(() => { if (!markError) return; const timer = setTimeout(() => setMarkError(''), 6000); return () => clearTimeout(timer); }, [markError]);
-  const suggestions = props.notes.filter(({ note }) => note.aiReview).sort((a, b) => a.note.page - b.note.page || a.note.rect[1] - b.note.rect[1] || a.note.rect[0] - b.note.rect[0]);
+  const suggestions = notes.filter(({ note }) => note.aiReview).sort((a, b) => a.note.page - b.note.page || a.note.rect[1] - b.note.rect[1] || a.note.rect[0] - b.note.rect[0]);
   const suggestionIndex = suggestions.findIndex(({ note }) => note.id === props.active);
   const activeSuggestion = suggestions[suggestionIndex];
-  const personal = props.notes.filter(({ note }) => !note.aiReview).sort((a, b) => a.note.page - b.note.page || a.note.rect[1] - b.note.rect[1]);
+  const personal = notes.filter(({ note }) => !note.aiReview).sort((a, b) => a.note.page - b.note.page || a.note.rect[1] - b.note.rect[1]);
   const personalIndex = personal.findIndex(({ note }) => note.id === props.active);
   const activeNote = activeSuggestion || personal[personalIndex];
   const noteIndex = activeSuggestion ? suggestionIndex : personalIndex, peers = activeSuggestion ? suggestions : personal;
@@ -250,7 +259,7 @@ export const PdfView = forwardRef<PdfHandle, {
   const onNoteBusy = props.noteActions?.onBusy;
   useEffect(() => { onNoteBusy?.(noteBusy); return () => onNoteBusy?.(false); }, [noteBusy, onNoteBusy]);
   useEffect(() => { setNoteError(''); }, [props.active]);
-  useEffect(() => { if (dismissedNote && props.notes.some(({ note }) => note.id === dismissedNote.id)) setDismissedNote(null); }, [props.notes, dismissedNote]);
+  useEffect(() => { if (dismissedNote && notes.some(({ note }) => note.id === dismissedNote.id)) setDismissedNote(null); }, [notes, dismissedNote]);
   function closeNote(restoreFocus = true) {
     if (latest.current.active !== props.active) return;
     const tag = container.current?.querySelector<HTMLButtonElement>(`.note-tag[data-note="${props.active}"]`);
@@ -502,7 +511,7 @@ export const PdfView = forwardRef<PdfHandle, {
       if (!page || !box.contains(page)) return;
       const frame = page.getBoundingClientRect(), x = (event.clientX - frame.left) / frame.width, y = (event.clientY - frame.top) / frame.height;
       let hit: Annotation | undefined, area = Infinity;
-      for (const { note } of latest.current.notes) {
+      for (const { note } of notesRef.current) {
         if (note.page !== Number(page.dataset.pageNumber) - 1) continue;
         for (const [left, top, right, bottom] of note.rects?.length ? note.rects : [note.rect]) {
           // Prefer the more specific mark when text and a larger region overlap.
@@ -570,41 +579,46 @@ export const PdfView = forwardRef<PdfHandle, {
     };
   }, []);
 
-  // A recompiled manuscript opens at the same place and zoom.
+  // A recompiled manuscript opens at the same place and zoom. A card opened
+  // during its download cancels that replacement until the card closes.
   useEffect(() => {
+    if (editing || (loaded.current && shownRef.current.url === props.url)) return;
+    const next = { url: props.url, words: props.words, key: props.pdfKey };
     const current = tools.current!, box = container.current!;
     let cancelled = false, attached = false;
     if (loaded.current) restore.current = { scale: current.viewer.currentScaleValue, top: box.scrollTop, left: box.scrollLeft };
     setLoading(!loaded.current); setError('');
-    const task = pdfjs.getDocument({ url: props.url, enableXfa: false, BinaryDataFactory: CMapData });
+    const task = pdfjs.getDocument({ url: next.url, enableXfa: false, BinaryDataFactory: CMapData });
     void task.promise.then(async document => {
       if (cancelled) return;
       // PDFViewer's first-page rejection handler can outlive setDocument(null)
       // and reject its replacement state. Keep that request in our cancellable
       // load phase, before the viewer takes ownership of the document.
       await document.getPage(1);
-      if (cancelled) return;
+      if (cancelled || editingRef.current) return;
       const previous = loaded.current;
       loaded.current = document; attached = true; layerMap.current.clear(); setLayers(new Map()); setSelection(null); setEditing(null);
-      if (latest.current.words) exactText(document, latest.current.words);
+      // Marks always name the pages actually attached, never a pending fetch.
+      shownRef.current = next; setShown(next);
+      if (next.words) exactText(document, next.words);
       current.viewer.setDocument(document); current.links.setDocument(document, null);
       setPages(document.numPages); setLoading(false);
       closeDocument(previous?.loadingTask);
       const items = await readOutline(document).catch(() => []);
-      if (!cancelled) latest.current.onOutline(items);
+      if (loaded.current === document) latest.current.onOutline(items);
     }).catch(failure => {
       if (cancelled) return;
       if (!attached) closeDocument(task);
       setError(failure instanceof Error ? failure.message : String(failure)); setLoading(false);
     });
     return () => { cancelled = true; if (!attached) closeDocument(task); };
-  }, [props.url]);
+  }, [props.url, props.words, props.pdfKey, editing]);
 
   // Opening a suggestion from the task or navigation reveals its passage.
   // Page views exist after pagesinit even when their canvases have not rendered.
   useEffect(() => {
     const reveal = () => {
-      const entry = latest.current.notes.find(({ note }) => note.id === latest.current.active);
+      const entry = notesRef.current.find(({ note }) => note.id === latest.current.active);
       const viewer = tools.current?.viewer, box = container.current;
       const div = entry && viewer?.getPageView(entry.note.page)?.div;
       if (!entry || !div || !box) return;
@@ -615,7 +629,7 @@ export const PdfView = forwardRef<PdfHandle, {
     const bus = tools.current?.bus;
     bus?.on('pagesinit', reveal); reveal();
     return () => bus?.off('pagesinit', reveal);
-  }, [props.active, props.url, loading]);
+  }, [props.active, shown.url, loading]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -677,7 +691,7 @@ export const PdfView = forwardRef<PdfHandle, {
     if (latest.current.markingDisabled) return;
     clearSelection();
     const kind = options.kind || (target.point ? 'point' : undefined);
-    void latest.current.onCreate(target.page, target.rect, target.rects, target.quote, comment, options.group, { reveal: false, ...(kind ? { kind } : {}), ...(options.stamp ? { stamp: options.stamp } : {}) })
+    void latest.current.onCreate(target.page, target.rect, target.rects, target.quote, comment, options.group, { reveal: false, ...(kind ? { kind } : {}), ...(options.stamp ? { stamp: options.stamp } : {}), key: shownRef.current.key })
       .catch(error => setMarkError(error instanceof Error ? error.message : String(error)));
   }
   function openCard(target: Target) {
@@ -739,7 +753,7 @@ export const PdfView = forwardRef<PdfHandle, {
     if (!editing) return false;
     setNoteBusy(true); setNoteError('');
     try {
-      await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action === 'keep', quote: action === 'quote', ...(editing.point ? { kind: 'point' as const } : {}) });
+      await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action === 'keep', quote: action === 'quote', ...(editing.point ? { kind: 'point' as const } : {}), key: shownRef.current.key });
       setEditing(null); return true;
     } catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); return false; }
     finally { setNoteBusy(false); }
@@ -797,7 +811,7 @@ export const PdfView = forwardRef<PdfHandle, {
     {[...layers].map(([number, layer]) => createPortal(<Fragment>
       {(() => {
         const compact = layer.clientWidth <= 680;
-        const notes = props.notes.filter(({ note }) => note.page === number - 1), spots = tagSpots(notes.map(({ note }) => ({ rect: (note.rects?.length ? note.rects : [note.rect])[0], name: note.stamp })), compact ? layer.clientHeight : undefined);
+        const notes = notesRef.current.filter(({ note }) => note.page === number - 1), spots = tagSpots(notes.map(({ note }) => ({ rect: (note.rects?.length ? note.rects : [note.rect])[0], name: note.stamp })), compact ? layer.clientHeight : undefined);
         return notes.map(({ note, number: label }, index) => <Fragment key={note.id}>
           {note.kind === 'point' ? <div className={'note-point' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-stamp={note.stamp ? true : undefined} style={{ ...center(note.rect), ...groupStyle(note.group) }}/>
             : (note.rects?.length ? note.rects : [note.rect]).map((rect, part) => <div key={part} className={(note.rects?.length ? 'note-mark' : 'note-box') + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
@@ -850,7 +864,7 @@ export const PdfView = forwardRef<PdfHandle, {
       {markable && selection?.page === number - 1 && !editing && (active === 'select' || active === 'note' || selection.handles) && <button type="button" className={'add-note' + (selection.handles ? ' touch' : '')} aria-label={pillTool === 'delete' ? t('Delete') : pillTool === 'magic' ? t('Quick notes') : pillGroup ? t('Add to {group}', { group: groupName(pillGroup) }) : t('Add note')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { if (pillTool) mark(selected(selection)); else startNote(); }}>{pillTool === 'delete' ? <><Icon name="toolStrike" size={14}/>{t('Delete')}</> : pillTool === 'magic' ? <><Icon name="toolMagic" size={14}/>{t('Quick notes')}</> : <><Icon name="pencil" size={14}/><GroupAction group={pillGroup}/></>}</button>}
       {editing?.page === number - 1 && <>
         {editing.point ? <div className="note-point draft" style={center(editing.rect)}/> : (editing.rects.length ? editing.rects : [editing.rect]).map((rect, index) => <div key={index} className={(editing.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>)}
-        <PdfNoteCard note={{ rect: editing.rect, comment: '', ...(editing.point ? { kind: 'point' as const } : {}) }} number={props.notes.length + 1} index={0} total={1} selected={false} busy={noteLocked} error={noteError}
+        <PdfNoteCard note={{ rect: editing.rect, comment: '', ...(editing.point ? { kind: 'point' as const } : {}) }} number={notes.length + 1} index={0} total={1} selected={false} busy={noteLocked} error={noteError}
           draft={newNoteDraft} onDraftChange={value => setNewNoteDraft(value ?? '')} onDismiss={closeNewNote} onClose={closeNewNote}
           onEditing={props.noteActions?.onEditing} onSave={saveNewNote}/>
       </>}

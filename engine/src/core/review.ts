@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { applyUnits, revertUnits } from "./changes.ts";
+import { applyUnits, revertUnits, withHashesAsync } from "./changes.ts";
+import { comparable, fingerprint, origin, rendered } from "./carry.ts";
 import { groupFormattingChanges } from "./formatting-changes.ts";
 import { now, readBytes, readJson, same, writeOrDelete } from "./files.ts";
 import { cleanPath, merge3Async } from "./git.ts";
@@ -31,7 +32,7 @@ const DECIDED: Record<ActionKind, Decision> = {
   reject: "rejected",
   comment: "commented",
 };
-const LIVE = new Set(["applying", "applied", "undoing"]);
+const LIVE = new Set(["queued", "applying", "applied", "undoing"]);
 export class Conflict extends Error {}
 const snippet = (text: string) => {
   text = text.replace(/\n+$/, "");
@@ -113,27 +114,56 @@ export class Review {
       pending: values.filter((v) => v === "pending").length,
     };
   }
-  lastChange(name: string) {
-    return this.app.store.one<{ id: number | null }>(
-      "SELECT MAX(id) AS id FROM messages WHERE task=? AND kind IN ('accept','reject','undo')",
-      name,
-    )!.id;
+  /** Undecided changes of a round that have a PDF comparison to decide with. */
+  ready(name: string, round: Round, decisions = this.decisions(name, round)) {
+    const shown = (round.visuals ?? "ready") === "ready" ? null : rendered(this.app, name, round.number);
+    return round.units.filter((u) => decisions[u.id] === "pending" && (!shown || comparable(round, shown, u.id))).length;
   }
-  undoEntry(name: string) {
+  /** Decided changes whose own comparison, rendered after the decision,
+   *  looks different from the earlier round's comparison they were decided
+   *  with. */
+  reviewAgain(name: string, round: Round) {
+    if ((round.visuals ?? "ready") !== "ready") return [];
+    const result = new Set<string>();
+    for (const action of this.actions(name, round.number)) {
+      if (!LIVE.has(action.status) || !action.detail.seen) continue;
+      const now = rendered(this.app, name, round.number);
+      for (const [id, seen] of Object.entries(action.detail.seen))
+        if (fingerprint(rendered(this.app, name, seen.round), seen.change) !== fingerprint(now, id)) result.add(id);
+    }
+    return [...result];
+  }
+  /** The decision Undo takes back: the latest one, unless it was applied or
+   *  merged since. Rounds never change, so a decision of an earlier round is
+   *  undone only when it is an accept that no decision followed, as when the
+   *  author accepts while the agent works and the agent's round follows: the
+   *  newer round's baseline is that accept, and the undo inserts the next
+   *  round, with the change pending again (`republish`). */
+  undoEntry(name: string): (Action & { republish?: true }) | null {
     const latest = this.latestRound(name),
       action = this.app.store.one<Action>(
-        "SELECT * FROM actions WHERE task=? AND status='applied' ORDER BY seq DESC LIMIT 1",
+        "SELECT * FROM actions WHERE task=? AND status IN ('applied','queued') ORDER BY seq DESC LIMIT 1",
         name,
       );
     const delivered = this.app.delivery.get(name), reconciliation = this.app.reconciliation.get(name);
-    return action && latest && (!reconciliation || action.round > reconciliation.round) && action.round === latest.number && (!delivered || action.seq > delivered.seq) ? action : null;
+    if (!action || !latest || (reconciliation && action.round <= reconciliation.round) || (delivered && action.seq <= delivered.seq)) return null;
+    if (action.round === latest.number) return action;
+    const followed = this.app.store.one(
+      "SELECT 1 FROM actions WHERE task=? AND round>? AND status IN ('applying','applied','undoing') LIMIT 1",
+      name,
+      action.round,
+    );
+    return action.kind === "accept" && !followed && action.detail.accepted_after === latest.before && this.app.tasks.get(name).accepted === latest.before
+      ? { ...action, republish: true }
+      : null;
   }
   summary(name: string): Summary {
     const task = this.app.tasks.get(name),
       latest = this.latestRound(name),
       job = this.app.publisher.current(name),
       counts = this.counts(name, latest),
-      number = latest?.number ?? null;
+      number = latest?.number ?? null,
+      ready = latest && counts.pending ? this.ready(name, latest) : 0;
     const notes =
       latest &&
       this.app.store.one(
@@ -155,7 +185,7 @@ export class Review {
       next = "A round is being built. Run `publish` again to wait for it.";
     } else if (
       job?.status === "failed" &&
-      (!latest || job.created > latest.created)
+      (!latest || job.created > latest.created || latest.summary.job === job.id)
     ) {
       state = "build_failed";
       next =
@@ -183,10 +213,26 @@ export class Review {
       state,
       round: number,
       counts,
+      ready,
       next,
     };
   }
-  pageState(name: string, number?: number): PageState {
+  // A round's decisions and comments as its page shows them: also those made
+  // on that page and applied to a later round (see decideNow).
+  private shown(name: string, round: Round) {
+    const decisions = this.decisions(name, round), comments: Record<string, string> = this.comments(name, round.number);
+    for (const action of this.app.store.all<Action>("SELECT * FROM actions WHERE task=? AND round>? ORDER BY seq", name, round.number)) {
+      if (!LIVE.has(action.status) || action.detail.requested?.round !== round.number) continue;
+      for (const change of action.detail.requested.changes) {
+        if (!Object.hasOwn(decisions, change)) continue;
+        decisions[change] = DECIDED[action.kind];
+        if (action.kind === "comment") comments[change] = action.body;
+      }
+    }
+    return { decisions, comments };
+  }
+  /** `seen`: the page asking is on screen, so the author reads this task. */
+  pageState(name: string, number?: number, seen = true): PageState {
     const task = this.app.tasks.get(name, false),
       latest = this.latestRound(name);
     number ||= latest?.number;
@@ -195,11 +241,13 @@ export class Review {
         round && latest && number === latest.number
           ? this.undoEntry(name)
           : null,
-      job = this.app.publisher.current(name);
-    this.app.viewers.set(name, now());
+      job = this.app.publisher.current(name),
+      again = round ? this.reviewAgain(name, round) : [];
+    if (seen) this.app.viewers.set(name, now());
     return {
       csrf: this.app.csrf,
       sourceEditing: true,
+      deferred: Boolean(task.deferred),
       task: name,
       title: task.title,
       closed: Boolean(task.closed),
@@ -211,11 +259,17 @@ export class Review {
       ),
       round: number ?? null,
       revision: round?.after ?? null,
-      decisions: round ? this.decisions(name, round) : {},
-      comments: round ? this.comments(name, round.number) : {},
+      ...(round ? this.shown(name, round) : { decisions: {}, comments: {} }),
+      ...(round && (round.visuals ?? "ready") !== "ready" ? { rendering: round.visuals as "pending" | "failed" } : {}),
+      waiting: round ? round.units.filter(unit => !comparable(round, rendered(this.app, name, round.number), unit.id)).map(unit => unit.id) : [],
+      ...(again.length ? { reviewAgain: again } : {}),
       undo: undo
-        ? { id: undo.id, kind: undo.kind, changes: undo.changes }
+        ? { id: undo.id, kind: undo.kind, changes: undo.changes, ...(undo.republish ? { republish: true as const } : {}), ...(undo.status === "queued" ? { queued: true as const } : {}) }
         : null,
+      ...(round ? (() => {
+        const queued = this.queuedActions(name).filter((a) => a.round === round.number).flatMap((a) => a.changes);
+        return queued.length ? { queued } : {};
+      })() : {}),
       job: job
         ? {
             id: job.id,
@@ -269,7 +323,8 @@ export class Review {
         ),
         { units: {}, sections: [], loose: [] },
       ),
-      history = this.history(name, round);
+      history = this.history(name, round),
+      rendering = (round.visuals ?? "ready") !== "ready" ? (round.visuals as "pending" | "failed") : undefined;
     // Earlier releases stored a single after strip as an object. Keep those rounds readable.
     for (const block of [
       ...render.sections
@@ -302,11 +357,15 @@ export class Review {
         ...u,
         ...context(u),
         ...render.units[u.id],
+        ...(rendering && !render.units[u.id] ? { waiting: true } : {}),
+        ...(rendering && render.carried?.[u.id] ? { carried: render.carried[u.id].round } : {}),
         ...(history[u.id] ? { history: history[u.id] } : {}),
       })),
+      ...(rendering ? { rendering } : {}),
       sections: render.sections,
       loose: render.loose,
       warnings: round.summary.warnings ?? [],
+      builds: round.summary.builds ?? [],
       files: `/files/${name}/${number}/`,
       ...(round.summary.builds?.length
         ? { build: { key: round.summary.builds.at(-1)!, targets: round.summary.targets ?? ["full"] } }
@@ -430,9 +489,14 @@ export class Review {
       changes: string[];
       round: number;
       body?: string;
+      /** The agent is working in the task's files: a reject waits for its
+       *  turn to end. */
+      queue?: boolean;
     },
+    // A note option's checkmark was given with the option's own PDF preview.
+    options: { previewed?: boolean } = {},
   ) {
-    return this.app.exclusive(() => this.decideNow(name, data));
+    return this.app.exclusive(() => this.decideNow(name, data, options));
   }
   private async decideNow(
     name: string,
@@ -442,7 +506,9 @@ export class Review {
       changes: string[];
       round: number;
       body?: string;
+      queue?: boolean;
     },
+    options: { previewed?: boolean },
   ) {
     const task = this.app.tasks.get(name),
       kind = data.action;
@@ -461,36 +527,63 @@ export class Review {
       ),
       chosen = data.changes;
     if (previous) {
+      // A decision that named an earlier round is retried as it was sent.
+      const sent = previous.detail.requested ?? { round: previous.round, changes: previous.changes };
       if (
         previous.task !== name ||
-        previous.round !== data.round ||
+        sent.round !== data.round ||
         previous.kind !== kind ||
         (kind === "comment" && previous.body !== (data.body || "").trim()) ||
-        JSON.stringify(previous.changes) !== JSON.stringify(chosen)
+        JSON.stringify(sent.changes) !== JSON.stringify(chosen)
       )
         throw new Error(
           "This action id was already used for another decision.",
         );
-      if (previous.status !== "applied")
+      if (previous.status !== "applied" && previous.status !== "queued")
         throw new Error("That decision was undone or failed. Make it again.");
-      return this.pageState(name);
+      return this.pageState(name, data.round);
     }
-    const latest = this.latestRound(name);
-    if (!latest || data.round !== latest.number)
-      throw new Error("A newer round is available. Reload the page.");
+    const latest = this.latestRound(name),
+      valid = Array.isArray(chosen) && chosen.length > 0 && new Set(chosen).size === chosen.length;
+    if (!latest) throw new Error("A newer round is available. Reload the page.");
+    let ids = chosen,
+      seen: Record<string, { round: number; change: string }> = {},
+      requested: ActionDetail["requested"];
+    if (data.round !== latest.number) {
+      // Changes decided on an earlier round's page apply to their exact
+      // versions in the latest round, when each has exactly one there.
+      const translated = valid && data.round < latest.number ? await this.translate(name, data.round, chosen, latest, kind !== "comment") : null;
+      if (!translated) throw new Error("A newer round is available. Reload the page.");
+      ({ ids, seen } = translated);
+      requested = { round: data.round, changes: chosen };
+    }
     const decisions = this.decisions(name, latest);
-    if (
-      !Array.isArray(chosen) ||
-      !chosen.length ||
-      new Set(chosen).size !== chosen.length ||
-      chosen.some((c) => decisions[c] !== "pending")
-    )
+    if (!valid || ids.some((c) => decisions[c] !== "pending"))
       throw new Error("These changes were already decided. Reload the page.");
     const body = (data.body || "").trim();
     if (kind === "comment" && !body) throw new Error("Write a comment first.");
-    const selected = chosen.map((c) => latest.units.find((u) => u.id === c)!);
-    if (kind === "accept") await this.accept(task, latest, identity, selected);
-    else if (kind === "reject") await this.reject(task, latest, identity, selected);
+    if (!requested && (latest.visuals ?? "ready") !== "ready") {
+      // The author decides with a PDF comparison: the round's own, or one an
+      // earlier round rendered of the same version, until its own arrives.
+      const shown = rendered(this.app, name, latest.number);
+      if (kind !== "comment" && !options.previewed && ids.some((id) => !comparable(latest, shown, id)))
+        throw new Error("Wait for the PDF comparison of this change before accepting or rejecting it.");
+      for (const id of ids) {
+        const found = origin(latest, shown, id);
+        if (found) seen[id] = found;
+      }
+    }
+    const extra: ActionDetail = { ...(requested ? { requested } : {}), ...(Object.keys(seen).length ? { seen } : {}) };
+    const selected = ids.map((c) => latest.units.find((u) => u.id === c)!);
+    if (kind === "accept") await this.accept(task, latest, identity, selected, extra);
+    else if (kind === "reject" && data.queue)
+      // Shown rejected now; its files are reverted when the agent stops.
+      this.record(identity, task, latest, "reject", ids, "", { ...extra, queued: true }, [], "queued");
+    else if (kind === "reject") {
+      // Rejects queued earlier go first, in order.
+      await this.applyQueued(name);
+      await this.reject(this.app.tasks.get(name), latest, identity, selected, extra);
+    }
     else
       this.app.store.transaction(() => {
         this.record(
@@ -498,25 +591,51 @@ export class Review {
           task,
           latest,
           kind,
-          chosen,
+          ids,
           body,
-          {},
+          extra,
           [],
           "applied",
           false,
         );
         this.message(name, latest.number, "comment", identity, body, {
-          changes: chosen,
+          changes: ids,
         });
       });
-    return this.pageState(name);
+    // The page that sent it shows its own round, with this decision.
+    return this.pageState(name, data.round);
+  }
+  // The latest round's changes with the exact versions of `chosen` in round
+  // `number`, and the comparison each was seen with, or null unless each has
+  // exactly one undecided match.
+  private async translate(name: string, number: number, chosen: string[], latest: Round, needsComparison: boolean) {
+    const round = this.app.store.one<Round>("SELECT * FROM rounds WHERE task=? AND number=?", name, number);
+    if (!round) return null;
+    const [older, newer] = await Promise.all([round, latest].map((r) => withHashesAsync(this.app.repo, r.before, r.after, r.units))),
+      then = this.decisions(name, round),
+      now = this.decisions(name, latest),
+      shown = rendered(this.app, name, round.number),
+      ids: string[] = [],
+      seen: Record<string, { round: number; change: string }> = {};
+    for (const id of chosen) {
+      const unit = older.find((u) => u.id === id);
+      if (!unit || then[id] !== "pending" || older.filter((u) => u.hash === unit.hash).length !== 1) return null;
+      const matches = newer.filter((u) => u.hash === unit.hash && now[u.id] === "pending"),
+        found = origin(round, shown, id);
+      // Accept and reject need the comparison the author saw. Comments on
+      // the exact same change stay available while that comparison renders.
+      if (matches.length !== 1 || (needsComparison && !found)) return null;
+      ids.push(matches[0].id);
+      if (found) seen[matches[0].id] = found;
+    }
+    return { ids, seen };
   }
   byFile(units: Unit[]) {
     const groups: Record<string, Unit[]> = {};
     for (const unit of units) (groups[unit.file] ??= []).push(unit);
     return groups;
   }
-  private async accept(task: Task, round: Round, identity: string, units: Unit[]) {
+  private async accept(task: Task, round: Round, identity: string, units: Unit[], extra: ActionDetail = {}) {
     const app = this.app,
       writes: [string, Buffer | null, Buffer | null][] = [],
       accepted: Record<string, Buffer | null> = {},
@@ -554,12 +673,12 @@ export class Review {
       "accept",
       units.map((u) => u.id),
       "",
-      { accepted_before: task.accepted, accepted_after: afterCommit },
+      { accepted_before: task.accepted, accepted_after: afterCommit, ...extra },
       writes,
     );
     await this.carryOut(identity, "apply");
   }
-  private async reject(task: Task, round: Round, identity: string, units: Unit[]) {
+  private async reject(task: Task, round: Round, identity: string, units: Unit[], extra: ActionDetail = {}) {
     const writes: [string, Buffer | null, Buffer | null][] = [],
       kept: string[] = [],
       groups = this.byFile(units),
@@ -580,10 +699,65 @@ export class Review {
       "reject",
       units.map((u) => u.id),
       "",
-      { not_reverted: kept },
+      { not_reverted: kept, ...extra },
       writes,
     );
     await this.carryOut(identity, "apply");
+  }
+  // The reverted contents of a reject's files, merged into `current`, or
+  // null for a file whose passage was edited again since its round.
+  private async reverts(round: Round, units: Unit[], current: (file: string) => Buffer | null) {
+    const groups = this.byFile(units), files = Object.keys(groups),
+      [before, after] = await Promise.all([this.app.repo.blobsAsync(round.before, files), this.app.repo.blobsAsync(round.after, files)]),
+      result: Record<string, Buffer | null | undefined> = {};
+    for (const [file, group] of Object.entries(groups)) {
+      const reverted = revertUnits(before[file], after[file], group), now = current(file),
+        [merged, conflict] = await merge3Async(now, after[file], reverted);
+      result[file] = conflict ? undefined : merged;
+    }
+    return result;
+  }
+  private queuedActions(name: string) {
+    return this.app.store.all<Action>("SELECT * FROM actions WHERE task=? AND status='queued' ORDER BY seq", name);
+  }
+  /** Reverts the rejects queued while the agent worked, in order. A reject
+   *  whose passages the agent edited again is not applied: the next round
+   *  shows the new version. The caller holds the engine's write turn. */
+  async applyQueued(name: string) {
+    for (const action of this.queuedActions(name)) {
+      const task = this.app.tasks.get(name), round = this.round(name, action.round),
+        units = round.units.filter((u) => action.changes.includes(u.id)),
+        reverts = await this.reverts(round, units, (file) => readBytes(safePath(task.worktree, file))),
+        kept = Object.keys(reverts).filter((file) => reverts[file] === undefined);
+      if (kept.length === Object.keys(reverts).length) {
+        this.app.store.execute("UPDATE actions SET status='failed', detail=? WHERE id=?", JSON.stringify({ ...action.detail, not_reverted: kept }), action.id);
+        continue;
+      }
+      this.app.store.transaction(() => {
+        this.app.store.execute("UPDATE actions SET status='applying', detail=? WHERE id=?", JSON.stringify({ ...action.detail, not_reverted: kept }), action.id);
+        for (const [file, target] of Object.entries(reverts)) {
+          if (target === undefined) continue;
+          const path = safePath(task.worktree, file), expected = readBytes(path);
+          if (!same(expected, target))
+            this.app.store.execute("INSERT INTO writes(action,phase,path,expected,target) VALUES(?,?,?,?,?)", action.id, "apply", path, expected, target);
+        }
+      });
+      await this.carryOut(action.id, "apply");
+    }
+  }
+  /** `snapshot` as it is once the queued rejects are reverted, as their
+   *  turn's end will make it, for compiling that ahead. */
+  async queuedTree(name: string, snapshot: string) {
+    const actions = this.queuedActions(name);
+    if (!actions.length) return snapshot;
+    const contents: Record<string, Buffer | null> = {};
+    for (const action of actions) {
+      const round = this.round(name, action.round), units = round.units.filter((u) => action.changes.includes(u.id));
+      const files = Object.keys(this.byFile(units)), current = await this.app.repo.blobsAsync(snapshot, files);
+      const reverts = await this.reverts(round, units, (file) => (file in contents ? contents[file] : current[file] ?? null));
+      for (const [file, target] of Object.entries(reverts)) if (target !== undefined) contents[file] = target;
+    }
+    return Object.keys(contents).length ? this.app.repo.commitWithAsync(snapshot, contents, "Queued rejects") : snapshot;
   }
   record(
     identity: string,
@@ -716,11 +890,16 @@ export class Review {
         });
       }
     });
-    if (action.kind === "accept")
+    if (action.kind === "accept") {
       await app.repo.updateRefAsync(
         `refs/latex-review/${action.task}/accepted`,
         accepted!,
       );
+      // The paper as decided compiles at once, replacing the compilation
+      // of the decisions before this one.
+      app.applied.refresh(action.task);
+      app.publisher.refollow(action.task);
+    }
   }
   message(
     name: string,
@@ -759,13 +938,27 @@ export class Review {
   undo(name: string, identity: string) {
     return this.app.exclusive(() => this.undoNow(name, identity));
   }
-  private async undoNow(name: string, identity: string) {
+  private async undoNow(name: string, identity: string): Promise<PageState & { restored: string[]; republished?: true }> {
     this.app.delivery.assertReady(name);
     const app = this.app,
       task = app.tasks.get(name),
       action = this.undoEntry(name);
-    if (!action || action.id !== identity)
+    if (!action || action.id !== identity) {
+      // A lost reply to an undo that inserted a round is answered again.
+      const done = app.store.one<Action>("SELECT * FROM actions WHERE id=? AND task=?", identity, name);
+      if (done?.status === "undone" && done.detail.republish) return { ...this.pageState(name), restored: done.changes, republished: true as const };
       throw new Error("Nothing to undo here any more. Reload the page.");
+    }
+    // A reject still queued never touched the task's files: it is dropped.
+    if (action.status === "queued") {
+      app.store.execute("UPDATE actions SET status='undone' WHERE id=?", identity);
+      return { ...this.pageState(name), restored: action.changes };
+    }
+    const latest = this.latestRound(name)!;
+    // The round it inserts compares the task's files as the newest round has
+    // them, so nothing else is published with it, such as an agent's edits.
+    if (action.republish && (await app.repo.treeIdAsync(await app.tasks.snapshotAsync(task))) !== (await app.repo.treeIdAsync(latest.after)))
+      throw new Conflict("The task's files changed since the newest round. Nothing was undone.");
     if (
       action.kind === "accept" &&
       task.accepted !== action.detail.accepted_after
@@ -791,7 +984,8 @@ export class Review {
       );
     app.store.transaction(() => {
       app.store.execute(
-        "UPDATE actions SET status='undoing' WHERE id=?",
+        "UPDATE actions SET status='undoing', detail=? WHERE id=?",
+        JSON.stringify(action.republish ? { ...action.detail, republish: latest.number + 1 } : action.detail),
         identity,
       );
       for (const [file, expected, target] of restores)
@@ -804,7 +998,12 @@ export class Review {
         );
     });
     await this.carryOut(identity, "undo");
-    return { ...this.pageState(name), restored: action.changes };
+    if (!action.republish) return { ...this.pageState(name), restored: action.changes };
+    // Like a source edit's, the round is inserted now and compiles in the
+    // background; a restart before the insert submits it (publisher.recover).
+    const job = app.publisher.submit(name, undefined, latest.summary.indirect ?? true);
+    await app.publisher.insertNow(job).catch(() => { /* The job inserts again when it starts, and fails with the reason. */ });
+    return { ...this.pageState(name), restored: action.changes, republished: true as const };
   }
   // At start, before any other write.
   async recover() {

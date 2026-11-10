@@ -5,6 +5,7 @@ export function tarCommand(): string;
 export function agentDirs(env?: NodeJS.ProcessEnv): string[];
 export function agentPath(env?: NodeJS.ProcessEnv): string;
 export function findExecutable(command: string, env?: NodeJS.ProcessEnv): string | null;
+export function findExecutables(command: string, env?: NodeJS.ProcessEnv, extra?: string[], include?: (dir: string) => boolean): string[];
 export function which(command: string, env?: NodeJS.ProcessEnv): string | null;
 export function spawnCommand(command: string, args: string[], options?: SpawnOptions): ChildProcess;
 export function spawnSyncCommand(command: string, args: string[], options?: SpawnSyncOptions): import('node:child_process').SpawnSyncReturns<Buffer>;

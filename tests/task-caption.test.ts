@@ -57,8 +57,8 @@ test('new tasks generate a caption from the request and PDF context without wait
     const input = { id: 'new-caption-task-01', projectId: 'paper', title: '改一下', instructions: '按批注修改', annotations: ['note'] };
     const created = await f.workspace.createTask(input);
     assert.equal(created.title, '改一下');
-    assert.equal(created.titleGeneration, 'pending');
-    await tick();
+    assert.equal(created.titleGeneration, 'pending', 'The caption starts while the task is being prepared');
+    await f.workspace.prepareTask(created.id); await tick();
     assert.ok(f.agent.calls.some(call => call.method === 'turn/start' && call.params.threadId.startsWith('editing-')), 'Editing proceeds while the caption is pending');
     const start = f.agent.calls.find(call => call.method === 'thread/start' && call.params.ephemeral)!.params;
     assert.deepEqual([start.sandbox, start.approvalPolicy, start.ephemeral, start.model], ['read-only', 'never', true, 'small-mini']);
@@ -142,7 +142,8 @@ test('a caption timeout is recoverable and an offline helper never prevents task
     assert.equal(f.store.task(f.task.id).titleGeneration, 'failed');
     assert.ok(f.agent.calls.some(call => call.method === 'turn/interrupt'));
     f.agent.ready = false;
-    const created = await f.workspace.createTask({ id: 'offline-caption-01', projectId: 'paper', title: 'Fallback', instructions: 'Explain the result.' });
+    await f.workspace.createTask({ id: 'offline-caption-01', projectId: 'paper', title: 'Fallback', instructions: 'Explain the result.' });
+    const created = await f.workspace.prepareTask('offline-caption-01');
     assert.equal(created.title, 'Fallback'); assert.equal(created.status, 'queued');
     assert.notEqual(created.titleGeneration, 'pending');
   } finally { f.close(); }

@@ -14,7 +14,7 @@ import { AGENT_NAMES, AntigravityAgent, ClaudeAgent, GlmAgent, type AgentRuntime
 import { ACP_PROFILES, AcpAgent } from './acp.ts';
 import { CursorAgent } from './cursor.ts';
 import { GrokAgent } from './grok.ts';
-import { reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
+import { AGENT_TURN, reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
 import { pathIdentity, realPath } from './real-path.ts';
@@ -28,10 +28,13 @@ import { notesInstructions, reviewNotesInstructions, summarizeNotes } from '../n
 import { canonicalGroup, groupsWithoutInstructions, parseGroupInstructions, type GroupInstructions } from '../note-groups.ts';
 import { commitChanges, conflictMarkers, gitCommit, gitRemote, gitStatus, mergeConflicts, mergeInProgress } from './manuscript.ts';
 import { AGENT_IDS, isTaskReviewNote } from '../shared.ts';
-import type { Task, TaskPermissions, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview } from '../shared.ts';
+import type { Task, TaskPermissions, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, PendingBuild, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview } from '../shared.ts';
 
 const execute = promisify(execFile);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Source saves start a build in the review engine, and so does undoing an
+// accept of an earlier round, which inserts the next round.
+const startsBuild = (route: string, value: unknown) => /\/source(?:\/options)?$/.test(route) || (route.endsWith('/undo') && (value as { republished?: unknown } | null)?.republished === true);
 const errorText = (e: unknown) => e instanceof Error ? e.message : String(e);
 // A Codex model/list entry with the reasoning efforts it supports.
 export const agentModel = (m: any): AgentModel => {
@@ -58,7 +61,7 @@ export function accountUsage(response: any): Usage | null {
   if (!windows.length && !credits) return null;
   return { plan: typeof limits.planType === 'string' ? limits.planType : null, windows, credits, reached: Boolean(limits.rateLimitReachedType) || response.ordinaryUsageAllowed === false };
 }
-const BUSY = new Set(['running', 'waiting_input', 'building', 'uncertain', 'deleting']);
+const BUSY = new Set(['preparing', 'running', 'waiting_input', 'building', 'uncertain', 'deleting']);
 // Review builds that fail on the agent's own edits (see the review engine's
 // publish.ts), and the request keys of the turns that send them back to it.
 const FIXABLE = /^(Some edits are outside the task scope|The revised document could not be compiled)/;
@@ -106,9 +109,16 @@ export class Workspace extends EventEmitter {
   // Whether rounds list each edit's changes elsewhere (Settings); buildApp
   // reads it from the saved preferences.
   indirectChanges: () => boolean = () => false;
-  private preparing = new Set<string>();
-  private preparingNotes = new Set<string>();
+  // Preparations in progress, by task (see createTask).
+  private preparing = new Map<string, Promise<Task>>();
+  // Each AI review created here compiles its copy with the function its
+  // request passed; one resumed after a restart uses prepareReview.
+  private reviewCopies = new Map<string, (worktree: string) => Promise<ReviewSnapshot>>();
+  prepareReview: (task: Task, worktree: string) => Promise<ReviewSnapshot> = async () => { throw new Error('The PDF snapshot for this review is unavailable. Start a new AI review.'); };
   private reviewWrites = new Set<string>();
+  // Settles when the task's review write in reviewWrite finishes.
+  private reviewWriting = new Map<string, Promise<void>>();
+  private refreshes = new Map<string, { done: Promise<void>; again: boolean }>();
   // Papers with a commit in progress: no review write may change their files meanwhile.
   private committing = new Set<string>();
   private commentWrites = new Map<string, number>();
@@ -122,6 +132,9 @@ export class Workspace extends EventEmitter {
   private flushTimer: NodeJS.Timeout | null = null;
   private connecting: Promise<void> | null = null;
   private usageTimers = new Map<AgentId, NodeJS.Timeout>();
+  // Tasks whose agent wrote files within the last moments: their next
+  // write asks once more for a prefetch when that moment ends.
+  private prefetches = new Map<string, { again: boolean }>();
   // Commit messages by agent, model and prompt, kept or still being written,
   // so one written ahead for a finished review is there when the dialog opens.
   private messages = new Map<string, Promise<{ message: string; agent: AgentId }>>();
@@ -134,7 +147,7 @@ export class Workspace extends EventEmitter {
   importsBusy = () => false;
   get busyForUpdate() {
     return Boolean(this.importsBusy() || this.projectChanges.size || this.active.size || this.preparing.size || this.publishing.size || this.reviewWrites.size || this.commentWrites.size || this.committing.size || this.deletions.size || this.helperStops.size || this.titles.size
-      || this.store.tasks().some(task => ['queued', 'running', 'waiting_input', 'building', 'uncertain', 'deleting'].includes(task.status) || task.pendingReview));
+      || this.store.tasks().some(task => ['preparing', 'queued', 'running', 'waiting_input', 'building', 'uncertain', 'deleting'].includes(task.status) || task.pendingReview));
   }
   readonly attachments: Attachments;
   constructor(public store: Store, public codex: AgentRuntime = new Codex(), private connectReview = reviewClient, others: Partial<Record<AgentId, AgentRuntime>> = {}) {
@@ -163,7 +176,7 @@ export class Workspace extends EventEmitter {
       if (task.threadId) this.loaded.delete(task.threadId);
       this.earlyCompletions.delete(taskId); this.earlyRequests.delete(taskId); this.active.delete(taskId);
       this.store.saveRun({ ...run, status: 'interrupted', finishedAt: Date.now() });
-      this.store.updateTask(taskId, { status: 'interrupted', turnId: null, error: `${AGENT_NAMES[id]} disconnected. You can resume the same task.` });
+      this.holdForReview(taskId, { status: 'interrupted', turnId: null, error: `${AGENT_NAMES[id]} disconnected. You can resume the same task.` });
     }
     if (id === 'codex') this.loaded.clear();
     this.emit('change');
@@ -252,7 +265,9 @@ export class Workspace extends EventEmitter {
   }
   private reserveProject(id: string) {
     this.store.project(id);
-    const tasks = this.store.tasks().filter(task => task.projectId === id), ids = new Set(tasks.map(task => task.id));
+    const tasks = this.store.tasks().filter(task => task.projectId === id);
+    // The first message of a task whose preparation failed waits for Retry.
+    const ids = new Set(tasks.filter(task => !task.preparation).map(task => task.id));
     if (this.projectChanges.has(id) || this.projectRequests.has(id) || this.committing.has(id) || this.preparing.size
       || tasks.some(task => BUSY.has(task.status) || task.status === 'queued' || task.pendingReview || this.active.has(task.id) || this.publishing.has(task.id) || this.reviewWrites.has(task.id) || this.commentWrites.has(task.id) || this.deletions.has(task.id) || this.titles.has(task.id))
       || this.store.runs().some(run => ids.has(run.taskId) && ['queued', 'running', 'uncertain'].includes(run.status))) {
@@ -270,7 +285,8 @@ export class Workspace extends EventEmitter {
       if (this.projectByPath(root)) throw new Error('This repository is already added as another paper.');
       const client = await this.connectReview(root);
       await client.get('/api/tasks');
-      const tasks = this.store.tasks().filter(task => task.projectId === id), worktrees = new Map<string, string>();
+      // A task that was never prepared has no copy yet; Retry makes one at the new path.
+      const tasks = this.store.tasks().filter(task => task.projectId === id && !task.preparation), worktrees = new Map<string, string>();
       // A new path must still contain this paper's existing review tasks.
       // Taking paths from the engine also handles a relocated repository.
       const common = async (folder: string) => realPath(path.resolve(folder, (await execute('git', ['-C', folder, 'rev-parse', '--git-common-dir'])).stdout.trim()));
@@ -308,14 +324,25 @@ export class Workspace extends EventEmitter {
     } finally { release(); }
   }
   // A task combines the author's words, an optional skill and selected PDF notes.
-  annotationSending(id: string) { return this.preparingNotes.has(id); }
-  // An AI review passes prepareReview, which reads the PDF of the new task's manuscript copy.
+  // A note is being sent while the task that claimed it is being prepared.
+  annotationSending(id: string) {
+    return this.store.tasks().some(task => task.status === 'preparing' && this.store.annotations(task.projectId).some(note => note.id === id && note.taskId === task.id));
+  }
+  // The task is saved at once, with its first message queued and its notes
+  // and attachments claimed, and is then prepared in the background (see
+  // prepareTask). An AI review passes prepareReview, which reads the PDF of
+  // the new task's manuscript copy.
   async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
     if (!/^[\w-]{16,64}$/.test(input.id)) throw new Error('Invalid task ID.');
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
-    // A retried request returns its task; an ID from another paper is refused.
-    const existing = this.store.tasks().find(t => t.id === input.id);
-    if (existing) { if (existing.projectId !== input.projectId || (existing.mode === 'review') !== Boolean(input.prepareReview)) throw new Error('Invalid task ID.'); return existing; }
+    // A retried request returns its task, preparing it again if that failed;
+    // an ID from another paper is refused.
+    const existing = this.store.findTask(input.id);
+    if (existing) {
+      if (existing.projectId !== input.projectId || (existing.mode === 'review') !== Boolean(input.prepareReview)) throw new Error('Invalid task ID.');
+      if (input.prepareReview && existing.preparation) this.reviewCopies.set(existing.id, input.prepareReview);
+      return this.retryTask(existing.id);
+    }
     this.validateTaskPermissions(input.permissions ?? 'workspace', input.agent || 'codex', Boolean(input.prepareReview));
     if (input.prepareReview && (input.annotations?.length || input.attachments?.length)) throw new Error('AI review uses the manuscript PDF. Start a separate editing task to send notes or attachments.');
     // Pin the model shown to the author, including for clients using the default.
@@ -326,62 +353,113 @@ export class Workspace extends EventEmitter {
       const model = input.model ? models.find(model => model.id === input.model) : models.find(model => model.isDefault);
       if (input.serviceTier !== 'default' && input.serviceTier !== model?.fastMode?.serviceTier) throw new Error('Fast mode is not available for this model.');
     }
-    if (this.preparing.has(input.id)) throw new Error('This task is being created. Refresh in a moment.');
-    this.preparing.add(input.id);
-    let notes: Annotation[] = [], claimed: string[] = [];
-    let releaseAttachments = () => {};
-    try {
       const project = this.store.project(input.projectId), skill = input.skill ? findSkill(project.path, input.skill) : undefined;
       if (skill?.output === 'annotations' && !input.prepareReview) throw new Error('Start a new task to run the AI review skill on the current PDF.');
       const files = this.attachments.resolve(project.id, input.attachments || [], input.id);
-      releaseAttachments = this.attachments.reserve(project.id, input.attachments || [], input.id);
       const available = new Map(this.store.annotations(project.id).filter(note => !note.taskId && !isTaskReviewNote(note)).map(note => [note.id, note]));
-      notes = [...new Set(input.annotations || [])].map(id => {
+    const notes = [...new Set(input.annotations || [])].map(id => {
         const note = available.get(id);
-        if (!note) throw new Error('A selected PDF note is no longer available. Refresh the manuscript and try again.');
-        if (this.preparingNotes.has(id)) throw new Error('A selected PDF note is already being sent. Wait for that task to finish creating.');
+      if (!note) throw new Error(this.annotationSending(id) ? 'A selected PDF note is already being sent. Wait for that task to finish creating.' : 'A selected PDF note is no longer available. Refresh the manuscript and try again.');
         return note;
       });
       const groupInstructions = parseGroupInstructions(input.groupInstructions);
       const selectedGroups = new Set(notes.flatMap(note => note.group ? [canonicalGroup(note.group)] : []));
       if (Object.keys(groupInstructions).some(group => !selectedGroups.has(group as keyof GroupInstructions))) throw new Error('Group instructions must refer to selected PDF notes.');
       if (groupsWithoutInstructions(notes, groupInstructions).length && !input.instructions.trim() && !skill) throw new Error('Describe what to do with each selected color group.');
-      claimed = notes.map(note => note.id); claimed.forEach(id => this.preparingNotes.add(id));
       if (!input.prepareReview && !skill && !notes.length && !files.length && !input.instructions.trim()) throw new Error('Describe the revision, choose a skill, or add a PDF note.');
       const instructions = notes.length ? notesInstructions(notes, input.instructions, groupInstructions) : input.instructions;
-      const client = await this.connectReview(project.path);
       const name = 'p-' + input.id.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
-      const info = await client.post('/api/tasks', { name, title: input.title, deferred: true });
-      let reviewInput: ReviewSnapshot | undefined;
-      if (input.prepareReview) try { reviewInput = await input.prepareReview(info.worktree); } catch (error) {
-        // Discard the copy, so a retry copies the manuscript again with the author's fixes.
-        await client.post(`${taskRoute(name)}/finish`, { force: true }).catch(() => undefined);
-        throw error;
-      }
-      const task: Task = { ...(reviewInput ? { mode: 'review' as const, aiReview: { key: reviewInput.key } } : {}), id: input.id, projectId: project.id, name, title: input.title, titleSource: 'prompt', instructions: skill ? skillPrompt(skill, instructions) : instructions,
-        permissions: input.permissions || 'workspace', worktree: info.worktree, deferred: info.deferred === true, threadId: null, turnId: null, agent: input.agent || 'codex', model: input.model || null, effort: input.effort || null, ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}), status: 'idle',
+    const task: Task = { ...(input.prepareReview ? { mode: 'review' as const } : {}), id: input.id, projectId: project.id, name, title: input.title, titleSource: 'prompt', instructions: skill ? skillPrompt(skill, instructions) : instructions,
+      permissions: input.permissions || 'workspace', worktree: '', deferred: true, threadId: null, turnId: null, agent: input.agent || 'codex', model: input.model || null, effort: input.effort || null, ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}), status: 'preparing', preparation: {},
         createdAt: Date.now(), updatedAt: Date.now(), feedbackCursor: 0, error: null, review: null };
-      this.store.transaction(() => {
-        this.store.saveTask(task);
-        if (reviewInput) this.store.saveReviewInput(task.id, reviewInput);
-      });
-      await this.enqueue(task.id, input.instructions || (input.prepareReview && !skill ? 'Review this manuscript and suggest improvements.' : ''), 'initial-' + task.id, false, { skill, notes, groupInstructions, attachments: files.map(file => file.id) });
+    // One transaction saves the task, its first message and the claims on
+    // its notes and attachments, so none can be sent by another task.
+    await this.enqueue(task.id, input.instructions || (input.prepareReview && !skill ? 'Review this manuscript and suggest improvements.' : ''), 'initial-' + task.id, false, { skill, notes, groupInstructions, attachments: files.map(file => file.id), admit: task });
+    if (input.prepareReview) this.reviewCopies.set(task.id, input.prepareReview);
       // Naming is independent of the editing turn. An unavailable helper must
       // not fail creation or prevent the queued task from running.
       try { this.requestTaskTitle(task.id); } catch { /* Keep the prompt-derived title. */ }
+    void this.prepareTask(task.id);
       return this.store.task(task.id);
-    } finally { releaseAttachments(); this.preparing.delete(input.id); claimed.forEach(id => this.preparingNotes.delete(id)); }
+  }
+  // Retry after a failed preparation; any other task is returned as it is.
+  retryTask(taskId: string) {
+    const task = this.store.task(taskId);
+    if (task.preparation && task.status === 'failed') void this.prepareTask(taskId);
+    return this.store.task(taskId);
+  }
+  // Makes a saved task's manuscript copy: connecting to the review engine,
+  // its task and worktree, and an AI review's PDF; then the queued first
+  // message can run. One preparation runs per task. A failure leaves the
+  // task failed with its error, for Retry or Delete; start.ts resumes a
+  // preparation a restart interrupted.
+  prepareTask(taskId: string): Promise<Task> {
+    const running = this.preparing.get(taskId);
+    if (running) return running;
+    const task = this.store.task(taskId);
+    if (!task.preparation) return Promise.resolve(task);
+    if (task.status === 'deleting') return Promise.reject(new Error('This task is being deleted.'));
+    if (task.status !== 'preparing') this.store.updateTask(taskId, { status: 'preparing', error: null });
+    const job = this.prepare(taskId).finally(() => this.preparing.delete(taskId));
+    this.preparing.set(taskId, job);
+    job.catch(error => {
+      // A server shutting down resumes the preparation when it starts again.
+      if (this.closing || !this.store.tasks().some(current => current.id === taskId && current.status === 'preparing')) return;
+      this.store.updateTask(taskId, { status: 'failed', error: errorText(error) });
+    });
+    return job;
+  }
+  private async prepare(taskId: string): Promise<Task> {
+    let task = this.store.task(taskId);
+    const client = await this.connectReview(this.store.project(task.projectId).path);
+    if (!task.preparation?.submitted) task = this.store.updateTask(taskId, { preparation: { ...task.preparation, submitted: true } });
+    // The engine answers with its open task of this name, so a retry or a
+    // restart reuses a copy it has already made. An engine that kept running
+    // across a restart may still be making the copy asked for before: wait
+    // for it rather than failing the task.
+    let info: { worktree: string; deferred?: boolean };
+    for (;;) {
+      try { info = await client.post('/api/tasks', { name: task.name, title: task.title, deferred: true }); break; }
+      catch (error) {
+        if (this.closing || !/ is being created\. Try again in a moment\.$/.test(errorText(error))) throw error;
+        await delay(1000);
+      }
+    }
+    let snapshot: ReviewSnapshot | undefined;
+    if (task.mode === 'review') try {
+      const current = task, capture = this.reviewCopies.get(taskId) ?? ((worktree: string) => this.prepareReview(current, worktree));
+      snapshot = await capture(info.worktree);
+    } catch (error) {
+      // Discard the copy, so a retry copies the manuscript again with the author's fixes.
+      if (await client.post(`${taskRoute(task.name)}/finish`, { force: true }).then(result => result?.finished === true, () => false)) this.store.updateTask(taskId, { preparation: {} });
+      throw error;
+    }
+    this.store.transaction(() => {
+      const run = this.store.runByKey('initial-' + taskId);
+      if (snapshot) {
+        this.store.saveReviewInput(taskId, snapshot);
+        // The review reads the PDF of this exact copy.
+        if (run?.status === 'queued') this.store.saveRun({ ...run, prompt: reviewPrompt(run.prompt, snapshot) });
+      }
+      this.store.updateTask(taskId, { worktree: info.worktree, deferred: info.deferred === true, ...(snapshot ? { aiReview: { key: snapshot.key } } : {}), status: run?.status === 'queued' ? 'queued' : 'idle', preparation: null, error: null });
+    });
+    this.reviewCopies.delete(taskId);
+    this.schedule();
+    return this.store.task(taskId);
   }
   // The author's message, a skill run with or without one, the review
   // feedback alone, or a build the agent broke. The chat keeps what happened;
   // the agent gets the prompt.
-  async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; feedback?: boolean; build?: BuildFailure; merge?: TaskReconciliation } = {}) {
-    const task = this.store.task(taskId);
+  // admit is a new task, saved with its first message (see createTask).
+  async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; feedback?: boolean; build?: BuildFailure; merge?: TaskReconciliation; admit?: Task } = {}) {
+    const task = options.admit ?? this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     if (task.mode === 'review' && ((options.skill && options.skill.output !== 'annotations') || options.notes?.length || options.reviewNotes?.length || options.attachments?.length || options.feedback || options.build)) throw new Error('AI review accepts review instructions only. Start an editing task to send notes, skills or attachments.');
     if (task.mode !== 'review' && options.skill?.output === 'annotations') throw new Error('Start a new task to run the AI review skill on the current PDF.');
     const existing = this.store.runByKey(requestKey);
     if (existing) { if (existing.taskId !== taskId) throw new Error('This request ID is already in use by another task.'); return existing; }
+    // Its first message holds the queue until the task is prepared.
+    if (task.preparation && !options.admit) throw new Error(task.status === 'preparing' ? 'This task is still being prepared. Send more instructions once it starts.' : 'Retry preparing this task before sending more instructions.');
     if (task.status === 'uncertain') throw new Error('Check the task status before sending more instructions.');
     if (task.delivery?.pending) throw new Error('Retry the pending delivery before sending more instructions.');
     if (this.committing.has(task.projectId)) throw new Error('Wait for the current Git operation before sending more instructions.');
@@ -401,8 +479,9 @@ export class Workspace extends EventEmitter {
       if (task.error) prompt += '\n\nLatest task/review error:\n' + task.error + '\nThe latest accepted manuscript is at ' + this.store.project(task.projectId).path + '. You may read it to understand accepted changes, but must only edit your isolated task worktree. Prepare a revised proposal for another review; never write to or accept changes in the manuscript checkout.';
     }
     if (files.length) prompt = (prompt || 'The user attached reference material without an instruction. Briefly identify the material and ask what they would like to do with it. Do not change the manuscript yet.') + this.attachments.prompt(files);
-    if (task.mode === 'review') prompt = reviewPrompt(prompt, this.store.reviewInput(taskId));
-    const noteOptionsRequested = task.mode !== 'review' && Boolean(options.notes?.length || options.reviewNotes?.length) && this.store.preference<boolean>('note-alternatives') !== false;
+    // A new AI review adds its PDF once its copy is prepared.
+    if (task.mode === 'review' && !options.admit) prompt = reviewPrompt(prompt, this.store.reviewInput(taskId));
+    const noteOptionsRequested = task.mode !== 'review' && Boolean(options.notes?.length || options.reviewNotes?.length) && this.store.preference<boolean>('note-alternatives') === true;
     if (noteOptionsRequested) prompt += '\n\n' + preparedNoteOptionsInstructions(this.store.preference('note-alternative-range'));
     const run: Run = { id: randomUUID(), taskId, requestKey, prompt, ...(noteOptionsRequested ? { noteOptionsRequested } : {}), ...(files.length ? { attachments: files } : {}), feedbackCursor: cursor, status: 'queued', createdAt: Date.now(), finishedAt: null, reviewRound: 0 };
     const meta: MessageMeta = { ...(options.skill ? { skill: { id: options.skill.id, name: options.skill.name, ...(options.skill.icon ? { icon: options.skill.icon } : {}) } } : {}), ...(options.notes?.length ? { notes: summarizeNotes(options.notes) } : options.reviewNotes?.length ? { notes: options.reviewNotes } : {}), ...(summary ? { feedback: summary } : {}), ...(options.feedback ? { sendsFeedback: true } : {}), ...(options.build ? { build: options.build } : {}) };
@@ -416,7 +495,7 @@ export class Workspace extends EventEmitter {
         return duplicate;
       }
       if (this.store.runs().some(r => r.taskId === taskId && r.status === 'queued')) throw new Error('This task already has queued instructions. Wait or pause it first.');
-      const current = this.store.task(taskId);
+      const current = options.admit ? this.store.saveTask(options.admit) : this.store.task(taskId);
       if (this.committing.has(current.projectId) || current.delivery?.pending) throw new Error('Wait for the current delivery before sending more instructions.');
       if (current.status === 'deleting') throw new Error('This task is being deleted. Your instructions were not queued.');
       if ((current.pauseVersion || 0) !== pauseVersion) throw new Error('The task was paused before these instructions were queued. Your draft has been kept.');
@@ -426,7 +505,12 @@ export class Workspace extends EventEmitter {
         meta.attachments = files;
       }
       this.store.saveRun(run);
-      for (const note of options.notes || []) this.store.saveAnnotation({ ...note, taskId });
+      for (const note of options.notes || []) {
+        // Claims are saved with the message, so two tasks never send one note.
+        const saved = this.store.annotation(note.projectId, note.id);
+        if ((saved.taskId && saved.taskId !== taskId) || saved.deletedAt !== undefined) throw new Error('A selected PDF note is no longer available. Refresh the manuscript and try again.');
+        this.store.saveAnnotation({ ...note, taskId });
+      }
       if (!BUSY.has(current.status)) this.store.updateTask(taskId, { status: 'queued', error: null });
       // Writing to an archived task brings it back to the task list.
       if (current.archivedAt && !options.build) this.store.updateTask(taskId, { archivedAt: null });
@@ -447,7 +531,7 @@ export class Workspace extends EventEmitter {
     for (const run of this.store.runs().filter(r => r.status === 'queued')) {
       const agent = this.agentOf(this.store.task(run.taskId));
       if (!this.agents[agent].ready || !this.runtimes[agent].authenticated) continue;
-      if (this.active.has(run.taskId) || this.reviewWrites.has(run.taskId) || this.publishing.has(run.taskId) || this.store.task(run.taskId).delivery?.pending || BUSY.has(this.store.task(run.taskId).status)) continue;
+      if (this.active.has(run.taskId) || this.reviewWrites.has(run.taskId) || this.publishing.has(run.taskId) || this.store.task(run.taskId).delivery?.pending || BUSY.has(this.store.task(run.taskId).status) || this.store.task(run.taskId).preparation) continue;
       this.active.set(run.taskId, run);
       void this.startRun(run).catch(e => this.failRun(run, e));
     }
@@ -568,8 +652,26 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.active.delete(run.taskId);
     this.earlyCompletions.delete(run.taskId); this.earlyRequests.delete(run.taskId);
     this.store.saveRun({ ...run, status: 'failed', finishedAt: Date.now() });
-    this.store.updateTask(run.taskId, { status: 'failed', turnId: null, pendingRunId: null, error: errorText(error) });
+    this.holdForReview(run.taskId, { status: 'failed', turnId: null, pendingRunId: null, error: errorText(error) });
     this.schedule();
+  }
+  // The agent writes files: the review engine compiles ahead what the round
+  // after this turn will compile first, in the background. The latest
+  // writes win; a burst of them asks once, and once more when it ends.
+  private prefetch(task: Task) {
+    const pending = this.prefetches.get(task.id);
+    if (pending) { pending.again = true; return; }
+    const entry = { again: false };
+    this.prefetches.set(task.id, entry);
+    void this.connectReview(this.store.project(task.projectId).path)
+      .then(client => client.post(`${taskRoute(task.name)}/prefetch`, {}))
+      .catch(() => { /* Speculation only: the round compiles what it needs. */ });
+    setTimeout(() => {
+      this.prefetches.delete(task.id);
+      if (entry.again && !this.closing) {
+        try { this.prefetch(this.store.task(task.id)); } catch { /* The task is gone. */ }
+      }
+    }, 2000).unref();
   }
   private flush() {
     if (this.flushTimer) clearTimeout(this.flushTimer); this.flushTimer = null;
@@ -578,7 +680,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   private appendDelta(task: Task, params: any, type: string) {
     const id = `${task.id}:${params.turnId}:${params.itemId}`;
-    const item = this.liveItems.get(id) || this.store.items(task.id).find(item => item.id === id) || { id, taskId: task.id, type, text: '', createdAt: Date.now() };
+    const item = this.liveItems.get(id) || this.store.item(task.id, id) || { id, taskId: task.id, type, text: '', createdAt: Date.now() };
     if (type === 'command') item.detail = ((item.detail || '') + (params.delta || '')).slice(-40000);
     else {
       if (type === 'assistant' && this.active.get(task.id)?.noteOptionsRequested) {
@@ -607,7 +709,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       this.usageTimers.set(agent, setTimeout(() => { this.usageTimers.delete(agent); void this.readUsage(agent); }, 1500));
       return;
     }
-    const task = this.store.tasks().find(t => t.threadId === p.threadId);
+    const task = this.store.taskByThread(p.threadId);
     if (!task || task.status === 'deleting') return;
     const eventTurn = p.turnId || p.turn?.id;
     if (eventTurn && task.turnId && eventTurn !== task.turnId) return;
@@ -617,7 +719,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const item = p.item, id = `${task.id}:${p.turnId}:${item.id}`;
       if (['userMessage', 'reasoning'].includes(item.type)) return;
       this.flush();
-      const previous = this.store.items(task.id).find(i => i.id === id);
+      const previous = this.store.item(task.id, id);
       const entry: TimelineItem = { id, taskId: task.id, createdAt: previous?.createdAt || Date.now(), type: item.type, text: item.text || item.command || '', status: item.status || (method === 'item/completed' ? 'completed' : 'inProgress') };
       if (item.type === 'agentMessage') entry.type = task.mode === 'review' ? 'reviewOutput' : 'assistant';
       if (item.type === 'agentMessage' && this.active.get(task.id)?.noteOptionsRequested) {
@@ -634,6 +736,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         if (item.success === false) entry.status = 'failed';
       }
       if (entry.text || entry.detail || entry.rawText) this.store.saveItem(entry);
+      if (method === 'item/completed' && item.type === 'fileChange' && task.mode !== 'review') this.prefetch(task);
     } else if (method === 'serverRequest/resolved') {
       const buffered = this.earlyRequests.get(task.id);
       if (buffered) this.earlyRequests.set(task.id, buffered.filter(request => String(request.id) !== String(p.requestId)));
@@ -662,7 +765,10 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       for (const [key, r] of this.requests) if (r.taskId === task.id) this.requests.delete(key);
       const status = p.turn.status === 'completed' ? 'completed' : p.turn.status === 'interrupted' ? 'interrupted' : 'failed';
       this.store.saveRun({ ...run, status, finishedAt: Date.now() });
-      this.store.updateTask(task.id, { turnId: null, pendingRunId: null, status: status === 'completed' ? 'building' : status, error: p.turn.error?.message || null });
+      const ended = { turnId: null, pendingRunId: null, error: p.turn.error?.message || null };
+      // A completed turn builds; publish() holds that build for the action.
+      if (status === 'completed') this.store.updateTask(task.id, { ...ended, status: 'building' });
+      else this.holdForReview(task.id, { ...ended, status });
       this.schedule();
       if (status === 'completed') {
         if (task.mode === 'review') this.finishAiReview(task, run, eventTurn);
@@ -675,7 +781,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   private serverRequest(message: any, agent: AgentId = 'codex') {
     if (this.closing) return;
-    const task = this.store.tasks().find(t => t.threadId === message.params?.threadId), runtime = this.agents[agent];
+    const task = this.store.taskByThread(message.params?.threadId), runtime = this.agents[agent];
     const allowed = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput', 'item/tool/call'];
     if (!task || this.agentOf(task) !== agent || !this.active.has(task.id) || !allowed.includes(message.method)) { runtime.reject(message.id, 'This request is not supported or its turn is no longer active.'); return; }
     if (message.params?.turnId && task.turnId && message.params.turnId !== task.turnId) { runtime.reject(message.id, 'This turn is no longer active.'); return; }
@@ -754,6 +860,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     const task = this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('This task is being deleted. Retry deletion to finish cleanup.');
     if (task.status === 'building') throw new Error('The PDF is building. Wait for this build to finish.');
+    if (task.preparation) throw new Error('This task has not started yet.');
     this.store.updateTask(taskId, { pauseVersion: (task.pauseVersion || 0) + 1 });
     for (const run of this.store.runs().filter(r => r.taskId === taskId && r.status === 'queued')) this.store.saveRun({ ...run, status: 'interrupted', finishedAt: Date.now() });
     void this.refresh(taskId);
@@ -766,9 +873,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   async reconcile(taskId: string) {
     const task = this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('Retry deletion to confirm this task was removed.');
-    if (task.pendingBuild && !task.pendingReview) { void this.resumeBuild(taskId); return this.store.task(taskId); }
-    if (task.status !== 'uncertain') return task;
+    // An unconfirmed review action is replayed whatever the status, once no
+    // write is in flight, so no status can leave it blocking the task.
     if (task.pendingReview) return this.reconcileReview(task);
+    if (task.pendingBuild) { void this.resumeBuild(taskId); return this.store.task(taskId); }
+    if (task.status !== 'uncertain') return task;
     const run = this.active.get(taskId) || this.store.runs().find(r => r.id === task.pendingRunId && r.taskId === taskId);
     const name = AGENT_NAMES[this.agentOf(task)];
     if (!run || !task.threadId) throw new Error(`The pending turn could not be identified. Reconnect ${name} and check again.`);
@@ -809,16 +918,24 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const value = await response.json() as { error?: string };
       if (!confirmedReviewResponse(response.status, value, task.name)) throw new Error('The review engine could not confirm this action. Check again when it is available.');
       await this.refresh(task.id);
-      const sourceBuild = response.ok && /\/source(?:\/options)?$/.test(pending.route);
+      const sourceBuild = response.ok && startsBuild(pending.route, value);
       this.store.transaction(() => {
-        this.store.updateTask(task.id, { pendingReview: null, status: this.store.runs().some(r => r.taskId === task.id && r.status === 'queued') ? 'queued' : pending.previousStatus, error: response.ok ? null : value.error || 'Check the review result before continuing.' });
+        // The status the task reached meanwhile, recorded by holdForReview. A
+        // turn or build still in progress ends on its own.
+        const current = this.store.task(task.id), reached = current.pendingReview ?? pending;
+        const going = this.active.has(task.id) || (this.publishing.has(task.id) && current.status === 'building');
+        const status = going ? current.status : this.store.runs().some(r => r.taskId === task.id && r.status === 'queued') ? 'queued' : reached.previousStatus;
+        this.store.updateTask(task.id, { pendingReview: null, status, error: !response.ok ? value.error || 'Check the review result before continuing.' : going ? null : reached.previousError ?? null });
         if (sourceBuild) this.rememberSourceBuild(task.id, value, pending);
       });
-      if (sourceBuild) void this.resumeBuild(task.id);
+      // So does the build held after the agent's turn for this action, and a
+      // build whose connection was lost meanwhile.
+      if (sourceBuild || this.store.task(task.id).pendingBuild) void this.resumeBuild(task.id);
       return this.store.task(task.id);
     } finally { this.reviewWrites.delete(task.id); this.schedule(); }
   }
-  async reviewWrite<T>(taskId: string, writesFiles: boolean, operation: () => Promise<T>, pending?: Omit<PendingReview, 'previousStatus'>): Promise<T> {
+  // `besideAgent`: the write leaves the task's worktree alone, as accepting does.
+  async reviewWrite<T>(taskId: string, writesFiles: boolean, operation: () => Promise<T>, pending?: Omit<PendingReview, 'previousStatus'>, besideAgent = false): Promise<T> {
     const task = this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     if (task.mode === 'review') throw new Error('AI review uses manuscript PDF notes, not change decisions.');
@@ -830,15 +947,27 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         if (remaining) this.commentWrites.set(taskId, remaining); else this.commentWrites.delete(taskId);
       }
     }
-    if (this.active.has(taskId) || this.publishing.has(taskId) || BUSY.has(task.status) || task.status === 'queued') throw new Error('Pause the task before accepting, rejecting, or undoing changes. Wait for any PDF build to finish.');
+    // During the agent's turn, accepting a deferred task writes only Git
+    // objects and review refs, so it goes ahead. Rejecting, undoing a rejection
+    // and editing source write the worktree the agent is editing.
+    const turn = Boolean(task.deferred) && AGENT_TURN.includes(task.status) && !this.publishing.has(taskId);
+    if (turn) {
+      if (!besideAgent) throw new Error("The agent is editing this task's files. Pause the task before rejecting or editing changes.");
+      if (task.pendingReview) throw new Error('A review action is already in progress. Wait for it to finish.');
+    }
+    else if (this.active.has(taskId) || (BUSY.has(task.status) && task.status !== 'building') || task.status === 'queued') throw new Error('Pause the task before accepting, rejecting, or undoing changes.');
     if (this.committing.has(task.projectId)) throw new Error('A commit is in progress. Try again when it finishes.');
     if (mergeInProgress(this.store.project(task.projectId).path)) throw new Error('Finish or abort the merge in the Git panel before accepting, rejecting, or undoing changes.');
     if (this.reviewWrites.has(taskId)) throw new Error('A review action is already in progress. Wait for it to finish.');
     this.reviewWrites.add(taskId);
-    if (pending) this.store.updateTask(taskId, { pendingReview: { ...pending, previousStatus: task.status } });
+    let written!: () => void;
+    this.reviewWriting.set(taskId, new Promise<void>(resolve => { written = resolve; }));
+    // A turn ends before anyone checks an unconfirmed write: the turn's end
+    // sets the status to return to, and a restart leaves the turn interrupted.
+    if (pending) this.store.updateTask(taskId, { pendingReview: { ...pending, previousStatus: turn ? 'interrupted' : task.status } });
     try {
       const result = await operation();
-      const sourceBuild = Boolean(pending && /\/source(?:\/options)?$/.test(pending.route)) && confirmedReviewResponse(200, result, task.name);
+      const sourceBuild = Boolean(pending && startsBuild(pending.route, result)) && confirmedReviewResponse(200, result, task.name);
       this.store.transaction(() => {
         if (pending) this.store.updateTask(taskId, { pendingReview: null });
         if (sourceBuild) this.rememberSourceBuild(taskId, result, pending);
@@ -846,18 +975,43 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       if (sourceBuild) void this.resumeBuild(taskId);
       return result;
     } catch (error) {
-      if (pending) this.store.updateTask(taskId, { status: 'uncertain', error: 'The review action could not be confirmed. Select Check status before continuing. ' + errorText(error) });
+      // A running turn or build keeps its status; its end asks to check the
+      // action (holdForReview). Otherwise Check status returns the task to
+      // the status it has reached.
+      const going = this.active.has(taskId) || (this.publishing.has(taskId) && this.store.task(taskId).status === 'building');
+      if (pending) this.store.updateTask(taskId, { ...(going ? {} : { status: 'uncertain' as const }), error: 'The review action could not be confirmed. Select Check status before continuing. ' + errorText(error) });
       throw error;
     }
-    finally { this.reviewWrites.delete(taskId); this.schedule(); }
+    finally { this.reviewWrites.delete(taskId); this.reviewWriting.delete(taskId); written(); this.schedule(); }
+  }
+  // Waits until no review write of the task is in flight.
+  private async reviewIdle(taskId: string) {
+    while (this.reviewWrites.has(taskId)) await (this.reviewWriting.get(taskId) ?? delay(50));
+  }
+  // Every turn and build ends here. A review action whose outcome is unknown
+  // is checked before the task moves on: Check status replays it, then
+  // returns the task to the status and error of `update`. While the action's
+  // write is still in flight the task moves on, and records where a lost
+  // response returns it. Returns whether the task waits for the check.
+  private holdForReview(taskId: string, update: Partial<Task> & { status: Task['status'] }) {
+    const task = this.store.task(taskId);
+    if (!task.pendingReview) { this.store.updateTask(taskId, update); return false; }
+    const pendingReview = { ...task.pendingReview, previousStatus: update.status, previousError: 'error' in update ? update.error ?? null : task.error };
+    if (this.reviewWrites.has(taskId)) { this.store.updateTask(taskId, { ...update, pendingReview }); return false; }
+    this.store.updateTask(taskId, { ...update, status: 'uncertain', pendingReview, error: 'The review engine could not confirm this action. Select Check status before continuing.' });
+    return true;
   }
   // Source saves start a build in the engine. Track that exact job, including
   // across a lost save response, without handing the author's text to an agent.
+  // A save during the build after the agent's turn replaces that build's job,
+  // which includes the turn's edits: the newer job keeps the turn's result
+  // links and its repair of a build the turn broke.
   private rememberSourceBuild(taskId: string, value: unknown, pending?: { route: string; body: Record<string, unknown> }) {
     const job = (value as { job?: { id?: string } } | null)?.job;
     if (!job?.id) throw new Error('The review engine could not confirm this action. Select Check status before continuing.');
     const runs = pending?.route.endsWith('/source/options') ? this.store.runs().filter(run => run.taskId === taskId && run.status === 'completed' && run.reviewRound === pending.body.round).map(run => run.id) : [];
-    this.store.updateTask(taskId, { status: 'building', error: null, pendingBuild: { requestId: randomUUID(), job: job.id, runs, sendBack: false, restarts: 0 } });
+    const building = this.store.task(taskId).pendingBuild;
+    this.store.updateTask(taskId, { status: 'building', error: null, pendingBuild: { requestId: randomUUID(), job: job.id, runs: [...new Set([...building?.runs ?? [], ...runs])], sendBack: building?.sendBack ?? false, restarts: 0 } });
   }
   // A build is automatic after the agent's run `after` completes. When its
   // edits break the build, the agent gets the error in a new turn, once.
@@ -866,12 +1020,16 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     if (task.mode === 'review') throw new Error('AI review creates PDF notes only. It cannot publish manuscript changes.');
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     if (this.active.has(taskId)) throw new Error('Pause Codex before building a review.');
-    if (this.reviewWrites.has(taskId)) throw new Error('Wait for the current review action before building a review.');
+    // The build after the agent's turn waits for an accept made during it.
+    if (this.reviewWrites.has(taskId) && !automatic) throw new Error('Wait for the current review action before building a review.');
     if (this.publishing.has(taskId) || (!automatic && (BUSY.has(task.status) || task.status === 'queued'))) throw new Error('This task is busy. Wait for it to finish or pause it first.');
     this.publishing.add(taskId);
     const runs = this.store.runs().filter(run => run.taskId === taskId && run.status === 'completed' && (run.reviewRound === 0 || (run.reviewRound === undefined && run.id === after?.id))).map(run => run.id);
     this.store.updateTask(taskId, { status: 'building', error: null, pendingBuild: { requestId: randomUUID(), runs, sendBack: Boolean(after && !after.requestKey.startsWith(BUILD_FIX)), restarts: 0 } });
-    return this.buildReview(task).finally(() => { this.publishing.delete(taskId); this.schedule(); });
+    return (async () => {
+      await this.reviewIdle(taskId);
+      if (!this.holdForReview(taskId, { status: 'building' })) await this.buildReview(task);
+    })().finally(() => { this.publishing.delete(taskId); this.schedule(); });
   }
   // Resume a persisted job, including jobs saved by versions before pendingBuild.
   async resumeBuild(taskId: string) {
@@ -915,6 +1073,13 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         }
       }
     };
+    // A source save replaced the job: follow the newer one, which also has
+    // this build's edits, with their result links and repair.
+    const follow = (latest: PendingBuild): PendingBuild => {
+      const merged = { ...latest, runs: [...new Set([...pending.runs, ...latest.runs])], sendBack: latest.sendBack || pending.sendBack };
+      this.store.updateTask(taskId, { pendingBuild: merged });
+      return merged;
+    };
     try {
       for (;;) {
         if (this.closing) return;
@@ -933,7 +1098,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
           this.emit('publishing', taskId, compiling);
         }
         const summary = await request(client => client.get(taskRoute(task.name)));
-        this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, job: { ...current, id: pending.job } } });
+        this.store.updateTask(taskId, { review: { ...this.store.task(taskId).review, state: summary.state, round: summary.round, counts: summary.counts, ready: summary.ready, job: { ...current, id: pending.job } } });
+        if (['done', 'completed', 'succeeded', 'failed'].includes(current.status)) {
+          const latest = this.store.task(taskId).pendingBuild;
+          if (latest && latest.job !== pending.job) { pending = follow(latest); continue; }
+        }
         if (current.status === 'done' || current.status === 'completed' || current.status === 'succeeded') {
           // Freeze the result round for these instructions. Later follow-ups
           // have their own results and cannot silently replace these links.
@@ -947,7 +1116,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
             this.store.updateTask(taskId, { review: { ...review, job: { id: pending.job, status: 'running', phase: 'options', createdAt: current.createdAt, options: { completed, total } } } });
           }, () => this.closing);
           if (this.closing) return;
-          this.store.updateTask(taskId, { status: this.store.runs().some(r => r.taskId === taskId && r.status === 'queued') ? 'queued' : 'reviewing', error: null, pendingBuild: null,
+          const latest = this.store.task(taskId).pendingBuild;
+          if (latest && latest.job !== pending.job) { pending = follow(latest); continue; }
+          this.holdForReview(taskId, { status: this.store.runs().some(r => r.taskId === taskId && r.status === 'queued') ? 'queued' : 'reviewing', error: null, pendingBuild: null,
             review: { ...this.store.task(taskId).review!, job: { ...current, id: pending.job } } });
           break;
         }
@@ -960,7 +1131,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
           const failure: BuildFailure = { error: current.error || 'PDF build failed.', details: current.details || [], ...(current.log ? { log: current.log } : {}) };
           // Instructions the author queued meanwhile go first; the build after them sends any error that remains.
           if (pending.sendBack && FIXABLE.test(failure.error) && await this.enqueue(taskId, '', BUILD_FIX + pending.job, false, { build: failure }).then(() => true, () => false)) {
-            this.store.updateTask(taskId, { status: 'queued', error: null, pendingBuild: null });
+            this.holdForReview(taskId, { status: 'queued', error: null, pendingBuild: null });
             return;
           }
           throw new Error([failure.error, ...failure.details].join('\n'));
@@ -968,16 +1139,14 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         await delay(1500);
       }
       await this.refresh(taskId);
-      // What applying the new round will write can now be compiled ahead.
-      this.emit('reviewed', taskId);
     } catch (e) {
       if (this.closing) return;
       if (reviewConnectionError(e)) {
         console.warn('PDF comparison recovery pending:', task.name, pending.job || pending.requestId, e);
-        this.store.updateTask(taskId, { status: 'uncertain', pendingBuild: pending,
+        this.holdForReview(taskId, { status: 'uncertain', pendingBuild: pending,
           error: 'The PDF comparison service could not be reached. Your edits are saved. Select Check status to recover the existing build.' });
       }
-      else this.store.updateTask(taskId, { status: 'failed', pendingBuild: null, error: errorText(e) });
+      else this.holdForReview(taskId, { status: 'failed', pendingBuild: null, error: errorText(e) });
     }
   }
   private finishAiReview(task: Task, run: Run, turnId: string) {
@@ -1002,7 +1171,22 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     }
     this.schedule();
   }
-  async refresh(taskId: string) {
+  // Reads the task's review summary again. Reads of one task run one at a
+  // time, and a call during a read reads once more after it, so an older
+  // answer never replaces a newer one. Each call resolves after a read that
+  // started after it.
+  refresh(taskId: string): Promise<void> {
+    const running = this.refreshes.get(taskId);
+    if (running) { running.again = true; return running.done; }
+    const entry = { done: Promise.resolve(), again: false };
+    entry.done = (async () => {
+      try { do { entry.again = false; await this.readReview(taskId); } while (entry.again); }
+      finally { this.refreshes.delete(taskId); }
+    })();
+    this.refreshes.set(taskId, entry);
+    return entry.done;
+  }
+  private async readReview(taskId: string) {
     let release: (() => void) | undefined;
     try {
       const task = this.store.task(taskId);
@@ -1017,7 +1201,13 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const reconciliation = summary.reconciliation ?? null;
       const files = await acceptedFiles(project.path, task.name, deferred ? reconciliation?.base ?? (delivery && delivery.mode !== 'branch' ? delivery.accepted : undefined) : task.committed?.accepted);
       const current = this.store.task(taskId);
-      if (current.status !== 'deleting') this.store.updateTask(taskId, { deferred, delivery, reconciliation, review: { state: summary.state, round: summary.round, counts: summary.counts, job: current.review?.job, unsent, comments, files } });
+      if (current.status !== 'deleting') this.store.updateTask(taskId, { deferred, delivery, reconciliation, review: { state: summary.state, round: summary.round, counts: summary.counts, ready: summary.ready, job: current.review?.job, unsent, comments, files } });
+      // The last pending change was just decided, or the decisions changed
+      // with none pending: what applying writes can compile now.
+      const decided = deferred && summary.counts?.pending === 0 && Object.values(summary.counts ?? {}).some(n => Number(n) > 0),
+        before = current.review;
+      if (decided && current.status !== 'deleting' && ((before?.counts?.pending ?? 1) > 0 || before?.round !== summary.round || JSON.stringify(before?.files) !== JSON.stringify(files) || JSON.stringify(before?.counts) !== JSON.stringify(summary.counts)))
+        this.emit('decided', taskId);
       // Recover an application interrupted after the engine prepared its
       // proposal but before Papilot persisted the agent run.
       if (reconciliation?.ready && (summary.round ?? 0) <= reconciliation.round && current.status === 'reviewing' && !this.committing.has(task.projectId) && !this.reviewWrites.has(taskId)
@@ -1114,12 +1304,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.store.updateTask(taskId, { titleGeneration: 'pending' });
     const written = this.oneOff(id, { cwd: this.store.project(task.projectId).path, sandbox: 'read-only', instructions: taskCaptionInstructions, prompt, model, effort: model?.efforts[0], timeout: 45000, what: 'generate a task title' }).then(reply => {
       if (this.closing) return null;
-      const current = this.store.tasks().find(item => item.id === taskId);
+      const current = this.store.findTask(taskId);
       if (!current || current.status === 'deleting' || (current.titleRevision || 0) !== revision) return current || null;
       return this.store.updateTask(taskId, { title: taskCaptionFrom(reply), titleSource: 'generated', titleRevision: revision + 1, titleGeneration: null });
     }).catch(error => {
       if (!this.closing) {
-        const current = this.store.tasks().find(item => item.id === taskId);
+        const current = this.store.findTask(taskId);
         if (current && current.status !== 'deleting' && (current.titleRevision || 0) === revision) this.store.updateTask(taskId, { titleGeneration: 'failed' });
       }
       throw error;
@@ -1333,11 +1523,13 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   async deleteTask(taskId: string): Promise<{ ok: true }> {
     if (this.preparing.has(taskId)) throw new Error('Wait for task creation to finish before deleting it.');
     if (this.deletions.has(taskId)) throw new Error('Deletion is already in progress. Wait for it to finish.');
-    const task = this.store.tasks().find(t => t.id === taskId);
+    const task = this.store.findTask(taskId);
     if (!task) return { ok: true };
-    if (!['idle', 'interrupted', 'reviewing', 'failed', 'deleting'].includes(task.status)
+    // A task that was never prepared has only its first message, which never ran.
+    const unprepared = Boolean(task.preparation);
+    if (!['idle', 'interrupted', 'reviewing', 'failed', 'deleting', ...(unprepared ? ['preparing'] : [])].includes(task.status)
       || this.active.has(taskId) || this.publishing.has(taskId) || this.reviewWrites.has(taskId) || this.commentWrites.has(taskId)
-      || task.pendingReview || this.store.runs().some(run => run.taskId === taskId && run.status === 'queued')) {
+      || task.pendingReview || (!unprepared && this.store.runs().some(run => run.taskId === taskId && run.status === 'queued'))) {
       throw new Error('Pause the task and wait for its current work or review action to finish before deleting it. Resolve any uncertain action first.');
     }
     // Persist the reservation before connecting to the engine. A restart or
@@ -1345,12 +1537,25 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.deletions.add(taskId);
     this.store.updateTask(taskId, { status: 'deleting', pauseVersion: (task.pauseVersion || 0) + 1, error: null });
     try {
-      const client = await this.connectReview(this.store.project(task.projectId).path);
-      const state = await client.get(`${taskRoute(task.name)}/state`);
-      if (!confirmedReviewResponse(200, state, task.name)) throw new Error('The review engine could not confirm this task’s cleanup status.');
-      if (!state.closed) {
-        const result = await client.post(`${taskRoute(task.name)}/finish`, { force: true });
+      // The engine never saw a task whose preparation was not submitted.
+      const client = unprepared && !task.preparation?.submitted ? null : await this.connectReview(this.store.project(task.projectId).path);
+      const finish = async () => {
+        const result = await client!.post(`${taskRoute(task.name)}/finish`, { force: true });
         if (result?.task !== task.name || result.finished !== true) throw new Error('The review engine did not confirm task deletion.');
+      };
+      if (unprepared) {
+        if (client) {
+          // A lost response may leave the engine still creating the copy,
+          // before it appears in the task list. Repeating the same request
+          // either confirms that copy or refuses while it is being created.
+          const info = await client.post('/api/tasks', { name: task.name, title: task.title, deferred: true });
+          if (info?.task !== task.name || typeof info.worktree !== 'string' || !info.worktree) throw new Error('The review engine could not confirm this task’s cleanup status.');
+          await finish();
+        }
+      } else {
+        const state = await client!.get(`${taskRoute(task.name)}/state`);
+      if (!confirmedReviewResponse(200, state, task.name)) throw new Error('The review engine could not confirm this task’s cleanup status.');
+        if (!state.closed) await finish();
       }
       // The review engine owns worktree cleanup. Drop Papilot's attachments
       // and records only after it has acknowledged finishing the task.
@@ -1358,6 +1563,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       for (const [id, request] of this.requests) if (request.taskId === taskId) this.requests.delete(id);
       this.earlyCompletions.delete(taskId); this.earlyRequests.delete(taskId);
       if (task.threadId) this.loaded.delete(task.threadId);
+      // Notes the agent never received go back to the manuscript.
+      if (unprepared) for (const { taskId: _, ...note } of this.store.annotations(task.projectId).filter(note => note.taskId === taskId)) this.store.saveAnnotation(note);
+      this.reviewCopies.delete(taskId);
       this.attachments.removeTask(taskId);
       this.store.deleteTask(taskId);
       return { ok: true };

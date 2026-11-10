@@ -80,15 +80,18 @@ try {
       // Grouped changes expose per-edit actions. Their hover background must
       // follow the review surface even when the surrounding workspace is dark.
       if (kind === 'inline') {
-        for (const [action, light, dark] of [
-          ['accept', 'rgb(21, 128, 61)', 'rgb(123, 213, 160)'],
-          ['reject', 'rgb(220, 38, 38)', 'rgb(255, 150, 150)'],
-          ['comment', 'rgb(37, 99, 235)', 'rgb(138, 180, 255)'],
+        for (const [action, light, dark, lightBackground, darkBackground] of [
+          ['accept', 'rgb(21, 128, 61)', 'rgb(123, 213, 160)', 'rgb(240, 253, 244)', 'rgb(36, 58, 47)'],
+          ['reject', 'rgb(220, 38, 38)', 'rgb(255, 150, 150)', 'rgb(254, 242, 242)', 'rgb(70, 41, 46)'],
+          ['comment', 'rgb(37, 99, 235)', 'rgb(138, 180, 255)', 'rgb(239, 246, 255)', 'rgb(43, 54, 81)'],
         ]) {
           const button = change.locator('.unit-actions .' + action).first();
           await button.hover();
-          await expect(button).toHaveCSS('background-color', darkReview ? 'rgb(30, 31, 34)' : 'rgb(243, 243, 243)');
-          await expect(button).toHaveCSS('color', darkReview ? dark : light);
+          await expect(button).toHaveCSS('background-color', darkReview ? darkBackground : lightBackground);
+          await expect(button).toHaveCSS('color', darkReview ? 'rgb(236, 236, 238)' : 'rgb(23, 23, 23)');
+          await expect(button).toHaveCSS('font-size', '0px');
+          await expect.poll(() => button.evaluate(el => getComputedStyle(el, '::before').backgroundColor)).toBe(darkReview ? dark : light);
+          assert.notEqual(await button.evaluate(el => getComputedStyle(el, '::before').maskImage), 'none', 'Per-edit actions retain their visible icons');
         }
       }
       await sourceToggle.click();

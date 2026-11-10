@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } f
 import type { AgentId, RuntimeStatus, TaskPermissions } from '../shared.ts';
 import { Icon } from './icons.tsx';
 import { BrandIcon } from './brand-icon.tsx';
-import { t } from './i18n.ts';
+import { errorText, t } from './i18n.ts';
 import { browserStorage } from './storage.ts';
 import { EffortSlider, effortName } from './effort-slider.tsx';
 import { permissionText } from './task-permissions.tsx';
@@ -14,7 +14,7 @@ export function ModelLabel({ model, effort, fast }: { model: string; effort?: st
 
 export function AgentConnectionNotice({ name, runtime, reconnecting, onReconnect }: { name: string; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void }) {
   if (!runtime || (runtime.connected && runtime.authenticated)) return null;
-  const error = runtime.error || '', first = error.split(/:\s|\.\s/)[0];
+  const error = runtime.error ? errorText(runtime.error) : '', first = error.split(/:\s|\.\s/)[0];
   const connecting = runtime.installed !== false && !error && !runtime.connected;
   // An agent that was not found is not connecting: say so until it is installed and Reconnect finds it.
   const message = runtime.installed === false ? t('{agent} was not found on this computer. Install or set it up, then select Reconnect.', { agent: name })
@@ -23,6 +23,18 @@ export function AgentConnectionNotice({ name, runtime, reconnecting, onReconnect
     <div className="agent-connection-message" role="status">{connecting ? <span className="spinner" aria-hidden="true"/> : <Icon name="alert" size={14}/>}<span>{message}</span></div>
     {error && error !== message && <details><summary>{t('Connection details')}</summary><p>{error}</p></details>}
     <button type="button" disabled={reconnecting} onClick={onReconnect}><Icon name="refresh" size={12}/>{reconnecting ? t('Connecting…') : t('Reconnect')}</button>
+  </div>;
+}
+
+// Adding an agent is the way forward, so it is the main action; Reconnect
+// checks again once one is installed.
+export function NoAgentNotice({ reconnecting, onReconnect, onAdd }: { reconnecting: boolean; onReconnect: () => void; onAdd: () => void }) {
+  return <div className="agent-connection no-agent" data-state="error">
+    <div className="agent-connection-message" role="status"><Icon name="alert" size={14}/><span>{t('No agent is set up on this computer yet. Add one, such as Codex or Claude Code, then select Reconnect.')}</span></div>
+    <div className="agent-connection-actions">
+      <button type="button" className="button primary compact" onClick={onAdd}>{t('Add an agent')}</button>
+      <button type="button" className="button secondary compact" disabled={reconnecting} onClick={onReconnect}><Icon name="refresh" size={13}/>{reconnecting ? t('Connecting…') : t('Reconnect')}</button>
+    </div>
   </div>;
 }
 
@@ -52,11 +64,11 @@ function agentState(runtime?: RuntimeStatus) {
 // selected model's reasoning effort, fast mode and permissions sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true }: {
+export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true, noAgent = false }: {
   agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
   onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string; allowUnknownDefault?: boolean;
-  permissions?: ReactNode; permissionMode?: TaskPermissions;
+  permissions?: ReactNode; permissionMode?: TaskPermissions; noAgent?: boolean;
 }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(''), [recent, setRecent] = useState(readRecent);
@@ -69,7 +81,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   const fastMode = agent === 'codex' ? selected?.fastMode : undefined;
   const permission = runtime?.permissionOptions?.find(option => option.value === permissionMode);
   const disconnected = runtime && (!runtime.connected || !runtime.authenticated);
-  const summary = [agentName, modelName, currentEffort ? effortName(currentEffort) : '', fastMode && fast ? t('Fast') : '', permission ? permissionText(permission.label) : ''].filter((part, index, all) => part && all.indexOf(part) === index).join(' · ');
+  const summary = noAgent ? t('No agent') : [agentName, modelName, currentEffort ? effortName(currentEffort) : '', fastMode && fast ? t('Fast') : '', permission ? permissionText(permission.label) : ''].filter((part, index, all) => part && all.indexOf(part) === index).join(' · ');
   // Every model of every agent; an agent without a model list offers its default.
   const choices = (option: AgentOption): Choice[] => {
     const list = option.runtime?.models || [];
@@ -104,7 +116,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
     window.addEventListener('resize', dismiss); document.addEventListener('scroll', scroll, true);
     return () => { observer.disconnect(); window.removeEventListener('resize', dismiss); document.removeEventListener('scroll', scroll, true); };
   }, [open]);
-  useEffect(() => { if (disabled) panel.current?.hidePopover(); }, [disabled]);
+  useEffect(() => { if (disabled || noAgent) panel.current?.hidePopover(); }, [disabled, noAgent]);
   // Keep the active option in view while moving through the list with the keyboard.
   useEffect(() => { if (open && active) list.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(active)}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active, open]);
   function show() {
@@ -138,15 +150,15 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   };
   const activeChoice = visible.find(choice => choice.key === active);
   return <span className="agent-picker">
-    <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={t('Agent settings')} aria-description={summary} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled}
+    <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={t('Agent settings')} aria-description={summary} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled || noAgent}
       onClick={() => panel.current?.matches(':popover-open') ? panel.current.hidePopover() : show()}
       onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); show(); } }}>
-      <BrandIcon name={agent} size={15}/>{!permission && modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}
+      {noAgent ? <span className="agent-picker-selection">{t('No agent')}</span> : <><BrandIcon name={agent} size={15}/>{!permission && modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}
       <span className="agent-picker-selection">
         <ModelLabel model={modelName} effort={permission ? undefined : currentEffort} fast={Boolean(fastMode && fast)}/>
         {permission && <small className="agent-permission-label" data-mode={permission.value}>{permissionText(permission.label)}</small>}
       </span>
-      <Icon name="chevronDown" size={13}/>{disconnected && <span className="agent-status-mark"><Icon name="alert" size={13}/></span>}
+      <Icon name="chevronDown" size={13}/>{disconnected && <span className="agent-status-mark"><Icon name="alert" size={13}/></span>}</>}
     </button>
     <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Agent settings')} className={'agent-picker-panel' + (permission ? ' has-permissions' : '')} onToggle={event => {
       const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown);

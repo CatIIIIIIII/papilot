@@ -166,3 +166,27 @@ for (const createdAt of [1, 2]) test(`a repeated Claude block stays visible whil
     refresh();
   } finally { store.close(); }
 });
+
+test('agent events find their task and message without reading the whole history', () => {
+  const store = new Store(':memory:');
+  const task = (id: string, threadId: string | null) => store.saveTask({ id, projectId: 'paper', name: id, title: id, instructions: '', worktree: '', threadId, turnId: null, model: null, status: 'reviewing', createdAt: 1 } as unknown as Parameters<Store['saveTask']>[0]);
+  task('old', 'thread-a'); task('none', null); task('new', 'thread-b'); task('again', 'thread-a');
+  assert.equal(store.taskByThread('thread-b')?.id, 'new');
+  assert.equal(store.taskByThread('thread-a')?.id, 'old', 'the first task with the thread, as before');
+  for (const missing of [undefined, null, '', 'thread-c', 7]) assert.equal(store.taskByThread(missing), undefined, `${String(missing)} names no task`);
+  store.updateTask('old', { threadId: 'thread-c' });
+  assert.equal(store.taskByThread('thread-a')?.id, 'again', 'a rebound thread follows the saved task');
+  assert.equal(store.taskByThread('thread-c')?.id, 'old');
+  store.deleteTask('again');
+  assert.equal(store.taskByThread('thread-a'), undefined);
+  const plan = store.db.prepare("EXPLAIN QUERY PLAN SELECT data FROM tasks WHERE json_extract(data,'$.threadId')=? ORDER BY rowid LIMIT 1").all('thread-a') as { detail: string }[];
+  assert.ok(plan.some(row => row.detail.includes('task_threads')), 'the thread lookup uses its index');
+  assert.equal(store.findTask('new')?.id, 'new'); assert.equal(store.findTask('gone'), undefined);
+  assert.equal(store.taskProject('new'), 'paper'); assert.equal(store.taskProject('gone'), undefined);
+  store.updateTask('new', { projectId: 'other-paper' });
+  assert.equal(store.taskProject('new'), 'other-paper', 'the project lookup follows a saved task move');
+  assert.equal(store.task('new').projectId, 'other-paper');
+  store.saveItem({ id: 'new:1:a', taskId: 'new', type: 'command', text: 'ls', createdAt: 5, detail: 'x'.repeat(40000) });
+  assert.equal(store.item('new', 'new:1:a')?.createdAt, 5);
+  assert.equal(store.item('old', 'new:1:a'), undefined, 'messages stay with their task');
+});

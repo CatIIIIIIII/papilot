@@ -230,7 +230,7 @@ it.skipIf(!tex)(
   120000,
 );
 it.skipIf(!tex)(
-  "a decision arriving during compilation is included in the published round",
+  "a decision on an earlier comparison is recorded without restarting the inserted round",
   async () => {
     const f = new Fixture(),
       app = f.app();
@@ -241,6 +241,7 @@ it.skipIf(!tex)(
       f.edit(task, METHOD, "Method sentence 2.", "First proposal.");
       fakeRound(app, task.name);
       f.edit(task, METHOD, "Detail sentence 15.", "Second proposal.");
+      const before = app.tasks.get(task.name).accepted;
       const original = Builder.prototype.build;
       let decided = false;
       const spy = vi
@@ -269,10 +270,14 @@ it.skipIf(!tex)(
           JSON.stringify(app.publisher.job(job.id).result),
         ).toBe("done");
         const round = app.review.round(task.name, 2);
-        expect(round.before).toBe(app.tasks.get(task.name).accepted);
-        expect(round.units).toHaveLength(1);
-        expect(round.units[0].new_text).toBe("Second proposal");
-        expect(round.units[0].new_text).not.toContain("First proposal.");
+        expect(round.before).toBe(before);
+        expect(round.units).toHaveLength(2);
+        expect(app.review.pageState(task.name).decisions).toEqual({ c001: "accepted", c002: "pending" });
+        const accepted = app.repo.blob(app.tasks.get(task.name).accepted, METHOD)!.toString();
+        expect(accepted).toContain("First proposal.");
+        expect(accepted).not.toContain("Second proposal.");
+        expect(app.review.latestRound(task.name)?.number).toBe(2);
+        expect(spy).toHaveBeenCalledTimes(2);
         expect(applyUnits(app.repo.blob(round.before, METHOD), app.repo.blob(round.after, METHOD), round.units)).toEqual(app.repo.blob(round.after, METHOD));
       } finally {
         spy.mockRestore();

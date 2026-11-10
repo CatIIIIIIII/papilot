@@ -67,7 +67,7 @@ test("renders vectors and selectable text without browser errors", async ({
         ),
     )
     .toBe(0);
-  expect(await page.locator(".pdf-glyph").count()).toBeGreaterThan(100);
+  await expect.poll(() => page.locator(".pdf-glyph").count()).toBeGreaterThan(100);
   await page.screenshot({ path: ".cache/browser-review.png", fullPage: false });
   expect(errors).toEqual([]);
 });
@@ -132,6 +132,43 @@ test("long reviews keep searchable text and preserve selections while limiting g
     return Boolean(selected.anchorNode!.compareDocumentPosition(selected.focusNode!) & Node.DOCUMENT_POSITION_PRECEDING);
   })).toBe(true);
   expect(await allText()).toEqual(original);
+});
+test("expanding a selected compact line preserves its boundaries and copy text", async ({ page }) => {
+  const equation = "w(v) = |left(v)|.";
+  await page.route("**/rounds/1", async route => {
+    const response = await route.fetch(), detail = await response.json();
+    const line = (text: string, left: number) => ({ text,
+      chars: Array.from(text, (text, i) => ({ text, rect: [left + i * 8, 20, left + i * 8 + 8, 34] })),
+    });
+    detail.sections.unshift({ node: "copy-fixture", title: "Copy fixture", number: "", blocks: [
+      { kind: "context", image: { src: "copy-fixture.svg", clean: "copy-fixture.svg", width: 600, height: 2000, page: 1, label: "copy-spacer", text: [] } },
+      { kind: "context", image: { src: "copy-fixture.svg", clean: "copy-fixture.svg", width: 600, height: 60, page: 2, label: "copy-equation", text: [line(equation, 100), line("(1)", 500)] } },
+    ] });
+    await route.fulfill({ json: detail });
+  });
+  await page.route("**/copy-fixture.svg", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 60"/>' }));
+  await page.reload();
+  const strip = page.locator('.pdf-strip[data-page="copy-equation"]');
+  for (const backwards of [false, true]) {
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.locator("#paper").evaluate(paper => { paper.scrollTop = 0; });
+    await expect(strip.locator(".pdf-line-preview")).toHaveCount(2);
+    const selected = await strip.locator(".pdf-text-line").first().evaluate((line, backwards) => {
+      const selection = window.getSelection()!, end = line.childNodes.length;
+      selection.setBaseAndExtent(line, backwards ? end : 0, line, backwards ? 0 : end);
+      return selection.toString();
+    }, backwards);
+    expect(selected).toBe(equation);
+    await strip.evaluate(strip => strip.scrollIntoView({ block: "center" }));
+    await expect(strip.locator(".pdf-glyph").first()).toBeVisible();
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(equation);
+    expect(await page.evaluate(() => {
+      const selection = window.getSelection()!;
+      return selection.anchorNode === selection.focusNode && selection.anchorOffset > selection.focusOffset;
+    })).toBe(backwards);
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+c" : "Control+c");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(equation);
+  }
 });
 test("ordinary copy returns selected PDF text and shortcuts do not decide it", async ({
   page,
@@ -591,4 +628,25 @@ test("change map viewport follows scrolling and can be dragged", async ({
     .toBe(0);
   await expectMapAligned(page);
   await page.screenshot({ path: ".cache/browser-change-map.png" });
+});
+test("an edit that prints in two changes names the other and goes there", async ({ page }) => {
+  await page.route("**/rounds/1", async route => {
+    const response = await route.fetch(), detail = await response.json();
+    const section = detail.sections.find((s: { blocks: { kind: string }[] }) => s.blocks.filter(b => b.kind === "change").length >= 2);
+    const [first, second] = section.blocks.filter((b: { kind: string }) => b.kind === "change");
+    // The second change also carries the first change's edit, printed there too.
+    const unit = first.units[0];
+    second.units = [...second.units, unit];
+    first.linked = [{ unit, reason: "places" }];
+    second.linked = [{ unit, reason: "places" }];
+    await route.fulfill({ response, json: detail });
+  });
+  await page.reload();
+  const firstLink = page.locator('.change[data-stop="0"] .change-linked');
+  await expect(firstLink).toHaveText(/Same edit as change \d+/);
+  await expect(firstLink).toHaveAttribute("title", "The same edit prints in several places in the PDF.");
+  const target = Number((await firstLink.innerText()).match(/\d+/)![0]) - 1;
+  await firstLink.click();
+  await expect(page.locator(".change.current")).toHaveAttribute("data-stop", String(target));
+  await expect(page.locator(`.change[data-stop="${target}"] .change-linked`)).toHaveText("Same edit as change 1");
 });

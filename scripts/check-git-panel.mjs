@@ -16,12 +16,14 @@ const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1
 const page = await context.newPage();
 await page.clock.install();
 context.setDefaultTimeout(15000);
-const errors = [], requests = [], stages = [], diffs = [];
+const errors = [], requests = [], stages = [], diffs = [], overviewFailures = [];
 page.on('pageerror', error => errors.push(error.message));
+page.on('requestfailed', request => { if (new URL(request.url()).pathname.endsWith('/git/overview')) overviewFailures.push(request.failure()); });
 const files = [{ path: 'main.tex', status: 'M', staged: false, unstaged: true, incoming: 'M', lines: [18, 4] }, { path: 'chapters/results.tex', status: 'M', staged: false, unstaged: true, lines: [6, 2] }, { path: 'references.bib', status: '?', staged: false, unstaged: true }];
 const longDiff = '@@ -1,9002 +1,9002 @@\n-First result.\n+Updated result.\n' + Array.from({ length: 9000 }, (_, index) => ` Context ${index + 2}\n`).join('') + '-Late result.\n+Late updated result.\n';
 let git = { remote: true, branch: 'main', upstream: 'origin/main', ahead: 1, behind: 1, head: { hash: 'abc1234', subject: 'Initial', date: 1 }, files: structuredClone(files), merging: null };
 let syncFailure = false, syncConflict = false, syncGate = null, overviewRequests = 0, fetches = 0, incoming = 0, historyDiffs = 0;
+let overviewGate = null, overviewError = null;
 const project = { id: 'paper', name: 'Example paper', path: '/tmp/git-panel-fixture', createdAt: 1 };
 const history = [{ hash: 'abc1234'.padEnd(40, '0'), message: 'Refine the discussion\n\nExplain the limitations and next steps.', author: 'Chen', date: Date.now() }, { hash: '1'.repeat(40), message: 'Add comparison results\n\nInclude the baseline and shared workspace results.', author: 'Lin', date: Date.now() - 86400000 }];
 const runtime = { connected: true, authenticated: true, account: null, error: null, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: ['high'], defaultEffort: 'high' }] };
@@ -41,7 +43,12 @@ await context.route('**/api/**', async route => {
   if (url.pathname.endsWith('/git')) return json(git);
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname.endsWith('/git/fetch')) { fetches++; if (incoming) git = { ...git, behind: incoming }; return json({ git }); }
-  if (url.pathname.endsWith('/git/overview')) { overviewRequests++; return json({ commits: [], worktrees: [], truncated: false }); }
+  if (url.pathname.endsWith('/git/overview')) {
+    overviewRequests++;
+    if (overviewGate) await overviewGate;
+    if (overviewError) return route.fulfill({ status: 503, json: { error: overviewError } });
+    return json({ commits: [], worktrees: [], truncated: false });
+  }
   if (url.pathname.endsWith('/git/history')) return json({ versions: history, next: null });
   if (/\/git\/history\/[a-f0-9]+\/diff$/.test(url.pathname)) { historyDiffs++; return json({ path: 'main.tex', diff: '@@ -1 +1 @@\n-First draft\n+Historical result\n', truncated: false }); }
   if (/\/git\/history\/[a-f0-9]+$/.test(url.pathname)) return json({ version: history.find(version => url.pathname.endsWith(version.hash)), files: [{ path: 'main.tex', status: 'M' }] });
@@ -236,23 +243,36 @@ try {
   await showHistory();
   await panel.getByRole('region', { name: 'Commit graph', exact: true }).waitFor();
   await panel.getByRole('region', { name: 'Worktrees', exact: true }).waitFor();
-  // A local repository read timing out is not evidence of a network failure.
+  // Repository reads may outlast the former deadline without being aborted or replaced.
   const graph = panel.getByRole('region', { name: 'Commit graph', exact: true });
+  const refreshGraph = graph.getByRole('button', { name: 'Refresh worktrees and history', exact: true });
   await expect(graph.getByText('No commits yet', { exact: true })).toBeVisible();
-  await page.evaluate(() => {
-    const timeout = AbortSignal.timeout;
-    window.__restoreGitOverviewTimeout = () => { AbortSignal.timeout = timeout; };
-    AbortSignal.timeout = wait => wait === 60000
-      ? AbortSignal.abort(new DOMException('Timed out', 'TimeoutError')) : timeout.call(AbortSignal, wait);
-  });
-  await graph.getByRole('button', { name: 'Refresh worktrees and history', exact: true }).click();
-  await expect(graph.getByRole('alert')).toContainText('The request timed out. Please try again.');
+  let releaseOverview;
+  overviewGate = new Promise(resolve => { releaseOverview = resolve; });
+  const beforeLong = overviewRequests, failuresBeforeLong = overviewFailures.length;
+  await refreshGraph.click();
+  await expect.poll(() => overviewRequests).toBe(beforeLong + 1);
+  await page.clock.fastForward(60_100);
+  await expect(graph.getByRole('alert')).toHaveCount(0);
+  await expect(refreshGraph).toBeDisabled();
+  assert.equal(overviewFailures.length, failuresBeforeLong, 'A long repository read must not be aborted');
+  assert.equal(overviewRequests, beforeLong + 1, 'Only one repository read may be in flight');
+  overviewGate = null; releaseOverview();
+  await expect(refreshGraph).toBeEnabled();
+  await expect(graph.getByRole('alert')).toHaveCount(0);
+  await expect(graph.getByText('No commits yet', { exact: true })).toBeVisible();
+  // An explicit server failure retains the previous result and can be retried.
+  overviewError = 'The repository could not be read.';
+  await refreshGraph.click();
+  await expect(graph.getByRole('alert')).toContainText(overviewError);
   await expect(graph.getByRole('alert')).toContainText('Showing the last update.');
   await expect(graph.getByRole('alert')).not.toContainText(/network/i);
   await expect(graph.getByText('No commits yet', { exact: true })).toBeVisible();
-  await page.evaluate(() => { window.__restoreGitOverviewTimeout(); delete window.__restoreGitOverviewTimeout; });
+  const beforeRetry = overviewRequests;
+  overviewError = null;
   await graph.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(graph.getByRole('alert')).toHaveCount(0);
+  assert.equal(overviewRequests, beforeRetry + 1, 'Retry must issue one fresh repository read');
   await page.reload();
   await page.locator('.git-link').click();
   await panel.getByRole('region', { name: 'Commit graph', exact: true }).waitFor();

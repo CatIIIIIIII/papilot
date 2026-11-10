@@ -11,6 +11,9 @@ import { Updates } from './updates.ts';
 import { readJson } from '../../bin/installation.mjs';
 import { desktopDemo } from './desktop-demo.ts';
 
+// One TeX pool for this installation: the review engines this server starts
+// inherit the folder, so their builds and the manuscript's share two slots.
+process.env.PAPILOT_TEX_POOL ||= path.join(DATA, 'tex-pool');
 const store = new Store(path.join(DATA, 'papilot.sqlite'));
 const workspace = new Workspace(store);
 const manuscripts = new Manuscripts(), changes = new Changes();
@@ -49,7 +52,9 @@ console.log(`Papilot is running at ${localUrl}${PUBLIC_ORIGIN ? `\nRemote: ${PUB
 if (!process.env.PAPILOT_UPDATE_PROBE) { void workspace.connect(); updates.start(); }
 // Recompute cached feedback counts, including decisions from before this restart.
 for (const task of store.tasks()) {
-  if (task.pendingBuild || (task.review?.job?.id && (task.status === 'building' || (task.status === 'failed' && task.error === 'fetch failed')))) {
+  // A task saved but not yet prepared continues; a failure shows on the task.
+  if (task.status === 'preparing') void workspace.prepareTask(task.id);
+  else if (task.pendingBuild || (task.review?.job?.id && (task.status === 'building' || (task.status === 'failed' && task.error === 'fetch failed')))) {
     void workspace.resumeBuild(task.id);
   } else if (task.status === 'building') {
     store.updateTask(task.id, { status: 'interrupted', error: 'The server restarted during the PDF build. Check the review and rebuild it if needed.' });

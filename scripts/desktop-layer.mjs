@@ -1,5 +1,5 @@
 import { npmCli } from '../engine/src/core/platform.mjs';
-// A desktop installer is a shell (Electron, Node, Codex and the production
+// A desktop installer is a shell (Electron, Node and the production
 // dependencies) around Papilot's own code. Updates download only that code, a
 // few megabytes, when it was built for an identical shell. Anything else needs
 // a new installer.
@@ -28,14 +28,15 @@ const production = lock => Object.entries(read(lock).packages || {}).filter(([na
 export function shellFingerprint(root = process.cwd(), node = process.versions.node) {
   const pkg = read(path.join(root, 'package.json'));
   const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  // These sources are copied into Electron at compile time, so a layer
-  // cannot replace them. Older checkouts may not contain every helper.
-  const copied = ['scripts/desktop.mjs', 'scripts/desktop-agent-paths.mjs', 'bin/agent-paths.mjs', 'engine/src/core/platform.mjs'].map(file => path.join(root, file)).filter(file => fs.existsSync(file));
+  // These sources build the installer or are copied into Electron, so a layer
+  // cannot replace their effects. Older checkouts may not contain every helper.
+  const copied = ['scripts/desktop.mjs', 'scripts/desktop-dedupe.mjs', 'scripts/desktop-agent-paths.mjs', 'bin/agent-paths.mjs', 'engine/src/core/platform.mjs'].map(file => path.join(root, file)).filter(file => fs.existsSync(file));
   const shell = [...files(path.join(root, 'desktop')), ...copied]
     .map(file => [path.relative(root, file).split(path.sep).join('/'), hash(file)]).sort(([a], [b]) => a.localeCompare(b));
   const inputs = {
     format: LAYER_FORMAT, node: node.split('.')[0],
-    electron: pkg.devDependencies?.electron, builder: pkg.devDependencies?.['electron-builder'], codex: pkg.devDependencies?.['@openai/codex'],
+    // Codex is a host tool, not part of the installer.
+    electron: pkg.devDependencies?.electron, builder: pkg.devDependencies?.['electron-builder'],
     dependencies: production(path.join(root, 'package-lock.json')), engine: production(path.join(root, 'engine/package-lock.json')), shell,
   };
   return createHash('sha256').update(JSON.stringify(inputs)).digest('hex');

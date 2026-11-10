@@ -97,7 +97,7 @@ try {
   await selectText(0); await expect.poll(() => notes.length).toBe(1);
   await selectText(1); await expect.poll(() => notes.length).toBe(2);
   await expect(page.getByRole('textbox', { name: /^Edit note / })).toHaveCount(0);
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.locator('.annotation-group')).toHaveCount(1);
   await expect(page.locator('.annotation-group .group-header')).toContainText('2 locations');
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
@@ -127,7 +127,7 @@ try {
   await page.keyboard.press('Escape');
   await chooseGroup('Purple');
   await selectText(3); await expect.poll(() => notes.length).toBe(3);
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.locator('.annotation-group')).toHaveCount(2);
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start task', exact: true })).toBeDisabled();
@@ -136,7 +136,7 @@ try {
   await expect(page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(picker()).toHaveAttribute('data-group', 'purple');
   await page.reload();
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.locator('.annotation-group')).toHaveCount(2);
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await expect(page.locator('.note-tag[data-group="yellow"]')).toHaveCount(2);
@@ -181,7 +181,7 @@ try {
   await expect(mobile.locator('.note-tag.active')).toHaveAttribute('data-note', notes[0].id);
   assert.equal(notes.length, 3);
   await mobile.close();
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await page.getByRole('button', { name: 'Select all notes for this task', exact: true }).click();
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await page.getByRole('tab', { name: 'New task', exact: true }).click();
@@ -205,7 +205,7 @@ try {
   await expect.poll(() => notes.length).toBe(1);
   await expect(page.getByRole('textbox', { name: /^Edit note / })).toHaveCount(0);
   await chooseGroup('Individual notes');
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.locator('.annotation-group')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Notes in this task' })).toHaveCount(0);
   await page.screenshot({ path: 'test-results/note-groups-mobile.png', fullPage: true });

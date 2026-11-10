@@ -141,3 +141,95 @@ export function bodyFiles(
   walk(main);
   return [...files].sort();
 }
+
+/** The document body in reading order, with its forced page breaks: text
+ *  before a forced break never shares a page with text after it. */
+export interface ReadingOrder {
+  /** The files the body reads. */
+  files: Set<string>;
+  /** Where a line (counted from 0) of a body file comes in reading order, or
+   *  null when that is unknown: a file read more than once, or a line that
+   *  also reads another file. */
+  at(file: string, line: number): number | null;
+  /** Whether a forced page break lies strictly between two positions. */
+  broken(from: number, to: number): boolean;
+}
+
+const ONE_COLUMN =
+  /\\documentclass\s*(?:\[[^\]]*\])?\s*\{\s*(?:article|report|book|memoir|scrartcl|scrreprt|scrbook|amsart|amsbook)\s*\}/;
+
+export function readingOrder(
+  read: (file: string) => string | null | undefined,
+  main: string,
+): ReadingOrder {
+  const lines = new Map<string, Map<number, number>>(),
+    unclear = new Map<string, Set<number>>(),
+    repeated = new Set<string>(),
+    breaks: number[] = [];
+  let position = 0,
+    // titlesec and KOMA-Script can turn chapters into run-in headings, and
+    // \newpage only ends a column in two-column layouts.
+    chapters = true,
+    newpage = false;
+  const walk = (file: string) => {
+    if (lines.has(file)) {
+      repeated.add(file);
+      return;
+    }
+    const text = read(file);
+    if (text == null) return;
+    const source = structuralSource(text);
+    let start = 0,
+      end = source.length;
+    if (file === main) {
+      const opening = /\\begin\s*\{document\}/.exec(source);
+      if (!opening) return;
+      const preamble = source.slice(0, opening.index);
+      chapters = !/\\(?:titleclass|RedeclareSectionCommands?)(?![A-Za-z@])/.test(preamble);
+      newpage = ONE_COLUMN.test(preamble) && !/twocolumn|multicol/.test(source);
+      start = opening.index + opening[0].length;
+      const ending = /\\end\s*\{document\}/.exec(source.slice(start));
+      if (ending) end = start + ending.index;
+    }
+    const own = new Map<number, number>(),
+      odd = new Set<number>();
+    lines.set(file, own);
+    unclear.set(file, odd);
+    let line = 0,
+      offset = 0,
+      cursor = 0;
+    const lineAt = (index: number) => {
+      for (; offset < index; offset++) if (source[offset] === "\n") line++;
+      return line;
+    };
+    const take = (last: number) => {
+      for (; cursor <= last; cursor++) own.set(cursor, position++);
+    };
+    cursor = lineAt(start);
+    const pattern =
+      /\\(input|include|subfile)\s*\{([^}]+)\}|\\(chapter|clearpage|cleardoublepage|newpage)(?![A-Za-z@])/g;
+    pattern.lastIndex = start;
+    for (let match = pattern.exec(source); match && match.index < end; match = pattern.exec(source)) {
+      const at = lineAt(match.index);
+      take(at);
+      if (match[1]) {
+        // Text before and after an input on its line reads around the file.
+        odd.add(at);
+        const child = sourceInputs(match[0], main)[0]?.file,
+          include = match[1] === "include";
+        if (include) breaks.push(position++);
+        if (child) walk(child);
+        if (include) breaks.push(position++);
+      } else if (match[3] === "chapter" ? chapters : match[3] === "newpage" ? newpage : true)
+        breaks.push(own.get(at)!);
+    }
+    take(lineAt(end));
+  };
+  walk(main);
+  return {
+    files: new Set(lines.keys()),
+    at: (file, line) =>
+      repeated.has(file) || unclear.get(file)?.has(line) ? null : (lines.get(file)?.get(line) ?? null),
+    broken: (from, to) => breaks.some((at) => from < at && at < to),
+  };
+}

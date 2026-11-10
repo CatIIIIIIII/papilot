@@ -71,7 +71,8 @@ export function TaskPermissionOptions({ task, runtime, disabled, save, onSaved, 
   const [saving, setSaving] = useState(false);
   const busy = ['running', 'waiting_input', 'building', 'uncertain', 'queued', 'deleting'].includes(task.status);
   if (task.mode === 'review') return null;
-  return <PermissionOptions runtime={runtime} value={task.permissions || 'workspace'} disabled={disabled || busy || saving} hint={busy ? t('Pause to change') : undefined}
+  // A task being prepared starts in a moment; it cannot be paused.
+  return <PermissionOptions runtime={runtime} value={task.permissions || 'workspace'} disabled={disabled || busy || task.status === 'preparing' || saving} hint={busy ? t('Pause to change') : undefined}
     onChange={async permissions => {
       setSaving(true); onSaving(true);
       try { onSaved(await save(permissions)); }

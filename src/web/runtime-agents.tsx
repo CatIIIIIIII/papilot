@@ -3,7 +3,7 @@ import { AGENT_IDS, AGENT_NAMES, type AgentId, type DiagnosticReport, type Runti
 import info from 'virtual:papilot-info';
 import { BrandIcon } from './brand-icon.tsx';
 import { Icon } from './icons.tsx';
-import { t } from './i18n.ts';
+import { errorText, t } from './i18n.ts';
 import { UsageSummary } from './usage.tsx';
 import { agentSetup } from './agent-setup.ts';
 import { RuntimeModels } from './runtime-models.tsx';
@@ -12,7 +12,7 @@ import { RuntimeCardGrid } from './runtime-card-grid.tsx';
 
 function connectionInfo(id: AgentId) {
   const descriptions = {
-    codex: t('Uses a compatible local Codex CLI. Papilot installs its own copy when needed.'),
+    codex: t('Uses the local Codex CLI and its saved login.'),
     claude: t('Uses Claude Code when installed, or the Claude Agent SDK with API credentials.'),
     cursor: t('Uses the Cursor SDK with CURSOR_API_KEY. Papilot installs the SDK on first use.'),
     grok: t('Uses Grok Build CLI through ACP with its saved login or configured API credentials.'),
@@ -24,7 +24,7 @@ function connectionInfo(id: AgentId) {
     qwen: t('Uses Qwen Code and its saved login through ACP.'),
     opencode: t('Uses OpenCode with the providers and models you have connected.'),
   };
-  const commands = { codex: 'papilot codex login', claude: 'claude auth login', cursor: 'CURSOR_API_KEY', copilot: 'copilot login', grok: 'grok login', antigravity: 'agy', kimi: 'kimi login', glm: 'ZHIPU_API_KEY / ZAI_API_KEY', deepseek: 'dsh web', qwen: 'qwen', opencode: 'opencode auth login' };
+  const commands = { codex: window.papilotDesktop ? 'codex login' : 'papilot codex login', claude: 'claude auth login', cursor: 'CURSOR_API_KEY', copilot: 'copilot login', grok: 'grok login', antigravity: 'agy', kimi: 'kimi login', glm: 'ZHIPU_API_KEY / ZAI_API_KEY', deepseek: 'dsh web', qwen: 'qwen', opencode: 'opencode auth login' };
   return { description: descriptions[id], command: commands[id], key: id === 'cursor' || id === 'glm' };
 }
 
@@ -106,7 +106,7 @@ export function RuntimeAgents({ online, runtimes, report, busy, checkFailed, che
           <p>{setup.description}</p>
           {blocked && guidance ? <>
             <p>{state === 'missing' ? guidance.reason : state === 'signin' ? t('Papilot reached this agent, but could not confirm a signed-in account on this host.') : t('Papilot could not establish a working connection to this agent. The latest connection error is shown below.')}</p>
-            {runtime?.error && <p className="runtime-agent-error">{runtime.error}</p>}
+            {runtime?.error && <p className="runtime-agent-error">{errorText(runtime.error)}</p>}
             {state === 'missing' && checked?.ok ? <p>{t('If the live status still disagrees with the check, restart Papilot under the same user and environment where you configured the agent.')}</p> : state === 'signin' ? <p>{t('Sign in as the user running Papilot, then restart Papilot.')}</p> : state === 'unavailable' ? <p>{t('Check the connection error above and the agent’s login, provider, and network settings on this host. Restart Papilot after changing credentials or executable paths.')}</p> : <ol>{guidance.steps.map(step => <li key={step}>{step}</li>)}</ol>}
             <p><strong>{t('Already set up?')}</strong> {guidance.existing}</p>
           </> : <><span className="runtime-agent-caption">{setup.key ? t('Environment variable') : t('Set up on the host')}</span><code className="runtime-agent-command">{setup.command}</code></>}

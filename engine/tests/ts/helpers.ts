@@ -64,7 +64,7 @@ export class Fixture {
   }
   async close() {
     for (const app of this.apps) await app.close();
-    fs.rmSync(this.base, { recursive: true, force: true });
+    await fs.promises.rm(this.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 export function fakeRound(app: App, name: string) {

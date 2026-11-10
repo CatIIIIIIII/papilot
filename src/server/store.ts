@@ -23,7 +23,8 @@ export class Store extends EventEmitter {
       CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS task_items ON items(task_id,created);
-      CREATE INDEX IF NOT EXISTS task_runs ON runs(task_id,status);`);
+      CREATE INDEX IF NOT EXISTS task_runs ON runs(task_id,status);
+      CREATE INDEX IF NOT EXISTS task_threads ON tasks(json_extract(data,'$.threadId'));`);
     // Keep the host's settings when upgrading a formerly shared workspace.
     // Papers, tasks, notes and historical attribution stay intact; credentials
     // and invitations are removed together so they cannot be reused.
@@ -40,7 +41,16 @@ export class Store extends EventEmitter {
   tasks() { return this.rows<Task>('tasks'); }
   runs() { return this.rows<Run>('runs'); }
   project(id: string) { const v = this.projects().find(p => p.id === id); if (!v) throw new Error('Paper project not found.'); return v; }
-  task(id: string) { const row = this.db.prepare('SELECT data FROM tasks WHERE id=?').get(id) as { data: string } | undefined; if (!row) throw new Error('Task not found.'); return JSON.parse(row.data) as Task; }
+  task(id: string) { const task = this.findTask(id); if (!task) throw new Error('Task not found.'); return task; }
+  // Agents stream several events a second, each naming its thread; reading
+  // every task (archived ones too) for each of them grew with the history.
+  findTask(id: string) { const row = this.db.prepare('SELECT data FROM tasks WHERE id=?').get(id) as { data: string } | undefined; return row ? JSON.parse(row.data) as Task : undefined; }
+  taskProject(id: string) { return (this.db.prepare('SELECT project_id FROM tasks WHERE id=?').get(id) as { project_id: string } | undefined)?.project_id; }
+  taskByThread(threadId: unknown) {
+    if (typeof threadId !== 'string' || !threadId) return undefined;
+    const row = this.db.prepare("SELECT data FROM tasks WHERE json_extract(data,'$.threadId')=? ORDER BY rowid LIMIT 1").get(threadId) as { data: string } | undefined;
+    return row ? JSON.parse(row.data) as Task : undefined;
+  }
   projectByPath(p: string) { return this.projects().find(project => project.path === p); }
   saveProject(p: Project) { this.db.prepare('INSERT INTO projects VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET path=excluded.path,data=excluded.data').run(p.id, p.path, JSON.stringify(p)); this.emit('change'); }
   removeProject(id: string) {
@@ -62,11 +72,13 @@ export class Store extends EventEmitter {
     if (value === undefined) this.db.prepare('DELETE FROM settings WHERE key=?').run(key);
     else this.db.prepare('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET data=excluded.data').run(key, JSON.stringify(value));
   }
-  saveTask(t: Task) { t.updatedAt = Date.now(); this.db.prepare('INSERT INTO tasks VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(t.id, t.projectId, JSON.stringify(t)); this.emit('change'); return t; }
+  saveTask(t: Task) { t.updatedAt = Date.now(); this.db.prepare('INSERT INTO tasks VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, data=excluded.data').run(t.id, t.projectId, JSON.stringify(t)); this.emit('change'); return t; }
   updateTask(id: string, update: Partial<Task>) { return this.saveTask({ ...this.task(id), ...update }); }
   saveRun(r: Run) { this.db.prepare('INSERT INTO runs VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,data=excluded.data').run(r.id, r.taskId, r.requestKey, r.status, JSON.stringify(r)); this.emit('change'); }
   runByKey(key: string) { const row = this.db.prepare('SELECT data FROM runs WHERE request_key=?').get(key) as { data: string } | undefined; return row ? JSON.parse(row.data) as Run : undefined; }
   items(taskId: string) { return (this.db.prepare('SELECT data FROM items WHERE task_id=? ORDER BY created,rowid').all(taskId) as { data: string }[]).map(r => JSON.parse(r.data) as TimelineItem); }
+  // One message of a conversation that can hold megabytes of command output.
+  item(taskId: string, id: string) { const row = this.db.prepare('SELECT data FROM items WHERE id=? AND task_id=?').get(id, taskId) as { data: string } | undefined; return row ? JSON.parse(row.data) as TimelineItem : undefined; }
   // A running task's view reads its timeline every second, and a command's
   // output alone can be 40 KB, so a view that has the timeline asks only for
   // the items written since its revision. Revisions start over with the

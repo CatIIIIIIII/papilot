@@ -221,6 +221,7 @@ try {
   await expect(page.locator('[data-task="example-clarity"] .task-badge')).toHaveText('1');
   await review.locator('.change.current button.reject').click();
   await expect(page.locator('[data-task="example-clarity"] .task-badge')).toHaveCount(0);
+  await expect(download).not.toBeVisible();
   await review.getByRole('button', { name: 'History', exact: true }).click();
   await review.locator('button.undo').click();
   await expect(page.locator('[data-task="example-clarity"] .task-badge')).toHaveText('1');
@@ -253,7 +254,7 @@ try {
   await download.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(followup).toHaveValue('Show me a more concrete wording.');
   await openManuscript();
-  await page.getByRole('button', { name: 'My notes', exact: true }).click();
+  await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.getByRole('complementary', { name: 'PDF note library' })).toBeVisible();
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });

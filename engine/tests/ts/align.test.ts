@@ -866,3 +866,59 @@ it("partitions a section without duplicating a narrow band across both columns",
       expect(width * height).toBe(0);
     }
 });
+it("does not call a word moved when reflow only hyphenates it elsewhere", () => {
+  // One word changed early in the paragraph; the rest reflows, so the
+  // same word breaks at another hyphen. Nothing moved: only the changed
+  // word is marked.
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => `Steady line ${i} of the unchanged paragraph text.`);
+  const old = pdf([
+      "The opening anchor sentence stays exactly where it was.",
+      "Neither method uses the information of the other argu-",
+      "ments when the compiler infers each type separately.",
+      ...filler(30),
+    ]),
+    next = pdf([
+      "The opening anchor sentence stays exactly where it was.",
+      "Neither variant uses the information of the other ar-",
+      "guments when the compiler infers each type separately.",
+      ...filler(30),
+    ]),
+    al = alignment(build(old), build(next));
+  for (const side of ["old", "new"] as const) {
+    const moved = [...al[side].moved.values()].flat().map((g) => al[side].words.glyphs[g].text).join("");
+    expect(moved).toBe("");
+    const crop: Position = { page: 0, clip: [0, 0, 600, 600], label: "1" };
+    expect(marksIn(al, side, crop).filter((m) => m.kind === "moved")).toEqual([]);
+  }
+  const changed = (side: "old" | "new") => [...al[side].changed.values()].flat().map((g) => al[side].words.glyphs[g].text).join("");
+  expect(changed("old")).toBe("method");
+  expect(changed("new")).toBe("variant");
+});
+
+it("finds one place only where two crops print a line in common", async () => {
+  const { sharesLine } = await import("../../src/render/inline.ts");
+  const doc = pdf(["The first printed line of the paragraph.", "The second printed line of the paragraph.", "The third printed line of the paragraph."]),
+    lines = doc.page(0).lines.filter((l) => l.text.trim()),
+    [first, second] = lines.map((l) => l.rect),
+    same = sharesLine(doc),
+    crop = (top: number, bottom: number): Position => ({ page: 0, clip: [0, top, 600, bottom], label: "1" });
+  // A crop of the first line and one of the rest touch where their boxes do.
+  expect(same(crop(first[1], first[3] + 1), crop(first[3] - 1, 600))).toBe(false);
+  // Both crops hold the second line: one place.
+  expect(same(crop(first[1], second[3]), crop(second[1], 600))).toBe(true);
+});
+
+it("does not move running heads or reach crops to them when pages turn elsewhere", () => {
+  // Inserted lines push the body down a page break; each page's running
+  // head then sits at another place in the reading order. The heads only
+  // turned with the pages: they are not moved text, and nothing a crop shows.
+  const body = Array.from({ length: 40 }, (_, i) => `Body line ${i} keeps its words in every version.`),
+    old = pdf(body),
+    next = pdf([...body.slice(0, 3), ...Array.from({ length: 10 }, (_, i) => `Inserted line ${i} adds new words here.`), ...body.slice(3)]),
+    al = alignment(build(old), build(next));
+  for (const side of ["old", "new"] as const) {
+    const text = (map: Map<number, number[]>) => [...map.values()].flat().map((g) => al[side].words.glyphs[g].text).join("");
+    expect(text(al[side].moved)).toBe("");
+    expect(text(al[side].unpaired)).not.toContain("Page");
+  }
+});

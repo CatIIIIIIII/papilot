@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { NoteOption, NoteOptions, Task } from '../shared.ts';
 import { MAX_NOTE_ALTERNATIVES } from '../shared.ts';
 import type { Store } from './store.ts';
-import { sameFragment, taskNoteResults, type NoteRound } from './note-results.ts';
+import { readRound, sameFragment, taskNoteResults, type NoteRound } from './note-results.ts';
 import { taskRoute, type ReviewClient } from './review.ts';
 
 export const noteOptionsKey = (task: string, key: string, round: number) => `note-options:${task}:${round}:${createHash('sha256').update(key).digest('hex')}`;
@@ -60,7 +60,7 @@ export async function noteOptionContext(store: Store, task: Task, key: string, c
   const note = notes.find(note => note.key === key);
   if (!note?.round || !note.changes.length) throw new Error('This note has no linked changes.');
   const [detail, state] = await Promise.all([
-    client.get<NoteRound>(`${taskRoute(task.name)}/rounds/${note.round}`),
+    readRound(client, task, note.round),
     client.get<{ decisions: Record<string, string>; latest: number; closed: boolean }>(`${taskRoute(task.name)}/state?round=${note.round}`),
   ]);
   const ids = new Set(note.changes.filter(change => change.round === note.round).flatMap(change => change.units)), units = detail.units.filter(unit => ids.has(unit.id));
@@ -76,7 +76,7 @@ export async function noteOptionContext(store: Store, task: Task, key: string, c
   if (!cached && origin) for (let number = note.round - 1; number >= origin; number--) {
     const previous = store.preference<NoteOptions>(noteOptionsKey(task.id, key, number));
     if (!previous) continue;
-    const old = await client.get<NoteRound>(`${taskRoute(task.name)}/rounds/${number}`);
+    const old = await readRound(client, task, number);
     const oldIds = new Set(previous.options.flatMap(option => option.edits.map(edit => edit.unit)));
     const original = { id: 'current', label: 'Initial proposal', edits: old.units.filter(unit => oldIds.has(unit.id)).map(unit => ({ unit: unit.id, text: unit.new_text })) };
     const choices = rebaseNoteOptions(previous.options.some(option => option.id === 'current') ? previous.options : [original, ...previous.options], old.units, units, Boolean(old.before && old.before === detail.before));
@@ -84,7 +84,7 @@ export async function noteOptionContext(store: Store, task: Task, key: string, c
     break;
   }
   if (cached && !cached.options.some(option => option.id === 'current')) {
-    const old = origin && origin < note.round ? await client.get<NoteRound>(`${taskRoute(task.name)}/rounds/${origin}`) : detail;
+    const old = origin && origin < note.round ? await readRound(client, task, origin) : detail;
     const sameBase = Boolean(old.before && old.before === detail.before);
     const originalUnits = old.units.filter(unit => units.some(next => sameFragment(unit, next, sameBase)));
     const original = { id: 'current', label: 'Initial proposal', edits: originalUnits.map(unit => ({ unit: unit.id, text: unit.new_text })) };

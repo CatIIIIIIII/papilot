@@ -203,6 +203,28 @@ test('paper path and removal require CSRF and an idle paper', async () => {
   } finally { await f.close(); }
 });
 
+test('an unchanged workspace state is answered with an empty 304', async () => {
+  const f = await fixture();
+  try {
+    const first = await f.local.inject({ url: '/api/state', headers: LOCAL });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.headers['cache-control'], 'no-store');
+    const tag = String(first.headers.etag);
+    assert.match(tag, /^"[\w-]+"$/);
+    assert.equal(first.json().csrf, 'local-csrf');
+    const same = await f.local.inject({ url: '/api/state', headers: { ...LOCAL, 'if-none-match': tag } });
+    assert.equal(same.statusCode, 304);
+    assert.equal(same.headers['cache-control'], 'no-store');
+    assert.equal(same.body, '');
+    assert.equal((await f.local.inject({ url: '/api/state', headers: { ...LOCAL, 'if-none-match': 'W/' + tag } })).statusCode, 304, 'a proxy may weaken the tag');
+    f.store.updateTask('grant-task', { title: 'Renamed' });
+    const changed = await f.local.inject({ url: '/api/state', headers: { ...LOCAL, 'if-none-match': tag } });
+    assert.equal(changed.statusCode, 200);
+    assert.notEqual(changed.headers.etag, tag);
+    assert.equal(changed.json().tasks.find((task: any) => task.id === 'grant-task').title, 'Renamed');
+  } finally { await f.close(); }
+});
+
 test('LaTeX installation information is read-only', async () => {
   const f = await fixture();
   try {
@@ -351,6 +373,57 @@ test('task and PDF note submissions both carry the chosen service tier', async (
     const invalid = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { id: 'tier-task-test-03', projectId: 'thesis', title: 'Revise', instructions: 'Revise.', serviceTier: true } });
     assert.equal(invalid.statusCode, 400);
     assert.equal(inputs.length, 2);
+  } finally { await f.close(); }
+});
+
+test('Start task answers at once: the task is listed as preparing with its first message, and a retry returns it', async () => {
+  const f = await fixture();
+  let release!: (value: unknown) => void;
+  const held = new Promise(resolve => { release = resolve; });
+  try {
+    const creates: unknown[] = [];
+    f.review.post = async (route: string, body?: unknown) => { if (route === '/api/tasks') { creates.push(body); return held as any; } return {} as any; };
+    const payload = { id: 'instant-route-task-01', projectId: 'thesis', title: 'Shorten', instructions: 'Shorten the abstract.' };
+    const sent = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload });
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.equal(sent.json().status, 'preparing');
+    const listed = (await f.local.inject({ url: '/api/state', headers: LOCAL })).json().tasks.find((task: Task) => task.id === payload.id);
+    assert.equal(listed.status, 'preparing');
+    const items = (await f.local.inject({ url: `/api/tasks/${payload.id}/items`, headers: f.as })).json().items;
+    assert.deepEqual(items.map((item: { type: string; text: string }) => [item.type, item.text]), [['user', 'Shorten the abstract.']]);
+    const retried = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload });
+    assert.equal(retried.json().id, payload.id);
+    assert.equal(retried.json().status, 'preparing');
+    const message = await f.local.inject({ method: 'POST', url: `/api/tasks/${payload.id}/messages`, headers: f.as, payload: { text: 'And the conclusion.', requestKey: 'second-message-01' } });
+    assert.equal(message.statusCode, 400); assert.match(message.json().error, /still being prepared/);
+    release({ worktree: '/unused/instant', deferred: true });
+    await f.workspace.prepareTask(payload.id);
+    assert.equal(f.store.task(payload.id).status, 'queued');
+    assert.equal(f.store.items(payload.id).length, 1);
+    assert.equal(creates.length, 1);
+  } finally { release({ worktree: '/unused/instant' }); await f.close(); }
+});
+
+test('a failed preparation shows its error and is retried by its route', async () => {
+  const f = await fixture();
+  try {
+    let fail = true;
+    f.review.post = async (route: string) => { if (route === '/api/tasks' && fail) throw new Error('The review engine is busy.'); return { worktree: '/unused/retried', deferred: true } as any; };
+    const payload = { id: 'failed-route-task-01', projectId: 'thesis', title: 'Shorten', instructions: 'Shorten the abstract.' };
+    assert.equal((await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload })).json().status, 'preparing');
+    await assert.rejects(f.workspace.prepareTask(payload.id), /engine is busy/);
+    const failed = (await f.local.inject({ url: '/api/state', headers: LOCAL })).json().tasks.find((task: Task) => task.id === payload.id);
+    assert.equal(failed.status, 'failed'); assert.equal(failed.error, 'The review engine is busy.'); assert.ok(failed.preparation);
+    const publish = await f.local.inject({ method: 'POST', url: `/api/tasks/${payload.id}/publish`, headers: f.as, payload: {} });
+    assert.equal(publish.statusCode, 400);
+    fail = false;
+    const retried = await f.local.inject({ method: 'POST', url: `/api/tasks/${payload.id}/prepare`, headers: f.as, payload: {} });
+    assert.equal(retried.statusCode, 200, retried.body);
+    assert.equal(retried.json().status, 'preparing');
+    const prepared = await f.workspace.prepareTask(payload.id);
+    assert.equal(prepared.status, 'queued'); assert.equal(prepared.worktree, '/unused/retried'); assert.equal(prepared.error, null);
+    assert.equal((await f.local.inject({ method: 'POST', url: `/api/tasks/${payload.id}/prepare`, headers: f.as, payload: {} })).json().status, 'queued', 'Retry leaves a prepared task alone');
+    assert.equal((await f.local.inject({ method: 'POST', url: '/api/tasks/grant-task/prepare', headers: f.as, payload: {} })).statusCode, 200);
   } finally { await f.close(); }
 });
 
@@ -589,6 +662,50 @@ test('this host and the tailnet keep working as before, and refuse Funnel traffi
   } finally { await f.close(); }
 });
 
+test('a note is saved at once while SyncTeX finds its source', async () => {
+  const f = await fixture();
+  let release!: () => void;
+  const lookup = new Promise<void>(resolve => { release = resolve; });
+  f.manuscripts.locate = async () => { await lookup; return { quote: 'Located text', source: { file: 'main.tex', lines: [7, 8], excerpt: undefined } }; };
+  try {
+    const created = await f.local.inject({ method: 'POST', url: '/api/projects/thesis/annotations', headers: f.as, payload: { key: 'pdf', page: 0, rect: [0.1, 0.1, 0.4, 0.2], quote: 'Selected text', comment: 'Tighten this.' } });
+    // The lookup has not finished: the note is already there, with what was selected.
+    assert.equal(created.statusCode, 200, created.body);
+    assert.equal(created.json().source, null);
+    assert.equal(created.json().quote, 'Selected text');
+    release();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const stored = f.store.annotation('thesis', created.json().id);
+    assert.deepEqual(stored.source, { file: 'main.tex', lines: [7, 8] });
+    assert.equal(stored.quote, 'Located text');
+    assert.equal(stored.comment, 'Tighten this.');
+  } finally { await f.close(); }
+});
+
+for (const endpoint of ['task', 'notes']) test(`sending a new PDF note through ${endpoint} waits for its source`, async () => {
+  const f = await fixture();
+  let release!: () => void;
+  const lookup = new Promise<void>(resolve => { release = resolve; });
+  f.manuscripts.locate = async () => { await lookup; return { quote: 'Located text', source: { file: 'main.tex', lines: [7, 8], excerpt: undefined } }; };
+  f.review.post = async () => ({ worktree: '/unused/review-copy', deferred: true }) as any;
+  try {
+    const created = await f.local.inject({ method: 'POST', url: '/api/projects/thesis/annotations', headers: f.as, payload: { key: 'pdf', page: 0, rect: [0.1, 0.1, 0.4, 0.2], quote: 'Selected text', comment: 'Tighten this.' } });
+    assert.equal(created.statusCode, 200, created.body);
+    const id = `source-lookup-${endpoint}-01`, annotations = [created.json().id];
+    let answered = false;
+    const sending = f.local.inject({ method: 'POST', url: endpoint === 'task' ? '/api/tasks' : '/api/projects/thesis/annotations/send', headers: f.as,
+      payload: { id, annotations, ...(endpoint === 'task' ? { projectId: 'thesis', title: 'Tighten this', instructions: '' } : {}) } }).then(response => { answered = true; return response; });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const answeredBeforeSource = answered;
+    release();
+    const sent = await sending;
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.equal(answeredBeforeSource, false, 'The agent must receive the source of the selected passage');
+    assert.match(f.store.runByKey('initial-' + id)!.prompt, /main\.tex.*7.*8/);
+    assert.deepEqual(f.store.items(id)[0].meta?.notes?.[0].anchor?.sources, [{ file: 'main.tex', lines: [7, 8] }]);
+  } finally { release(); await f.close(); }
+});
+
 test('color groups persist without per-location comments and take their meaning from each request', async () => {
   const f = await fixture();
   f.manuscripts.locate = async () => ({ quote: 'Selected text', source: { file: 'main.tex', lines: [10, 12], excerpt: undefined } });
@@ -695,7 +812,8 @@ test('the note alternatives default is validated and saved for future editing tu
   const f = await fixture();
   try {
     const read = async () => (await f.local.inject({ url: '/api/note-alternatives', headers: LOCAL })).json().noteAlternatives;
-    assert.equal(await read(), true);
+    // Off until the author turns alternatives on.
+    assert.equal(await read(), false);
     const preferences = async () => (await f.local.inject({ url: '/api/note-alternatives', headers: LOCAL })).json();
     assert.equal((await preferences()).noteAlternativeRange, 'few');
     for (const range of ['few', 'balanced', 'many']) {
@@ -912,7 +1030,7 @@ test('changing a relocated paper path recovers its preserved review PDF without 
   } finally { await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
 });
 
-test('inline source writes use the review token and reserve the task while its PDF rebuilds', async () => {
+test('inline source writes use the review token and track rebuilding without a round-wide lock', async () => {
   const f = await fixture();
   let writes = 0;
   const engine = http.createServer((_request, response) => {
@@ -938,10 +1056,120 @@ test('inline source writes use the review token and reserve the task while its P
     assert.equal(writes, 1);
     assert.equal(f.store.task('thesis-task').status, 'building');
     assert.equal(f.store.task('thesis-task').pendingBuild?.job, 'source-job');
-    assert.match(response.json().decisionLock, /PDF build/);
+    assert.equal(response.json().decisionLock, null, 'the engine gates each comparison separately');
     finish({ status: 'done' });
     for (let i = 0; i < 20 && f.store.task('thesis-task').status === 'building'; i++) await new Promise(resolve => setImmediate(resolve));
   } finally { finish({ status: 'done' }); engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); await f.close(); }
+});
+
+// A review engine that answers decisions with a page state, and records them.
+async function decisionEngine(state: (route: string, body: any) => Record<string, unknown> = () => ({})) {
+  const calls: { method: string; route: string; body: any }[] = [];
+  const engine = http.createServer(async (request, response) => {
+    let text = '';
+    for await (const chunk of request) text += chunk;
+    const body = text ? JSON.parse(text) : undefined;
+    calls.push({ method: request.method!, route: request.url!, body });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ task: 'p-thesis-task', csrf: 'review-token', closed: false, decisions: { c001: 'pending' }, comments: {}, undo: null, job: null, ...state(request.url!, body) }));
+  });
+  await new Promise<void>(resolve => engine.listen(0, '127.0.0.1', resolve));
+  return { calls, url: `http://127.0.0.1:${(engine.address() as { port: number }).port}`, async close() { engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); } };
+}
+
+test('a review decision replies before the task summary is read again, and the next poll waits for that read', async () => {
+  const f = await fixture(), engine = await decisionEngine();
+  f.review.url = engine.url;
+  const refreshes: { done: boolean; release: () => void }[] = [], reviewed: string[] = [];
+  f.workspace.refresh = async () => {
+    const entry = { done: false, release: () => {} };
+    refreshes.push(entry);
+    await new Promise<void>(resolve => { entry.release = resolve; });
+    entry.done = true;
+  };
+  f.workspace.on('reviewed', (id: string) => reviewed.push(id));
+  const headers = { ...LOCAL, 'x-review-token': 'review-token' }, base = '/review/thesis/api/tasks/p-thesis-task';
+  const settled = async <T>(work: Promise<T>) => {
+    let done = false;
+    void work.then(() => { done = true; }, () => { done = true; });
+    for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
+    return done;
+  };
+  try {
+    const decided = await f.local.inject({ method: 'POST', url: base + '/decide', headers, payload: { id: 'accept-1', action: 'accept', round: 1, changes: ['c001'] } });
+    assert.equal(decided.statusCode, 200, decided.body);
+    assert.equal(refreshes.length, 1, 'the summary is read again right after the reply');
+    assert.equal(refreshes[0].done, false, 'the reply did not wait for it');
+    assert.deepEqual(reviewed, []);
+    const poll = f.local.inject({ url: base + '/state', headers: LOCAL });
+    assert.equal(await settled(poll), false, 'the review page poll waits for the summary');
+    // The workspace shows every paper: one slow engine cannot hold it. The
+    // summary's update announces itself, so the workspace reads it then.
+    assert.equal(await settled(f.local.inject({ url: '/api/state', headers: LOCAL })), true, 'the workspace poll answers at once');
+    // A second decision meanwhile reads the summary once more, after the first read.
+    const second = await f.local.inject({ method: 'POST', url: base + '/decide', headers, payload: { id: 'comment-1', action: 'comment', round: 1, changes: ['c001'], body: 'Shorter.' } });
+    assert.equal(second.statusCode, 200, second.body);
+    assert.equal(refreshes.length, 1, 'one read at a time');
+    refreshes[0].release();
+    for (let i = 0; i < 20 && refreshes.length < 2; i++) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(refreshes.length, 2);
+    assert.equal(await settled(poll), false, 'the poll waits for the read that covers both decisions');
+    refreshes[1].release();
+    assert.equal((await poll).statusCode, 200);
+    assert.deepEqual(reviewed, [], 'decisions refresh summaries without triggering speculative builds');
+    assert.deepEqual(engine.calls.map(call => call.method + ' ' + call.route), ['POST /api/tasks/p-thesis-task/decide', 'POST /api/tasks/p-thesis-task/decide', 'GET /api/tasks/p-thesis-task/state']);
+    // A poll with nothing to wait for answers at once.
+    assert.equal(await settled(f.local.inject({ url: base + '/state', headers: LOCAL })), true);
+  } finally { for (const entry of refreshes) entry.release(); await engine.close(); await f.close(); }
+});
+
+test('accepting and rejecting go ahead while the agent edits a deferred task; undoing an applied rejection and editing source wait', async () => {
+  let undo: { id: string; kind: string; republish?: boolean } | null = { id: 'accept-1', kind: 'accept' };
+  const f = await fixture(), engine = await decisionEngine(route => route.endsWith('/undo') ? { restored: ['c001'] } : {});
+  f.review.url = engine.url;
+  f.review.get = async (route: string) => (route.endsWith('/state') ? { undo } : {}) as any;
+  f.workspace.refresh = async () => {};
+  const headers = { ...LOCAL, 'x-review-token': 'review-token' }, base = '/review/thesis/api/tasks/p-thesis-task';
+  const post = (route: string, payload: Record<string, unknown>) => f.local.inject({ method: 'POST', url: base + route, headers, payload });
+  try {
+    f.store.updateTask('thesis-task', { status: 'running', deferred: true });
+    const accepted = await post('/decide', { id: 'accept-1', action: 'accept', round: 1, changes: ['c001'] });
+    assert.equal(accepted.statusCode, 200, accepted.body);
+    assert.equal(accepted.json().decisionLock, null);
+    assert.match(accepted.json().rejectLock, /agent is editing this task's files/);
+    assert.equal(f.store.task('thesis-task').status, 'running', 'the agent keeps working');
+    assert.equal(f.store.task('thesis-task').pendingReview, null);
+    const undone = await post('/undo', { id: 'accept-1' });
+    assert.equal(undone.statusCode, 200, undone.body);
+    // A reject goes to the engine marked to wait for the turn to end.
+    const queued = await post('/decide', { id: 'reject-1', action: 'reject', round: 1, changes: ['c001'] });
+    assert.equal(queued.statusCode, 200, queued.body);
+    assert.equal(engine.calls.at(-1)?.body?.queue, true, 'the reject waits in the engine for the turn to end');
+    assert.equal(f.store.task('thesis-task').status, 'running', 'the agent keeps working');
+    // So does undoing a reject that is still waiting.
+    undo = { id: 'reject-1', kind: 'reject', queued: true } as typeof undo;
+    const dropped = await post('/undo', { id: 'reject-1' });
+    assert.equal(dropped.statusCode, 200, dropped.body);
+    const refused = await post('/source', { id: 'source-1' });
+    assert.equal(refused.statusCode, 400);
+    assert.match(refused.json().error, /agent is editing this task's files\. Pause the task before rejecting or editing changes/);
+    undo = { id: 'reject-0', kind: 'reject' };
+    const reverting = await post('/undo', { id: 'reject-0' });
+    assert.equal(reverting.statusCode, 400);
+    assert.match(reverting.json().error, /agent is editing/);
+    // Undoing an accept of an earlier round publishes the next round, so it waits too.
+    undo = { id: 'accept-0', kind: 'accept', republish: true };
+    const republishing = await post('/undo', { id: 'accept-0' });
+    assert.equal(republishing.statusCode, 400);
+    assert.match(republishing.json().error, /agent is editing/);
+    assert.equal((await post('/decide', { id: 'comment-1', action: 'comment', round: 1, changes: ['c001'], body: 'Shorter.' })).statusCode, 200);
+    // A task that applies decisions to the manuscript as they are made waits for the agent.
+    f.store.updateTask('thesis-task', { deferred: false });
+    const waiting = await post('/decide', { id: 'accept-2', action: 'accept', round: 1, changes: ['c001'] });
+    assert.equal(waiting.statusCode, 400);
+    assert.match(waiting.json().error, /Pause the task before accepting/);
+    assert.deepEqual(engine.calls.map(call => call.route.split('/').at(-1) + ' ' + call.body?.id), ['decide accept-1', 'undo accept-1', 'decide reject-1', 'undo reject-1', 'decide comment-1']);
+  } finally { await engine.close(); await f.close(); }
 });
 
 test('writing a paper compiles its manuscript, while pending chapter proposals do not precompile the whole paper', async () => {
@@ -968,21 +1196,62 @@ test('writing a paper compiles its manuscript, while pending chapter proposals d
       const noted = await f.local.inject({ method: 'POST', url: '/review/thesis/api/tasks/p-thesis-task/note', headers: { ...LOCAL, 'x-review-token': 'review-token' }, payload: { body: 'A note.' } });
       assert.equal(noted.statusCode, 200, noted.body);
       await new Promise(resolve => setImmediate(resolve));
-      assert.deepEqual(refreshed[1], ['thesis', '/unused/thesis'], 'a review action through the review page compiles too');
+      assert.equal(refreshed.length, 1, 'a note changes no manuscript files and starts no build');
     } finally { engine.close(); }
-    f.store.updateTask('thesis-task', { deferred: true, review: { state: 'reviewing', round: 1, counts: { pending: 1 }, unsent: 0 } } as any);
+    assert.deepEqual(predicted, [], 'review actions start no speculative manuscript build');
+  } finally { await f.close(); }
+});
+
+test('deferred decisions wait until application before refreshing the manuscript', async () => {
+  const f = await fixture(), engine = await decisionEngine(() => ({}));
+  f.review.url = engine.url;
+  f.workspace.refresh = async () => {};
+  const refreshed: string[] = [], predicted: string[] = [];
+  f.manuscripts.refresh = async id => { refreshed.push(id); };
+  f.manuscripts.predict = async id => { predicted.push(id); };
+  f.store.updateTask('thesis-task', { deferred: true });
+  const headers = { ...LOCAL, 'x-review-token': 'review-token' };
+  try {
+    for (const action of ['accept', 'reject', 'comment']) {
+      const response = await f.local.inject({ method: 'POST', url: '/review/thesis/api/tasks/p-thesis-task/decide', headers, payload: { id: action, round: 1, action, changes: ['c001'], ...(action === 'comment' ? { body: 'Shorter.' } : {}) } });
+      assert.equal(response.statusCode, 200, response.body);
+    }
+    const undone = await f.local.inject({ method: 'POST', url: '/review/thesis/api/tasks/p-thesis-task/undo', headers, payload: { id: 'accept' } });
+    assert.equal(undone.statusCode, 200, undone.body);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(refreshed, []);
+    assert.deepEqual(predicted, []);
+    f.store.updateTask('thesis-task', { deferred: false });
+    const legacy = await f.local.inject({ method: 'POST', url: '/review/thesis/api/tasks/p-thesis-task/decide', headers, payload: { id: 'legacy', round: 1, action: 'accept', changes: ['c001'] } });
+    assert.equal(legacy.statusCode, 200, legacy.body);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(refreshed, ['thesis']);
+  } finally { await engine.close(); await f.close(); }
+});
+
+test('the last decision compiles what applying the decided task writes, and undecided proposals do not', async () => {
+  const f = await fixture();
+  try {
+    const predicted: [string, string, Record<string, string | null>][] = [];
+    f.manuscripts.predict = async (id: string, root: string, files: Record<string, Buffer | null>) => { predicted.push([id, root, Object.fromEntries(Object.entries(files).map(([file, data]) => [file, data?.toString() ?? null]))]); };
     f.review.get = async (route: string) => (route.endsWith('/preview') ? { files: { 'main.tex': Buffer.from('Applied.\n').toString('base64'), 'old.tex': null } } : {}) as any;
+    const headers = { ...LOCAL, 'x-papilot-token': 'local-csrf' }, predict = async () => {
+      const response = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/predict', headers });
+      assert.equal(response.statusCode, 200, response.body);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    };
+    f.store.updateTask('thesis-task', { deferred: true, review: { state: 'reviewing', round: 1, counts: { pending: 1 }, unsent: 0 } } as any);
     f.workspace.emit('publishing', 'thesis-task', 'proposed-revision');
     f.workspace.emit('reviewed', 'thesis-task');
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await predict();
     assert.deepEqual(predicted, [], 'undecided proposals do not start a speculative full manuscript build');
     f.store.updateTask('thesis-task', { review: { state: 'done', round: 1, counts: { accepted: 1 }, unsent: 0 } });
-    f.workspace.emit('reviewed', 'thesis-task');
-    for (let i = 0; i < 20 && !predicted.length; i++) await new Promise(resolve => setTimeout(resolve, 5));
-    assert.deepEqual(predicted, [['thesis', '/unused/thesis', { 'main.tex': 'Applied.\n', 'old.tex': null }]], 'once, though two listeners serve the workspace');
-    f.store.updateTask('thesis-task', { deferred: false } as any);
-    f.workspace.emit('reviewed', 'thesis-task');
+    f.workspace.emit('decided', 'thesis-task');
     await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(predicted, [['thesis', '/unused/thesis', { 'main.tex': 'Applied.\n', 'old.tex': null }]], 'the last decision compiles the result at once');
+    f.store.updateTask('thesis-task', { deferred: false } as any);
+    f.workspace.emit('decided', 'thesis-task');
+    await predict();
     assert.equal(predicted.length, 1, 'a task that applies as it is reviewed needs no prediction');
   } finally { await f.close(); }
 });

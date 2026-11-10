@@ -26,10 +26,10 @@ export function attachmentIds(value: unknown): string[] {
 const publicFile = ({ id, projectId, name, size, mime }: SavedAttachment): Attachment => ({ id, projectId, name, size, mime });
 
 // Files live beside the database, never in the paper or its review worktrees.
-// Sending a draft attaches it to one task.
+// Sending a draft attaches it to one task in the transaction that saves the
+// message, including a new task's first message.
 export class Attachments {
   private directory: string | null = null;
-  private reservations = new Map<string, string>();
   constructor(private store: Store) {}
   private root() {
     this.directory ??= this.store.file === ':memory:' ? fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-attachments-')) : path.resolve(path.dirname(this.store.file), 'attachments');
@@ -52,7 +52,7 @@ export class Attachments {
   discard(projectId: string, id: string) {
     const file = this.saved(projectId, id);
     // A late remove or another tab must never delete a sent attachment.
-    if (!file.taskId && !this.reservations.has(id)) this.remove(file);
+    if (!file.taskId) this.remove(file);
   }
   private remove(file: SavedAttachment) {
     fs.rmSync(this.path(file), { force: true });
@@ -68,7 +68,7 @@ export class Attachments {
     for (const row of rows) {
       const file: SavedAttachment = JSON.parse(row.data);
       if (file.taskId) continue;
-      if (file.createdAt < Date.now() - 30 * 86400000 && !this.reservations.has(file.id)) this.remove(file);
+      if (file.createdAt < Date.now() - 30 * 86400000) this.remove(file);
       else total += file.size;
     }
     if (total + size > 500 * 1024 * 1024) throw new Error('Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.');
@@ -99,19 +99,12 @@ export class Attachments {
   resolve(projectId: string, ids: string[], taskId: string): Attachment[] {
     const files = attachmentIds(ids).map(id => {
       const file = this.saved(projectId, id);
-      const reserved = this.reservations.get(id);
-      if (reserved && reserved !== taskId) throw new Error('This attachment is already being sent to another task.');
       if ((file.taskId && file.taskId !== taskId)) throw new Error('This attachment is not available for this task.');
       if (!fs.existsSync(this.path(file))) throw new Error(`Attachment is missing: ${file.name}. Remove it and upload it again.`);
       return publicFile(file);
     });
     if (files.reduce((total, file) => total + file.size, 0) > MAX_ATTACHMENT_TOTAL) throw new Error('Attachments must total 100 MB or less.');
     return files;
-  }
-  reserve(projectId: string, ids: string[], taskId: string) {
-    this.resolve(projectId, ids, taskId);
-    for (const id of ids) this.reservations.set(id, taskId);
-    return () => { for (const id of ids) if (this.reservations.get(id) === taskId) this.reservations.delete(id); };
   }
   // Called inside the transaction that saves a message, after async feedback loading.
   claim(projectId: string, ids: string[], taskId: string) {

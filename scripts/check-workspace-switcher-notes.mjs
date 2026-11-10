@@ -71,7 +71,7 @@ try {
     await page.keyboard.up(modifier);
     await expect(page.locator('[data-task="b"] .task-link')).toHaveAttribute('aria-current','page');
     await page.locator('.manuscript-link').click();
-    await page.getByRole('button', { name: 'My notes', exact: true }).click();
+    await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
     await page.getByRole('region', { name: 'My notes', exact: true }).getByRole('button', { name: 'Edit note 1: Unsaved PDF popover edit', exact: true }).click();
     await page.getByRole('textbox', { name: 'Edit note 1', exact: true }).fill('Pending side-panel edit');
     holdWrite = true;

@@ -102,12 +102,22 @@ export function writeJson(file: string, value: unknown, mode?: number) {
 export async function acquireLock(file: string, retry = true) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.closeSync(fs.openSync(file, "a"));
-  return lockfile.lock(file, {
-    realpath: false,
-    stale: 30000,
-    update: 10000,
-    retries: retry ? { retries: 1800, minTimeout: 100, maxTimeout: 500 } : 0,
-  });
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await lockfile.lock(file, {
+        realpath: false,
+        stale: 30000,
+        update: 10000,
+        retries: 0,
+      });
+    } catch (error) {
+      // Only contention can be resolved by waiting for another owner. A
+      // removed build directory or a permission error must not keep a
+      // cancelled background build retrying for fifteen minutes.
+      if (!retry || attempt >= 1800 || (error as NodeJS.ErrnoException).code !== "ELOCKED") throw error;
+      await sleep(Math.min(100 * 2 ** attempt, 500));
+    }
+  }
 }
 export async function withLock<T>(
   file: string,

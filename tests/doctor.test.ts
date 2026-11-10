@@ -37,9 +37,9 @@ function fixture() {
     return file;
   }
   function baseTools() { for (const name of ['git', 'latexmk', 'synctex', 'pdflatex']) tool(name); }
-  async function run(args: string[] = [], extraEnv: NodeJS.ProcessEnv = {}) {
+  async function run(args: string[] = [], extraEnv: NodeJS.ProcessEnv = {}, timeout = 15000) {
     return new Promise<{ code: number; stdout: string; stderr: string; report: Report }>(resolve => {
-      execFile(process.execPath, [path.join(app, 'bin/papilot.mjs'), 'doctor', ...args], { env: { ...env, ...extraEnv }, cwd: dir, timeout: 15000 }, (error, stdout, stderr) => {
+      execFile(process.execPath, [path.join(app, 'bin/papilot.mjs'), 'doctor', ...args], { env: { ...env, ...extraEnv }, cwd: dir, timeout }, (error, stdout, stderr) => {
         let report: Report = { ok: false, checks: [] };
         try { report = JSON.parse(stdout); } catch { /* Human output. */ }
         resolve({ code: error ? Number((error as any).code) || 1 : 0, stdout, stderr, report });
@@ -157,7 +157,172 @@ test('doctor uses the supported managed Codex and never leaks login output or kn
     assert.equal(item(unavailable.report, 'agent.codex').ok, false);
     assert.match(item(unavailable.report, 'agent.codex').fix!, /papilot codex login/);
     assert.doesNotMatch(unavailable.stdout + unavailable.stderr, /top-secret-login/);
+    // The desktop app uses any installed Codex that runs, whatever its version.
+    fs.rmSync(managed, { recursive: true, force: true });
+    const desktop = item((await f.run(['--json'], { PAPILOT_DESKTOP: '1' })).report, 'agent.codex');
+    assert.match(desktop.detail, /^Codex 0\.1\.0 /, 'an older version is not refused');
+    assert.match(desktop.fix!, /^Run codex login/);
+    assert.doesNotMatch(desktop.fix!, /papilot/);
   } finally { f.cleanup(); }
+});
+
+test('desktop doctor searches PATH, the package and data in order with the server probe PATH', async () => {
+  const f = fixture();
+  try {
+    f.baseTools();
+    // Keep real discovery, but exclude installations outside this fixture.
+    const paths = path.join(f.app, 'bin/agent-paths.mjs');
+    fs.renameSync(paths, path.join(f.app, 'bin/agent-paths-real.mjs'));
+    fs.writeFileSync(paths, `
+      import fs from 'node:fs';
+      import * as real from './agent-paths-real.mjs';
+      export * from './agent-paths-real.mjs';
+      export function findExecutables(...args) { return real.findExecutables(...args).filter(file => fs.realpathSync(file).startsWith(${JSON.stringify(fs.realpathSync(f.dir) + path.sep)})); }
+    `);
+    fs.unlinkSync(path.join(f.app, 'node_modules'));
+    const local = path.join(f.app, 'node_modules/.bin'), managed = path.join(f.data, 'agents/node_modules/.bin');
+    const script = (version: string) => `
+      if (!process.env.PATH.split(${JSON.stringify(path.delimiter)}).includes(${JSON.stringify(path.join(f.env.HOME!, '.local/bin'))})) process.exit(2);
+      if (process.argv.includes('--version')) {
+        console.log('codex-cli ${version}');
+      } else console.log('Logged in');
+    `;
+    const install = (dir: string, name: string, version: string) => {
+      fs.mkdirSync(dir, { recursive: true });
+      const file = f.tool(name, script(version));
+      if (process.platform === 'win32') fs.copyFileSync(file, path.join(dir, 'codex.cmd'));
+      else fs.symlinkSync(file, path.join(dir, 'codex'));
+    };
+    f.tool('codex', script('0.1.0'));
+    install(local, 'local-codex', '0.2.0'); install(managed, 'data-codex', '0.3.0');
+    const check = async (version: string) => {
+      const result = item((await f.run(['--json'], { PAPILOT_DESKTOP: '1' })).report, 'agent.codex');
+      assert.equal(result.ok, true, result.detail);
+      assert.ok(result.detail.startsWith(`Codex ${version} (`), result.detail);
+    };
+    await check('0.1.0');
+    f.tool('codex', 'process.exit(1);');
+    await check('0.2.0');
+    f.tool('local-codex', 'process.exit(1);');
+    await check('0.3.0');
+  } finally { f.cleanup(); }
+});
+
+test('desktop doctor distinguishes failed probes from candidates not checked before the deadline', async () => {
+  const f = fixture();
+  try {
+    f.baseTools();
+    const candidates = ['first-codex', 'second-codex', 'untried-codex'].map(name => f.tool(name, 'process.exit(1);'));
+    const paths = path.join(f.app, 'bin/agent-paths.mjs');
+    fs.renameSync(paths, path.join(f.app, 'bin/agent-paths-real.mjs'));
+    // Advance the probe budget on each failed candidate without a real wait.
+    fs.writeFileSync(paths, `
+      import * as real from './agent-paths-real.mjs';
+      export * from './agent-paths-real.mjs';
+      const candidates = ${JSON.stringify(candidates)}, now = Date.now;
+      let elapsed = 0;
+      Date.now = () => now() + elapsed;
+      export function findExecutables() { return candidates; }
+      export function spawnCommand(file, args, options) {
+        const child = real.spawnCommand(file, args, options);
+        if (candidates.includes(file) && args[0] === '--version') child.once('close', () => { elapsed += 10000; });
+        return child;
+      }
+    `);
+    const result = await f.run(['--json'], { PAPILOT_DESKTOP: '1' });
+    const codex = item(result.report, 'agent.codex');
+    assert.equal(codex.ok, false);
+    assert.equal(codex.detail, `Codex could not be run (${candidates.slice(0, 2).join(', ')}). Codex candidates not checked in time (${candidates[2]}).`);
+    const commands = fs.readFileSync(f.log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.deepEqual(commands.filter(([name]) => name.endsWith('-codex')), [['first-codex', '--version'], ['second-codex', '--version']]);
+  } finally { f.cleanup(); }
+});
+
+test('desktop doctor gives login only the remaining probe budget, bounded to 3–10 seconds', async () => {
+  const f = fixture();
+  try {
+    f.baseTools();
+    const codex = f.tool('codex', 'console.log("codex-cli 0.1.0");');
+    const paths = path.join(f.app, 'bin/agent-paths.mjs'), timeoutFile = path.join(f.dir, 'login-timeout');
+    fs.renameSync(paths, path.join(f.app, 'bin/agent-paths-real.mjs'));
+    // Advance the clock after --version and record login's actual deadline
+    // without making each budget boundary cost twenty seconds.
+    fs.writeFileSync(paths, `
+      import { EventEmitter } from 'node:events';
+      import fs from 'node:fs';
+      import * as real from './agent-paths-real.mjs';
+      export * from './agent-paths-real.mjs';
+      const now = Date.now(), timer = globalThis.setTimeout;
+      let elapsed = 0, login, loginTimer = false;
+      Date.now = () => now + elapsed;
+      globalThis.setTimeout = (callback, timeout, ...args) => {
+        if (loginTimer) {
+          loginTimer = false;
+          fs.writeFileSync(${JSON.stringify(timeoutFile)}, String(timeout));
+          return timer(callback, 0, ...args);
+        }
+        return timer(callback, timeout, ...args);
+      };
+      export function spawnCommand(file, args, options) {
+        if (file !== process.env.PAPILOT_CODEX_BIN) return real.spawnCommand(file, args, options);
+        if (args[0] === '--version') {
+          const child = real.spawnCommand(file, args, options);
+          child.once('close', () => { elapsed += Number(process.env.PROBE_ELAPSED); });
+          return child;
+        }
+        login = new EventEmitter(); login.pid = -1; loginTimer = true;
+        return login;
+      }
+      export function killTree(pid, signal) {
+        if (pid !== -1) return real.killTree(pid, signal);
+        login.emit('close', 1, null);
+      }
+    `);
+    for (const [elapsed, timeout] of [[4000, 10000], [14000, 6000], [19500, 3000]]) {
+      const result = await f.run(['--json'], { PAPILOT_DESKTOP: '1', PAPILOT_CODEX_BIN: codex, PROBE_ELAPSED: String(elapsed) });
+      const check = item(result.report, 'agent.codex');
+      assert.equal(check.ok, false);
+      assert.match(check.detail, /timed out/);
+      assert.equal(Number(fs.readFileSync(timeoutFile, 'utf8')), timeout, `login budget after ${elapsed} ms of probing`);
+    }
+  } finally { f.cleanup(); }
+});
+
+test('desktop doctor skips a hanging Codex and probes the working candidate only once', { timeout: 50000 }, async () => {
+  const f = fixture();
+  const pidFile = path.join(f.dir, 'codex.pid');
+  try {
+    f.baseTools();
+    f.tool('codex', `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`);
+    const secondDir = path.join(f.dir, 'second');
+    fs.mkdirSync(secondDir);
+    const working = f.tool('working-codex', `
+      if (!process.env.PATH.split(${JSON.stringify(path.delimiter)}).includes(${JSON.stringify(path.join(f.env.HOME!, '.local/bin'))})) process.exit(2);
+      if (process.argv.includes('--version')) console.log('codex-cli 0.1.0');
+      else console.log('Logged in');
+    `);
+    const second = path.join(secondDir, process.platform === 'win32' ? 'codex.cmd' : 'codex');
+    if (process.platform === 'win32') fs.copyFileSync(working, second);
+    else fs.symlinkSync(working, second);
+    const started = Date.now();
+    const result = await f.run(['--json'], { PAPILOT_DESKTOP: '1', PATH: [f.tools, secondDir].join(path.delimiter) }, 45000);
+    assert.ok(Date.now() - started < 40000, 'a hanging candidate must leave time within the 45 second diagnostics limit');
+    assert.equal(result.code, 0, result.stdout);
+    const codex = item(result.report, 'agent.codex');
+    assert.equal(codex.ok, true, codex.detail);
+    const reported = /^Codex 0\.1\.0 \((.+)\): signed in\.$/.exec(codex.detail);
+    assert.ok(reported, codex.detail);
+    const comparable = (file: string) => process.platform === 'win32' ? file.toLowerCase() : file;
+    assert.equal(comparable(reported[1]), comparable(second));
+    const commands = fs.readFileSync(f.log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.deepEqual(commands.filter(([name]) => name === 'codex' || name === 'working-codex'), [
+      ['codex', '--version'], ['working-codex', '--version'], ['working-codex', 'login', 'status'],
+    ]);
+    assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 0), { code: 'ESRCH' }, 'the hanging probe is stopped');
+  } finally {
+    if (fs.existsSync(pidFile)) { try { process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch { /* already stopped */ } }
+    f.cleanup();
+  }
 });
 
 test('doctor checks real repository configuration without changing files or making worktrees', { skip: process.platform === 'win32' && 'uses the POSIX which command and file links' }, async () => {

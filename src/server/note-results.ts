@@ -125,6 +125,23 @@ export function sameFragment(previous: NoteRound['units'][number], next: NoteRou
   return before.some((text, i) => text.length >= 8 && text === after[i]);
 }
 
+// A round's detail is the largest read here (about 0.6 MB for a thesis
+// chapter), and opening a review asks for every note's options and previews
+// at once, each of which read it, often twice. A rendered round no longer
+// changes, so its detail is shared for a short while; one still rendering is
+// always read afresh.
+const ROUND_REUSE = 30000;
+const rounds = new Map<string, { at: number; detail: Promise<NoteRound> }>();
+export function readRound(client: ReviewClient, task: Pick<Task, 'name'>, round: number): Promise<NoteRound> {
+  const key = `${client.url} ${task.name} ${round}`, now = Date.now(), kept = rounds.get(key);
+  if (kept && now - kept.at < ROUND_REUSE) return kept.detail;
+  for (const [old, entry] of rounds) if (now - entry.at >= ROUND_REUSE) rounds.delete(old);
+  const detail = client.get<NoteRound>(`${taskRoute(task.name)}/rounds/${round}`);
+  rounds.set(key, { at: now, detail });
+  // Only a finished rendering is shared; a failed read is never kept.
+  detail.then(value => { if ((value as { rendering?: string }).rendering) rounds.delete(key); }, () => rounds.delete(key));
+  return detail;
+}
 export async function taskNoteResults(task: Task, items: TimelineItem[], runs: Run[], client: ReviewClient): Promise<NoteResult[]> {
   const byId = new Map(runs.map(run => [run.id, run]));
   const results: NoteResult[] = items.filter(item => item.type === 'user').flatMap(item => (item.meta?.notes || readNotesInstructions(item.text) || []).map((note, index) => {
@@ -138,7 +155,7 @@ export async function taskNoteResults(task: Task, items: TimelineItem[], runs: R
   const contexts = new Map<number, Promise<{ detail: NoteRound; decisions: Record<string, string> }>>();
   const read = (round: number) => {
     if (!contexts.has(round)) contexts.set(round, Promise.all([
-      client.get<NoteRound>(`${taskRoute(task.name)}/rounds/${round}`),
+      readRound(client, task, round),
       client.get<{ decisions: Record<string, string> }>(`${taskRoute(task.name)}/state?round=${round}`),
     ]).then(([detail, state]) => {
       if (detail.round !== round || !Array.isArray(detail.units) || !Array.isArray(detail.sections) || !Array.isArray(detail.loose) || !state.decisions) throw new Error('The review could not be loaded. Try again.');

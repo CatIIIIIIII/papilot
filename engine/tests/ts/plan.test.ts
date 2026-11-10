@@ -164,3 +164,16 @@ it("conserves coverage and ownership for arbitrary overlapping rectangles", () =
         }
   }
 });
+
+it("joins crops only where the given rule finds one place", () => {
+  // Adjacent lines' boxes overlap by a point; with a rule that asks for a
+  // shared line, the two edits stay separate changes.
+  const cards = [
+      card("word", [pair(at([0, 100, 10, 113]), at([0, 100, 10, 113]))]),
+      card("paragraph", [pair(at([0, 112, 10, 150]), at([0, 112, 10, 160]))]),
+    ],
+    apart = regions(cards, () => false),
+    together = regions(cards);
+  expect(apart.map((r) => r.members)).toEqual([[0], [1]]);
+  expect(together.map((r) => r.members)).toEqual([[0, 1]]);
+});

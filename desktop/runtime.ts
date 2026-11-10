@@ -20,21 +20,35 @@ export async function refreshWindowsPath(inherited = process.env): Promise<NodeJ
   } catch { return inherited; }
 }
 
+export function npmBinFolder(prefix: string, platform: NodeJS.Platform = process.platform) {
+  return platform === 'win32' ? path.win32.normalize(prefix) : path.posix.join(prefix, 'bin');
+}
+
 export function backendEnvironment(node: string, root: string, data: string, inherited = process.env) {
   // Windows may supply both Path and PATH. Keep every inherited directory
   // before emitting a single canonical key for the backend.
   const inheritedPath = process.platform === 'win32'
     ? Object.keys(inherited).filter(key => key.toLowerCase() === 'path').map(key => inherited[key] || '').join(path.delimiter)
     : envPath(inherited);
-  const home = os.homedir();
+  const home = (process.platform === 'win32' ? inherited.USERPROFILE || inherited.HOME : inherited.HOME) || os.homedir();
   const nvm = path.join(inherited.NVM_DIR || path.join(home, '.nvm'), 'versions/node');
   let nodeBins: string[] = [];
   try { nodeBins = fs.readdirSync(nvm).filter(version => /^v\d+\.\d+\.\d+$/.test(version)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).map(version => path.join(nvm, version, 'bin')); } catch { /* nvm is optional */ }
+  let npmBin: string[] = [];
+  try {
+    const prefix = fs.readFileSync(path.join(home, '.npmrc'), 'utf8').match(/^\s*prefix\s*=\s*(.+?)\s*$/m)?.[1].replace(/^(['"])(.*)\1$/, '$2')
+      .replace(/\$\{([^}]+)\}/g, (match, name) => inherited[name] ?? match);
+    if (prefix) npmBin = [npmBinFolder(prefix.startsWith('~/') ? path.join(home, prefix.slice(2)) : prefix)];
+  } catch { /* a custom npm prefix is optional */ }
+  const fnm = [inherited.FNM_DIR || path.join(home, '.local/share/fnm'), path.join(home, 'Library/Application Support/fnm')];
   // An installed release has its dependencies beside it in node_modules.
   const hoisted = path.basename(path.dirname(root)) === 'node_modules' ? [path.join(path.dirname(root), '.bin')] : [];
   const directories = [path.dirname(node), path.join(root, 'node_modules/.bin'), ...hoisted,
     ...inheritedPath.split(path.delimiter), ...agentDirs(inherited),
-    ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin', '.volta/bin', '.asdf/shims'].map(dir => path.join(home, dir)), ...nodeBins,
+    ...['.local/bin', '.claude/local', '.kimi-code/bin', '.grok/bin', '.opencode/bin', '.bun/bin', '.npm-global/bin', '.volta/bin', '.asdf/shims'].map(dir => path.join(home, dir)),
+    // Finder does not load the shell setup that adds these Node/npm installations.
+    inherited.PNPM_HOME || '', ...['Library/pnpm', '.local/share/pnpm', '.local/share/mise/shims', '.yarn/bin'].map(dir => path.join(home, dir)),
+    ...fnm.map(dir => path.join(dir, 'aliases/default/bin')), ...npmBin, ...nodeBins,
     '/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
   const env = { ...inherited, PATH: [...new Set(directories.filter(dir => path.isAbsolute(dir)))].join(path.delimiter),
     NODE_ENV: 'production', PAPILOT_DESKTOP: '1', PAPILOT_DATA: data, PAPILOT_PORT: '0',

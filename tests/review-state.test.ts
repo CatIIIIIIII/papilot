@@ -28,14 +28,29 @@ test('viewer receives the agent lifecycle and remaining feedback separately from
 });
 
 test('active task state blocks every file decision while preserving comments', () => {
-  for (const status of ['running', 'waiting_input', 'queued', 'building', 'uncertain'] as const) {
+  for (const status of ['running', 'waiting_input', 'queued', 'uncertain'] as const) {
     const result = annotate([task(status)]);
     assert.ok(result.decisionLock, status);
     assert.equal(result.commentLock, null, status);
     assert.match(result.decisionLock, /accepting, rejecting, or undoing/);
   }
-  assert.match(annotate([task('building')]).decisionLock!, /PDF build/);
+  assert.equal(annotate([task('building')]).decisionLock, null, 'the engine gates each comparison during a build');
   assert.match(annotate([task('uncertain')]).decisionLock!, /Check status/);
+});
+
+test('while the agent edits a deferred task, rejects wait for its turn to end, and only source edits and undoing a rejection are locked', () => {
+  for (const status of ['running', 'waiting_input', 'queued'] as const) {
+    const result = annotate([{ ...task(status), deferred: true }]);
+    assert.equal(result.decisionLock, null, status);
+    assert.equal(result.commentLock, null, status);
+    assert.equal(result.queueRejects, true, status);
+    assert.match(result.rejectLock!, /agent is editing this task's files\. Pause it before editing changes or undoing a rejection\. You can still accept, reject and comment\./, status);
+    assert.equal(annotate([task(status)]).rejectLock, null, 'a task that writes the manuscript as it is reviewed stays fully locked');
+  }
+  const pending = { ...task('running'), deferred: true, pendingReview: { route: '/decide', body: { id: 'accept-1' }, previousStatus: 'interrupted' as const } };
+  assert.match(annotate([pending]).decisionLock!, /current review action/);
+  assert.equal(annotate([pending]).rejectLock, null);
+  for (const status of ['reviewing', 'building', 'uncertain'] as const) assert.equal(annotate([{ ...task(status), deferred: true }]).rejectLock, null, status);
 });
 
 test('a pending review action remains locked and fresh ready state clears stale locks', () => {

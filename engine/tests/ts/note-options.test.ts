@@ -62,6 +62,21 @@ it('the checkmark accepts only the chosen note after publishing and is idempoten
   expect(acceptedText).toContain('Procedure sentence 2.');
   expect(acceptedText).toContain('Detail sentence 15.');
 });
+it('the checkmark waits for review when a newer round replaces the option\'s round before its PDF', async () => {
+  const selected = units().find(unit => unit.new_text === 'Approach')!;
+  vi.mocked(app.publisher.publish).mockImplementation(async () => {
+    const round = fakeRound(app, task.name);
+    // A source save inserted the next round while this one rendered.
+    fakeRound(app, task.name);
+    return { outcome: 'published', round: round.number, changes: round.units.length, superseded: true };
+  });
+  await useNoteOption(app, task.name, { id: 'superseded-accept', round: 1, accept: true, edits: [{ unit: selected.id, text: 'Procedure' }] });
+  await app.publisher.join();
+  expect(app.publisher.current(task.name)?.status).toBe('done');
+  expect(app.store.all('SELECT id FROM actions')).toHaveLength(0);
+  const round = app.review.latestRound(task.name)!, decisions = app.review.decisions(task.name, round);
+  expect(round.units.filter(unit => decisions[unit.id] !== 'pending')).toHaveLength(0);
+});
 it('refuses an option shared with an accepted edit before writing any fragment', async () => {
   const [first, second] = units();
   await app.review.decide(task.name, { round: 1, changes: [first.id], action: 'accept' });
