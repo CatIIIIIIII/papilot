@@ -27,7 +27,8 @@ export const skillInstructions = (content: string) => {
 };
 export function setSkillMetadata(content: string, field: 'name' | 'description' | 'icon', value: string) {
   const { bom, source, header, newline } = parts(content);
-  const clean = value.replace(/[\r\n]/g, ' ');
+  // A field is one line; the reader's `.` also stops at U+2028 and U+2029.
+  const clean = value.replace(/[\r\n\u2028\u2029]/g, ' ');
   const line = `${field}: ${field === 'icon' ? clean : JSON.stringify(clean)}`;
   if (!header) return `${bom}---${newline}${line}${newline}---${newline}${newline}${source}`;
   const rows = header[1].split(/\r?\n/);

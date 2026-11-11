@@ -45,7 +45,8 @@ export async function diffUnitsAsync(
     ]);
   return unitsOf(files, old, next, isFigure);
 }
-function unitsOf(
+// The changes between two versions of these files; diffUnits reads them from Git.
+export function unitsOf(
   files: string[],
   oldBlobs: Record<string, Buffer | null>,
   newBlobs: Record<string, Buffer | null>,

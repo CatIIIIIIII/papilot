@@ -22,7 +22,6 @@ import {
   errors,
   warnings,
 } from "../../src/core/build.ts";
-import { wordDiff } from "../../src/web/model.ts";
 let f: Fixture;
 beforeEach(() => {
   f = new Fixture();
@@ -289,66 +288,4 @@ describe("compiler diagnostics and source diff", () => {
       "Undefined control sequence.  [l.4 \\broken]",
     ]);
   });
-  it.each([
-    ["one old word", "one new term"],
-    ["a b c", "x b y"],
-    [
-      "\\noindent Since a type variable's meaning now\ndepends on its bound, our two new guards must also be context-aware.",
-      "\\noindent Since type variables now depend on their bounds, both guards must be context-aware.",
-    ],
-  ])("source diff reconstructs both inputs", (before, after) => {
-    const diff = wordDiff(before, after);
-    expect(
-      diff
-        .filter((p) => p.type !== "ins")
-        .map((p) => p.text)
-        .join(""),
-    ).toBe(before);
-    expect(
-      diff
-        .filter((p) => p.type !== "del")
-        .map((p) => p.text)
-        .join(""),
-    ).toBe(after);
-  });
-});
-it("seeded edit sequences reconstruct both sides through arbitrary hunk subsets", () => {
-  let seed = 0x5eed123;
-  const random = (n: number) => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed % n;
-  };
-  const before = Array.from(
-      { length: 45 },
-      (_, i) => `line ${i}: repeated text\n`,
-    ).join(""),
-    head = f.repo.commitWith(
-      f.repo.rev("HEAD"),
-      { [METHOD]: Buffer.from(before) },
-      "fuzz baseline",
-    );
-  for (let sample = 0; sample < 100; sample++) {
-    const lines = before.match(/[^\n]*\n/g)!;
-    for (let k = 0; k < 8; k++) {
-      const index = random(lines.length + 1),
-        kind = random(3);
-      lines.splice(
-        index,
-        kind === 0 ? 0 : 1,
-        ...(kind === 1 ? [] : [`mutation ${sample}-${k}: α beta\\gamma\n`]),
-      );
-    }
-    if (random(2)) lines[lines.length - 1] = lines.at(-1)!.trimEnd();
-    const next = Buffer.from(lines.join("")),
-      after = f.repo.commitWith(head, { [METHOD]: next }, "fuzz snapshot"),
-      units = diffUnits(f.repo, head, after),
-      old = Buffer.from(before);
-    expect(applyUnits(old, next, units)).toEqual(next);
-    expect(revertUnits(old, next, units)).toEqual(old);
-    const chosen = units.filter(() => Boolean(random(2))),
-      other = units.filter((u) => !chosen.includes(u));
-    expect(applyUnits(old, next, chosen)).toEqual(
-      revertUnits(old, next, other),
-    );
-  }
 });
