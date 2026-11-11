@@ -162,6 +162,7 @@ export const zhCN: Record<string, string> = {
   "Back to current changes →": "返回当前修改 →",
   "{n} new LaTeX warning": "{n} 条新的 LaTeX 警告",
   "{n} new LaTeX warnings": "{n} 条新的 LaTeX 警告",
+  "The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.": "修改前的文本有编译错误，它的页面是 LaTeX 跳过这些错误后排出的。",
   "Agent needs your input": "智能体需要你的回复",
   "Feedback queued": "反馈已排队",
   "Feedback sent · Agent is working": "反馈已发送 · 智能体正在处理",

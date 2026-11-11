@@ -208,6 +208,7 @@
   "The same edit prints in several places in the PDF.": "相同的編輯在 PDF 中的多處顯示。",
   "The source changed while you were editing. Copy your draft before resetting to the saved source.": "編輯期間原始碼發生了變化。請先複製草稿，再還原已儲存的原始碼。",
   "The sources could not be reached.": "無法連線至資料來源。",
+  "The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.": "這些變更前的內容存在編譯錯誤。其頁面顯示的是 LaTeX 略過這些錯誤後的排版結果。",
   "There are no accepted changes to save.": "沒有可儲存的已接受變更。",
   "There are no new changes to review. Previous decisions are available in History.": "沒有需要審閱的新變更。先前的決定可在歷史記錄中檢視。",
   "These previews show one verified combination of edits. Other or smaller combinations may produce the same result. Accepting or rejecting applies only to the selected edit.": "這些預覽顯示一組已驗證的修改組合。其他組合或更少的修改也可能產生相同結果。接受或拒絕只作用於選取的修改。",

@@ -208,6 +208,7 @@
   "The same edit prints in several places in the PDF.": "Samma redigering återges på flera ställen i PDF-filen.",
   "The source changed while you were editing. Copy your draft before resetting to the saved source.": "Källkoden ändrades medan du redigerade. Kopiera ditt utkast innan du återställer den sparade källkoden.",
   "The sources could not be reached.": "Källorna kunde inte nås.",
+  "The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.": "Texten före dessa ändringar har kompileringsfel. Dess sidor visar vad LaTeX typsatte efter att ha hoppat över dem.",
   "There are no accepted changes to save.": "Det finns inga godkända ändringar att spara.",
   "There are no new changes to review. Previous decisions are available in History.": "Det finns inga nya ändringar att granska. Tidigare beslut finns i Historik.",
   "These previews show one verified combination of edits. Other or smaller combinations may produce the same result. Accepting or rejecting applies only to the selected edit.": "Dessa förhandsvisningar visar en verifierad kombination av ändringar. Andra eller mindre kombinationer kan ge samma resultat. Godkännande eller avvisning gäller endast den valda ändringen.",

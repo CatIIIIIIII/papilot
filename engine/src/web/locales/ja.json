@@ -208,6 +208,7 @@
   "The same edit prints in several places in the PDF.": "同じ編集がPDF内の複数箇所に出力されています。",
   "The source changed while you were editing. Copy your draft before resetting to the saved source.": "編集中にソースが変更されました。保存済みソースに戻す前に下書きをコピーしてください。",
   "The sources could not be reached.": "参照元に接続できませんでした。",
+  "The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.": "変更前のテキストにコンパイルエラーがあります。エラーをスキップして LaTeX が組版した結果が表示されています。",
   "There are no accepted changes to save.": "保存する承認済みの変更はありません。",
   "There are no new changes to review. Previous decisions are available in History.": "レビューする新しい変更はありません。以前の判断内容は履歴で確認できます。",
   "These previews show one verified combination of edits. Other or smaller combinations may produce the same result. Accepting or rejecting applies only to the selected edit.": "このプレビューは、検証済みの変更の組み合わせを示します。別の組み合わせや、より少ない変更でも同じ結果になる場合があります。承認または却下は、選択した変更にのみ適用されます。",

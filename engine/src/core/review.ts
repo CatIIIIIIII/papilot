@@ -365,6 +365,7 @@ export class Review {
       sections: render.sections,
       loose: render.loose,
       warnings: round.summary.warnings ?? [],
+      ...(round.summary.baselineErrors?.length ? { baselineErrors: round.summary.baselineErrors } : {}),
       builds: round.summary.builds ?? [],
       files: `/files/${name}/${number}/`,
       ...(round.summary.builds?.length

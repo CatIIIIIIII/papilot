@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { Builder } from "../../src/core/build.ts";
 import { loadProject } from "../../src/core/config.ts";
 import { which } from "../../src/core/process.ts";
@@ -88,6 +88,51 @@ it.skipIf(!tex)(
       expect(revised).toMatch(/revised with a longer opening\. See Section 3\.1 on page \d+ and \[3\]\./);
       // The chapter's own pages, not the seed's: other chapters stay out.
       expect(revised).not.toContain("Body a sentence 0.");
+    } finally {
+      await f.close();
+    }
+  },
+  180000,
+);
+it.skipIf(!tex)(
+  "a chapter's fix compiles the whole paper when the task's starting text does not compile",
+  async () => {
+    const f = new Fixture();
+    try {
+      f.write("paper/main.tex", String.raw`\documentclass{book}
+\begin{document}
+\include{chapters/a}
+\include{chapters/b}
+\end{document}
+`);
+      f.write("paper/chapters/a.tex", "\\chapter{A}\nFirst chapter. See Chapter~\\ref{ch:b}.\n");
+      f.write("paper/chapters/b.tex", "\\chapter{B}\\label{ch:b}\nSecond chapter. \\thiscommanddoesnotexist\n");
+      f.repo.run(["rm", "-q", "paper/sections/method.tex"]);
+      f.repo.run(["add", "-A"]);
+      f.repo.run(["commit", "-qm", "Book"]);
+      const app = f.app(), task = app.tasks.create("fix");
+      f.edit(task, "paper/chapters/b.tex", " \\thiscommanddoesnotexist", "");
+      f.edit(task, "paper/chapters/b.tex", "Second chapter.", "Second chapter, fixed.");
+      expect(await new Builder(app.project, app.repo).planAsync(task.accepted, app.tasks.snapshot(task), ["paper/chapters/b.tex"])).toEqual(["chapters/b"]);
+      const job = app.publisher.submit(task.name);
+      await app.publisher.join();
+      const done = app.publisher.job(job.id);
+      expect(done.status, JSON.stringify(done.result)).toBe("done");
+      const round = app.review.round(task.name, 1), detail = app.review.roundDetail(task.name, 1);
+      expect(round.summary.targets).toEqual(["full"]);
+      expect(detail.baselineErrors?.join("\n")).toContain("Undefined control sequence");
+      // The whole revised paper, with the other chapter's reference resolved.
+      const revised = (await new Builder(app.project, app.repo).completed(round.summary.builds.at(-1)!))!;
+      expect(text(revised.pdf)).toMatch(/See Chapter 2\..*Second chapter, fixed\./);
+      // The next round knows the starting text does not compile.
+      const seeds = vi.spyOn(Builder.prototype, "buildSeed");
+      f.edit(task, "paper/chapters/b.tex", "Second chapter, fixed.", "Second chapter, fixed twice.");
+      const again = app.publisher.submit(task.name);
+      await app.publisher.join();
+      expect(app.publisher.job(again.id).status).toBe("done");
+      expect(seeds).not.toHaveBeenCalled();
+      expect(app.review.round(task.name, 2).summary.targets).toEqual(["full"]);
+      seeds.mockRestore();
     } finally {
       await f.close();
     }

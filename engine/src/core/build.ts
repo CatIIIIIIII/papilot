@@ -9,7 +9,7 @@ import { Repo } from "./git.ts";
 import { readJson, writeJsonAsync, withLock, now } from "./files.ts";
 import { stripComments } from "./outline.ts";
 import { signature, type Project } from "./config.ts";
-import { Cancelled, capture, commandVersion, runAsync } from "./process.ts";
+import { Cancelled, ProcessError, capture, commandVersion, runAsync } from "./process.ts";
 import { Lease } from "./pool.ts";
 import { progressReader, writtenPages } from "./progress.ts";
 import type { BuildInfo, BuildProgress } from "../types.ts";
@@ -376,7 +376,7 @@ export class Builder {
   }
   /** What identifies the build of `rev`: its cache key, and the tree and
    *  date that it compiles. */
-  async resolve(rev: string, targets: string[], seed: BuildInfo | null, options: { date?: ReturnType<typeof buildDate> } = {}) {
+  async resolve(rev: string, targets: string[], seed: BuildInfo | null, options: { date?: ReturnType<typeof buildDate>; pastErrors?: boolean } = {}) {
     const p = this.project,
       partial = JSON.stringify(targets) !== '["full"]';
     if (partial && !seed)
@@ -407,12 +407,14 @@ export class Builder {
           version,
           dated ? date : null,
           SELF,
+          // Existing keys stay valid: only a build past errors adds this.
+          ...(options.pastErrors ? ["past errors"] : []),
         ]),
       ).slice(0, 32);
     return { partial, tree, date, dated, context, cacheKey };
   }
   /** The completed build of `rev`, if there is one, without compiling. */
-  async cached(rev: string, targets: string[], seed: BuildInfo | null, options: { date?: ReturnType<typeof buildDate> } = {}) {
+  async cached(rev: string, targets: string[], seed: BuildInfo | null, options: { date?: ReturnType<typeof buildDate>; pastErrors?: boolean } = {}) {
     const { cacheKey } = await this.resolve(rev, targets, seed, options),
       preferred = this.preferred(cacheKey);
     // A refresh replaced the build of this key (see build()).
@@ -436,6 +438,11 @@ export class Builder {
        *  request it replaces can be cancelled without stopping a
        *  compilation both need. */
       onKey?: (key: string) => void;
+      /** TeX typesets past errors it can recover from, as LaTeX does without
+       *  -halt-on-error, and the PDF it writes is the result, with those
+       *  errors in `errors`. For a version shown only for comparison, such
+       *  as the text a task fixing a compilation error starts from. */
+      pastErrors?: boolean;
     } = {},
   ): Promise<BuildInfo> {
     const p = this.project,
@@ -538,10 +545,11 @@ export class Builder {
     date: ReturnType<typeof buildDate>,
     dated: boolean,
     partial: boolean,
-    options: { force?: boolean; progress?: (progress: BuildProgress) => void },
+    options: { force?: boolean; progress?: (progress: BuildProgress) => void; pastErrors?: boolean },
     requestKey = key,
     signal?: AbortSignal,
   ) {
+    const pastErrors = options.pastErrors ?? false;
     if (signal?.aborted) throw new Cancelled();
     // A build continues from the completed one with the same targets whose
     // sources differ least from this one, or a full build from the author's
@@ -567,18 +575,19 @@ export class Builder {
     let result: BuildInfo;
     try {
       try {
-        result = await this.compile(rev, tree, key, targets, seed, date, dated, start, progress, run, signal);
+        result = await this.compile(rev, tree, key, targets, seed, date, dated, start, progress, run, signal, pastErrors);
       } catch (error) {
         // A cancelled build is not a failure that a clean start could fix.
         if (error instanceof Cancelled || signal?.aborted) throw error;
         if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
-        result = await this.compile(rev, tree, key, targets, seed, date, dated, null, progress, run, signal);
+        result = await this.compile(rev, tree, key, targets, seed, date, dated, null, progress, run, signal, pastErrors);
       }
     } finally {
       active.delete(run);
       schedule();
     }
-    await this.remember(targets, { key, context, date: date.SOURCE_DATE_EPOCH, tree, dated });
+    // What TeX left after errors is no state for another build to continue.
+    if (!pastErrors) await this.remember(targets, { key, context, date: date.SOURCE_DATE_EPOCH, tree, dated });
     if (options.force) {
       const preferred = this.preferredFile(cacheKey);
       await withLock(preferred, () => writeJsonAsync(preferred, { key }));
@@ -665,6 +674,7 @@ export class Builder {
     progress?: (progress: BuildProgress) => void,
     scheduled?: Active,
     signal?: AbortSignal,
+    pastErrors = false,
   ): Promise<BuildInfo> {
     const p = this.project,
       partial = JSON.stringify(targets) !== '["full"]',
@@ -694,7 +704,9 @@ export class Builder {
     // older auxiliary state, but TeX must refresh the date on its pages.
     // Pages of other targets, such as a chapter build's full seed, are never
     // this build's output: without them latexmk has to run TeX.
-    const reused = base !== null && JSON.stringify(base.targets) === JSON.stringify(targets)
+    // A build past errors starts without them: its PDF is then the one TeX
+    // wrote, not one left over that latexmk stopped before replacing.
+    const reused = !pastErrors && base !== null && JSON.stringify(base.targets) === JSON.stringify(targets)
       && (!dated || (start !== "author" && start?.date === date.SOURCE_DATE_EPOCH));
     if (base) {
       const previous = path.dirname(base.pdf);
@@ -721,6 +733,8 @@ export class Builder {
         }));
     }
     if (signal?.aborted) return abandon();
+    // Nor is a PDF that the paper's repository keeps in the output folder.
+    if (pastErrors) await Promise.all(["pdf", "xdv"].map((ext) => fs.promises.rm(path.join(out, `${job}.${ext}`), { force: true })));
     const args = [
       "-norc",
       ...(p.latexmkrc
@@ -733,7 +747,8 @@ export class Builder {
       `-jobname=${job}`,
       "-synctex=1",
       "-interaction=nonstopmode",
-      "-halt-on-error",
+      // latexmk -f runs the remaining passes and the PDF driver after errors.
+      ...(pastErrors ? ["-f"] : ["-halt-on-error"]),
       "-file-line-error",
     ];
     if (partial) {
@@ -868,8 +883,17 @@ export class Builder {
       texLog = path.join(out, job + ".log");
     if (reused && !failure)
       await Promise.all([path.join(out, job + ".synctex.gz"), texLog].map((file) => relocate(file, path.dirname(base!.root), folder)));
-    const logText = await fs.promises.readFile(texLog, "utf8").catch(() => "");
-    if (failure || !fs.existsSync(pdf)) {
+    const logText = await fs.promises.readFile(texLog, "utf8").catch(() => ""),
+      // latexmk reports the errors TeX went past with its exit status. A
+      // latexmk that a timeout or a shutdown killed has none, and may have
+      // left the PDF unfinished.
+      past = pastErrors && failure instanceof ProcessError && / failed \(\d+\)$/.test(failure.message) && fs.existsSync(pdf);
+    let errors: string[] | undefined;
+    if (past) {
+      const transcriptText = await fs.promises.readFile(transcript, "utf8");
+      errors = compilerDiagnostics(logText, transcriptText);
+      if (!errors.length) errors = transcriptText.split("\n").slice(-25);
+    } else if (failure || !fs.existsSync(pdf)) {
       const transcriptText = await fs.promises.readFile(transcript, "utf8"),
         details = compilerDiagnostics(logText, transcriptText),
         kept = path.join(p.state, "logs", key + ".log");
@@ -897,6 +921,7 @@ export class Builder {
       pdf,
       seconds: Math.round((now() - ran) * 10) / 10,
       warnings: warnings(logText),
+      ...(errors ? { errors } : {}),
     };
     await writeJsonAsync(path.join(folder, "result.json"), result);
     return result;

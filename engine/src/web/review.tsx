@@ -1914,6 +1914,18 @@ export function ReviewApp({
               </details>
             </div>
           ) : null}
+          {/* A task that fixes a compilation error starts from text that
+              does not compile: its Before pages went on past the errors. */}
+          {detail?.baselineErrors?.length ? (
+            <div className="banner">
+              <details>
+                <summary>
+                  {t("The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.")}
+                </summary>
+                <pre className="details">{detail.baselineErrors.join("\n")}</pre>
+              </details>
+            </div>
+          ) : null}
           {detail?.references &&
             (detail.references.entries.length > 0 ||
               detail.references.missing.length > 0) && (

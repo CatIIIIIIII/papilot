@@ -34,6 +34,18 @@ export class PublishError extends Error {
   }
 }
 const RANK: Record<BuildPriority, number> = { background: 0, normal: 1, foreground: 2 };
+// Nothing for a build that failed to compile; a cancelled one stays cancelled.
+const compileFailure = (error: unknown) => {
+  if (error instanceof BuildError) return null;
+  throw error;
+};
+/** The cached build of `rev` past its errors, when the cache holds none of it
+ *  as it is: that text does not compile as it is, and is not tried again
+ *  until the date or the TeX installation changes. */
+async function knownBroken(builder: Builder, rev: string, targets: string[], seed: BuildInfo | null, date: ReturnType<typeof buildDate>) {
+  if (await builder.cached(rev, targets, seed, { date })) return null;
+  return builder.cached(rev, targets, seed, { date, pastErrors: true });
+}
 // Seconds for which a review page that asked for its state counts as open.
 const VIEWING = 15;
 // Each rendering step takes its own share of the TeX pool, so a comparison
@@ -320,15 +332,26 @@ export class Publisher {
     const after = await app.review.queuedTree(name, await app.tasks.snapshotAsync(task)), before = task.accepted,
       files = await app.repo.changedFilesAsync(before, after);
     if (!files.length || signal.aborted) return replace();
-    const builder = new Builder(project, app.repo), targets = await builder.planAsync(before, after, files),
+    const builder = new Builder(project, app.repo),
       priority = () => this.followPriority(name);
-    const seed = targets[0] !== "full" ? await builder.buildSeed(task.base, { priority }) : null;
-    if (signal.aborted || this.stopping) return replace();
     const date = buildDate(), options = { date, signal, priority };
-    const [old, next] = await Promise.all([
-      builder.build(before, targets, seed, options),
+    let targets = await builder.planAsync(before, after, files), seed: BuildInfo | null = null;
+    // A starting text that does not compile is compiled as the round's
+    // publication will compile it (see renderComparison).
+    if (targets[0] !== "full") {
+      if (!(await knownBroken(builder, task.base, ["full"], null, date).catch(compileFailure)))
+        seed = await builder.buildSeed(task.base, { priority }).catch(compileFailure);
+      if (!seed) targets = ["full"];
+    }
+    if (signal.aborted || this.stopping) return replace();
+    const [baseline, revised] = await Promise.allSettled([
+      knownBroken(builder, before, targets, seed, date).then((known) => known ?? builder.build(before, targets, seed, options)),
       builder.build(after, targets, seed, { ...options, onKey: replace }),
     ]);
+    if (revised.status === "rejected") throw revised.reason;
+    if (baseline.status === "rejected" && !(baseline.reason instanceof BuildError && !signal.aborted)) throw baseline.reason;
+    const next = revised.value,
+      old = baseline.status === "fulfilled" ? baseline.value : await builder.build(before, targets, seed, { ...options, pastErrors: true });
     this.guesses.set(name, old.key);
     const indirect = this.tracking.get(name) ?? false;
     const units = await withHashesAsync(app.repo, before, after, await diffUnitsAsync(app.repo, before, after, (f) => isFigure(project, f)));
@@ -406,13 +429,13 @@ export class Publisher {
       shared.wanted.delete(priority);
     }
   }
-  private async compile(job: Pick<Job, "id" | "task">, side: "baseline" | "revised", builder: Builder, rev: string, targets = ["full"], seed: BuildInfo | null = null, { asSeed = false, force = false, date }: { asSeed?: boolean; force?: boolean; date?: ReturnType<typeof buildDate> } = {}) {
+  private async compile(job: Pick<Job, "id" | "task">, side: "baseline" | "revised", builder: Builder, rev: string, targets = ["full"], seed: BuildInfo | null = null, { asSeed = false, force = false, date, pastErrors = false }: { asSeed?: boolean; force?: boolean; date?: ReturnType<typeof buildDate>; pastErrors?: boolean } = {}) {
     const progress = this.builds.get(job.id) ?? {};
     this.builds.set(job.id, progress);
     progress[side] = { step: "tex", pass: 0, pages: 0, total: null };
     try {
       const options = { force, date, priority: () => this.priority(job), progress: (value: BuildProgress) => { progress[side] = value; } };
-      const result = await (asSeed ? builder.buildSeed(rev, options) : builder.build(rev, targets, seed, options));
+      const result = await (asSeed ? builder.buildSeed(rev, options) : builder.build(rev, targets, seed, { ...options, pastErrors }));
       const guess = this.guesses.get(job.task);
       if (side === "baseline" && !asSeed && guess) this.verdicts.set(job.id, guess === result.key ? "hit" : "miss");
       return result;
@@ -750,9 +773,9 @@ export class Publisher {
     if (this.roundSuperseded(round)) return superseded;
     this.phase(job, "build");
     const builder = new Builder(project, app.repo),
-      targets = round.summary.targets?.length ? round.summary.targets : ["full"],
       date = round.summary.date ?? buildDate(new Date(round.created * 1000)),
       indirect = round.summary.indirect ?? true;
+    let targets = round.summary.targets?.length ? round.summary.targets : ["full"];
     if (targets[0] !== "full") this.revisions.set(job.id, after);
     const failed = (what: string) => (error: unknown) => {
       if (error instanceof BuildError)
@@ -765,19 +788,40 @@ export class Publisher {
       throw error;
     };
     const base = app.tasks.get(name).base;
-    let seed = targets[0] !== "full" ? await this.compile(job, "baseline", builder, base, ["full"], null, { asSeed: true }).catch(failed("The comparison baseline could not be compiled.")) : null;
+    let seed: BuildInfo | null = null;
+    if (targets[0] !== "full") {
+      // Chapters cannot continue from a task's starting text that does not
+      // compile, which an earlier build past its errors may already show:
+      // both versions compile whole instead (see below).
+      if (!(await knownBroken(builder, base, ["full"], null, date).catch(compileFailure)))
+        seed = await this.compile(job, "baseline", builder, base, ["full"], null, { asSeed: true }).catch(compileFailure);
+      if (!seed) {
+        targets = ["full"];
+        this.revisions.delete(job.id);
+      }
+    }
     // Both versions compile at once: each needs only the seed.
-    const versions = () => Promise.allSettled([
-      this.compile(job, "baseline", builder, before, targets, seed, { date }),
-      this.compile(job, "revised", builder, after, targets, seed, { date }),
-    ]);
-    let builds = await versions();
+    const versions = async () => {
+      const known = await knownBroken(builder, before, targets, seed, date).catch(compileFailure);
+      return Promise.allSettled([
+        known ?? this.compile(job, "baseline", builder, before, targets, seed, { date }),
+        this.compile(job, "revised", builder, after, targets, seed, { date }),
+      ]);
+    };
+    let builds: PromiseSettledResult<BuildInfo>[] = await versions();
     if (!this.stopping && seed && builds.some((built) => built.status === "rejected" && auxiliaryBuildError(built.reason))) {
       // An external package can invalidate readable aux files without
       // changing the source tree or engine version. Rebuild the seed once,
       // after both attempts finish, then use it for both comparison sides.
       seed = await this.compile(job, "baseline", builder, base, ["full"], null, { asSeed: true, force: true }).catch(failed("The comparison baseline could not be compiled."));
       builds = await versions();
+    }
+    // A task that fixes a compilation error starts from text that does not
+    // compile. Its side of the comparison is what TeX typesets past the
+    // errors; the revised version must still compile as it is.
+    if (!this.stopping && builds[0].status === "rejected" && builds[0].reason instanceof BuildError && builds[1].status === "fulfilled") {
+      const past = await this.compile(job, "baseline", builder, before, targets, seed, { date, pastErrors: true }).catch(compileFailure);
+      if (past) builds = [{ status: "fulfilled", value: past }, builds[1]];
     }
     // A failure of either is reported once both have settled, the baseline's first.
     const [baseline, revised] = builds,
@@ -795,6 +839,7 @@ export class Publisher {
       targets,
       date,
       builds: [seed, old, next].filter((b) => b !== null).map((b) => b.key),
+      baselineErrors: old.errors,
     };
     try {
       // The comparison the agent's writes were rendered into ahead, when it

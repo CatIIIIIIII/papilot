@@ -101,6 +101,9 @@ export interface Round {
     indirect?: boolean;
     /** The build job that inserted the round. */
     job?: string;
+    /** The accepted text does not compile: the errors that its side of the
+     *  comparison was typeset past. */
+    baselineErrors?: string[];
   };
   created: number;
   /** Whether its PDF comparison is rendered. A round is inserted first and
@@ -194,6 +197,8 @@ export interface BuildInfo {
   pdf: string;
   seconds: number;
   warnings: string[];
+  /** The errors TeX typeset past, in a build that went on after them. */
+  errors?: string[];
 }
 // A running compilation: latexmk's current step, the TeX pass, and the
 // pages typeset in it against the last known page count.
@@ -484,6 +489,9 @@ export interface RoundDetail extends Omit<RenderedRound, "units"> {
   after: string;
   units: (Unit & Partial<VisualUnit> & { history?: History[]; formattingFor?: string; waiting?: boolean; carried?: number })[];
   warnings: string[];
+  /** The errors of the accepted text, when its side of the comparison was
+   *  typeset past them. */
+  baselineErrors?: string[];
   /** The round's own comparison is still rendering, or failed. */
   rendering?: "pending" | "failed";
   files: string;

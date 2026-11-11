@@ -208,6 +208,7 @@
   "The same edit prints in several places in the PDF.": "La même modification apparaît à plusieurs endroits dans le PDF.",
   "The source changed while you were editing. Copy your draft before resetting to the saved source.": "Le code source a changé pendant votre modification. Copiez votre brouillon avant de rétablir le code source enregistré.",
   "The sources could not be reached.": "Impossible de joindre les sources.",
+  "The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.": "Le texte antérieur à ces modifications contient des erreurs de compilation. Ses pages affichent le rendu produit par LaTeX après les avoir ignorées.",
   "There are no accepted changes to save.": "Il n’y a aucune modification acceptée à enregistrer.",
   "There are no new changes to review. Previous decisions are available in History.": "Il n’y a aucune nouvelle modification à réviser. Les décisions précédentes sont disponibles dans l’historique.",
   "These previews show one verified combination of edits. Other or smaller combinations may produce the same result. Accepting or rejecting applies only to the selected edit.": "Ces aperçus montrent une combinaison vérifiée de modifications. D’autres combinaisons, éventuellement plus petites, peuvent produire le même résultat. L’acceptation ou le rejet ne s’applique qu’à la modification sélectionnée.",

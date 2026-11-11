@@ -994,6 +994,11 @@
     "textHash": "f3a6e1f60a8a53206919c18c17a33290e900f4da8f54c4505eb0505ff4004ae5",
     "model": "gemini-4-argon-medium"
   },
+  "The text before these changes has compilation errors. Its pages show what LaTeX typeset after skipping them.": {
+    "revision": "b92e0dbd11f630efc024ec44cbe436c8e8d2be81ab7de1cd2478aed9fc7a8feb",
+    "textHash": "4aac69f775f37e8cd6e297de3550aaa5261f075ad229795c38cd549ebdb2ce50",
+    "model": "gemini-4-argon-medium"
+  },
   "There are no accepted changes to save.": {
     "revision": "4d2cdbefe1c43f8273953117d7c1962e3861aca2773f2ed2550d308fc3610f4a",
     "textHash": "ccb009a61a647c0c96ab0937d22e931d23dc3531a694550a8593ceb36fd2c3e5",

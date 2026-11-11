@@ -230,6 +230,78 @@ it.skipIf(!tex)(
   120000,
 );
 it.skipIf(!tex)(
+  "compares a task that fixes a compilation error with its text typeset past the error",
+  async () => {
+    const f = new Fixture();
+    f.write(METHOD, f.read(METHOD).replace("Method sentence 3.", "Method sentence 3. \\thiscommanddoesnotexist"));
+    f.repo.run(["commit", "-qam", "broken"]);
+    const app = f.app();
+    const { vi } = await import("vitest");
+    const publish = async (name: string) => {
+      const job = app.publisher.submit(name);
+      await app.publisher.join();
+      return app.publisher.job(job.id);
+    };
+    try {
+      // Without fixing it, the task's own version fails as it is.
+      const unfixed = app.tasks.create("unfixed");
+      f.edit(unfixed, METHOD, "Method sentence 5.", "Still broken.");
+      const failed = await publish(unfixed.name);
+      expect(failed.status).toBe("failed");
+      expect(failed.result.error).toBe("The comparison baseline could not be compiled.");
+      expect(failed.result.details?.join("\n")).toContain("Undefined control sequence");
+
+      const task = app.tasks.create("fix");
+      f.edit(task, METHOD, " \\thiscommanddoesnotexist", "");
+      f.edit(task, METHOD, "Method sentence 5.", "A fixed sentence.");
+      const done = await publish(task.name);
+      expect(done.status, JSON.stringify(done.result)).toBe("done");
+      const detail = app.review.roundDetail(task.name, 1);
+      expect(detail.baselineErrors?.join("\n")).toContain("Undefined control sequence");
+      expect(detail.units.find((u) => u.new_text.includes("A fixed sentence"))?.visual).toBe("text");
+
+      // The next round knows the accepted text does not compile as it is.
+      const build = vi.spyOn(Builder.prototype, "build");
+      f.edit(task, METHOD, "Detail sentence 4.", "A second edit.");
+      expect((await publish(task.name)).status).toBe("done");
+      const before = app.tasks.get(task.name).accepted;
+      expect(build.mock.calls.filter(([rev, , , options]) => rev === before && !options?.pastErrors)).toEqual([]);
+      expect(app.review.roundDetail(task.name, 2).baselineErrors?.length).toBeGreaterThan(0);
+      build.mockRestore();
+
+      // Once the fix is accepted, the comparison no longer mentions errors.
+      await app.review.decide(task.name, { action: "accept", round: 2, changes: app.review.roundDetail(task.name, 2).units.filter((u) => u.old_text.includes("\\thiscommanddoesnotexist")).map((u) => u.id) });
+      f.edit(task, METHOD, "Detail sentence 6.", "A third edit.");
+      expect((await publish(task.name)).status).toBe("done");
+      const latest = app.review.latestRound(task.name)!;
+      expect(app.review.roundDetail(task.name, latest.number).baselineErrors).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  },
+  180000,
+);
+it.skipIf(!tex)(
+  "a build past errors fails when TeX writes no PDF, whatever PDF the repository keeps",
+  async () => {
+    const f = new Fixture(),
+      app = f.app();
+    try {
+      const builder = new Builder(app.project, app.repo),
+        kept = fs.readFileSync((await builder.build("HEAD")).pdf);
+      // A missing \input file stops TeX in nonstop mode, past errors or not.
+      f.write("paper/main.tex", "\\documentclass{article}\n\\input{doesnotexist}\n\\begin{document}\nText.\n\\end{document}\n");
+      f.write("paper/build/main.pdf", kept);
+      f.repo.run(["add", "."]);
+      f.repo.run(["commit", "-qm", "fatal"]);
+      await expect(builder.build("HEAD", ["full"], null, { pastErrors: true })).rejects.toBeInstanceOf(BuildError);
+    } finally {
+      await f.close();
+    }
+  },
+  120000,
+);
+it.skipIf(!tex)(
   "a decision on an earlier comparison is recorded without restarting the inserted round",
   async () => {
     const f = new Fixture(),

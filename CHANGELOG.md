@@ -24,6 +24,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- **Tasks that fix a compilation error can be reviewed.** When the text a task starts from does not compile, as when you ask the agent to fix the problems of the last compilation, the PDF comparison no longer fails. The Before pages show what LaTeX typeset after skipping the errors, a note above the changes lists them, and the agent's version must still compile cleanly. ([#121](https://github.com/PapilotAI/papilot/pull/121))
 - **Apply reuses the final selection's compilation.** Intermediate decisions no longer refresh the manuscript. Older tasks that write accepted changes directly compile once their last pending change is decided, and Apply or Commit compiles only once the changes are in the manuscript. ([#115](https://github.com/PapilotAI/papilot/pull/115))
 - **A lost file lock no longer stops the app.** When another process took over or removed a lock Papilot held, for example while an earlier app's review engine shut down, the server crashed. Now the review engine that lost its lock stops, and Papilot continues with the engine that holds it, so two never write a paper's review state at once. ([#115](https://github.com/PapilotAI/papilot/pull/115))
 - **"No visible change" describes only changes that show nothing.** A change with visible edits is no longer labelled so because one of its edits only swapped a space for a line break. ([#115](https://github.com/PapilotAI/papilot/pull/115))
