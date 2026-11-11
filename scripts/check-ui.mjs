@@ -42,6 +42,7 @@ const diagnosticReport = { version: '0.6.0', checkedAt: 1700000000000, platform:
   { id: 'project.worktrees', ok: true, severity: 'warn', detail: 'Task folders are writable.', fix: null },
 ] };
 const creates = [];
+const publishes = [];
 let failCreate = true;
 let createResult = task;
 let heldState;
@@ -226,6 +227,7 @@ await page.route('**/api/**', async route => {
     if (!snapshot.tasks.some(t => t.id === createResult.id)) snapshot.tasks.push(createResult);
     return json(createResult);
   }
+  if (url.pathname.endsWith('/publish')) { publishes.push(url.pathname.split('/')[3]); return json({ ok: true }); }
   if (url.pathname.endsWith('/prepare')) {
     const pending = snapshot.tasks.find(t => t.id === url.pathname.split('/')[3]);
     pending.status = 'preparing'; pending.error = null;
@@ -2009,9 +2011,19 @@ try {
   task.status = 'failed'; task.error = 'A build failed in the test fixture.'; task.review.job = { status: 'failed' };
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await page.getByRole('button', { name: 'Retry build', exact: true }).waitFor();
+  // The chat already shows the error, so View details appears only when it is hidden.
+  await page.locator('.task-error').getByText(task.error, { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'View details', exact: true }).count(), 0);
+  await selectWorkspaceView('Review');
   await page.getByRole('button', { name: 'View details', exact: true }).click();
-  assert.equal(await views.getByRole('button', { name: 'Chat', exact: true }).getAttribute('aria-pressed'), 'true');
-  await page.getByText(task.error, { exact: true }).waitFor();
+  assert.equal(await views.getByRole('button', { name: 'Split', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.locator('.task-error').getByText(task.error, { exact: true }).waitFor();
+  // With only the chat in view, the error offers the PDF comparison the review panel holds.
+  await selectWorkspaceView('Chat');
+  assert.equal(await page.getByRole('button', { name: 'View details', exact: true }).count(), 0);
+  await page.locator('.task-error-actions').getByRole('button', { name: 'Regenerate PDF comparison', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('.task-error-actions button[aria-busy=true]'));
+  assert.deepEqual(publishes, [task.id]);
   task.error = null; task.review.job = null;
   await selectWorkspaceView('Split');
   console.log('PASS: Long conversations follow new messages, preserve history reading position, and offer a jump back');

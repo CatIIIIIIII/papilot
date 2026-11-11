@@ -94,6 +94,42 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+// agy 1.5 reports status ERROR with a failed attempt's message even after a
+// retry succeeded; these steps follow a run recorded with a cut connection.
+test('Antigravity turns finish when agy recovers from a failed model request', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-retry-'));
+  const step = (step_index: number, step_type: string, more: Record<string, unknown> = {}) => JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'conv-r', step_index, state: 'DONE', step_type, ...more } });
+  const reply = (index: number, text: string) => step(index, 'agent_response', { text_delta: text });
+  const tool = (index: number) => step(index, 'tool', { tool_name: 'edit_file', tool_info: { parameters: { TargetFile: '/work/intro.tex' } } });
+  const failure = (error: string) => JSON.stringify({ event: 'result', result: { conversation_id: 'conv-r', status: 'ERROR', error, finished_reason: 'error' } });
+  const error = 'API error (attempt 2): INTERNAL (code 500): Internal error encountered.';
+  const fake = fakeAgy([
+    // Two failed attempts, then the retry edits the file and replies.
+    [JSON.stringify({ event: 'init', conversation_id: 'conv-r' }), step(0, 'user_input'), reply(1, 'Reading the chapter.'), step(2, 'error_message'), step(3, 'error_message'), tool(4), reply(5, 'I revised the introduction.'), failure(error)],
+    // agy gave up: the last step is the failed request.
+    [reply(6, 'Checking the build.'), tool(7), step(8, 'error_message'), failure(error)],
+    // A reply after an error, but the agent went on with a tool when it stopped.
+    [step(9, 'error_message'), reply(10, 'Now the conclusion.'), step(11, 'tool', { state: 'ACTIVE', tool_name: 'edit_file', tool_info: { parameters: { TargetFile: '/work/end.tex' } } }), failure('stream reading error: unexpected EOF')],
+    // ERROR without a recorded failed request is not a recovery.
+    [reply(12, 'Done.'), failure('Quota exceeded')],
+  ]);
+  const agent = new AntigravityAgent('agy', path.join(dir, 'conversations.json'), fake.launch as any); agent.ready = true;
+  try {
+    const { thread } = await agent.request('thread/start', { cwd: '/work' });
+    const run = async (text: string) => { const seen = events(agent); await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text }] }); return { turn: await completed(seen), seen }; };
+    const recovered = await run('Smooth the introduction.');
+    assert.equal(recovered.turn.status, 'completed');
+    assert.equal(recovered.turn.error, undefined);
+    assert.deepEqual(recovered.seen.filter(e => e.method === 'item/completed').map(e => e.params.item.text ?? e.params.item.type), ['Reading the chapter.', 'fileChange', 'I revised the introduction.']);
+    const gaveUp = await run('Check the build.');
+    assert.deepEqual([gaveUp.turn.status, gaveUp.turn.error.message], ['failed', error]);
+    const midTool = await run('And the conclusion.');
+    assert.deepEqual([midTool.turn.status, midTool.turn.error.message], ['failed', 'stream reading error: unexpected EOF']);
+    const quota = await run('Again.');
+    assert.deepEqual([quota.turn.status, quota.turn.error.message], ['failed', 'Quota exceeded']);
+  } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('Antigravity grants only selected images read access for the current turn', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
   const image = path.join(dir, 'attached.png'); fs.writeFileSync(image, 'image fixture');

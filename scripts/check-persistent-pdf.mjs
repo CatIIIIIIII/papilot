@@ -78,6 +78,9 @@ try {
     await readable();
     assert.ok(await original.evaluate(el => el.isConnected), 'Task status must not remount the PDF');
     await expect(views.getByRole('button')).toHaveCount(3);
+    // A stopped turn can build its first comparison from the toolbar, without
+    // a prompt over the PDF; waiting turns and answers have nothing to build.
+    await expect(preview.getByRole('button', { name: 'Generate PDF comparison', exact: true })).toHaveCount(['building', 'failed'].includes(status) ? 1 : 0);
   }
   await expect(page.getByRole('button', { name: 'Generate PDF comparison', exact: true })).toHaveCount(0);
   // A new, unavailable PDF must leave the successfully loaded pages intact.
@@ -167,11 +170,17 @@ try {
   manuscript.build = { status: 'ready', key: 'rebuilt', current: true };
   await sync();
   await expect(page.locator('.task-grid')).toHaveClass(/layout-conversation/);
-  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:layout')), 'conversation');
   await expect.poll(() => requests.some(url => url.includes('key=rebuilt'))).toBe(true);
   await views.getByRole('button', { name: 'Split', exact: true }).click();
   await readable();
   await expect.poll(() => box.evaluate(el => Math.round(el.scrollTop))).toBeGreaterThan(500);
+  // A chosen view lasts for the session; Papilot starts side by side again.
+  await views.getByRole('button', { name: 'Chat', exact: true }).click();
+  await expect(page.locator('.task-grid')).toHaveClass(/layout-conversation/);
+  await page.evaluate(() => localStorage.setItem('papilot:layout', 'conversation'));
+  await page.reload();
+  await expect(page.locator('.task-grid')).toHaveClass(/layout-split/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:layout')), null, 'An earlier saved view is cleared');
   assert.deepEqual(errors, []);
   console.log('PASS: Persistent PDF across task states, no changes, failed replacement, review readiness/failure, PDF-mode escape, hidden Chat shortcuts/place retention, reload, and mobile');
 } finally { await browser.close(); await server.close(); }

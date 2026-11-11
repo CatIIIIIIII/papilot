@@ -570,15 +570,21 @@ export class AntigravityAgent extends Adapter {
     let stopped = false, result: { status?: string; error?: string; denied_actions?: { display_name?: string; action?: string }[] } | null = null, stderr = '';
     turn.stop = () => { stopped = true; child.kill('SIGINT'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); };
     const texts = new Map<number, string>();
+    // Step indices of the latest step, failed model request and finished reply.
+    let lastStep = -1, lastError = -1, lastReply = -1;
     createInterface({ input: child.stdout! }).on('line', line => {
       let event: any;
       try { event = JSON.parse(line); } catch { if (line.trim()) stderr = (stderr + '\n' + line).slice(-4000); return; }
       if (event.event === 'init' && event.conversation_id && !conversation) { this.conversations[turn.threadId] = event.conversation_id; this.save(); }
       const step = event.step_update;
+      if (Number.isInteger(step?.step_index)) {
+        lastStep = Math.max(lastStep, step.step_index);
+        if (step.step_type === 'error_message') lastError = Math.max(lastError, step.step_index);
+      }
       if (step?.step_type === 'agent_response') {
         const id = `${turn.id}:${step.step_index}`;
         if (step.text_delta) { texts.set(step.step_index, (texts.get(step.step_index) || '') + step.text_delta); this.notify('item/agentMessage/delta', { threadId: turn.threadId, turnId: turn.id, itemId: id, delta: step.text_delta }); }
-        if (step.state === 'DONE' && texts.get(step.step_index)?.trim()) this.item(turn, { id, type: 'agentMessage', text: texts.get(step.step_index)!.trim() });
+        if (step.state === 'DONE' && texts.get(step.step_index)?.trim()) { this.item(turn, { id, type: 'agentMessage', text: texts.get(step.step_index)!.trim() }); lastReply = Math.max(lastReply, step.step_index); }
       } else if (step?.step_type === 'tool' && step.tool_name) {
         const item = toolItem(`${turn.id}:${step.step_index}`, step.tool_name, step.tool_info?.parameters || {});
         if (step.state === 'ACTIVE') this.item(turn, item, false);
@@ -593,7 +599,12 @@ export class AntigravityAgent extends Adapter {
       if (stopped) return this.finish(turn, 'interrupted');
       const denied = (result?.denied_actions || []).map(action => action.display_name || action.action).filter(Boolean);
       if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval.` });
-      if (result?.status === 'SUCCESS') this.finish(turn, 'completed');
+      // agy retries a failed model request itself and records each failed
+      // attempt as an error step. It still reports the turn as an error when a
+      // retry succeeded and the agent went on to finish, so a reply after the
+      // last error step, with nothing after it, means the turn completed.
+      const recovered = result?.status === 'ERROR' && lastError >= 0 && lastReply > lastError && lastReply === lastStep;
+      if (result?.status === 'SUCCESS' || recovered) this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });
     // One NDJSON user message followed by EOF runs one turn without argv limits.

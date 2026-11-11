@@ -738,7 +738,6 @@ try {
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveAttribute('aria-pressed', 'true');
   question.review.job.outcome = 'unchanged'; await sync();
   await expect(page.locator('.review-frame')).toBeVisible();
-  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:layout')), 'review');
   console.log('PASS: Answer-only tasks keep the PDF and chat views without a generate prompt; reload, mobile, follow-up questions, and later manuscript changes preserve the review preference');
   assert.deepEqual(errors, []);
   console.log('PASS: Current changes resolve to clean PDF; history and explicit undo; sent/working states; notes on accepted text; mixed decisions; new rounds; older rounds read-only; mobile');

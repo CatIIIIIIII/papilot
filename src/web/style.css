@@ -60,8 +60,8 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .compile-button:hover:not(:disabled){background:var(--green-soft)}
 .compile-button[data-state="failed"],.compile-button[data-state="failed"]:hover{color:var(--red)}
 .compile-button[data-state="failed"]:hover{background:var(--red-soft)}
-.compile-button[data-state="unknown"],.compile-button[data-state="unknown"]:hover,.compile-button:disabled:not([aria-busy="true"]){color:var(--text-3)}
-.compile-button[data-state="unknown"]:hover{background:var(--bg-hover)}
+.compile-button[data-state="unknown"],.compile-button[data-state="unknown"]:hover,.compile-button[data-state="idle"],.compile-button[data-state="idle"]:hover,.compile-button:disabled:not([aria-busy="true"]){color:var(--text-3)}
+.compile-button[data-state="unknown"]:hover,.compile-button[data-state="idle"]:hover{background:var(--bg-hover)}
 .compile-button[aria-busy="true"]{color:var(--accent);opacity:1}
 .compile-button .spinner{width:20px;height:20px;border-color:var(--accent-line);border-top-color:currentColor}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line-strong);border-top-color:var(--text-2);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}

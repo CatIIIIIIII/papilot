@@ -3,7 +3,8 @@ import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
 
 export function CompileButton({ status, label, disabled, className = '', onCompile }: {
-  status: 'ready' | 'building' | 'failed' | 'unknown';
+  // idle: nothing compiled yet, so there is no result to report.
+  status: 'idle' | 'ready' | 'building' | 'failed' | 'unknown';
   label: string;
   disabled?: boolean;
   className?: string;
@@ -12,11 +13,11 @@ export function CompileButton({ status, label, disabled, className = '', onCompi
   const request = useRef(false);
   const [starting, setStarting] = useState(false);
   const state = starting ? 'building' : status;
-  const detail = state === 'building' ? t('Compiling the PDF…') : state === 'failed' ? t('Compilation failed. Click to retry.') : state === 'ready' ? t('PDF compiled successfully.') : t('Compilation status unavailable.');
+  const detail = state === 'building' ? t('Compiling the PDF…') : state === 'failed' ? t('Compilation failed. Click to retry.') : state === 'ready' ? t('PDF compiled successfully.') : state === 'idle' ? '' : t('Compilation status unavailable.');
   async function compile() {
     if (request.current || disabled || state === 'building') return;
     request.current = true; setStarting(true);
     try { await onCompile(); } finally { request.current = false; setStarting(false); }
   }
-  return <button type="button" className={`icon-button compile-button ${className}`} data-state={state} aria-label={label} aria-description={detail} title={`${label} · ${detail}`} aria-busy={state === 'building'} disabled={disabled || state === 'building'} onClick={() => void compile()}>{state === 'building' ? <span className="spinner" aria-hidden="true"/> : <Icon name="compile" size={24}/>}</button>;
+  return <button type="button" className={`icon-button compile-button ${className}`} data-state={state} aria-label={label} aria-description={detail || undefined} title={detail ? `${label} · ${detail}` : label} aria-busy={state === 'building'} disabled={disabled || state === 'building'} onClick={() => void compile()}>{state === 'building' ? <span className="spinner" aria-hidden="true"/> : <Icon name="compile" size={24}/>}</button>;
 }

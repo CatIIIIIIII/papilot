@@ -69,7 +69,7 @@ await page.route('**/api/**', async route => {
   throw new Error(`Unexpected API request: ${url.pathname}`);
 });
 try {
-  await page.addInitScript(() => { if (!localStorage.getItem('fixture-started')) { localStorage.setItem('papilot:task', ''); localStorage.setItem('papilot:layout', 'conversation'); localStorage.setItem('fixture-started', '1'); } });
+  await page.addInitScript(() => { if (!localStorage.getItem('fixture-started')) { localStorage.setItem('papilot:task', ''); localStorage.setItem('fixture-started', '1'); } });
   await page.goto(origin);
   const input = page.getByRole('textbox', { name: 'Describe the revision', exact: true });
   await expect(input).toBeVisible();

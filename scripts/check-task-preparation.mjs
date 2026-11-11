@@ -43,7 +43,10 @@ try {
     task.mode = 'review'; await page.reload();
     await expect(page.locator('.status.preparing').first()).toHaveText('Preparing the review PDF…');
     task.status = 'failed'; task.error = 'The review PDF could not be prepared.'; await page.reload();
-    await page.getByRole('button', { name: 'View details', exact: true }).click();
+    // Desktop shows the chat beside the review; a phone shows one panel, and
+    // View details opens the chat that holds the error.
+    const details = page.getByRole('button', { name: 'View details', exact: true });
+    if (width < 680) await details.click(); else await expect(details).toHaveCount(0);
     const actions = page.locator('.task-error-actions');
     await expect(actions.getByRole('button', { name: 'Delete task…', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Send instructions', exact: true })).toBeDisabled();
