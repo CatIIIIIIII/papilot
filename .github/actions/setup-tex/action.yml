@@ -1,0 +1,65 @@
+name: Set up TeX
+description: >
+  Installs the TeX packages the PDF tests compile with, from Ubuntu's archive.
+  The downloaded packages are cached per runner image, so a run that finds
+  them never waits on the package mirror, which now and then takes minutes.
+
+runs:
+  using: composite
+  steps:
+    - id: packages
+      shell: bash
+      run: |
+        packages="latexmk poppler-utils texlive-lang-chinese texlive-latex-extra texlive-xetex"
+        echo "list=$packages" >> "$GITHUB_OUTPUT"
+        echo "dir=/tmp/papilot-tex-debs" >> "$GITHUB_OUTPUT"
+        # The cache holds what this image lacks, so a new image (about weekly)
+        # starts a new one. Bump v3 to replace a cache that does not install.
+        echo "key=tex-debs-v3-$ImageOS-$ImageVersion-$(uname -m)-$(sha256sum <<< "$packages" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+    - id: cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ steps.packages.outputs.dir }}
+        key: ${{ steps.packages.outputs.key }}
+
+    # dpkg installs the cached files and never downloads. (apt-get counts
+    # copying local packages as fetching, so --no-download refuses them.)
+    - name: Install from the cache
+      id: cached
+      if: steps.cache.outputs.cache-hit == 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        DIR: ${{ steps.packages.outputs.dir }}
+        PACKAGES: ${{ steps.packages.outputs.list }}
+      run: |
+        sudo dpkg -i "$DIR"/*.deb
+        bash "$GITHUB_ACTION_PATH/installed.sh" $PACKAGES
+
+    # Otherwise, or if that failed, install from the mirror as before, keeping
+    # the downloaded packages in the cache folder.
+    - name: Install from the mirror
+      id: download
+      if: steps.cache.outputs.cache-hit != 'true' || steps.cached.outcome == 'failure'
+      shell: bash
+      env:
+        DIR: ${{ steps.packages.outputs.dir }}
+        PACKAGES: ${{ steps.packages.outputs.list }}
+      run: |
+        apt=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120 -o Dir::Cache::archives="$DIR" -o APT::Keep-Downloaded-Packages=true)
+        sudo dpkg --configure -a || true
+        mkdir -p "$DIR/partial" && sudo chown _apt "$DIR/partial"
+        sudo apt-get "${apt[@]}" update
+        sudo apt-get "${apt[@]}" install -y --no-install-recommends --fix-broken $PACKAGES
+        bash "$GITHUB_ACTION_PATH/installed.sh" $PACKAGES
+        sudo rm -rf "$DIR/partial" "$DIR/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$DIR"
+
+    # Only main saves: pull requests restore its cache, and one of their own
+    # would add 274 MB that no other branch can use.
+    - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.download.outcome == 'success'
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ steps.packages.outputs.dir }}
+        key: ${{ steps.packages.outputs.key }}

@@ -43,9 +43,7 @@ jobs:
       - run: npm run setup:review
       - name: Install TeX for PDF integration tests
         if: matrix.node == 22
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-xetex texlive-lang-chinese poppler-utils
+        uses: ./.github/actions/setup-tex
       - run: npm run typecheck
       - run: npm test
       - name: PDF diff engine tests
@@ -91,9 +89,7 @@ jobs:
       - run: npm ci
       - run: npm run setup:review
       - name: Install TeX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-xetex texlive-lang-chinese poppler-utils
+        uses: ./.github/actions/setup-tex
       - name: Install browser
         working-directory: engine
         run: npx playwright install --with-deps chromium
