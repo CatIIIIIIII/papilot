@@ -1,6 +1,0 @@
-{
-  "name": "papilot-engine-placeholder",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Empty on purpose. Papilot 0.8.2 and earlier check for this lockfile and run npm ci here when they install an update; the review engine itself is in engine/."
-}

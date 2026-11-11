@@ -188,8 +188,6 @@ export async function installRelease(data: string, version: string) {
     await runInstall(['install', '--prefix', stage, '--save-exact', ...flags, `papilot@${version}`], stage, log);
     const pkg = readJson(path.join(root, 'package.json'));
     if (pkg?.name !== 'papilot' || pkg.version !== version) throw new Error('The downloaded package does not match the requested release.');
-    // Releases also ship an empty vendor/latex-review package, where 0.8.2 and
-    // earlier look for the engine when they install an update.
     for (const file of ['dist/index.html', 'src/server/start.ts', 'src/server/main.ts', 'bin/papilot.mjs', 'engine/package-lock.json']) {
       if (!fs.existsSync(path.join(root, file))) throw new Error('The downloaded release is incomplete.');
     }

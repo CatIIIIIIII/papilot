@@ -34,7 +34,6 @@ buildNpmPackage {
       ../tests
       ../public
       ../examples
-      ../vendor
       ../engine/src
       ../engine/scripts
       ../engine/examples
