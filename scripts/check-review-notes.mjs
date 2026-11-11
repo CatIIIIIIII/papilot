@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium } from '../engine/node_modules/playwright/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
@@ -90,6 +90,9 @@ try {
   const box = await frame().locator('.context .review-region-capture').boundingBox();
   await page.mouse.move(box.x + 60, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + 250, box.y + 65, { steps: 5 }); await page.mouse.up();
+  // A new note's field takes focus a frame later. Wait for it, or that focus
+  // can move typing meant for note 2 into this note.
+  await expect(noteInput(3)).toBeFocused();
   await noteInput(3).fill('Check the spacing in this region.');
   const originalNotes = (await savedDraft()).notes; console.log('Created notes', originalNotes.length);
   await noteInput(2).fill('Keep this accepted paragraph and its citation.'); console.log('Edited notes', (await savedDraft()).notes.length);

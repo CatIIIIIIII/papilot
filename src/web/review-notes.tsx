@@ -163,11 +163,12 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
     const selectionChanged = () => { clearTimeout(timer); timer = setTimeout(select, 100); };
     doc.addEventListener('selectionchange', selectionChanged);
     let disposed = false;
-    let pressed: { layer: Layer; x: number; y: number; at: number } | null = null;
+    let pressed: { layer: Layer; x: number; y: number; at: number } | null = null, penTap = false;
     const press = (event: PointerEvent) => {
       const target = event.target as Element, strip = target.closest<HTMLElement>('.pdf-strip');
       const layer = strip && mounted.get(strip);
       pressed = event.button === 0 && layer && !target.closest('button,a,input,textarea') ? { layer, x: event.clientX, y: event.clientY, at: performance.now() } : null;
+      penTap = false;
     };
     const marked = (event: PointerEvent) => {
       const start = pressed; pressed = null;
@@ -176,6 +177,11 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
       if (event.pointerType === 'touch' && (current.current.tool !== 'magic' || touch.current?.active() || !start || performance.now() - start.at >= 450)) return;
       if (!start && !(event.target as Element).closest('.pdf-strip')) return;
       if (!['note', 'delete', 'magic'].includes(current.current.tool)) return;
+      // The pen takes a tap whole. Its touchend is cancelled, so no mousedown
+      // and click follow: they could arrive after the wheel opens, and either
+      // press its middle, writing a plain note, or focus the paper behind it,
+      // where Escape and the number keys no longer reach the wheel.
+      penTap = event.pointerType === 'touch';
       // A native selection can end in the blank margin, outside the text layer.
       // A click with the magic pen marks a point, whether on text or whitespace.
       setTimeout(() => {
@@ -188,9 +194,11 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
       }, 0);
     };
     const cancelPress = () => { pressed = null; };
+    const tapEnd = (event: TouchEvent) => { if (penTap && event.cancelable) event.preventDefault(); penTap = false; };
     doc.addEventListener('pointercancel', cancelPress);
     doc.addEventListener('pointerdown', press);
     doc.addEventListener('pointerup', marked);
+    doc.addEventListener('touchend', tapEnd, { passive: false });
     // Touch screens select glyphs with Papilot's own handles and menu
     // (review-notes.css turns native selection off there).
     touch.current = touchSelection<Layer>(doc, {
@@ -209,7 +217,7 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
     });
     return () => {
       disposed = true; clearTimeout(timer); observer.disconnect(); touch.current?.stop(); touch.current = null;
-      doc.removeEventListener('selectionchange', selectionChanged); doc.removeEventListener('pointercancel', cancelPress); doc.removeEventListener('pointerdown', press); doc.removeEventListener('pointerup', marked);
+      doc.removeEventListener('selectionchange', selectionChanged); doc.removeEventListener('pointercancel', cancelPress); doc.removeEventListener('pointerdown', press); doc.removeEventListener('pointerup', marked); doc.removeEventListener('touchend', tapEnd);
       for (const layer of mounted.values()) layer.element.remove();
     };
   }, [doc, task.review?.round]);

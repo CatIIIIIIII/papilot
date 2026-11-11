@@ -99,10 +99,19 @@ export function PdfNoteCard({ note, number, index, total, selected, busy, error,
   // once there is text to discard.
   const compose = !inline && !note.id, send = !inline && !destination;
   useEffect(() => { onEditing?.(editing); return () => onEditing?.(false); }, [editing, onEditing]);
-  function finish() { onDraftChange(null); requestAnimationFrame(() => text.current?.focus({ preventScroll: true })); }
+  // Focus goes back to the text in the commit that shows it again. A frame
+  // later is not enough: after a save the draft clears from a promise, and
+  // React may render that only after the next frame.
+  const refocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!refocus.current || editing) return;
+    refocus.current = false;
+    text.current?.focus({ preventScroll: true });
+  });
+  function finish() { onDraftChange(null); refocus.current = true; }
   function edit() { if (!busy) onDraftChange(note.comment); }
   function close(restoreFocus = true) {
-    if (inline) { onDraftChange(null); if (restoreFocus) requestAnimationFrame(() => text.current?.focus({ preventScroll: true })); }
+    if (inline) { onDraftChange(null); if (restoreFocus) refocus.current = true; }
     else onClose?.(restoreFocus);
   }
   async function save(action: 'keep' | 'close' | 'quote' = 'keep', restoreFocus = true) {

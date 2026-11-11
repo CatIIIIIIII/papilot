@@ -1848,7 +1848,10 @@ function App() {
         if (next !== 'split') setMobileTab(next);
       });
       // Keep keyboard focus with the switcher as it moves between toolbars.
-      document.querySelector<HTMLElement>('.workspace-view-selector [aria-pressed="true"]')?.focus({ preventScroll: true });
+      // With a view transition this runs a frame or more after the click; if
+      // the author has moved on, say into the composer, focus stays there.
+      const focused = document.activeElement;
+      if (!focused || focused === document.body || focused.closest('.workspace-view-selector')) document.querySelector<HTMLElement>('.workspace-view-selector [aria-pressed="true"]')?.focus({ preventScroll: true });
     };
     if (!document.startViewTransition || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       document.documentElement.classList.remove('switching-workspace');

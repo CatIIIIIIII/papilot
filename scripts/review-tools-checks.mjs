@@ -18,7 +18,10 @@ export async function checkReviewTools(page, writes, sent) {
     await tool('Magic pen').click();
     const glyph = viewer().locator('.change[data-stop="0"] .after .pdf-glyph').first();
     const rect = await glyph.boundingBox(), x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
-    await page.touchscreen.tap(x, y); await expect(page.locator('.stamp-wheel')).toBeVisible(); await page.keyboard.press('Escape');
+    // The pen takes the tap whole: no mousedown or click follows onto the wheel.
+    await viewer().locator('body').evaluate(() => { window.tapEnds = []; addEventListener('touchend', event => window.tapEnds.push(event.defaultPrevented)); });
+    await page.touchscreen.tap(x, y); await expect(page.locator('.stamp-wheel')).toBeVisible();
+    assert.deepEqual(await viewer().locator('body').evaluate(() => window.tapEnds), [true]); await page.keyboard.press('Escape');
     const strip = await viewer().locator('.change[data-stop="0"] .after .pdf-strip').boundingBox();
     await page.touchscreen.tap(strip.x + 200, strip.y + 10);
     await expect(page.locator('.stamp-wheel')).toBeVisible(); await page.keyboard.press('Escape');
