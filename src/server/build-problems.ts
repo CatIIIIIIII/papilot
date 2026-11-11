@@ -263,12 +263,46 @@ export function placementOrder(problems: Pick<BuildProblem, 'severity'>[], limit
   return new Set(problems.map((problem, index) => index).sort((a, b) => rank[problems[a].severity] - rank[problems[b].severity] || a - b).slice(0, limit));
 }
 
+// The boxes one source line printed, as `synctex view` lists them.
+const syncView = (pdf: string, file: string, line: number) =>
+  exec('synctex', ['view', '-i', `${line}:0:${file}`, '-o', pdf], { timeout: 10000 }).then(result => parseSynctexView(result.stdout), () => [] as SyncBox[]);
+
+// The box around what source lines printed on one page, in page points.
+// Boxes taller than a good part of the page are whole floats or pages, so
+// they count only when nothing else was printed there.
+function boxRect(boxes: SyncBox[], page: number, text: Pick<PageText, 'bounds' | 'height'>) {
+  const [x0, y0] = text.bounds;
+  const onPage = boxes.filter(box => box.page === page), tidy = onPage.filter(box => box.H > 0 && box.H < text.height * 0.4);
+  const rect = tidy.length
+    ? [Math.min(...tidy.map(b => b.h)), Math.min(...tidy.map(b => b.v - b.H)), Math.max(...tidy.map(b => b.h + b.W)), Math.max(...tidy.map(b => b.v))]
+    : [onPage[0].x - 6, onPage[0].y - 10, onPage[0].x + 6, onPage[0].y + 2];
+  return { onPage, rect: [rect[0] + x0, rect[1] + y0, rect[2] + x0, rect[3] + y0] };
+}
+
+// A rectangle in page points as fractions of the page, as the PDF view places marks.
+function pageFraction(rect: number[], text: Pick<PageText, 'bounds' | 'width' | 'height'>): [number, number, number, number] {
+  const [x0, y0] = text.bounds, unit = (value: number) => Math.min(1, Math.max(0, Math.round(value * 10000) / 10000));
+  return [unit((rect[0] - x0) / text.width), unit((rect[1] - y0) / text.height), unit((rect[2] - x0) / text.width), unit((rect[3] - y0) / text.height)];
+}
+
+/** Where source lines were printed: of the pages that show them, the one
+ *  nearest `near` (a section title also prints in the contents), and the box
+ *  around them there, as fractions of the page. */
+export async function placeLines(pdf: string, source: string, lines: number[], near: number, openPage: (page: number) => Pick<PageText, 'bounds' | 'width' | 'height'> | null) {
+  const boxes = (await Promise.all(lines.map(line => syncView(pdf, source, line)))).flat();
+  if (!boxes.length) return null;
+  const pages = [...new Set(boxes.map(box => box.page))].sort((a, b) => Math.abs(a - near) - Math.abs(b - near) || a - b);
+  const page = pages[0], text = openPage(page);
+  if (!text) return null;
+  return { page, rect: pageFraction(boxRect(boxes, page, text).rect, text) };
+}
+
 export async function locateProblems(problems: StoredProblem[], pdf: string, openPage: (page: number) => PageText | null, limit = LOCATE_LIMIT): Promise<BuildProblem[]> {
   // SyncTeX reads its whole file on every call, so each source line is asked once.
   const views = new Map<string, Promise<SyncBox[]>>();
   const view = (file: string, line: number) => {
     const id = `${line}:${file}`;
-    if (!views.has(id)) views.set(id, exec('synctex', ['view', '-i', `${line}:0:${file}`, '-o', pdf], { timeout: 10000 }).then(result => parseSynctexView(result.stdout), () => []));
+    if (!views.has(id)) views.set(id, syncView(pdf, file, line));
     return views.get(id)!;
   };
   // TeX warns about the missing references of one source line in reading
@@ -286,12 +320,8 @@ export async function locateProblems(problems: StoredProblem[], pdf: string, ope
     if (!boxes.length) return shown;
     const page = boxes[0].page, text = openPage(page);
     if (!text) return shown;
-    const [x0, y0] = text.bounds;
-    const onPage = boxes.filter(box => box.page === page), tidy = onPage.filter(box => box.H > 0 && box.H < text.height * 0.4);
-    let rect: number[] = tidy.length
-      ? [Math.min(...tidy.map(b => b.h)), Math.min(...tidy.map(b => b.v - b.H)), Math.max(...tidy.map(b => b.h + b.W)), Math.max(...tidy.map(b => b.v))]
-      : [onPage[0].x - 6, onPage[0].y - 10, onPage[0].x + 6, onPage[0].y + 2];
-    rect = [rect[0] + x0, rect[1] + y0, rect[2] + x0, rect[3] + y0];
+    const [x0, y0] = text.bounds, placed = boxRect(boxes, page, text), onPage = placed.onPage;
+    let rect = placed.rect;
     if (problem.kind === 'reference' || problem.kind === 'citation') {
       // A citation prints "?" or its key; the "?" of a missing reference's "??" is not one.
       const pairs = text.search('??'), inside = (mark: number[], outer: number[]) => mark[0] >= outer[0] - 0.5 && mark[2] <= outer[2] + 0.5 && mark[1] >= outer[1] - 0.5 && mark[3] <= outer[3] + 0.5;
@@ -306,8 +336,7 @@ export async function locateProblems(problems: StoredProblem[], pdf: string, ope
       if (!best && marks.length) best = marks.reduce((a, b) => gap(b) < gap(a) ? b : a);
       if (best) rect = [best[0] - 2, best[1] - 1, best[2] + 2, best[3] + 1];
     }
-    const unit = (value: number) => Math.min(1, Math.max(0, Math.round(value * 10000) / 10000));
-    return { ...shown, page, rect: [unit((rect[0] - x0) / text.width), unit((rect[1] - y0) / text.height), unit((rect[2] - x0) / text.width), unit((rect[3] - y0) / text.height)] };
+    return { ...shown, page, rect: pageFraction(rect, text) };
   };
   const output: BuildProblem[] = new Array(problems.length), chosen = placementOrder(problems, limit);
   let next = 0;

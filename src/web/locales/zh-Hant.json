@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "無法連線至 {sources}。",
   "{time} ago": "{time}前",
   "{title} PDF change review": "{title} PDF 變更審閱",
-  "{used}% used": "已使用 {used}%"
+  "{used}% used": "已使用 {used}%",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "點擊段落或拖曳選取文字以直接編輯其 LaTeX。儲存後無需智慧代理即可更新 PDF。",
+  "Close (the draft is kept)": "關閉（保留草稿）",
+  "Edit LaTeX source": "編輯 LaTeX 原始碼",
+  "Edit source": "編輯原始碼",
+  "Finding the source…": "正在尋找原始碼…",
+  "LaTeX source": "LaTeX 原始碼",
+  "Line {n}": "第 {n} 行",
+  "Load the current source": "載入目前的原始碼",
+  "No LaTeX source was found here. Click a line of text instead.": "此處找不到 LaTeX 原始碼，請改為點擊一行文字。",
+  "Show {n} other problem": "顯示另外 {n} 個問題",
+  "Show {n} other problems": "顯示另外 {n} 個問題",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "此段落於 PDF 編譯後有所變更，目前顯示為最新內容。",
+  "This version did not compile. The last PDF stays.": "此版本編譯失敗，目前保留上一次的 PDF。",
+  "Unsaved": "未儲存"
 }

@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Warten Sie, bis die Aufgaben- und Überprüfungsaktionen abgeschlossen sind, bevor Sie ein Ziel auswählen.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Warten Sie, bis die PDF-Erstellung für diesen Artikel abgeschlossen ist, bevor Sie den Pfad ändern oder ihn entfernen.",
   "ZIP links and special files are not supported.": "Links und Spezialdateien in ZIP-Archiven werden nicht unterstützt.",
-  "npm is unavailable to Papilot.": "npm ist für Papilot nicht verfügbar."
+  "npm is unavailable to Papilot.": "npm ist für Papilot nicht verfügbar.",
+  "Choose a source file.": "Wählen Sie eine Quelldatei aus.",
+  "Click the text whose source you want to edit.": "Klicken Sie auf den Text, dessen Quelltext Sie bearbeiten möchten.",
+  "Invalid line range.": "Ungültiger Zeilenbereich.",
+  "Invalid source edit.": "Ungültige Quelltextbearbeitung.",
+  "This PDF is out of date. Refresh it and try again.": "Dieses PDF ist veraltet. Aktualisieren Sie es und versuchen Sie es erneut.",
+  "This edit ID was already used for another edit.": "Diese Bearbeitungs-ID wurde bereits für eine andere Bearbeitung verwendet.",
+  "This file cannot be edited here.": "Diese Datei kann hier nicht bearbeitet werden.",
+  "This file is not text that can be edited here.": "Diese Datei ist kein Text, der hier bearbeitet werden kann.",
+  "This source file is too large to edit here.": "Diese Quelldatei ist zu groß, um sie hier zu bearbeiten.",
+  "This source file no longer exists.": "Diese Quelldatei existiert nicht mehr."
 }

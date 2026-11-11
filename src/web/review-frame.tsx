@@ -1,6 +1,6 @@
 import { isPlayground } from './playground-mode.ts';
 import taskCommitStyles from './task-commit.css?inline';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '../shared.ts';
 import { useReviewDraft } from './review-draft.ts';
@@ -20,6 +20,7 @@ import { ModeSwitch } from './mode-switch.tsx';
 import { PdfContents, PdfPageControls, PdfFind, PdfFindButton } from './pdf-controls.tsx';
 import { PDF_READER_COMMAND, PDF_READER_STATE, type PdfReaderCommand, type PdfReaderState } from '../../engine/src/web/pdf-reader.ts';
 import { VIEW_CHOSEN_EVENT } from '../../engine/src/web/view-preferences.ts';
+import { CURRENT_CHANGE_EVENT, SELECT_SOURCE_EVENT, type CurrentChange } from '../../engine/src/web/review-events.ts';
 
 // The viewer reads the interface language from its address.
 export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `${isPlayground ? import.meta.env.BASE_URL + 'src/web/playground/review.html' : `/review/${task.projectId}/`}?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
@@ -308,7 +309,11 @@ function cropMargins(doc: Document) {
 // completion is the next step shown in the viewer's card once every change is decided.
 // Without a task the frame shows the paper's uncommitted changes (changesOf),
 // and the viewer's own waiting message shows while they are compared.
-export function ReviewFrame({ task, changesOf, tools, lead, completion, onComment, onDecided, onReadyChange, onFullPaperChange, view: controlledView, onViewChange, keepPdf }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onComment?: () => void; onDecided?: () => void; onReadyChange?: (ready: boolean, round?: number) => void; onFullPaperChange?: (available: boolean) => void; view?: ReviewView; onViewChange?: (value: ReviewView) => void; keepPdf?: boolean }) {
+// onCurrentChange follows the viewer's current change; sources asks the
+// viewer for the change at a line of a file.
+export interface ReviewSources { select: (file: string, line: number) => void }
+export function ReviewFrame({ task, changesOf, tools, lead, completion, onComment, onDecided, onReadyChange, onFullPaperChange, view: controlledView, onViewChange, keepPdf, onCurrentChange, sources }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onComment?: () => void; onDecided?: () => void; onReadyChange?: (ready: boolean, round?: number) => void; onFullPaperChange?: (available: boolean) => void; view?: ReviewView; onViewChange?: (value: ReviewView) => void; keepPdf?: boolean;
+  onCurrentChange?: (change: CurrentChange) => void; sources?: Ref<ReviewSources> }) {
   const draft = useReviewDraft(task?.id || '');
   const quoteFocus = draft.reveal;
   const shortcuts = useShortcuts();
@@ -368,6 +373,15 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   }, [document]);
   const [railSlot, setRailSlot] = useState<HTMLDivElement | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const following = useRef(onCurrentChange); following.current = onCurrentChange;
+  useEffect(() => {
+    const view = document?.defaultView;
+    if (!view) return;
+    const current = (event: Event) => following.current?.((event as CustomEvent<CurrentChange>).detail);
+    view.addEventListener(CURRENT_CHANGE_EVENT, current);
+    return () => view.removeEventListener(CURRENT_CHANGE_EVENT, current);
+  }, [document]);
+  useImperativeHandle(sources, () => ({ select: (file, line) => document?.defaultView?.dispatchEvent(new CustomEvent(SELECT_SOURCE_EVENT, { detail: { file, line } })) }), [document]);
   const toolbar = useRef<HTMLDivElement>(null), leading = useRef<HTMLDivElement>(null), hostBar = useRef<HTMLDivElement>(null);
   const [reserve, setReserve] = useState(0), [leadWidth, setLeadWidth] = useState(0);
   const decided = useRef(onDecided); decided.current = onDecided;

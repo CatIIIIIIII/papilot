@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "{sources}에 연결할 수 없습니다.",
   "{time} ago": "{time} 전",
   "{title} PDF change review": "{title} PDF 변경 사항 검토",
-  "{used}% used": "{used}% 사용됨"
+  "{used}% used": "{used}% 사용됨",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "구절을 클릭하거나 텍스트를 드래그하여 LaTeX를 직접 편집하세요. 저장하면 에이전트 없이 PDF가 업데이트됩니다.",
+  "Close (the draft is kept)": "닫기 (초안 유지됨)",
+  "Edit LaTeX source": "LaTeX 소스 편집",
+  "Edit source": "소스 편집",
+  "Finding the source…": "소스 찾는 중…",
+  "LaTeX source": "LaTeX 소스",
+  "Line {n}": "{n}행",
+  "Load the current source": "현재 소스 불러오기",
+  "No LaTeX source was found here. Click a line of text instead.": "여기에서 LaTeX 소스를 찾을 수 없습니다. 대신 텍스트 줄을 클릭하세요.",
+  "Show {n} other problem": "다른 문제 {n}개 표시",
+  "Show {n} other problems": "다른 문제 {n}개 표시",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "이 구절은 PDF가 컴파일된 이후 변경되었습니다. 현재 상태 그대로 표시됩니다.",
+  "This version did not compile. The last PDF stays.": "이 버전은 컴파일되지 않았습니다. 마지막 PDF가 유지됩니다.",
+  "Unsaved": "저장되지 않음"
 }

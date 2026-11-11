@@ -89,7 +89,7 @@ const key = async value => { await page.locator('.pdf-container').focus(); await
 try {
   await page.goto(origin);
   await words().first().waitFor();
-  await expect(rail().getByRole('button')).toHaveCount(10);
+  await expect(rail().getByRole('button')).toHaveCount(11);
   await expect(tool('Undo')).toBeDisabled(); await expect(tool('Redo')).toBeDisabled();
   assert.deepEqual(await rail().getByRole('button').evaluateAll(buttons => buttons.slice(-2).map(button => button.getAttribute('aria-label'))), ['Undo', 'Redo']);
   const railBox = await rail().boundingBox(), redoBox = await tool('Redo').boundingBox();
@@ -119,7 +119,7 @@ try {
   await page.keyboard.press('Enter');
   await expect(collapse()).toHaveAttribute('aria-expanded', 'true');
   await expect(collapse()).toBeFocused();
-  await expect(rail().getByRole('button')).toHaveCount(10);
+  await expect(rail().getByRole('button')).toHaveCount(11);
   // The note tool is its own color picker: a click picks it, a second opens colors.
   await tool('Note').click();
   await expect(tool('Note')).toHaveAttribute('aria-pressed', 'true');
@@ -172,7 +172,7 @@ try {
     await expect(tool('Collapse marking tools')).toBeFocused();
     await expect(page.locator('.rail-tip:popover-open')).toHaveCount(0);
     await page.keyboard.press('Tab');
-    for (let index = 0; index < 6; index++) await page.keyboard.press('Tab');
+    for (let index = 0; index < 7; index++) await page.keyboard.press('Tab');
     await expect(tool('Hand')).toBeFocused();
     await expect(tool('Hand').locator('.rail-tip')).toBeVisible();
     await page.keyboard.press('Enter');
@@ -438,7 +438,8 @@ try {
   await expect(page.locator('.pdf-toolbar .markup-toggle')).toHaveCount(0);
   await expect(rail()).toBeVisible();
   await expect(rail()).toHaveAttribute('aria-orientation', 'horizontal');
-  await expect(rail().getByRole('button')).toHaveCount(9);
+  // Every desktop tool but Hand: one finger already scrolls the page.
+  await expect(rail().getByRole('button')).toHaveCount(10);
   await expect(rail().getByRole('button', { name: 'Hand', exact: true })).toHaveCount(0);
   const mobileRailBox = await settled(rail());
   assert.ok(mobileRailBox.x >= 0 && mobileRailBox.x + mobileRailBox.width <= 390 && mobileRailBox.y > 700, 'Phone marking capsule floats within the bottom viewport');
@@ -457,7 +458,7 @@ try {
   await expect(page.locator('.pdf-view')).toHaveClass(/tool-select/);
   await expand().click();
   await expect(rail()).toHaveAttribute('data-collapsed', 'false');
-  await expect(rail().getByRole('button')).toHaveCount(9);
+  await expect(rail().getByRole('button')).toHaveCount(10);
   assert.deepEqual(errors, []);
   console.log('PASS: collapsible rail, bottom undo/redo, history retries and keyboard shortcuts, native text undo, deletions with replacements, the magic pen wheel, number lock, menu and settings, points, sticky notes, hand and Space, tool-after-selection, and phone collapsible bottom capsule.');
 } finally { await browser.close(); await server.close(); }

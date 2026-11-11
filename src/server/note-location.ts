@@ -102,7 +102,9 @@ export interface MarkRequest {
   // project, and the working tree the lines are followed into.
   root?: string; sourceDir?: string; working?: string;
 }
-export interface Located { quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null }
+// `compiled` is where the mark is in the compiled copy of its file, before
+// following it into the working tree, for callers that follow it themselves.
+export interface Located { quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; compiled?: { file: string; input: string; lines: [number, number] } }
 
 /** The text under the marked region of a PDF page and the source lines it
  *  came from: SyncTeX's answer for the first and last marked character of
@@ -144,18 +146,19 @@ export async function locateMark(
   if (!file || !found) return { quote, source: null };
   const source = fs.existsSync(found.input) ? fs.readFileSync(found.input, 'utf8').split('\n') : [];
   const lines = settleLines(source, [Math.min(...found.lines), Math.max(...found.lines)], first, last);
+  const compiled = { file, input: found.input, lines };
   // The build compiled a copy of the source; the working tree may have
   // moved on since, by later edits or because these are older pages.
   const working = request.working && path.join(request.working, ...file.split('/'));
   if (working && path.resolve(working) !== path.resolve(found.input)) {
-    if (!fs.existsSync(working)) return { quote, source: null };
+    if (!fs.existsSync(working)) return { quote, source: null, compiled };
     const now = fs.readFileSync(working, 'utf8').split('\n');
     if (now.length !== source.length || now.some((line, index) => line !== source[index])) {
       const ops = opcodesWithin(source, now, 1000);
       // A timed-out comparison cannot establish current source coordinates.
       const followed = ops && followLines(ops, lines);
-      return { quote, source: followed && { file, lines: followed, excerpt: sourceExcerpt(working, followed) } };
+      return { quote, source: followed && { file, lines: followed, excerpt: sourceExcerpt(working, followed) }, compiled };
     }
   }
-  return { quote, source: { file, lines, excerpt: sourceExcerpt(found.input, lines) } };
+  return { quote, source: { file, lines, excerpt: sourceExcerpt(found.input, lines) }, compiled };
 }

@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "대상 위치를 선택하기 전에 작업 및 검토 동작이 완료될 때까지 기다려 주세요.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "경로를 변경하거나 제거하기 전에 이 논문의 PDF 빌드가 완료될 때까지 기다리세요.",
   "ZIP links and special files are not supported.": "ZIP 링크 및 특수 파일은 지원되지 않습니다.",
-  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다."
+  "npm is unavailable to Papilot.": "Papilot에서 npm을 사용할 수 없습니다.",
+  "Choose a source file.": "소스 파일을 선택하세요.",
+  "Click the text whose source you want to edit.": "소스를 편집할 텍스트를 클릭하세요.",
+  "Invalid line range.": "유효하지 않은 줄 범위입니다.",
+  "Invalid source edit.": "유효하지 않은 소스 편집입니다.",
+  "This PDF is out of date. Refresh it and try again.": "이 PDF는 최신 상태가 아닙니다. 새로 고친 후 다시 시도하세요.",
+  "This edit ID was already used for another edit.": "이 편집 ID는 이미 다른 편집에 사용되었습니다.",
+  "This file cannot be edited here.": "이 파일은 여기서 편집할 수 없습니다.",
+  "This file is not text that can be edited here.": "이 파일은 여기서 편집할 수 있는 텍스트가 아닙니다.",
+  "This source file is too large to edit here.": "이 소스 파일은 너무 커서 여기서 편집할 수 없습니다.",
+  "This source file no longer exists.": "이 소스 파일이 더 이상 존재하지 않습니다."
 }

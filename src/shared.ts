@@ -156,7 +156,9 @@ export interface GitOverview { worktrees: GitWorktree[]; commits: GitGraphCommit
 // A running compilation, from latexmk's output: its step, the TeX pass, and
 // the pages typeset in that pass against the last known page count.
 export interface BuildProgress { step: 'tex' | 'bibliography' | 'pdf'; pass: number; pages: number; total: number | null; startedAt: number }
-export interface ManuscriptBuild { status: 'building' | 'ready' | 'failed'; key?: string; pages?: [number, number][]; builtAt?: number; error?: string; current: boolean; problems?: BuildProblemCounts; progress?: BuildProgress }
+export interface ManuscriptBuild { status: 'building' | 'ready' | 'failed'; key?: string; pages?: [number, number][]; builtAt?: number; error?: string; current: boolean;
+  /** The working tree this build compiles or compiled, failed or not. */
+  tree?: string; problems?: BuildProblemCounts; progress?: BuildProgress }
 // What the last finished build reported. Errors stop the build; warnings are
 // mistakes in the PDF (?? and missing citations); minor problems are
 // typesetting (overfull lines) and package remarks, listed but never counted.
@@ -193,6 +195,18 @@ export interface Annotation { aiReview?: { taskId: string; agent: AgentId; sourc
 // Review findings stay with their task; only explicit copies belong to the manuscript.
 export const isTaskReviewNote = (note: Annotation) => Boolean(note.aiReview && !note.aiReview.sourceId);
 export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[] }
+// A source file for manual editing, as it is on disk: `revision` names its
+// bytes, so a save refuses when the file changed meanwhile, and `base` is the
+// file at the last commit (null when it has none), to show what changed.
+// Lines are 0-based, end excluded: `passage` is the paragraph a click on the
+// PDF named and `focus` the lines it hit; `drifted` says the passage changed
+// after the PDF it was found in was compiled.
+export interface SourceFile { file: string; revision: string; text: string; base: string | null; passage: [number, number]; focus: [number, number]; drifted: boolean }
+// A saved file, the lines that changed, the working tree whose build shows
+// it, and when it was written, by the server's clock (as builds' `builtAt`).
+export interface SourceSave { source: SourceFile; changed: [number, number]; tree: string; at: number }
+// Where saved lines were printed in a PDF: a page (0-based) and a box as fractions of it.
+export interface SourcePlace { page: number; rect: [number, number, number, number] }
 export interface PaperImport {
   id: string; path: string; name: string; copied: boolean; candidates: string[]; main: string; engine: string;
   phase: 'choose' | 'building' | 'failed' | 'ready' | 'repairing';

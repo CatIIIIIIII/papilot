@@ -47,6 +47,7 @@ import {
 } from "./references.tsx";
 import { bindingLabel, readShortcuts, resolveShortcuts, shortcutAction, SHORTCUT_EVENT, SHORTCUT_STORAGE } from "./shortcuts.ts";
 import { sendsMessage } from "./send-key.ts";
+import { CURRENT_CHANGE_EVENT, SELECT_SOURCE_EVENT, type CurrentChange, type SelectSource } from "./review-events.ts";
 import { DecisionQueue, Unreachable, withQueued, type QueuedDecision } from "./decision-queue.ts";
 import {
   STATE,
@@ -216,6 +217,9 @@ export function ReviewApp({
     // How far into the current change the author had read, restored once
     // when the review reopens on it in the same view.
     returning = useRef<{ index: number; offset: number; paper: boolean } | null>(null),
+    // How the current change was reached, for the workspace: picked by the
+    // author, followed while scrolling, or asked for from the source editor.
+    reached = useRef<CurrentChange["from"]>("scroll"),
     snapshot = useRef({ state, detail: publishedDetail, busy, composer, current, open: openSource }),
     // Polls again at once, after the last queued decision is confirmed.
     pollNow = useRef(() => {}),
@@ -499,6 +503,7 @@ export function ReviewApp({
   }
   function select(index: number, scroll = true) {
     if (index < 0 || index >= stops.length) return;
+    if (scroll && reached.current !== "source") reached.current = "pick";
     if (scroll) returning.current = null;
     setCurrent(index);
     store(placeKey, {
@@ -544,6 +549,43 @@ export function ReviewApp({
   useEffect(() => {
     if (current >= 0 && !returning.current && Date.now() >= scrollUntil.current && paper.current?.scrollTop) remember(current);
   }, [current]);
+  // The workspace's source editor follows the current change, and asks for
+  // the change at a line of a file.
+  const unitLines = (unit: Unit): [number, number][] => unit.whole_file
+    ? [[Math.max(0, unit.new_start - 1), unit.new_end]]
+    : unit.ops.filter((op) => op[0] !== "equal").map((op) => [op[3], op[4]]);
+  function announce(index: number) {
+    const from = reached.current;
+    reached.current = "scroll";
+    if (!stops[index]) return;
+    const detail: CurrentChange = {
+      stop: index, from,
+      units: stops[index].units.map((id) => units.get(id)).filter((unit): unit is NonNullable<typeof unit> => Boolean(unit && unit.kind === "text" && unit.status !== "deleted"))
+        .map((unit) => ({ id: unit.id, file: unit.file, lines: unitLines(unit) })),
+    };
+    window.dispatchEvent(new CustomEvent(CURRENT_CHANGE_EVENT, { detail }));
+  }
+  useEffect(() => { if (current >= 0) announce(current); }, [current, detail]);
+  useEffect(() => {
+    const choose = (event: Event) => {
+      const { file, line } = (event as CustomEvent<SelectSource>).detail;
+      let best = -1, distance = Infinity;
+      stops.forEach((stop, index) => stop.units.forEach((id) => {
+        const unit = units.get(id);
+        if (!unit || unit.file !== file) return;
+        for (const [from, to] of unitLines(unit)) {
+          const away = line < from ? from - line : line >= Math.max(to, from + 1) ? line - Math.max(to, from + 1) + 1 : 0;
+          if (away < distance) { distance = away; best = index; }
+        }
+      }));
+      // Only a line in or right beside a change has one.
+      if (best < 0 || distance > 1 || best === current) return;
+      reached.current = "source";
+      select(best);
+    };
+    window.addEventListener(SELECT_SOURCE_EVENT, choose);
+    return () => window.removeEventListener(SELECT_SOURCE_EVENT, choose);
+  });
   useEffect(() => {
     let cancelled = false,
       polling = false,
@@ -951,7 +993,7 @@ export function ReviewApp({
           };
         });
     const index = visibleStop(regions, current, box.top + 60, box.bottom - 100);
-    if (index !== current) select(index, false);
+    if (index !== current) { reached.current = "scroll"; select(index, false); }
     if (index >= 0) remember(index);
   }
   const actionBar = (index: number) => {
@@ -1228,8 +1270,10 @@ export function ReviewApp({
         data-resolved={resolved}
         tabIndex={-1}
         onClick={() => {
-          if (block.units.some(inFocus) && index !== current && !composer && (expanded || !reviewed))
-            select(index, false);
+          if (!block.units.some(inFocus) || composer || (!expanded && reviewed)) return;
+          reached.current = "pick";
+          if (index !== current) select(index, false);
+          else announce(index);
         }}
       >
         {reviewed && !expanded && !resolved && (

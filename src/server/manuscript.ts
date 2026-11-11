@@ -572,7 +572,7 @@ export class Manuscripts extends EventEmitter {
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
     const { status: state, key, pages, builtAt, error } = build;
-    return { git: status, build: { status: state, key, pages, builtAt, error, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems), ...(state === 'building' && build.progress ? { progress: build.progress } : {}) } };
+    return { git: status, build: { status: state, key, pages, builtAt, error, tree: build.tree, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems), ...(state === 'building' && build.progress ? { progress: build.progress } : {}) } };
   }
 
   /** Compiles the working tree if it changed, without waiting for anyone to
@@ -584,6 +584,17 @@ export class Manuscripts extends EventEmitter {
     const tree = await this.snapshot(root), build = this.builds.get(projectId);
     if (build?.status === 'building') { if (build.tree !== tree) this.stale.add(projectId); return; }
     if (!build || build.tree !== tree) this.start(projectId, root, tree, build);
+  }
+
+  /** After Papilot itself wrote into the working tree: the tree it is now,
+   *  compiling at once or as soon as the build in progress ends. The caller
+   *  recognizes the build of its write by this tree. */
+  async written(projectId: string, root: string) {
+    this.statuses.delete(root);
+    const tree = await this.snapshot(root), build = this.builds.get(projectId);
+    if (build?.status === 'building') { if (build.tree !== tree) this.stale.add(projectId); }
+    else if (!build || build.tree !== tree) this.start(projectId, root, tree, build);
+    return tree;
   }
 
   /** Compiles in the background what the manuscript will be once the given
@@ -882,6 +893,14 @@ export class Manuscripts extends EventEmitter {
     const shown = this.shownBuild(projectId, key);
     if (!shown) throw Object.assign(new Error('This manuscript preview is out of date. Refresh it and try again.'), { statusCode: 404 });
     return shown.pdf;
+  }
+
+  /** The PDF named `key` and the folder its sources were compiled in, which
+   *  holds `sourceDir` of the repository: the PDF shown now, or one shown
+   *  shortly before whose files are still there. */
+  compiled(projectId: string, key: string) {
+    const pdf = this.pdf(projectId, key), shown = this.shownBuild(projectId, key)!;
+    return { pdf, root: shown.root || path.dirname(pdf), sourceDir: shown.sourceDir || '' };
   }
 
   // The PDF with the paper's notes drawn on it, to share with people outside Papilot.

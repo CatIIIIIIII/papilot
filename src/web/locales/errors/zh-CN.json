@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "选择目标位置前，请先等待任务和审阅操作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "请等待此论文的 PDF 构建完成后，再更改其路径或将其移除。",
   "ZIP links and special files are not supported.": "不支持 ZIP 链接和特殊文件。",
-  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。",
+  "Choose a source file.": "请选择源文件。",
+  "Click the text whose source you want to edit.": "请点击要编辑源码的文本。",
+  "Invalid line range.": "行范围无效。",
+  "Invalid source edit.": "源码编辑无效。",
+  "This PDF is out of date. Refresh it and try again.": "此 PDF 已过期，请刷新后重试。",
+  "This edit ID was already used for another edit.": "此编辑 ID 已用于另一项编辑。",
+  "This file cannot be edited here.": "无法在此处编辑此文件。",
+  "This file is not text that can be edited here.": "此文件不是可在此处编辑的文本。",
+  "This source file is too large to edit here.": "此源文件过大，无法在此处编辑。",
+  "This source file no longer exists.": "此源文件已不存在。"
 }

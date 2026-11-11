@@ -1,0 +1,58 @@
+/* Editing a passage's LaTeX from the PDF: its tab beside New task, the
+   passage marked on its page, and the button beside a selection. */
+.side-pane{display:contents}
+.side-pane[hidden]{display:none}
+/* The source tab and its close button, as one tab: a dot while unsaved,
+   a cross under the pointer or keyboard. */
+.side-tabs>.side-tab-closable{display:flex;flex-shrink:0;align-items:center;border-radius:var(--r);color:var(--text-2);transition:background-color .15s,color .15s}
+.side-tabs>.side-tab-closable:hover{background:var(--bg-hover);color:var(--text)}
+.side-tabs>.side-tab-closable[data-selected=true]{background:var(--bg-muted);color:var(--text)}
+.side-tab-closable>button[role=tab]{display:flex;align-items:center;gap:6px;height:30px;padding:0 4px 0 8px;font-size:13px;font-weight:500;color:inherit}
+.side-tab-close{position:relative;display:grid;place-items:center;width:20px;height:20px;margin-right:5px;border-radius:5px;color:var(--text-3)}
+.side-tab-close:hover,.side-tab-close:focus-visible{background:var(--bg-hover);color:var(--text)}
+.side-tab-close[data-dirty]>svg{opacity:0}
+.side-tab-close[data-dirty]::after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;background:currentColor}
+.side-tab-close[data-dirty]:hover>svg,.side-tab-close[data-dirty]:focus-visible>svg{opacity:1}
+.side-tab-close[data-dirty]:hover::after,.side-tab-close[data-dirty]:focus-visible::after{display:none}
+
+.source-panel{flex:1;min-height:0;display:flex;flex-direction:column;outline:none;
+  /* The review's LaTeX colours, for the editor. */
+  --latex-command:#7042b2;--latex-comment:#6b7480;--latex-math:#126d65;--latex-bracket:#a34920;--latex-parameter:#a12a67}
+:root[data-theme=dark] .source-panel{--latex-command:#c7a7fa;--latex-comment:#929ba8;--latex-math:#7bd6c9;--latex-bracket:#ecb384;--latex-parameter:#eda5cb}
+
+.source-panel-message{display:flex;align-items:center;gap:8px;margin:12px 14px;color:var(--text-2);font-size:13px;line-height:1.5}
+.source-panel-note{margin:0;padding:7px 14px;border-bottom:1px solid var(--line);background:var(--amber-soft);color:var(--amber-text);font-size:12.5px;line-height:1.5}
+.source-panel-error{margin:0;padding:8px 14px;border-top:1px solid var(--line);color:var(--danger);font-size:12.5px;line-height:1.5;white-space:pre-wrap}
+.source-panel-error .note-link{color:var(--text)}
+
+/* The editor fills the tab, edge to edge, like an editor's pane. */
+.source-panel-editor{position:relative;flex:1;min-height:0;overflow:hidden}
+.source-panel-editor[hidden]{display:none}
+.source-panel-editor>.cm-editor{position:absolute;inset:0}
+.source-panel-editor[data-loading]{opacity:.55;transition:opacity .2s}
+
+.source-panel-problems{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--danger) 30%,transparent);background:color-mix(in srgb,var(--danger) 7%,transparent);font-size:12.5px}
+.source-panel-problems-title{margin-bottom:2px;color:var(--danger);font-weight:600}
+.source-panel-problem{display:flex;gap:8px;width:100%;padding:2px 0;color:var(--text);text-align:left;line-height:1.45}
+.source-panel-problem:hover .source-panel-problem-line{text-decoration:underline}
+.source-panel-problem-line{flex:none;color:var(--danger);font-weight:600;font-variant-numeric:tabular-nums}
+.source-panel-problems .note-link{margin-top:2px;color:var(--text-2);font-weight:500}
+
+
+/* The passage the panel edits, marked on its page. */
+.source-mark{position:absolute;z-index:2;background:color-mix(in srgb,var(--accent) 12%,transparent);pointer-events:none}
+
+/* Code lines shown briefly, as the PDF flashes a place: a tint over the
+   line that rises and fades, leaving the line's own highlight as it was. */
+.source-panel .cm-source-flash{position:relative}
+.source-panel .cm-source-flash::after{content:"";position:absolute;inset:0;background:color-mix(in srgb,var(--accent) 16%,transparent);pointer-events:none;opacity:0;animation:source-code-flash 1s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes source-code-flash{0%{opacity:0}18%,42%{opacity:1}100%{opacity:0}}
+
+/* Beside "Add note", a selection also offers its LaTeX. */
+.add-source{position:absolute;z-index:2;transform:translate(6px,8px);display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--text-2);box-shadow:var(--float);pointer-events:auto;animation:menu-in .14s var(--ease)}
+.add-source:hover{background:var(--bg-hover);color:var(--text)}
+
+.tool-source .pdf-container .page{cursor:text}
+@media(prefers-reduced-motion:reduce){.add-source,.source-panel .cm-source-flash::after{animation:none}}
+/* One panel at a time on a phone, like New task. */
+@media(max-width:680px){.manuscript.show-source .manuscript-pages{display:none}}

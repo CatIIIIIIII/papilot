@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "{sources} konnten nicht erreicht werden.",
   "{time} ago": "vor {time}",
   "{title} PDF change review": "{title} PDF-Änderungsüberprüfung",
-  "{used}% used": "{used} % verbraucht"
+  "{used}% used": "{used} % verbraucht",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "Klicken Sie auf eine Textstelle oder ziehen Sie über Text, um dessen LaTeX direkt zu bearbeiten. Beim Speichern wird das PDF ohne Agent aktualisiert.",
+  "Close (the draft is kept)": "Schließen (der Entwurf bleibt erhalten)",
+  "Edit LaTeX source": "LaTeX-Quelltext bearbeiten",
+  "Edit source": "Quelltext bearbeiten",
+  "Finding the source…": "Quelltext wird gesucht…",
+  "LaTeX source": "LaTeX-Quelltext",
+  "Line {n}": "Zeile {n}",
+  "Load the current source": "Aktuellen Quelltext laden",
+  "No LaTeX source was found here. Click a line of text instead.": "Hier wurde kein LaTeX-Quelltext gefunden. Klicken Sie stattdessen auf eine Textzeile.",
+  "Show {n} other problem": "{n} weiteres Problem anzeigen",
+  "Show {n} other problems": "{n} weitere Probleme anzeigen",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "Dieser Abschnitt wurde nach der Kompilierung des PDFs geändert. Er wird im aktuellen Zustand angezeigt.",
+  "This version did not compile. The last PDF stays.": "Diese Version konnte nicht kompiliert werden. Das letzte PDF bleibt erhalten.",
+  "Unsaved": "Ungespeichert"
 }

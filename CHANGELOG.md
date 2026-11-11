@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- **Edit the LaTeX straight from the PDF.** Pick the new Edit source tool (E) in the marking tools, then click a passage or drag over text: its file opens in a code editor in a tab beside New task, scrolled to the passage with the clicked lines highlighted and flashing, and the selected or clicked word marked. Bars beside the line numbers show what changed since the last commit. Unsaved changes show as a mark; ⌘S saves the file, without an agent, and compiles the manuscript: the new PDF and the editor then flash the saved lines, or the tab shows the compile errors on its lines and the last PDF stays. In Changes, picking a change opens its lines in the editor, and moving to a changed line in the editor shows its change. Edits made elsewhere since the PDF was compiled are followed to the current file, a save is refused if the file changed while you typed, and unsaved drafts are kept.
 - **DeepSeek task permissions.** Choose sandboxed editing or bypass permissions for each task. Papilot applies the selected native Harness preset to new, resumed and continuing sessions; read-only remains enforced for restricted tasks. ([#111](https://github.com/PapilotAI/papilot/pull/111))
 
 ### Changed

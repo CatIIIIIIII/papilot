@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "反映先を選択する前に、タスクとレビュー操作が完了するまでお待ちください。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "パスの変更や削除を行う前に、この論文の PDF ビルドが完了するまでお待ちください。",
   "ZIP links and special files are not supported.": "ZIP 内のリンクおよび特殊ファイルはサポートされていません。",
-  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。"
+  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。",
+  "Choose a source file.": "ソースファイルを選択してください。",
+  "Click the text whose source you want to edit.": "ソースを編集したいテキストをクリックしてください。",
+  "Invalid line range.": "無効な行範囲です。",
+  "Invalid source edit.": "無効なソース編集です。",
+  "This PDF is out of date. Refresh it and try again.": "このPDFは最新ではありません。更新してからもう一度お試しください。",
+  "This edit ID was already used for another edit.": "この編集IDはすでに別の編集で使用されています。",
+  "This file cannot be edited here.": "このファイルはここでは編集できません。",
+  "This file is not text that can be edited here.": "このファイルはここで編集できるテキストではありません。",
+  "This source file is too large to edit here.": "このソースファイルは大きすぎるため、ここでは編集できません。",
+  "This source file no longer exists.": "このソースファイルはすでに存在しません。"
 }

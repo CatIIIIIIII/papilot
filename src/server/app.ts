@@ -16,6 +16,7 @@ import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
 import { gitHistory, gitVersion, gitVersionDiff, gitRestoreVersion } from './git-history.ts';
+import { locateSource, placeSource, readFile, saveSource } from './manuscript-source.ts';
 import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
@@ -602,10 +603,33 @@ export async function buildApp(options: AppOptions) {
     return action === 'fetch' ? work() : serialGit(project.id, work);
   });
   app.post<{ Params: { id: string } }>('/api/projects/:id/manuscript', project(), request => manuscript(request.params.id, true));
+  const isRect = (value: unknown): value is [number, number, number, number] => Array.isArray(value) && value.length === 4 && value.every(v => typeof v === 'number' && v >= 0 && v <= 1) && value[2] > value[0] && value[3] > value[1];
+  // Manual LaTeX edits from the PDF, without an agent: the passage under a
+  // click as it is on disk now, any lines of a file, a save of those lines
+  // (which compiles the manuscript), and where saved lines were printed.
+  app.post<{ Params: { id: string } }>('/api/projects/:id/manuscript/source/locate', project(), request => {
+    const project = store.project(request.params.id), b = (request.body || {}) as any;
+    if (!isRect(b.rect)) throw new Error('Click the text whose source you want to edit.');
+    const rects = Array.isArray(b.rects) ? b.rects.filter(isRect).slice(0, 200) : [];
+    return locateSource(manuscripts, project.id, project.path, string(b.key, 'Preview key', 64), Number(b.page), b.rect, rects, typeof b.quote === 'string' ? b.quote.slice(0, 20000) : '');
+  });
+  app.get<{ Params: { id: string }; Querystring: { file?: string } }>('/api/projects/:id/manuscript/source', project(), request =>
+    readFile(store.project(request.params.id).path, request.query.file));
+  app.post<{ Params: { id: string } }>('/api/projects/:id/manuscript/source', { ...project(), bodyLimit: 8 * 1024 * 1024 }, request => {
+    const project = store.project(request.params.id);
+    // Like reverting a change: one Git write at a time, never during a commit.
+    return serialGit(project.id, () => workspace.exclusiveCommit(project.id, async () => {
+      const saved = await saveSource(project.id, project.path, request.body), at = Date.now();
+      return { ...saved, tree: await manuscripts.written(project.id, project.path), at };
+    }));
+  });
+  app.get<{ Params: { id: string }; Querystring: { key?: string; file?: string; start?: string; end?: string; near?: string } }>('/api/projects/:id/manuscript/source/place', project(), request => {
+    const project = store.project(request.params.id), q = request.query;
+    return placeSource(manuscripts, project.id, String(q.key || ''), q.file, q.start, q.end, q.near);
+  });
   // Notes are saved for reading; only explicitly attached IDs reach an agent task.
   app.post<{ Params: { id: string } }>('/api/projects/:id/annotations', project(), async request => {
     const project = store.project(request.params.id), b = request.body as any;
-    const isRect = (value: unknown): value is [number, number, number, number] => Array.isArray(value) && value.length === 4 && value.every(v => typeof v === 'number' && v >= 0 && v <= 1) && value[2] > value[0] && value[3] > value[1];
     if (!isRect(b.rect)) throw new Error('Select text or mark a region on the page first.');
     const rects = Array.isArray(b.rects) ? b.rects.filter(isRect) : [];
     if (b.group !== undefined && !isNoteGroup(b.group)) throw new Error('Invalid annotation group.');

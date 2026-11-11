@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "Impossibile raggiungere {sources}.",
   "{time} ago": "{time} fa",
   "{title} PDF change review": "Revisione delle modifiche al PDF di {title}",
-  "{used}% used": "{used}% utilizzato"
+  "{used}% used": "{used}% utilizzato",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "Fai clic su un passaggio o trascina sul testo per modificarne direttamente il LaTeX. Il salvataggio aggiorna il PDF senza un agente.",
+  "Close (the draft is kept)": "Chiudi (la bozza viene conservata)",
+  "Edit LaTeX source": "Modifica sorgente LaTeX",
+  "Edit source": "Modifica sorgente",
+  "Finding the source…": "Ricerca del sorgente…",
+  "LaTeX source": "Sorgente LaTeX",
+  "Line {n}": "Riga {n}",
+  "Load the current source": "Carica il sorgente corrente",
+  "No LaTeX source was found here. Click a line of text instead.": "Nessun sorgente LaTeX trovato qui. Fai clic invece su una riga di testo.",
+  "Show {n} other problem": "Mostra {n} altro problema",
+  "Show {n} other problems": "Mostra altri {n} problemi",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "Questo passaggio è cambiato dopo la compilazione del PDF. Viene mostrato nello stato attuale.",
+  "This version did not compile. The last PDF stays.": "Questa versione non è stata compilata. Rimane l'ultimo PDF.",
+  "Unsaved": "Non salvato"
 }

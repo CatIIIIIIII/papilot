@@ -1643,3 +1643,55 @@ test('single-user routes expose the workspace without accounts and removed colla
     assert.equal((await f.local.inject({ url: '/api/state', headers: { ...LOCAL, origin: 'https://untrusted.example' } })).statusCode, 403);
   } finally { await f.close(); }
 });
+
+test('manual source edits need CSRF, refuse stale saves and wait for review writes', async () => {
+  const f = await fixture(), root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-api-source-'));
+  const snapshot = path.join(root, '.compiled-main.tex');
+  try {
+    fs.writeFileSync(path.join(root, 'main.tex'), 'Intro.\n\nThe pelican paragraph.\nIt continues.\n\nEnd.\n');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['add', 'main.tex'], { cwd: root });
+    execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', 'Paper'], { cwd: root });
+    fs.writeFileSync(snapshot, fs.readFileSync(path.join(root, 'main.tex')));
+    f.store.saveProject({ ...f.store.project('thesis'), path: root });
+    f.manuscripts.locate = async () => ({ quote: 'pelican', source: { file: 'main.tex', lines: [3, 3] }, compiled: { file: 'main.tex', input: snapshot, lines: [3, 3] } });
+    f.manuscripts.compiled = () => ({ pdf: path.join(root, 'main.pdf'), root, sourceDir: '' });
+    const writes: string[] = [];
+    f.manuscripts.written = async projectId => { writes.push(projectId); return 'tree-after-save'; };
+    const locate = (headers: Record<string, string>, payload: object) => f.local.inject({ method: 'POST', url: '/api/projects/thesis/manuscript/source/locate', headers, payload });
+    assert.equal((await locate(LOCAL, { key: 'pdf', page: 0, rect: [0.1, 0.1, 0.2, 0.2] })).statusCode, 403);
+    assert.equal((await locate(f.as, { key: 'pdf', page: 0, rect: [0.3, 0.1, 0.2, 0.2] })).statusCode, 400);
+    const found = await locate(f.as, { key: 'pdf', page: 0, rect: [0.1, 0.1, 0.2, 0.2], quote: 'pelican' });
+    assert.equal(found.statusCode, 200, found.body);
+    const source = found.json().source;
+    assert.deepEqual([source.file, source.passage, source.focus, source.base], ['main.tex', [2, 4], [2, 3], source.text]);
+    const read = await f.local.inject({ url: '/api/projects/thesis/manuscript/source?file=main.tex', headers: LOCAL });
+    assert.equal(read.statusCode, 200, read.body);
+    assert.equal(read.json().text, source.text);
+    const save = (headers: Record<string, string>, payload: object) => f.local.inject({ method: 'POST', url: '/api/projects/thesis/manuscript/source', headers, payload });
+    const text = 'Intro.\n\nThe heron paragraph.\n\nEnd.\n', edit = { id: 'save-1', file: 'main.tex', revision: source.revision, text };
+    assert.equal((await save(LOCAL, edit)).statusCode, 403);
+    await f.workspace.reviewWrite('thesis-task', true, async () => {
+      const locked = await save(f.as, edit);
+      assert.equal(locked.statusCode, 400); assert.match(locked.json().error, /review action/);
+    });
+    assert.deepEqual(writes, [], 'a refused save starts no build');
+    const saved = await save(f.as, edit);
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.equal(saved.json().tree, 'tree-after-save');
+    assert.deepEqual(saved.json().changed, [2, 3]);
+    assert.equal(saved.json().source.base, source.text, 'the base stays the last commit');
+    assert.equal(fs.readFileSync(path.join(root, 'main.tex'), 'utf8'), text);
+    assert.deepEqual(writes, ['thesis']);
+    const stale = await save(f.as, { ...edit, id: 'save-2', text: 'Another.\n' });
+    assert.equal(stale.statusCode, 409); assert.match(stale.json().error, /changed while you were editing/);
+    // A class or package file outside the compiled paper has nothing to edit.
+    f.manuscripts.locate = async () => ({ quote: 'Title', source: null, compiled: { file: 'article.cls', input: '/usr/share/texmf/article.cls', lines: [1, 1] } });
+    const outside = await locate(f.as, { key: 'pdf', page: 0, rect: [0.1, 0.1, 0.2, 0.2] });
+    assert.equal(outside.statusCode, 200, outside.body);
+    assert.equal(outside.json().source, null);
+    delete (f.manuscripts as { compiled?: unknown }).compiled;
+    const place = await f.local.inject({ url: '/api/projects/thesis/manuscript/source/place?key=gone&file=main.tex&start=2&end=3', headers: LOCAL });
+    assert.equal(place.statusCode, 404, 'a PDF that is no longer shown cannot place lines');
+  } finally { await f.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});

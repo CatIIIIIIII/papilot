@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "{sources} に接続できませんでした。",
   "{time} ago": "{time}前",
   "{title} PDF change review": "{title} PDF 変更レビュー",
-  "{used}% used": "{used}% 使用済み"
+  "{used}% used": "{used}% 使用済み",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "箇所をクリックするかテキストをドラッグして、LaTeX を直接編集します。保存するとエージェントを介さずに PDF が更新されます。",
+  "Close (the draft is kept)": "閉じる（下書きは保持されます）",
+  "Edit LaTeX source": "LaTeX ソースを編集",
+  "Edit source": "ソースを編集",
+  "Finding the source…": "ソースを検索中…",
+  "LaTeX source": "LaTeX ソース",
+  "Line {n}": "{n} 行目",
+  "Load the current source": "現在のソースを読み込む",
+  "No LaTeX source was found here. Click a line of text instead.": "ここに LaTeX ソースが見つかりませんでした。代わりにテキストの行をクリックしてください。",
+  "Show {n} other problem": "他 {n} 件の問題を表示",
+  "Show {n} other problems": "他 {n} 件の問題を表示",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "この箇所は PDF のコンパイル後に変更されました。現在の状態が表示されています。",
+  "This version did not compile. The last PDF stays.": "このバージョンはコンパイルできませんでした。前回の PDF がそのまま表示されています。",
+  "Unsaved": "未保存"
 }

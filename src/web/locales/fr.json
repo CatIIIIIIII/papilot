@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "Impossible de joindre {sources}.",
   "{time} ago": "il y a {time}",
   "{title} PDF change review": "Révision des modifications du PDF {title}",
-  "{used}% used": "{used} % utilisé"
+  "{used}% used": "{used} % utilisé",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "Cliquez sur un passage ou sélectionnez du texte pour modifier directement son code LaTeX. L’enregistrement met à jour le PDF sans agent.",
+  "Close (the draft is kept)": "Fermer (le brouillon est conservé)",
+  "Edit LaTeX source": "Modifier la source LaTeX",
+  "Edit source": "Modifier la source",
+  "Finding the source…": "Recherche de la source…",
+  "LaTeX source": "Source LaTeX",
+  "Line {n}": "Ligne {n}",
+  "Load the current source": "Charger la source actuelle",
+  "No LaTeX source was found here. Click a line of text instead.": "Aucune source LaTeX trouvée ici. Cliquez plutôt sur une ligne de texte.",
+  "Show {n} other problem": "Afficher {n} autre problème",
+  "Show {n} other problems": "Afficher {n} autres problèmes",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "Ce passage a été modifié après la compilation du PDF. Son état actuel est affiché.",
+  "This version did not compile. The last PDF stays.": "Cette version n’a pas pu être compilée. Le dernier PDF est conservé.",
+  "Unsaved": "Non enregistré"
 }

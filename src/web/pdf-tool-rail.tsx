@@ -10,8 +10,8 @@ import './pdf-tools.css';
 
 // The tool rail, after an image editor's: each tool stays chosen until another
 // is picked or Escape returns to Select.
-export type PdfTool = 'select' | 'note' | 'magic' | 'region' | 'point' | 'delete' | 'hand';
-export const TOOL_KEYS: Record<string, PdfTool> = { v: 'select', t: 'note', q: 'magic', m: 'region', p: 'point', d: 'delete', h: 'hand' };
+export type PdfTool = 'select' | 'note' | 'magic' | 'region' | 'point' | 'delete' | 'source' | 'hand';
+export const TOOL_KEYS: Record<string, PdfTool> = { v: 'select', t: 'note', q: 'magic', m: 'region', p: 'point', d: 'delete', e: 'source', h: 'hand' };
 
 // Tooltips use the top layer so scrolling a short rail cannot clip them.
 function hideRailTips(rail: HTMLElement | null, except?: HTMLElement) {
@@ -33,8 +33,10 @@ function showRailTip(button: Element | null) {
 }
 
 // Shared by the manuscript and the embedded review; gestures stay with each viewer.
-export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended, editing, stamps, locked, onLock, history }: {
+export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended, editing, stamps, locked, onLock, history, sourceTool }: {
   tool: PdfTool; onTool: (tool: PdfTool) => void;
+  /** Offer the tool that opens a passage's LaTeX for editing by hand. */
+  sourceTool?: boolean;
   group: NoteGroup | null; onGroup?: (group: NoteGroup | null) => void;
   disabled?: boolean; suspended?: boolean; editing?: boolean;
   stamps: Stamp[]; locked: number | null; onLock: (slot: number | null) => void;
@@ -89,6 +91,7 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
     { id: 'region', icon: 'toolRegion', label: t('Region'), key: 'M', hint: t('Draw a box around a figure, table or equation.') },
     { id: 'point', icon: 'toolSticky', label: t('Sticky note'), key: 'P', hint: t('Click anywhere on the page to leave a note there.') },
     { id: 'delete', icon: 'toolStrike', label: t('Delete'), key: 'D', hint: t('Strike out text to ask for it to be removed. Open the mark to give a replacement.') },
+    ...(sourceTool ? [{ id: 'source' as const, icon: 'toolSource', label: t('Edit source'), key: 'E', hint: t('Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.') }] : []),
     { id: 'select', icon: 'toolSelect', label: t('Select'), key: 'V', hint: t('Select text to copy it or add a note from the button beside it.') },
     { id: 'hand', icon: 'toolHand', label: t('Hand'), key: 'H', hint: t('Drag to move around the page. Hold Space to use it with any tool.') },
   ];
@@ -136,7 +139,7 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
             tool={{ label: item.label, pressed: tool === 'note', keys: item.key, content, onPress: () => { if (tool !== 'note') { onTool('note'); return false; } return !editing; } }}/>
             : item.id === 'magic' ? <StampMenu label={item.label} keys={item.key} pressed={tool === 'magic'} disabled={disabled} content={content} stamps={stamps} locked={locked}
               onPress={() => { if (tool !== 'magic') { onTool('magic'); return false; } loadStamps(); return !editing; }} onLock={onLock}/>
-            : <button type="button" className="rail-tool" aria-label={item.label} aria-pressed={tool === item.id} aria-keyshortcuts={item.key} disabled={item.id !== 'select' && item.id !== 'hand' && disabled} onClick={() => onTool(item.id)}>{content}</button>}
+            : <button type="button" className="rail-tool" aria-label={item.label} aria-pressed={tool === item.id} aria-keyshortcuts={item.key} disabled={item.id !== 'select' && item.id !== 'hand' && item.id !== 'source' && disabled} onClick={() => onTool(item.id)}>{content}</button>}
         </Fragment>;
       })}
       </div>

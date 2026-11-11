@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "選擇目標位置前，請先等待任務與審閱動作完成。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "請等待此論文的 PDF 建置完成後，再變更其路徑或將其移除。",
   "ZIP links and special files are not supported.": "不支援 ZIP 連結與特殊檔案。",
-  "npm is unavailable to Papilot.": "Papilot 無法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 無法使用 npm。",
+  "Choose a source file.": "請選擇原始碼檔案。",
+  "Click the text whose source you want to edit.": "請點擊您想編輯原始碼的文字。",
+  "Invalid line range.": "無效的行號範圍。",
+  "Invalid source edit.": "無效的原始碼編輯。",
+  "This PDF is out of date. Refresh it and try again.": "此 PDF 已過期，請重新整理後再試一次。",
+  "This edit ID was already used for another edit.": "此編輯 ID 已用於另一項編輯。",
+  "This file cannot be edited here.": "無法在此處編輯此檔案。",
+  "This file is not text that can be edited here.": "此檔案並非可在此處編輯的文字檔。",
+  "This source file is too large to edit here.": "此原始碼檔案過大，無法在此處編輯。",
+  "This source file no longer exists.": "此原始碼檔案已不存在。"
 }

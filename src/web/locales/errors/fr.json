@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Attendez la fin de la tâche et des actions de révision avant de choisir une destination.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Attendez la fin de la compilation du PDF de cet article avant de modifier son chemin d’accès ou de le supprimer.",
   "ZIP links and special files are not supported.": "Les liens et fichiers spéciaux dans les archives ZIP ne sont pas pris en charge.",
-  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot."
+  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot.",
+  "Choose a source file.": "Choisissez un fichier source.",
+  "Click the text whose source you want to edit.": "Cliquez sur le texte dont vous souhaitez modifier la source.",
+  "Invalid line range.": "Plage de lignes invalide.",
+  "Invalid source edit.": "Modification de la source invalide.",
+  "This PDF is out of date. Refresh it and try again.": "Ce PDF n'est plus à jour. Actualisez-le et réessayez.",
+  "This edit ID was already used for another edit.": "Cet identifiant de modification a déjà été utilisé pour une autre modification.",
+  "This file cannot be edited here.": "Ce fichier ne peut pas être modifié ici.",
+  "This file is not text that can be edited here.": "Ce fichier ne contient pas de texte modifiable ici.",
+  "This source file is too large to edit here.": "Ce fichier source est trop volumineux pour être modifié ici.",
+  "This source file no longer exists.": "Ce fichier source n'existe plus."
 }

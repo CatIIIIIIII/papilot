@@ -29,7 +29,7 @@ import { browserStorage } from './storage.ts';
 import { requestId } from './request-id.ts';
 import { readPlace, savePlace } from './places.ts';
 import { ModeSwitch, type PdfMode } from './mode-switch.tsx';
-import { ReviewFrame, reviewUrl } from './review-frame.tsx';
+import { ReviewFrame, reviewUrl, type ReviewSources } from './review-frame.tsx';
 import { AiReviewView } from './ai-review.tsx';
 import { keepDialogFocus } from './focus.ts';
 import { DeleteTaskDialog } from './task-dialog.tsx';
@@ -42,6 +42,7 @@ import { PaperDialog } from './paper-dialog.tsx';
 import { ImportDialog } from './import-dialog.tsx';
 import { CompileButton } from './compile-button.tsx';
 import { ProblemsButton, fixRequest, type ProblemsHandle } from './build-problems.tsx';
+import { useSourceEdit } from './source-panel.tsx';
 import { useTheme } from './theme.tsx';
 import { SettingsDialog, type SettingsInitialPage } from './settings.tsx';
 import { WorkspaceSwitcher } from './workspace-switcher.tsx';
@@ -944,7 +945,7 @@ function PreparingTask({ task }: { task: Task }) {
   </div>;
 }
 
-type ManuscriptPanel = 'pdf' | 'task';
+type ManuscriptPanel = 'pdf' | 'task' | 'source';
 function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, setCollapsed, project, data, error, view, setView, region, setRegion, active, setActive, actions, newTask, tools, share, navigation, onGit, writer, reportError, onFixProblems }: { notesRequest?: number; navigationGuard: React.Ref<NotesHandle>; collapsed: boolean; setCollapsed: React.Dispatch<React.SetStateAction<boolean>>; taskCards: ReturnType<typeof useNoteCards>; onFixProblems?: (request: string) => void; navigation?: React.ReactNode; newTask: (notes: React.ReactNode) => React.ReactNode; tools?: React.ReactNode; share?: React.ReactNode; onGit: (status: GitStatus) => void; writer: CommitWriter; reportError: (error: unknown) => void; project: Project; data: Manuscript | null; error: string; view: ManuscriptPanel; setView: (view: ManuscriptPanel) => void; region: boolean; setRegion: (on: boolean) => void; active: string; setActive: (id: string) => void; actions: NoteActions }) {
   const build = data?.build, notes = data?.annotations || [], git = data?.git;
   const pdf = useRef<PdfHandle>(null);
@@ -978,6 +979,14 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
     showMode(value); savePlace('mode:' + project.id, value); };
   // The last build's problems sit beside Recompile and open only when asked.
   const problems = useRef<ProblemsHandle>(null);
+  // Editing a passage's LaTeX by hand, from a click on the PDF, in a tab
+  // beside New task that exists while a passage is open.
+  const review = useRef<ReviewSources>(null), modeRef = useRef<PdfMode>('pdf');
+  // In Changes, moving to a changed line in the editor shows its change.
+  const source = useSourceEdit({ api, projectId: project.id, build, head: git?.head?.hash ?? null, pdf, onProblems: () => problems.current?.open(),
+    onLine: (file, line) => { if (modeRef.current === 'changes') review.current?.select(file, line); } });
+  modeRef.current = mode;
+  useEffect(() => { if (view === 'source' && !source.editing) setView(window.matchMedia('(max-width: 680px)').matches ? 'pdf' : 'task'); }, [source.editing, view]);
   const problemsButton = <ProblemsButton ref={problems} counts={build?.problems} status={build?.status} pdfKey={build?.key} logUrl={`/api/projects/${project.id}/manuscript/log`}
     load={() => api<ManuscriptProblems>(`/projects/${project.id}/manuscript/problems`)}
     onJump={problem => { if (problem.page === undefined || !problem.rect) return; if (phone()) setView('pdf'); const { page, rect } = problem; requestAnimationFrame(() => pdf.current?.showPlace(page, rect)); }}
@@ -995,7 +1004,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
   </>;
   const numbered = notes.map((note, index) => ({ note, number: index + 1 }));
   const phone = () => window.matchMedia('(max-width: 680px)').matches;
-  const side = view === 'pdf' ? 'task' : view;
+  const side = view === 'source' && source.panel ? 'source' : 'task';
   async function show(note: Annotation) {
     if (note.key !== build?.key || !await closeReadingNotes()) return;
     setMode('pdf');
@@ -1013,7 +1022,8 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
   return <div className={'manuscript show-' + view + (hidden ? ' panel-collapsed' : '')} style={panel.style}>
     {panel.resizer}
     {mode === 'changes' ? <section className="manuscript-pages" aria-label={t('Uncommitted changes in the PDF')}>
-      <ReviewFrame key={'changes:' + project.id} changesOf={project.id} lead={switcher} tools={<>{commitButton(false)}{pageTools}</>} completion={commitButton(true)} onDecided={reloadGit}/>
+      <ReviewFrame key={'changes:' + project.id} changesOf={project.id} lead={switcher} tools={<>{commitButton(false)}{pageTools}</>} completion={commitButton(true)} onDecided={reloadGit}
+        sources={review} onCurrentChange={change => void source.follow(change, () => { setView('source'); setCollapsed(false); })}/>
     </section> : <section className="manuscript-pages" aria-label={t('PDF preview')} aria-busy={!build || build.status === 'building'}>
       {!build?.key && <div className="pdf-toolbar manuscript-lead" role="toolbar" aria-label={t('PDF controls')}>{switcher}<div className="pdf-toolbar-spacer"/>{pdfTools}</div>}
       {error && <div className="manuscript-note error" role="alert">{error}</div>}
@@ -1023,7 +1033,8 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
         : <div className="manuscript-note error" role="alert"><strong>{t('The manuscript did not compile.')}</strong><pre>{build.error}</pre></div>)}
       {build?.key ? <Suspense fallback={<div className="review-loading"><p role="status">{t('Opening the PDF…')}</p></div>}><PdfView ref={pdf} place={'pdf:' + project.id} pdfKey={build.key} url={pdfAsset(`/api/projects/${project.id}/manuscript.pdf?key=${build.key}`)} words={wordAsset(`/api/projects/${project.id}/manuscript/words?key=${build.key}`)} notes={numbered.filter(item => item.note.key === build.key)} active={active} region={region} setRegion={setRegion} group={actions.group} onGroupChange={actions.setGroup} markingDisabled={actions.sending}
           history={actions.history} noteActions={{ has: actions.selection.has, toggle: note => actions.selection.set([note.id], !actions.selection.has(note.id)), remove: actions.remove, restore: actions.restore, edit: actions.edit, onEditing: actions.onEditing, onBusy: actions.onReviewBusy, disabled: actions.sending }} onDeselect={() => setActive('')}
-          onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}/></Suspense>
+          onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}
+          onSource={async (target, key) => { if (!await closeReadingNotes()) return; setActive(''); setView('source'); setCollapsed(false); void source.open(target, key); }} passage={source.passage}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
       {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} currentKey={build?.key} active={active} actions={actions} onShow={show} onAnnotate={annotate}/></aside></>}
     </section>}
@@ -1032,10 +1043,17 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
         {!hidden && togglePanel}
         <div className="side-tabs" role="tablist" aria-label={t('Manuscript panels')}>
           <button role="tab" data-task-home aria-selected={side === 'task'} title={t('New task')} onClick={() => setView('task')}><Icon name="compose" size={14}/><span className="tab-label">{t('New task')}</span>{actions.selection.selected.length > 0 && <span className="count" aria-hidden="true">{actions.selection.selected.length}</span>}</button>
+          {/* The source tab closes itself, like an editor's: a dot while unsaved, a cross under the pointer. */}
+          {source.tab && <span className="side-tab-closable" role="presentation" data-selected={side === 'source'}>
+            <button role="tab" aria-selected={side === 'source'} title={source.tab.file || t('Edit source')} onClick={() => setView('source')}><Icon name="toolSource" size={14}/><span className="tab-label">{source.tab.name}</span></button>
+            <button type="button" className="side-tab-close" data-dirty={source.tab.dirty || source.tab.saving || undefined}
+              aria-label={source.tab.dirty ? `${t('Unsaved')} · ${t('Close (the draft is kept)')}` : t('Close')} title={source.tab.dirty ? `${t('Unsaved')} · ${t('Close (the draft is kept)')}` : t('Close')} onClick={source.close}><Icon name="close" size={12}/></button>
+          </span>}
         </div>
         {!hidden && sideBySide && share}
       </div>
-      {newTask(<TaskNotes cards={taskCards} controller={taskNotes} notes={notes} currentKey={build?.key} actions={actions} onShow={show}/>)}
+      <div className="side-pane" hidden={side !== 'task'}>{newTask(<TaskNotes cards={taskCards} controller={taskNotes} notes={notes} currentKey={build?.key} actions={actions} onShow={show}/>)}</div>
+      {source.panel && <div className="side-pane" hidden={side !== 'source'}>{source.panel}</div>}
     </aside>
     {committing && <CommitDialog branch={git?.branch ?? null} files={staged} staged remote={Boolean(git?.remote)} agent={AGENT_LABELS[writer.agent]} onClose={() => setCommitting(false)}
       generate={fresh => api<{ message: string }>(`/projects/${project.id}/git/message`, { paths: staged, staged: true, agent: writer.agent, fresh }).then(result => result.message)}

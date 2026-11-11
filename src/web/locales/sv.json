@@ -1304,5 +1304,19 @@
   "{sources} could not be reached.": "{sources} kunde inte nås.",
   "{time} ago": "för {time} sedan",
   "{title} PDF change review": "Granskning av PDF-ändringar för {title}",
-  "{used}% used": "{used} % använt"
+  "{used}% used": "{used} % använt",
+  "Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.": "Klicka på ett stycke eller markera text för att redigera dess LaTeX direkt. När du sparar uppdateras PDF-filen utan en agent.",
+  "Close (the draft is kept)": "Stäng (utkastet behålls)",
+  "Edit LaTeX source": "Redigera LaTeX-källkod",
+  "Edit source": "Redigera källkod",
+  "Finding the source…": "Söker efter källkoden…",
+  "LaTeX source": "LaTeX-källkod",
+  "Line {n}": "Rad {n}",
+  "Load the current source": "Läs in aktuell källkod",
+  "No LaTeX source was found here. Click a line of text instead.": "Ingen LaTeX-källkod hittades här. Klicka på en textrad i stället.",
+  "Show {n} other problem": "Visa {n} annat problem",
+  "Show {n} other problems": "Visa {n} andra problem",
+  "This passage changed after the PDF was compiled. It is shown as it is now.": "Det här avsnittet ändrades efter att PDF:en kompilerades. Det visas som det är nu.",
+  "This version did not compile. The last PDF stays.": "Den här versionen gick inte att kompilera. Den senaste PDF:en ligger kvar.",
+  "Unsaved": "Osparat"
 }

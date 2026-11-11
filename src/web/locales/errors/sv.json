@@ -271,5 +271,15 @@
   "Wait for the task and review actions to finish before choosing a destination.": "Vänta tills uppgiften och granskningsåtgärderna är klara innan du väljer ett mål.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Vänta tills PDF-bygget för den här artikeln är klart innan du ändrar dess sökväg eller tar bort den.",
   "ZIP links and special files are not supported.": "Länkar och specialfiler i ZIP-arkiv stöds inte.",
-  "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot."
+  "npm is unavailable to Papilot.": "npm är inte tillgängligt för Papilot.",
+  "Choose a source file.": "Välj en källfil.",
+  "Click the text whose source you want to edit.": "Klicka på texten vars källa du vill redigera.",
+  "Invalid line range.": "Ogiltigt radintervall.",
+  "Invalid source edit.": "Ogiltig källredigering.",
+  "This PDF is out of date. Refresh it and try again.": "Den här PDF:en är inaktuell. Uppdatera den och försök igen.",
+  "This edit ID was already used for another edit.": "Det här redigerings-ID:t har redan använts för en annan redigering.",
+  "This file cannot be edited here.": "Den här filen kan inte redigeras här.",
+  "This file is not text that can be edited here.": "Den här filen är inte text som kan redigeras här.",
+  "This source file is too large to edit here.": "Den här källfilen är för stor för att redigeras här.",
+  "This source file no longer exists.": "Den här källfilen finns inte längre."
 }

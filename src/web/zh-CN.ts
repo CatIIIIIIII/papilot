@@ -699,4 +699,14 @@ export const zhCN: Record<string, string> = {
   'Preparing the review PDF…': '正在准备审阅 PDF…',
   'Could not prepare this task': '无法准备此任务',
   'Send more instructions once the task has started.': '任务开始后即可继续发送指令。',
+  // Editing a passage's LaTeX by hand from the PDF.
+  'Edit source': '编辑源码', 'LaTeX source': 'LaTeX 源码', 'Edit LaTeX source': '编辑 LaTeX 源码',
+  'Click a passage or drag over text to edit its LaTeX directly. Saving updates the PDF without an agent.': '点一下段落或拖选文字，直接修改对应的 LaTeX。保存后立即更新 PDF，不经过 agent。',
+  'Finding the source…': '正在查找源码…', 'No LaTeX source was found here. Click a line of text instead.': '这里没有找到对应的 LaTeX 源码，请点在一行文字上。',
+  'Line {n}': '第 {n} 行',
+  'Close (the draft is kept)': '关闭（草稿会保留）', 'Unsaved': '未保存',
+  'This version did not compile. The last PDF stays.': '这一版没有编译通过，PDF 保持上一版。',
+  'Show {n} other problem': '查看其他 {n} 个问题', 'Show {n} other problems': '查看其他 {n} 个问题',
+  'This passage changed after the PDF was compiled. It is shown as it is now.': 'PDF 生成后这段又改过，这里显示的是当前版本。',
+  'Load the current source': '载入当前源码',
 };

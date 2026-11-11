@@ -34,12 +34,17 @@ document.head.append(styles);
 export type { PdfTool } from './pdf-tool-rail.tsx';
 export type Rect = [number, number, number, number];
 export type { OutlineItem } from '../../engine/src/web/pdf-reader.ts';
-export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note: Annotation) => void; showPlace: (page: number, rect: Rect) => void; focus: () => void; fitWidth: () => void }
+// `showPlace` scrolls a place into view and marks it briefly; with `keep`,
+// a place already in view is marked without moving the pages.
+export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note: Annotation) => void; showPlace: (page: number, rect: Rect, options?: { keep?: boolean }) => void; focus: () => void; fitWidth: () => void }
 // A touch selection also has its ends: the edge of its first and last word, with that line's top and bottom.
 interface Selection { page: number; rects: Rect[]; quote: string; handles?: { from: [number, number, number]; to: [number, number, number] } }
 // What a tool marks: selected text, a region, or a point (a small box quoted
-// by the line at or beside it).
-interface Target { page: number; rect: Rect; rects: Rect[]; quote: string; point?: boolean }
+// by the line at or beside it, with the word clicked and the words before it
+// on that line).
+export interface Target { page: number; rect: Rect; rects: Rect[]; quote: string; point?: boolean; word?: { text: string; context: string } }
+// A passage the viewer's owner is working on, marked on its page.
+export interface PdfPassage { page: number; marks: Rect[] }
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 const percent = ([x0, y0, x1, y1]: Rect): React.CSSProperties => ({ left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
 const bounds = (rects: Rect[]): Rect => [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1])), Math.max(...rects.map(r => r[2])), Math.max(...rects.map(r => r[3]))];
@@ -65,13 +70,16 @@ function pointAt(pageDiv: HTMLElement, clientX: number, clientY: number): Target
     const dy = y < word.top ? word.top - y : y > word.bottom ? y - word.bottom : 0, dx = x < word.left ? word.left - x : x > word.right ? x - word.right : 0;
     if (dy * 4 + dx < distance) { distance = dy * 4 + dx; nearest = word; }
   }
-  let quote = '';
+  let quote = '', word: Target['word'];
   if (nearest && distance < 0.12) {
     const middle = (nearest.top + nearest.bottom) / 2, height = nearest.bottom - nearest.top;
     const line = words.filter(word => Math.abs((word.top + word.bottom) / 2 - middle) < height / 2).sort((a, b) => a.left - b.left);
     quote = [...line.filter(word => (word.left + word.right) / 2 < x).map(word => word.text), '‸', ...line.filter(word => (word.left + word.right) / 2 >= x).map(word => word.text)].join(' ');
+    const away = (word: typeof line[number]) => x < word.left ? word.left - x : x > word.right ? x - word.right : 0;
+    const clicked = line.reduce((best, word) => away(word) < away(best) ? word : best, line[0]);
+    if (clicked) word = { text: clicked.text, context: line.slice(0, line.indexOf(clicked)).map(word => word.text).join(' ') };
   }
-  return { page: Number(pageDiv.dataset.pageNumber) - 1, rect: [Math.max(0, x - 0.006), Math.max(0, y - 0.004), Math.min(1, x + 0.006), Math.min(1, y + 0.004)], rects: [], quote, point: true };
+  return { page: Number(pageDiv.dataset.pageNumber) - 1, rect: [Math.max(0, x - 0.006), Math.max(0, y - 0.004), Math.min(1, x + 0.006), Math.min(1, y + 0.004)], rects: [], quote, point: true, ...(word ? { word } : {}) };
 }
 
 // A note covers whole words: a drag that starts or ends inside a word takes
@@ -192,6 +200,9 @@ export const PdfView = forwardRef<PdfHandle, {
   place?: string;
   /** Keep reading state mounted while another workspace view is in front. */
   suspended?: boolean;
+  /** Offers the source tool; a click or drag with it names a passage, on the PDF named `key`. */
+  onSource?: (target: Target, key?: string) => void;
+  passage?: PdfPassage;
 }>(function PdfView(props, ref) {
   const latest = useRef(props); latest.current = props;
   const root = useRef<HTMLDivElement>(null), container = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), findInput = useRef<HTMLInputElement>(null);
@@ -214,6 +225,8 @@ export const PdfView = forwardRef<PdfHandle, {
   const [selection, setSelection] = useState<Selection | null>(null);
   // A place shown from elsewhere, such as a compilation problem, marked briefly.
   const [flash, setFlash] = useState<{ page: number; rect: Rect; id: number } | null>(null);
+  // A place asked for while a new PDF opens is shown once its pages have a size.
+  const pagesReady = useRef(false), pendingPlace = useRef<{ page: number; rect: Rect; keep?: boolean } | null>(null);
   const [editing, setEditing] = useState<Target | null>(null), editingRef = useRef(editing); editingRef.current = editing;
   // A recompiled manuscript waits while a note is being written: replacing the
   // pages would close the card and lose its place. The pages on screen, their
@@ -296,7 +309,8 @@ export const PdfView = forwardRef<PdfHandle, {
     finally { setNoteBusy(false); }
   }
 
-  useImperativeHandle(ref, () => ({
+  const handle = useRef<PdfHandle | null>(null);
+  useImperativeHandle(ref, () => handle.current = ({
     focus() { container.current?.focus({ preventScroll: true }); },
     fitWidth() { const viewer = tools.current?.viewer; if (viewer && viewer.currentScaleValue !== 'page-width') viewer.currentScaleValue = 'page-width'; },
     // Scroll to the section without pdf.js's link service, which focuses the
@@ -320,10 +334,13 @@ export const PdfView = forwardRef<PdfHandle, {
       if (!div || !box) return;
       box.scrollTo({ top: box.scrollTop + div.getBoundingClientRect().top - box.getBoundingClientRect().top + note.rect[1] * div.offsetHeight - 96, behavior: 'smooth' });
     },
-    showPlace(page, rect) {
+    showPlace(page, rect, options) {
+      if (!pagesReady.current) { pendingPlace.current = { page, rect, ...options }; return; }
       const div = tools.current?.viewer.getPageView(page)?.div, box = container.current;
       if (!div || !box) return;
       const pageBox = div.getBoundingClientRect(), view = box.getBoundingClientRect();
+      const visible = pageBox.top + rect[1] * pageBox.height >= view.top + 8 && pageBox.top + rect[3] * pageBox.height <= view.bottom - 8;
+      if (options?.keep && visible) { setFlash({ page, rect, id: Date.now() }); return; }
       const top = box.scrollTop + pageBox.top - view.top + rect[1] * div.offsetHeight - box.clientHeight / 3;
       const middle = box.scrollLeft + pageBox.left - view.left + (rect[0] + rect[2]) / 2 * div.offsetWidth - box.clientWidth / 2;
       // A far jump lands at once, so the mark is still showing on arrival.
@@ -389,6 +406,9 @@ export const PdfView = forwardRef<PdfHandle, {
       viewer.currentScaleValue = pdfZoom(keep?.scale || returning?.scale || browserStorage.getItem(PDF_ZOOM_STORAGE));
       if (keep) { returning = undefined; box.scrollTop = keep.top; box.scrollLeft = keep.left; }
       else goBack();
+      pagesReady.current = true;
+      const pending = pendingPlace.current; pendingPlace.current = null;
+      if (pending) requestAnimationFrame(() => handle.current?.showPlace(pending.page, pending.rect, { keep: pending.keep }));
     });
     bus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => { setPage(pageNumber); });
     bus.on('scalechanging', ({ scale, presetValue }: { scale: number; presetValue?: string }) => {
@@ -463,9 +483,10 @@ export const PdfView = forwardRef<PdfHandle, {
     };
     const selectionChange = () => { clearTimeout(timer); timer = setTimeout(select, 120); };
     document.addEventListener('selectionchange', selectionChange);
-    // The note, delete and magic tools act when a drag over text ends; a
-    // plain click on the page gives the magic pen a point instead. The click
-    // waits a moment, so a double click still selects a word.
+    // The note, delete, magic and source tools act when a drag over text
+    // ends; a plain click on the page gives the magic pen and the source
+    // tool a point instead. The click waits a moment, so a double click
+    // still selects a word.
     // A click that closes an open card does only that. The card closes on
     // the same press, so whether one was open is read before anything else.
     let down: { x: number; y: number; time: number } | null = null, pointTimer: ReturnType<typeof setTimeout> | undefined;
@@ -477,7 +498,7 @@ export const PdfView = forwardRef<PdfHandle, {
     const finishMark = (event: PointerEvent) => {
       const tool = toolRef.current, start = down; down = null;
       const touchMagic = event.pointerType === 'touch' && tool === 'magic' && !picking.current?.active() && Boolean(start && performance.now() - start.time < 450);
-      if ((tool !== 'note' && tool !== 'delete' && tool !== 'magic') || latest.current.readOnly || latest.current.markingDisabled || editingRef.current || (event.pointerType === 'touch' && !touchMagic) || event.button !== 0
+      if ((tool !== 'note' && tool !== 'delete' && tool !== 'magic' && tool !== 'source') || latest.current.readOnly || (tool !== 'source' && latest.current.markingDisabled) || editingRef.current || (event.pointerType === 'touch' && !touchMagic) || event.button !== 0
         || !box.contains(event.target as Node) || (event.target as Element).closest('button,input,textarea,select,.pdf-note-card')) return;
       const at = { x: event.clientX, y: event.clientY }, page = (event.target as Element).closest<HTMLElement>('.page');
       const click = Boolean(start && !pressed.current.card && Math.hypot(at.x - start.x, at.y - start.y) < (event.pointerType === 'touch' ? 10 : 5)), onNote = Boolean(noteAt(event));
@@ -485,7 +506,7 @@ export const PdfView = forwardRef<PdfHandle, {
         if (disposed || (event.pointerType === 'touch' && picking.current?.active())) return;
         const value = event.pointerType === 'touch' ? null : select();
         if (value) { markRef.current({ page: value.page, rect: bounds(value.rects), rects: value.rects, quote: value.quote }, at); return; }
-        if (tool === 'magic' && page && click && !onNote) {
+        if ((tool === 'magic' || tool === 'source') && page && click && !onNote) {
           if (event.pointerType === 'touch') markRef.current(pointAt(page, at.x, at.y), at);
           else pointTimer = setTimeout(() => { if (!disposed && !editingRef.current) markRef.current(pointAt(page, at.x, at.y), at); }, 220);
         }
@@ -512,7 +533,7 @@ export const PdfView = forwardRef<PdfHandle, {
     // underlying text. A click/tap on a mark selects its note after the native
     // selection gesture has finished; drags, scrolling and long presses do not.
     const noteAt = (event: MouseEvent) => {
-      if (latest.current.region || editingRef.current || toolRef.current === 'point') return;
+      if (latest.current.region || editingRef.current || toolRef.current === 'point' || toolRef.current === 'source') return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('button,a,input,textarea,select,[contenteditable],.select-handle,.pdf-note-card')) return;
       const page = target?.closest<HTMLElement>('.page');
@@ -595,6 +616,7 @@ export const PdfView = forwardRef<PdfHandle, {
     const current = tools.current!, box = container.current!;
     let cancelled = false, attached = false;
     if (loaded.current && box.clientHeight > 0) restore.current = { scale: current.viewer.currentScaleValue, top: box.scrollTop, left: box.scrollLeft };
+    pagesReady.current = false;
     setLoading(!loaded.current); setError('');
     const task = pdfjs.getDocument({ url: next.url, enableXfa: false, BinaryDataFactory: CMapData });
     void task.promise.then(async document => {
@@ -716,6 +738,7 @@ export const PdfView = forwardRef<PdfHandle, {
     const tool = toolRef.current;
     if (tool === 'hand') return;
     if (tool === 'delete') { if (!target.point) createMark(target, '', { kind: 'delete' }); return; }
+    if (tool === 'source') { clearSelection(); latest.current.onSource?.(target, shownRef.current.key); return; }
     if (tool === 'magic') {
       const slot = lockedRef.current, stamp = slot === null ? undefined : stamps[slot];
       if (stamp) createMark(target, stamp.instruction, { stamp: stamp.label });
@@ -733,9 +756,10 @@ export const PdfView = forwardRef<PdfHandle, {
   }
   // A selection made first is marked by the tool picked next.
   function pickTool(next: PdfTool) {
+    if (next === 'source' && !latest.current.onSource) return;
     const pending = selection && !selection.handles && !editing ? selection : null;
     choose(next);
-    if (pending && (next === 'note' || next === 'delete' || next === 'magic')) { toolRef.current = next; mark(selected(pending)); }
+    if (pending && (next === 'note' || next === 'delete' || next === 'magic' || next === 'source')) { toolRef.current = next; mark(selected(pending)); }
   }
   function lock(slot: number | null) {
     if (slot === null || !stamps[slot]) { setLocked(null); return; }
@@ -804,7 +828,7 @@ export const PdfView = forwardRef<PdfHandle, {
     </div>
     {findOpen && <PdfFind inputRef={findInput} query={query} matches={matches} notFound={notFound} onQuery={text => { setQuery(text); search(false, false, text); }} onNext={previous => search(true, previous)} onClose={closeFind}/>}
     <div className="pdf-body">
-    {markable && <PdfToolRail tool={tool} onTool={pickTool} group={props.group || null} onGroup={props.onGroupChange} disabled={props.markingDisabled} suspended={props.suspended} editing={Boolean(editing)} stamps={stamps} locked={locked} onLock={slot => slot === null ? setLocked(null) : lock(slot)} history={props.history}/>}
+    {markable && <PdfToolRail tool={tool} onTool={pickTool} group={props.group || null} onGroup={props.onGroupChange} disabled={props.markingDisabled} suspended={props.suspended} editing={Boolean(editing)} stamps={stamps} locked={locked} onLock={slot => slot === null ? setLocked(null) : lock(slot)} history={props.history} sourceTool={Boolean(props.onSource)}/>}
     <div className="pdf-scroll-host">
       <div ref={container} className="pdf-container" tabIndex={0} aria-label={t('PDF pages')}>
         <div ref={inner} className="pdfViewer"/>
@@ -865,12 +889,15 @@ export const PdfView = forwardRef<PdfHandle, {
       {wheel?.target.page === number - 1 && (wheel.target.point ? <div className="note-point draft" style={center(wheel.target.rect)}/>
         : (wheel.target.rects.length ? wheel.target.rects : [wheel.target.rect]).map((rect, index) => <div key={index} className={(wheel.target.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>))}
       {draft?.page === number - 1 && <div className="note-box draft" style={percent(draft.rect)}/>}
+      {props.passage?.page === number - 1 && props.passage.marks.map((rect, index) => <div key={index} className="source-mark" style={percent(rect)}/>)}
       {flash?.page === number - 1 && <div key={flash.id} className="problem-flash" style={percent(flash.rect)}/>}
       {selection?.handles && selection.page === number - 1 && !editing && <>
         {selection.rects.map((rect, index) => <div key={index} className="note-mark draft" style={percent(rect)}/>)}
         {(['from', 'to'] as const).map(end => { const [x, top, bottom] = selection.handles![end]; return <span key={end} className="select-handle" data-end={end} style={{ left: `${x * 100}%`, top: `${top * 100}%`, height: `${(bottom - top) * 100}%` }}/>; })}
       </>}
       {markable && selection?.page === number - 1 && !editing && (active === 'select' || active === 'note' || selection.handles) && <button type="button" className={'add-note' + (selection.handles ? ' touch' : '')} aria-label={pillTool === 'delete' ? t('Delete') : pillTool === 'magic' ? t('Quick notes') : pillGroup ? t('Add to {group}', { group: groupName(pillGroup) }) : t('Add note')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { if (pillTool) mark(selected(selection)); else startNote(); }}>{pillTool === 'delete' ? <><Icon name="toolStrike" size={14}/>{t('Delete')}</> : pillTool === 'magic' ? <><Icon name="toolMagic" size={14}/>{t('Quick notes')}</> : <><Icon name="pencil" size={14}/><GroupAction group={pillGroup}/></>}</button>}
+      {/* Beside "Add note", the Select tool also offers the passage's LaTeX. */}
+      {markable && props.onSource && selection?.page === number - 1 && !selection.handles && !editing && active === 'select' && <button type="button" className="add-source" aria-label={t('Edit source')} title={t('Edit source')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { const target = selected(selection); clearSelection(); props.onSource!(target, shownRef.current.key); }}><Icon name="toolSource" size={15}/></button>}
       {editing?.page === number - 1 && <>
         {editing.point ? <div className="note-point draft" style={center(editing.rect)}/> : (editing.rects.length ? editing.rects : [editing.rect]).map((rect, index) => <div key={index} className={(editing.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>)}
         <PdfNoteCard note={{ rect: editing.rect, comment: '', ...(editing.point ? { kind: 'point' as const } : {}) }} number={notes.length + 1} index={0} total={1} selected={false} busy={noteLocked} error={noteError}
