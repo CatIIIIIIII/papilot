@@ -11,6 +11,10 @@ import { taskCaptionFrom } from '../src/task-caption.ts';
 import { setSkillInstructions, setSkillMetadata, skillInstructions, skillMetadata } from '../src/skill-metadata.ts';
 import { graphRows } from '../src/web/git-graph.ts';
 
+// CI seeds a commit's run from its SHA: rerunning it repeats the same inputs,
+// and each new commit tries new ones.
+if (process.env.GITHUB_SHA) fc.configureGlobal({ seed: Number.parseInt(process.env.GITHUB_SHA.slice(0, 8), 16) | 0 });
+
 // Author-written text: any characters, plus the line breaks, list markers and
 // labels that could be mistaken for the message's own structure.
 const prose = fc.array(fc.oneof(
@@ -44,7 +48,14 @@ test('the chat reads back every PDF note from the message that carried it', () =
       quote: note.kind !== 'point' && !note.quote ? '' : note.quote,
       comment: note.comment.trim(),
     })));
-  }));
+  }), {
+    // Found by CI: an excerpt line of three backticks followed by one that
+    // looks like the marked text once closed the excerpt early.
+    examples: [[[
+      { id: 'note', projectId: 'paper', key: 'pdf', rect: [0, 0, 1, 1], createdAt: 1, page: 0, quote: '', comment: '', source: { file: 'main.tex', lines: [1, 1], excerpt: '```\nPDF text: "' } },
+      { id: 'note', projectId: 'paper', key: 'pdf', rect: [0, 0, 1, 1], createdAt: 1, page: 0, quote: '', comment: '', source: null },
+    ]]],
+  });
 });
 
 test('any other message is not mistaken for PDF notes', () => {

@@ -12,6 +12,10 @@ import { wordDiff } from "../../src/web/model.ts";
 import { latexTokens } from "../../src/web/LatexInput.tsx";
 import type { Op, Span } from "../../src/types.ts";
 
+// CI seeds a commit's run from its SHA: rerunning it repeats the same inputs,
+// and each new commit tries new ones.
+if (process.env.GITHUB_SHA) fc.configureGlobal({ seed: Number.parseInt(process.env.GITHUB_SHA.slice(0, 8), 16) | 0 });
+
 // Manuscript-like text: commands, groups, math, comments, CJK, punctuation
 // and the spacing and line endings authors leave.
 const piece = fc.constantFrom(

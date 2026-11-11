@@ -40,7 +40,10 @@ export function reviewNotesInstructions(notes: NoteSummary[], request = '') {
 export function notesInstructions(notes: Annotation[], request = '', groupInstructions: GroupInstructions = {}) {
   const items = notes.map((note, index) => {
     const where = noteWhere(note);
-    const source = note.source?.excerpt ? ['   LaTeX source of the marked region:', '   ```latex', ...note.source.excerpt.split('\n').map(line => '   ' + line), '   ```'] : [];
+    // As in Markdown, the fence is longer than any run of backticks in the
+    // excerpt, so no line of the excerpt can close it.
+    const fence = '`'.repeat(Math.max(3, ...[...(note.source?.excerpt ?? '').matchAll(/`+/g)].map(run => run[0].length + 1)));
+    const source = note.source?.excerpt ? ['   LaTeX source of the marked region:', `   ${fence}latex`, ...note.source.excerpt.split('\n').map(line => '   ' + line), `   ${fence}`] : [];
     return [`${index + 1}. ${heading({ ...note, where })}`, ...source, marked(note), `${NOTE.slice(1)}${comment(note)}`].join('\n');
   });
   const scope = request.trim() ? `follow both the overall request and the notes.\n\nOverall request:\n${request.trim()}` : 'change only what the notes ask for.';
@@ -57,11 +60,13 @@ export function readNotesInstructions(text: string): NoteSummary[] | null {
     const head = block.match(/^\d+\. (.*)\n/);
     if (!head) return null;
     let rest = block.slice(head[0].length);
-    if (rest.startsWith('   LaTeX source of the marked region:\n   ```latex\n')) {
-      // The excerpt may hold a fence of its own; the closing one is followed by the marked text.
-      const end = rest.match(/\n {3}```\n(?= {3}(?:PDF text: "|Marked point \(‸\) in this PDF line: "|Marked region: ))/);
+    const fenced = /^ {3}LaTeX source of the marked region:\n {3}(`{3,})latex\n/.exec(rest);
+    if (fenced) {
+      // The closing fence has the opening fence's length and is followed by
+      // the marked text. Messages written before fences grew always used three.
+      const end = new RegExp(`\\n {3}${fenced[1]}\\n(?= {3}(?:PDF text: "|Marked point \\(‸\\) in this PDF line: "|Marked region: ))`).exec(rest);
       if (!end) return null;
-      rest = rest.slice(end.index! + end[0].length);
+      rest = rest.slice(end.index + end[0].length);
     }
     const note = rest.indexOf(NOTE);
     if (note < 0) return null;
