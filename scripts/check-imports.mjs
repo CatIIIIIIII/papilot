@@ -37,9 +37,9 @@ try {
   await page.goto(`http://127.0.0.1:${server.server.address().port}`);
   await page.getByRole('button', { name: 'Add paper', exact: true }).first().click();
   let dialog = page.getByRole('dialog', { name: 'Add a paper' }); await dialog.waitFor();
-  assert.equal(await page.getByLabel('Folder path', { exact: true }).isVisible(), false);
-  const [folderButton, zipButton] = await dialog.locator('.import-options button').evaluateAll(buttons => buttons.map(button => { const rect = button.getBoundingClientRect(); return { y: rect.y, width: rect.width }; }));
-  assert.ok(Math.abs(folderButton.y - zipButton.y) < 1); assert.ok(Math.abs(folderButton.width - zipButton.width) < 1);
+  assert.equal(await page.getByLabel('Folder path', { exact: true }).isVisible(), true);
+  const [folderButton, zipButton] = await dialog.locator('.import-options button').evaluateAll(buttons => buttons.map(button => { const rect = button.getBoundingClientRect(); return { y: rect.y, height: rect.height }; }));
+  assert.ok(Math.abs(folderButton.y - zipButton.y) < 1); assert.ok(folderButton.height <= 32 && zipButton.height <= 32);
   await dialog.screenshot({ animations: 'disabled', path: 'test-results/import-start.png' });
   const transfer = await page.evaluateHandle(() => { const transfer = new DataTransfer(); transfer.items.add(new File(['fixture zip bytes'], 'paper.zip', { type: 'application/zip' })); return transfer; });
   await page.locator('.import-drop').dispatchEvent('drop', { dataTransfer: transfer });
@@ -84,7 +84,6 @@ try {
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
   await page.getByText('Your paper compiled successfully. It is ready for editing.').waitFor();
   await page.getByRole('button', { name: 'Choose different files', exact: true }).click();
-  await page.getByText('Enter a folder path', { exact: true }).click();
   const builds = requests.filter(request => request.route.endsWith('/build')).length;
   await page.getByLabel('Folder path', { exact: true }).fill('/papers/large-local-paper');
   await page.getByRole('button', { name: 'Read folder', exact: true }).click();

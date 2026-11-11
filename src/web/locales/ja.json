@@ -371,7 +371,6 @@
   "Editing light mode colors. Changes are saved automatically.": "ライトモードの配色を編集中です。変更は自動的に保存されます。",
   "Elapsed: {time}": "経過時間：{time}",
   "Enable shortcut: {action}": "ショートカットを有効化: {action}",
-  "Enter a folder path": "フォルダのパスを入力",
   "Environment": "実行環境",
   "Environment variable": "環境変数",
   "Errors": "エラー",

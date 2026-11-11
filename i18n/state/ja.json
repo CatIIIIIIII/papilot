@@ -1614,11 +1614,6 @@
     "textHash": "9c7b166989a795f517a6c8db8c5ac757371e68625bd2015f3b1fe994b74bf926",
     "model": "gemini-4-argon-medium"
   },
-  "Enter a folder path": {
-    "revision": "4395aff2a79c035773ae5ff51a2e96df9089cc0e768b423aa5311dbf2005696d",
-    "textHash": "56748a9e9cc7e8a774c4d985b1dc0489e40c68d930c71150e581f428e33b119c",
-    "model": "gemini-4-argon-high"
-  },
   "Environment variable": {
     "revision": "7b495ebed24e1a012888eb43c37d5d44098a6cbb028d109afb407c2391e3c9fa",
     "textHash": "21f21b31b1341a2f409510f00683fee8d9d4e88213a016fd277b0d621b49ba8a",

@@ -162,7 +162,6 @@ export const zhCN: Record<string, string> = {
   'Choose a folder to upload a copy. To use original files, open it in the desktop app.': '选择文件夹并上传副本。使用桌面版可直接打开原始文件。',
   'Import a separate copy from Overleaf or a ZIP archive.': '从 Overleaf 或 ZIP 压缩包导入一份副本。',
   'Or drop a folder or ZIP here': '也可以把文件夹或 ZIP 拖到这里',
-  'Enter a folder path': '手动输入文件夹路径',
   'Drop one folder or LaTeX ZIP file.': '请拖入一个文件夹或 LaTeX ZIP 文件。',
   'No files found in this folder.': '这个文件夹中没有可导入的文件。',
   'Could not detect a main file. Enter its path relative to the paper folder.': '未能识别主文件，请输入它相对于论文文件夹的路径。',

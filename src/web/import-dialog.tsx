@@ -103,56 +103,88 @@ export function ImportDialog({ api, agent, canRepair, onDone, onClose }: { api: 
     : /fontspec|Unicode character|xeCJK/i.test(failure) ? t('This paper may need XeLaTeX. Change the engine below and retry.')
     : /not found|missing|cannot find/i.test(failure) ? t('A package, font or source file may be missing. Check the details below, restore the missing file or ask for help.')
     : t('Check the main file and engine, or ask the assistant to fix compilation. You can also edit the saved files and retry.');
+  const canFinish = Boolean(draft?.versioned && !working);
+  const dirty = Boolean(draft && (form.main !== draft.main || form.engine !== draft.engine || form.name !== draft.name));
+  const submitPrimary = !working && (!canFinish || dirty);
+  const folderAt = draft ? Math.max(0, draft.path.replace(/[\\/]+$/, '').replaceAll('\\', '/').lastIndexOf('/')) : 0;
+  const step2 = draft?.versioned ? 'done' : working ? 'active' : draft?.phase === 'failed' ? 'failed' : '';
+  const step3 = draft?.phase === 'ready' ? 'done' : draft?.versioned && working ? 'active' : draft?.versioned && draft?.phase === 'failed' ? 'failed' : '';
   function close() { if (!busy) onClose(); }
   return <dialog ref={dialog} className="modal-backdrop" aria-labelledby="import-title" onKeyDown={keepDialogFocus} onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}>
     <section className="modal import-dialog">
-      <button className="modal-close icon-button" aria-label={t('Close')} disabled={busy} onClick={close}><Icon name="close"/></button>
+      <button type="button" className="modal-close icon-button" aria-label={t('Close')} disabled={busy} onClick={close}><Icon name="close"/></button>
       <h2 id="import-title">{t('Add a paper')}</h2>
-      <p className="modal-description">{t('Choose a folder or ZIP, or drag it here.')}</p>
       {!draft ? <>
+        <p className="modal-description">{t('Choose a folder or ZIP, or drag it here.')}</p>
         <div className={'import-drop' + (dragging ? ' dragging' : '')} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }} onDrop={event => { event.preventDefault(); setDragging(false); if (!locked) drop(event.dataTransfer); }}>
           <div className="import-options">
-            <div className="import-option"><Icon name="folder" size={28}/><strong>{t('Open a folder')}</strong>
+            <div className="import-option">
+              <div className="import-option-head"><Icon name="folder" size={17}/><strong>{t('Open a folder')}</strong></div>
               <p>{t('Choose a folder to upload a copy. To use original files, open it in the desktop app.')}</p>
-              <button data-choose-folder className="button secondary" disabled={locked} onClick={() => folder.current?.click()}>{t('Choose folder')}</button>
+              <button type="button" data-choose-folder className="button secondary compact" disabled={locked} onClick={() => folder.current?.click()}>{t('Choose folder')}</button>
             </div>
-            <div className="import-option"><Icon name="file" size={28}/><strong>{t('Import a ZIP')}</strong>
+            <div className="import-option">
+              <div className="import-option-head"><Icon name="archive" size={17}/><strong>{t('Import a ZIP')}</strong></div>
               <p>{t('Import a separate copy from Overleaf or a ZIP archive.')}</p>
-              <button className="button secondary" disabled={locked} onClick={() => zip.current?.click()}>{t('Choose ZIP')}</button>
+              <button type="button" className="button secondary compact" disabled={locked} onClick={() => zip.current?.click()}>{t('Choose ZIP')}</button>
             </div>
           </div>
-          <span>{t('Or drop a folder or ZIP here')}</span>
+          <span className="import-drop-hint">{t('Or drop a folder or ZIP here')}</span>
         </div>
         <input hidden {...{ webkitdirectory: '' }} ref={folder} type="file" multiple aria-label={t('Choose folder')} onChange={event => { void upload(Array.from(event.target.files || []), false); event.target.value = ''; }}/>
         <input hidden ref={zip} type="file" accept=".zip,application/zip" aria-label={t('Choose ZIP')} onChange={event => { void upload(Array.from(event.target.files || []), true); event.target.value = ''; }}/>
-        <details className="import-path"><summary>{t('Enter a folder path')}</summary><form onSubmit={event => { event.preventDefault(); void run(() => openFolder(form.path)); }}>
-          <label>{t('Folder path')}<input value={form.path} required disabled={locked} maxLength={4000} onChange={event => setForm({ ...form, path: event.target.value })} placeholder={t('/Users/you/papers/my-paper')} spellCheck={false}/></label>
-          <button className="button secondary" disabled={locked}>{t('Read folder')}</button>
-        </form></details>
-        {busy && <p role="status">{t('Reading paper files…')}</p>}
+        <form className="import-path" onSubmit={event => { event.preventDefault(); void run(() => openFolder(form.path)); }}>
+          <label htmlFor="import-folder-path">{t('Folder path')}</label>
+          <div className="import-path-row">
+            <input id="import-folder-path" value={form.path} required disabled={locked} maxLength={4000} onChange={event => setForm({ ...form, path: event.target.value })} placeholder={t('/Users/you/papers/my-paper')} spellCheck={false}/>
+            <button className={'button compact ' + (form.path.trim() ? 'primary' : 'secondary')} disabled={locked}>{t('Read folder')}</button>
+          </div>
+        </form>
+        {busy && <p className="import-reading" role="status"><span className="spinner"/>{t('Reading paper files…')}</p>}
+        {error && <p className="inline-error" role="alert">{error}</p>}
+        <div className="button-row import-footer">
+          <button type="button" className="button secondary compact" disabled={busy} onClick={close}>{t('Cancel')}</button>
+        </div>
       </> : <>
-        <ol className="import-steps" aria-label={t('Import progress')}><li className="done">{t('Files received')}</li><li className={draft.versioned ? 'done' : ''}>{t('Version history')}</li><li className={draft.phase === 'ready' ? 'done' : ''}>{t('PDF compilation')}</li></ol>
-        <p className="import-location">{t('Saved folder')}<br/><code>{draft.path}</code></p>
+        <ol className="import-steps" aria-label={t('Import progress')}>
+          <li className="done"><span className="import-step-badge"><Icon name="check" size={11}/></span><span>{t('Files received')}</span></li>
+          <li className={step2}><span className="import-step-badge">{step2 === 'done' ? <Icon name="check" size={11}/> : step2 === 'active' ? <span className="spinner"/> : step2 === 'failed' ? '!' : '2'}</span><span>{t('Version history')}</span></li>
+          <li className={step3}><span className="import-step-badge">{step3 === 'done' ? <Icon name="check" size={11}/> : step3 === 'active' ? <span className="spinner"/> : step3 === 'failed' ? '!' : '3'}</span><span>{t('PDF compilation')}</span></li>
+        </ol>
+        <div className="import-location" title={draft.path}>
+          <Icon name="folder" size={16}/>
+          <div className="import-location-body">
+            <span className="import-location-label">{t('Saved folder')}</span>
+            <code className="import-location-path"><span className="paper-location-parent">{draft.path.slice(0, folderAt)}</span><span className="paper-location-name">{draft.path.slice(folderAt)}</span></code>
+          </div>
+          {!working && <button type="button" className="button ghost compact" disabled={busy} onClick={() => { browserStorage.removeItem(memoryKey); setDraft(null); setError(''); }}>{t('Choose different files')}</button>}
+        </div>
         <form onSubmit={event => { event.preventDefault(); void build(); }}>
           <label>{t('Paper name')}<input required maxLength={120} value={form.name} disabled={locked} onChange={event => setForm({ ...form, name: event.target.value })}/></label>
           <div className="import-settings"><label>{t('Main TeX file')}<input aria-label={t('Main TeX file')} list="import-main-files" value={form.main} disabled={locked} onChange={event => setForm({ ...form, main: event.target.value })} placeholder="main.tex" spellCheck={false}/><datalist id="import-main-files">{draft.candidates.map(file => <option key={file} value={file}/>)}</datalist></label>
           <label>{t('LaTeX engine')}<ChipSelect className="field-select" label={t('LaTeX engine')} value={form.engine} disabled={locked} onChange={engine => setForm({ ...form, engine })} options={[{ value: 'pdflatex', label: 'pdfLaTeX' }, { value: 'xelatex', label: 'XeLaTeX' }, { value: 'lualatex', label: 'LuaLaTeX' }]}/></label></div>
-          {!draft.candidates.length && <p role="alert">{t('Could not detect a main file. Enter its path relative to the paper folder.')}</p>}
-          {draft.candidates.length > 1 && draft.phase === 'choose' && <p>{t('Several TeX files were found. Check the selected main document before continuing.')}</p>}
+          {!draft.candidates.length && <p className="import-notice warn" role="alert"><Icon name="alert" size={15}/><span>{t('Could not detect a main file. Enter its path relative to the paper folder.')}</span></p>}
+          {draft.candidates.length > 1 && draft.phase === 'choose' && <p className="import-notice"><Icon name="info" size={15}/><span>{t('Several TeX files were found. Check the selected main document before continuing.')}</span></p>}
           {working && <BuildStatus draft={draft}/>}
-          {draft.phase === 'ready' && <p className="import-success" role="status">{t('Your paper compiled successfully. It is ready for editing.')}</p>}
-          {(failure || draft.phase === 'failed') && <div className="import-problem" role="alert"><strong>{preparationFailure ? t('Could not prepare the paper') : t('The paper needs a little help')}</strong><p>{hint}</p><details><summary>{t('Compilation details')}</summary><pre>{failure}</pre></details></div>}
-          {draft.summary && <div className="import-summary"><strong>{t('Repair summary')}</strong><p>{draft.summary}</p><p>{t('Repairs are saved as uncommitted changes. Review them in the paper’s file changes.')}</p></div>}
-          <div className="button-row import-actions">
-            {draft.phase === 'failed' && !preparationFailure && <button type="button" className="button secondary" disabled={locked || !canRepair || !form.main} onClick={() => void build(true)}>{t('Help fix compilation')}</button>}
-            <button className="button secondary" disabled={locked || !form.main || !form.name.trim()} type="submit">{draft.phase === 'choose' ? t('Prepare and compile') : t('Retry compilation')}</button>
-            {draft.versioned && !working && <button type="button" className="button primary" disabled={busy || form.main !== draft.main || form.engine !== draft.engine || form.name !== draft.name} onClick={() => void finish()}>{draft.phase === 'ready' ? t('Open paper') : t('Add and fix later')}</button>}
+          {draft.phase === 'ready' && <p className="import-success" role="status"><Icon name="check" size={16}/><span>{t('Your paper compiled successfully. It is ready for editing.')}</span></p>}
+          {(failure || draft.phase === 'failed') && <div className={'import-problem' + (preparationFailure ? ' danger-card' : '')} role="alert">
+            <div className="import-problem-head"><Icon name="alert" size={16}/><strong>{preparationFailure ? t('Could not prepare the paper') : t('The paper needs a little help')}</strong></div>
+            <p>{hint}</p>
+            {draft.phase === 'failed' && !preparationFailure && <div className="import-problem-actions">
+              <button type="button" className="button secondary compact" disabled={locked || !canRepair || !form.main} onClick={() => void build(true)}><Icon name="spark" size={14}/>{t('Help fix compilation')}</button>
+              {!canRepair && <span>{t('Connect an assistant in Settings to help repair this paper.')}</span>}
+            </div>}
+            <details><summary><Icon name="chevronRight" size={13}/>{t('Compilation details')}</summary><pre>{failure}</pre></details>
+          </div>}
+          {draft.summary && <div className="import-summary"><div className="import-summary-head"><Icon name="spark" size={15}/><strong>{t('Repair summary')}</strong></div><p>{draft.summary}</p><p className="import-summary-note">{t('Repairs are saved as uncommitted changes. Review them in the paper’s file changes.')}</p></div>}
+          {error && <p className="inline-error" role="alert">{error}</p>}
+          <div className="button-row import-footer">
+            <button type="button" className="button ghost compact import-later" disabled={busy} onClick={close}>{t('Continue later')}</button>
+            <button className={'button compact ' + (submitPrimary ? 'primary' : 'secondary')} disabled={locked || !form.main || !form.name.trim()} type="submit">{draft.phase === 'choose' ? t('Prepare and compile') : t('Retry compilation')}</button>
+            {canFinish && <button type="button" className={'button compact ' + (dirty ? 'secondary' : 'primary')} disabled={busy || dirty} onClick={() => void finish()}>{draft.phase === 'ready' ? t('Open paper') : t('Add and fix later')}</button>}
           </div>
-          {draft.phase === 'failed' && !preparationFailure && !canRepair && <p className="modal-description">{t('Connect an assistant in Settings to help repair this paper.')}</p>}
         </form>
       </>}
-      {error && <p className="inline-error" role="alert">{error}</p>}
-      <div className="button-row import-footer">{draft && !working && <button type="button" className="button ghost" disabled={busy} onClick={() => { browserStorage.removeItem(memoryKey); setDraft(null); setError(''); }}>{t('Choose different files')}</button>}<button className="button secondary" disabled={busy} onClick={close}>{draft ? t('Continue later') : t('Cancel')}</button></div>
     </section>
   </dialog>;
 }

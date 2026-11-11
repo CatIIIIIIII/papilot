@@ -1,40 +1,129 @@
-.modal.import-dialog { width: min(600px, calc(100vw - 32px)); }
-.import-drop { border: 1px dashed var(--line); border-radius: 12px; padding: 25px 16px; display: flex; align-items: center; flex-direction: column; gap: 12px; text-align: center; }
-.import-drop.dragging { background: var(--accent-soft); border-color: var(--accent); }
-.import-drop > span, .import-location, .import-path p { font-size: 12px; color: var(--text-3); }
-.import-drop .button-row { margin-top: 4px; justify-content: center; }
-.import-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; width: 100%; }
-.import-option { display: flex; align-items: center; flex-direction: column; gap: 12px; }
-.import-option p { font-size: 12px; color: var(--text-3); line-height: 1.6; margin: 0; flex: 1; }
-.import-option .button { width: 100%; }
-.import-path { margin: 20px 0; }
-.import-path summary, .import-problem summary { cursor: pointer; }
-.import-path summary { font-size: 12px; color: var(--text-3); }
-.import-path form { margin-top: 12px; }
-.import-steps { display: flex; list-style: none; gap: 12px; padding: 0; margin: 20px 0; font-size: 12px; color: var(--text-3); }
-.import-steps li { border-bottom: 2px solid var(--line); padding-bottom: 8px; flex: 1; }
-.import-steps li.done { border-color: var(--accent); color: var(--text); }
-.import-location { overflow-wrap: anywhere; line-height: 1.6; }
-.import-settings { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 12px; }
-.import-settings .field-select { border-color: var(--line); border-radius: 7px; }
-.import-status { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; }
-.import-status > .spinner { margin-top: 3px; }
+.modal.import-dialog { width: min(540px, calc(100vw - 32px)); }
+.import-dialog .modal-description { margin-bottom: 16px; }
+
+/* Phase 1: Folder / ZIP picker & dropzone (no tinted fills, compact actions) */
+.import-drop { border: 1px dashed var(--line-strong); border-radius: var(--r-lg); background: transparent; padding: 18px 18px 13px; display: flex; flex-direction: column; transition: border-color .15s, box-shadow .15s; }
+.import-drop.dragging { border-color: var(--accent); box-shadow: var(--ring); }
+.import-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+.import-option { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; text-align: left; }
+.import-option:first-child { padding-right: 18px; border-right: 1px solid var(--line); }
+.import-option:last-child { padding-left: 18px; }
+.import-option-head { display: flex; align-items: center; gap: 7px; color: var(--text); }
+.import-option-head > svg { flex: none; color: var(--text-3); }
+.import-option-head strong { font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.import-option p { margin: 0; flex: 1; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.import-option .button { align-self: flex-start; width: auto; margin-top: 6px; }
+.import-drop-hint { width: 100%; margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-3); line-height: 1.4; text-align: center; }
+
+/* Direct local path field */
+.import-path { margin: 16px 0 0; }
+.import-dialog .import-path > label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--text); }
+.import-path-row { display: flex; align-items: center; gap: 8px; }
+.import-dialog input, .import-dialog .chip-select.field-select { height: 34px; padding: 0 10px; border-radius: 7px; font-size: 13.5px; box-shadow: none; }
+.import-dialog input:focus, .import-dialog .chip-select.field-select:focus-visible { border-color: var(--accent); box-shadow: var(--ring); }
+.import-path-row input { margin-top: 0; flex: 1; min-width: 0; height: 32px; font-size: 13px; }
+.import-path-row .button { flex: none; height: 32px; }
+.import-reading { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 13px; color: var(--text-2); }
+
+/* Phase 2: Stepper */
+.import-steps { display: flex; align-items: center; gap: 8px; list-style: none; padding: 0; margin: 12px 0 14px; font-size: 12.5px; color: var(--text-3); }
+.import-steps li { display: flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
+.import-steps li:not(:last-child) { flex: 1; }
+.import-steps li:not(:last-child)::after { content: ""; flex: 1; min-width: 12px; height: 1px; margin-left: 3px; background: var(--line); }
+.import-steps li.done::after { background: color-mix(in srgb, var(--green) 32%, var(--line)); }
+.import-steps li.done, .import-steps li.active, .import-steps li.failed { color: var(--text); font-weight: 500; }
+.import-step-badge { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); background: transparent; color: var(--text-3); font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.import-steps li.done .import-step-badge { color: var(--green); border-color: color-mix(in srgb, var(--green) 42%, var(--line)); }
+.import-steps li.active .import-step-badge { border: 0; }
+.import-steps li.active .spinner { width: 15px; height: 15px; border-width: 1.75px; border-color: var(--accent-line); border-top-color: var(--accent); }
+.import-steps li.failed .import-step-badge { color: var(--amber-text); border-color: var(--amber-line); }
+
+/* Saved folder row */
+.import-location { display: flex; align-items: center; gap: 9px; padding: 10px 0; margin: 0 0 15px; border-block: 1px solid var(--line); background: transparent; }
+.import-location > svg { flex: none; color: var(--text-3); }
+.import-location-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.import-location-label { font-size: 11.5px; font-weight: 500; line-height: 1.3; color: var(--text-3); }
+.import-location-path { display: flex; min-width: 0; font-size: 12.5px; line-height: 1.4; color: var(--text); white-space: nowrap; }
+.import-location .button { flex: none; margin-right: -6px; }
+
+/* Paper settings fields */
+.import-dialog form > label { margin-bottom: 13px; font-size: 13px; }
+.import-settings { display: grid; grid-template-columns: minmax(0, 1fr) 148px; gap: 12px; }
+.import-settings > label { display: block; min-width: 0; font-size: 13px; font-weight: 500; color: var(--text); margin: 0; }
+
+/* Notices, live compilation progress, failure & repair sections */
+.import-notice { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.import-notice > svg { flex: none; margin-top: 2px; color: var(--text-3); }
+.import-notice.warn { border-color: var(--amber-line); color: var(--amber-text); }
+.import-notice.warn > svg { color: var(--amber-text); }
+
+.import-status { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; font-size: 13px; }
+.import-status > .spinner { margin-top: 3px; border-color: var(--accent-line); border-top-color: var(--accent); }
 .import-status-body { flex: 1; min-width: 0; display: grid; gap: 8px; }
 .import-status-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .import-elapsed, .import-pages { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .import-progress { display: flex; align-items: center; gap: 10px; }
-.import-progress-track { flex: 1; height: 4px; border-radius: 2px; background: var(--bg-active); overflow: hidden; }
+.import-progress-track { flex: 1; height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .import-progress-track > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .4s ease; }
 .import-progress-track > span.indeterminate { width: 30%; animation: import-pages 1.4s ease-in-out infinite; }
 @keyframes import-pages { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 @media (prefers-reduced-motion: reduce) { .import-progress-track > span { transition: none; } .import-progress-track > span.indeterminate { animation: none; width: 100%; opacity: .4; } }
-.import-problem, .import-summary { padding: 14px; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; font-size: 13px; }
-.import-problem pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto; font-size: 11px; }
-.import-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.import-success { color: var(--accent); }
-.import-actions, .import-footer { flex-wrap: wrap; }
-.import-footer { border-top: 1px solid var(--line); padding-top: 14px; }
-@media (max-width: 480px) { .import-settings { grid-template-columns: minmax(0, 1fr); gap: 0; } .modal.import-dialog { padding: 22px 16px; } .import-actions .button { flex: 1 1 100%; } }
-@media (max-width: 380px) { .import-options { gap: 14px; } }
+
+.import-success { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--green) 32%, var(--line)); border-radius: var(--r); background: transparent; color: var(--green); font-size: 13px; font-weight: 500; line-height: 1.45; }
+.import-success > svg { flex: none; }
+
+.import-problem, .import-summary { padding: 12px 13px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; margin: 14px 0 0; font-size: 12.5px; line-height: 1.55; }
+.import-problem { border-color: var(--amber-line); color: var(--text); }
+.import-problem.danger-card { border-color: var(--red-line); }
+.import-problem-head, .import-summary-head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+.import-problem-head { color: var(--amber-text); }
+.import-problem.danger-card .import-problem-head { color: var(--red); }
+.import-problem-head strong, .import-summary-head strong { font-size: 13px; font-weight: 600; }
+.import-problem > p, .import-summary > p { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.import-problem-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 10px; }
+.import-problem-actions > span { font-size: 12px; color: var(--text-2); }
+.import-problem details { margin-top: 10px; }
+.import-problem summary { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--text-2); cursor: pointer; list-style: none; user-select: none; }
+.import-problem summary::-webkit-details-marker { display: none; }
+.import-problem summary:hover { color: var(--text); }
+.import-problem summary > svg { color: var(--text-3); transition: transform .15s var(--ease); }
+.import-problem details[open] summary > svg { transform: rotate(90deg); }
+.import-problem pre { margin: 8px 0 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto; font: 11.5px/1.55 var(--mono); }
+
+.import-summary-head > svg { color: var(--accent); }
+.import-summary > p { white-space: pre-wrap; }
+.import-summary > .import-summary-note { margin-top: 6px; font-size: 12px; color: var(--text-3); }
+
+.import-dialog .inline-error { margin: 12px 0 0; }
+
+/* Unified dialog footer */
+.modal .import-footer { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
+.import-later { margin-right: auto; margin-left: -8px; padding-inline: 8px; }
+
+@media (max-width: 680px) {
+  .modal.import-dialog .button { min-height: 32px; height: auto; padding-block: 5px; }
+  .modal.import-dialog input { font-size: 16px; height: 36px; }
+  .modal.import-dialog .chip-select.field-select { height: 36px; }
+}
+
+@media (max-width: 520px) {
+  .modal.import-dialog { padding: 22px 18px 18px; }
+  .import-drop { padding: 15px 15px 12px; }
+  .import-options { grid-template-columns: minmax(0, 1fr); }
+  .import-option:first-child { padding-right: 0; padding-bottom: 14px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .import-option:last-child { padding-left: 0; padding-top: 14px; }
+  .import-steps { flex-wrap: wrap; gap: 8px 14px; }
+  .import-steps li:not(:last-child) { flex: 0 1 auto; }
+  .import-steps li:not(:last-child)::after { display: none; }
+  .import-location { flex-wrap: wrap; gap: 6px 9px; }
+  .import-location-body { flex-basis: calc(100% - 28px); }
+  .import-location .button { margin-left: 17px; margin-right: 0; }
+  .import-settings { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .import-path-row { flex-wrap: wrap; }
+  .import-path-row input { flex-basis: 180px; }
+  .modal .import-footer { gap: 8px; }
+  .modal .import-footer .button { white-space: normal; }
+  .import-later { margin-left: -6px; padding-inline: 6px; }
+}
 
 .import-dialog input[hidden] { display: none; }

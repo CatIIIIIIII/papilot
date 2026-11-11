@@ -371,7 +371,6 @@
   "Editing light mode colors. Changes are saved automatically.": "Farben für den hellen Modus werden bearbeitet. Änderungen werden automatisch gespeichert.",
   "Elapsed: {time}": "Vergangene Zeit: {time}",
   "Enable shortcut: {action}": "Tastenkürzel aktivieren: {action}",
-  "Enter a folder path": "Ordnerpfad eingeben",
   "Environment": "Laufzeitumgebung",
   "Environment variable": "Umgebungsvariable",
   "Errors": "Fehler",
