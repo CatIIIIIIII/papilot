@@ -10,20 +10,17 @@ const task = (overrides: Partial<Task> = {}): Task => ({
   review: { state: 'done', round: 1, counts: { accepted: 1 }, files: [] },
   ...overrides,
 });
-const committed = { hash: 'commit', accepted: 'accepted', at: 1 };
+const committed: Task['delivery'] = { mode: 'commit', accepted: 'accepted', commit: 'main-commit', branch: 'main' };
 
-test('saved task status distinguishes local commits, confirmed pushes and applied changes', () => {
+test('saved task status distinguishes commits and applied changes', () => {
   assert.equal(taskSaveStatus(task()), null);
-  assert.equal(taskSaveStatus(task({ committed })), 'committed');
-  assert.equal(taskSaveStatus(task({ committed: { ...committed, pushed: true } })), 'pushed');
   assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'branch', accepted: 'accepted', commit: 'branch-commit' } })), null);
   assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'commit', accepted: 'accepted', commit: 'main-commit', branch: 'main' } })), 'committed');
   assert.equal(taskSaveStatus(task({ deferred: true, delivery: { mode: 'workspace', accepted: 'accepted' } })), 'applied');
-  assert.equal(taskSaveStatus(task({ deferred: true, committed })), null, 'isolated tasks use their own delivery');
 });
 
 test('new work and unfinished reviews take precedence over an earlier saved result', () => {
-  const saved = task({ committed: { ...committed, pushed: true } });
+  const saved = task({ deferred: true, delivery: committed });
   for (const status of ['running', 'queued', 'building', 'waiting_input', 'interrupted', 'failed', 'uncertain', 'deleting'] as TaskStatus[]) {
     assert.equal(taskSaveStatus({ ...saved, status }), null, status);
   }

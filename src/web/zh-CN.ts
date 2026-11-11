@@ -234,7 +234,7 @@ export const zhCN: Record<string, string> = {
   // Task status
   'Ready': '就绪', 'Queued': '排队中', 'Needs your reply': '等待你的回复', 'Preparing task results': '正在整理任务结果', 'Ready for review': '待审阅',
   'Paused': '已暂停', 'Needs attention': '需要处理', 'Check task status': '请检查任务状态', 'Deleting task': '正在删除任务',
-  'Review complete': '审阅完成', 'Completed': '已完成', 'Committed': '已提交', 'Committed and pushed': '已提交并推送', '{agent} is working': '{agent} 正在处理',
+  'Review complete': '审阅完成', 'Completed': '已完成', 'Committed': '已提交', '{agent} is working': '{agent} 正在处理',
 
   // Time
   'now': '刚刚', '{n}m': '{n} 分钟', '{n}h': '{n} 小时', '{n}d': '{n} 天', 'just now': '刚刚', '{time} ago': '{time}前',

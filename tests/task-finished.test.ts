@@ -12,8 +12,6 @@ const task = (overrides: Partial<Task> = {}): Task => ({
 const isolated = (overrides: Partial<Task> = {}) => task({ deferred: true, review: { state: 'done', round: 1, counts: { accepted: 2 }, unsent: 2, comments: 0, files: [] }, delivery: { mode: 'workspace', accepted: 'accepted' }, ...overrides });
 
 test('a decided review whose accepted changes left the task is finished', () => {
-  assert.equal(taskFinished(task()), true, 'older tasks accept straight into the working directory');
-  assert.equal(taskFinished(task({ committed: { hash: 'abc', accepted: 'accepted', at: 1, pushed: true } })), true);
   assert.equal(taskFinished(isolated()), true, 'applied to the working directory');
   assert.equal(taskFinished(isolated({ delivery: { mode: 'branch', accepted: 'accepted', branch: 'papilot/revision', commit: 'abc' } })), false, 'task branch still needs manuscript application');
   assert.equal(taskFinished(task({ review: { state: 'done', round: 1, counts: { accepted: 1, rejected: 1 }, unsent: 2, comments: 0, files: [] } })), true, 'a mixed review needs no feedback');

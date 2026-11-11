@@ -23,7 +23,7 @@ let effectFixture = true, effectRequests = 0;
 const rounds = { 1: { first: 'pending', second: 'pending', third: 'pending', fourth: 'pending' } };
 const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [], archiveRequests = [], deleteRequests = [], predictRequests = [];
 let gitFiles = [];
-let pushError, conflictOnApply = false, combinedOnCommit = false;
+let conflictOnApply = false, combinedOnCommit = false;
 let timeline = [];
 const state = round => ({ task: 'flow', title: task.title, csrf: 'fixture', closed: false, state: task.review.state, latest, history: Object.keys(rounds).map(number => ({ number: Number(number), created: 1793322000 + Number(number) * 120 })), round, revision: `after-${round}`, decisions: rounds[round], comments: {}, undo, job: task.review.job || null });
 function update() {
@@ -94,13 +94,6 @@ await page.route('**/api/**', async route => {
     task.delivery = { mode: body.mode || 'workspace', accepted: 'accepted', ...(body.mode === 'commit' ? { branch: 'main', commit: 'abc1234' } : {}) };
     if (body.mode === 'commit') commitRequests.push(body);
     return route.fulfill({ json: { delivery: task.delivery } });
-  }
-  if (url.pathname.endsWith('/commit')) {
-    const body = route.request().postDataJSON();
-    commitRequests.push(body); gitFiles = []; task.review.files = [];
-    if (task.deferred) task.delivery = { mode: 'branch', branch: 'papilot/flow', commit: 'abc1234', accepted: 'accepted' };
-    else task.committed = { hash: 'abc1234', accepted: `accepted-${commitRequests.length}`, at: Date.now(), pushed: body.push && !pushError };
-    return route.fulfill({ json: { commit: 'abc1234', pushError, git: { branch: 'main', upstream: 'origin/main', remote: true, ahead: 0, behind: 0, head: { hash: 'abc1234', subject: 'Explain the method', date: 2 }, files: [] } } });
   }
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/messages')) { task.status = 'running'; task.review.unsent = 0; return route.fulfill({ json: { ok: true } }); }
@@ -488,12 +481,11 @@ try {
   await viewer().locator('.source-unit').filter({ hasText: 'main.tex · lines 4–4' }).getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(viewer().locator('.mixed-reviewed .side:visible')).toHaveCount(0);
   await expect(viewer().getByText('Reviewed changes · View in History', { exact: true })).toBeVisible();
-  // Existing direct-accept tasks retain their commit form; isolated tasks offer both save choices.
+  // A decided task offers both save choices.
   task.review.unsent = 0; task.review.comments = 0; task.review.files = ['main.tex']; gitFiles = [{ path: 'main.tex', status: 'M', staged: false }];
   await sync();
   const card = viewer().locator('.review-complete');
   const taskStatus = page.locator(`[data-task="${task.id}"] .status`);
-  await expect(card.getByRole('textbox', { name: 'Commit message', exact: true })).toBeVisible();
   task.deferred = true; task.review.files = ['main.tex']; gitFiles = [];
   await sync();
   const applyButton = () => card.getByRole('button', { name: 'Apply to workspace', exact: true });

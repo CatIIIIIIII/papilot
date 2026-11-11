@@ -204,11 +204,6 @@
     "textHash": "7d8309e44966502e7eebd9208bd3f6dcf14667ce835e9e8ed05e28d1482de024",
     "model": "gemini-4-argon-medium"
   },
-  "Commit the task first, then push from Git.": {
-    "revision": "780de6e383eb51c13e2a6189f94e63a73498ac87726cd7b62caad4a05482c12c",
-    "textHash": "a6dbdaf231931d9ce957d91349a43ac068faacae36556765c5daa648d32dd33b",
-    "model": "gemini-4-argon-high"
-  },
   "Confirm permanent task deletion before continuing.": {
     "revision": "a0aaa3af6af027a6d25daaee4467dce2c68538aa2b550946e9bc316d9518bb9a",
     "textHash": "cb993f8f87ad8beefe62eec9ea9365a9782e11e51f975c935ed6303b8683f9c0",

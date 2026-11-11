@@ -47,7 +47,6 @@
   "Codex is installed but could not be run. Reinstall Codex, then select Reconnect.": "Codex 已安裝，但無法執行。請重新安裝 Codex，然後選取「重新連線」。",
   "Codex is not connected.": "Codex 未連線。",
   "Codex was not found on this computer. Install Codex, then select Reconnect.": "在此電腦上找不到 Codex。請先安裝 Codex，然後選取「重新連線」。",
-  "Commit the task first, then push from Git.": "請先提交任務，再從 Git 推送。",
   "Confirm permanent task deletion before continuing.": "繼續前請確認永久刪除任務。",
   "Could not check for updates.": "無法檢查更新。",
   "Could not check for updates. Try again when connected.": "無法檢查更新。請在連線後再試一次。",

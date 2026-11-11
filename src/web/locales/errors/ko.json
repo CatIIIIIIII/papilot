@@ -47,7 +47,6 @@
   "Codex is installed but could not be run. Reinstall Codex, then select Reconnect.": "Codex가 설치되어 있지만 실행할 수 없습니다. Codex를 다시 설치한 후 다시 연결을 선택하세요.",
   "Codex is not connected.": "Codex가 연결되어 있지 않습니다.",
   "Codex was not found on this computer. Install Codex, then select Reconnect.": "이 컴퓨터에서 Codex를 찾을 수 없습니다. Codex를 설치한 후 다시 연결을 선택하세요.",
-  "Commit the task first, then push from Git.": "먼저 작업을 커밋한 후 Git에서 푸시하세요.",
   "Confirm permanent task deletion before continuing.": "계속하기 전에 작업 영구 삭제를 확인하세요.",
   "Could not check for updates.": "업데이트를 확인할 수 없습니다.",
   "Could not check for updates. Try again when connected.": "업데이트를 확인할 수 없습니다. 네트워크에 연결된 상태에서 다시 시도하세요.",

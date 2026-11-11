@@ -66,7 +66,7 @@ export function annotateReviewState(value: unknown, tasks: readonly Task[]): unk
   const queueRejects = Boolean(task && !decisionLock && task.deferred && AGENT_TURN.includes(task.status));
   if (task && !decisionLock && AGENT_TURN.includes(task.status)) rejectLock = "The agent is editing this task's files. Pause it before editing changes or undoing a rejection. You can still accept, reject and comment.";
   // Task-branch commits from older versions still need manuscript application.
-  return { ...state, decisionLock, commentLock, rejectLock, ...(queueRejects ? { queueRejects: true } : {}), ...(task ? { workspace: { ...(task.reconciliation ? { merging: true } : {}), status: task.status, unsent: task.review?.unsent ?? 0, comments: task.review?.comments ?? 0, accepted: task.review?.files?.length || (task.committed || task.delivery?.pending || task.delivery?.mode === 'branch' ? 1 : 0), ...(task.deferred ? { deferred: true, destination: task.delivery?.pending ? undefined : task.delivery?.mode } : {}) } } : {}) };
+  return { ...state, decisionLock, commentLock, rejectLock, ...(queueRejects ? { queueRejects: true } : {}), ...(task ? { workspace: { ...(task.reconciliation ? { merging: true } : {}), status: task.status, unsent: task.review?.unsent ?? 0, comments: task.review?.comments ?? 0, accepted: task.review?.files?.length || (task.delivery?.pending || task.delivery?.mode === 'branch' ? 1 : 0), ...(task.deferred ? { deferred: true, destination: task.delivery?.pending ? undefined : task.delivery?.mode } : {}) } } : {}) };
 }
 
 export function allowedReviewRoute(route: string, method: string): boolean {

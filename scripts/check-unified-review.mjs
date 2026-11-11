@@ -27,7 +27,7 @@ let effectFixture = false, effectRequests = 0;
 const rounds = { 1: { first: 'pending', second: 'pending', third: 'pending', fourth: 'pending' } };
 const actions = [], writes = [], messageRequests = [], commitRequests = [], applyRequests = [], archiveRequests = [], deleteRequests = [];
 let gitFiles = [];
-let pushError, conflictOnApply = false, combinedOnCommit = false;
+let conflictOnApply = false, combinedOnCommit = false;
 let timeline = [];
 let noteResults = [];
 const state = round => ({ task: 'flow', title: task.title, csrf: 'fixture', closed: false, state: task.review.state, latest, history: Object.keys(rounds).map(number => ({ number: Number(number), created: 1793322000 + Number(number) * 120 })), round, revision: `after-${round}`, decisions: rounds[round], comments: {}, undo, job: null });
@@ -99,13 +99,6 @@ await page.route('**/api/**', async route => {
     task.delivery = { mode: body.mode || 'workspace', accepted: 'accepted', ...(body.mode === 'commit' ? { branch: 'main', commit: 'abc1234' } : {}) };
     if (body.mode === 'commit') commitRequests.push(body);
     return route.fulfill({ json: { delivery: task.delivery } });
-  }
-  if (url.pathname.endsWith('/commit')) {
-    const body = route.request().postDataJSON();
-    commitRequests.push(body); gitFiles = []; task.review.files = [];
-    if (task.deferred) task.delivery = { mode: 'branch', branch: 'papilot/flow', commit: 'abc1234', accepted: 'accepted' };
-    else task.committed = { hash: 'abc1234', accepted: `accepted-${commitRequests.length}`, at: Date.now(), pushed: body.push && !pushError };
-    return route.fulfill({ json: { commit: 'abc1234', pushError, git: { branch: 'main', upstream: 'origin/main', remote: true, ahead: 0, behind: 0, head: { hash: 'abc1234', subject: 'Explain the method', date: 2 }, files: [] } } });
   }
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/messages')) { const message = route.request().postDataJSON(); sent.push(message); if (failSend) return route.fulfill({ status: 503, json: { error: 'Try again.' } }); task.review.unsent = 0; task.review.comments = 0; return route.fulfill({ json: { ok: true } }); }

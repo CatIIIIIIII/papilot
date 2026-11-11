@@ -1074,7 +1074,7 @@ test('archiving survives a restart, retains task history and review, and restore
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-archive-'));
   const file = path.join(dir, 'state.db'), f = fixture(undefined, { file });
   try {
-    f.store.updateTask(f.task.id, { review: summary, committed: { hash: 'abc', accepted: 'text', at: 1 } });
+    f.store.updateTask(f.task.id, { review: summary, delivery: { mode: 'commit', accepted: 'text', commit: 'abc', branch: 'main' } });
     f.store.saveItem({ id: 'message', taskId: f.task.id, type: 'user', text: 'Keep this conversation.', createdAt: 1 });
     const before = f.store.task(f.task.id), items = f.store.items(f.task.id);
     const archived = f.workspace.archiveTask(f.task.id, true);
@@ -1088,7 +1088,7 @@ test('archiving survives a restart, retains task history and review, and restore
       reopened.recover();
       assert.equal(reopened.task(f.task.id).archivedAt, archived.archivedAt);
       assert.deepEqual(reopened.items(f.task.id), items);
-      assert.deepEqual(reopened.task(f.task.id).committed, before.committed);
+      assert.deepEqual(reopened.task(f.task.id).delivery, before.delivery);
     } finally { reopened.close(); }
     const restored = f.workspace.archiveTask(f.task.id, false);
     assert.equal(restored.archivedAt, null);
@@ -2257,7 +2257,7 @@ for (const mode of ['workspace', 'commit'] as const) test(`tasks save to the man
     assert.equal(f.codex.calls.length, 0);
     if (mode === 'commit') {
       assert.equal(disk.repo.rev('HEAD'), result.delivery?.commit);
-      assert.equal((await f.workspace.commitTask(f.task.id, 'Retry')).commit, result.delivery?.commit);
+      assert.equal((await f.workspace.applyTask(f.task.id, false, { message: 'Retry' })).delivery?.commit, result.delivery?.commit);
     } else assert.deepEqual((await f.workspace.applyTask(f.task.id)).delivery, result.delivery);
   } finally { f.close(); await disk.close(); }
 });
@@ -2367,67 +2367,6 @@ for (const stage of ['reviewed', 'interrupted', 'waiting_input'] as const) test(
     await f.workspace.refresh(f.task.id);
     assert.equal(f.store.runs().length, 0, 'do not replace a review or restart paused work');
     assert.match(disk.read(METHOD), /Latest text/);
-  } finally { f.close(); await disk.close(); }
-});
-
-test('a task commits only what it accepted since its last commit, never during a review write, and can push', async () => {
-  const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
-  const disk = new Fixture();
-  const app = disk.app();
-  const f = fixture(undefined, { file: path.join(disk.base, 'state.db') });
-  try {
-    const target = app.tasks.create('p-task', 'Accept twice', [], ['paper']);
-    disk.edit(target, METHOD, 'Method sentence 2.', 'First accepted sentence.');
-    disk.edit(target, METHOD, 'Detail sentence 15.', 'Second accepted sentence.');
-    disk.write('notes.txt', 'Not part of the task.');
-    f.store.saveProject({ id: f.task.projectId, name: 'Temporary paper', path: disk.root, createdAt: 1 });
-    await assert.rejects(f.workspace.commitTask(f.task.id, 'Nothing yet'), /no accepted changes/);
-    const round = fakeRound(app, target.name);
-    await app.review.decide(target.name, { id: 'accept-first', action: 'accept', round: round.number, changes: [round.units[0].id] });
-    assert.deepEqual(await acceptedFiles(disk.root, target.name), [METHOD]);
-    const first = await f.workspace.commitTask(f.task.id, 'Accept the first sentence', true);
-    assert.equal(app.repo.text(['log', '-1', '--format=%s']).trim(), 'Accept the first sentence');
-    assert.equal(app.repo.text(['show', '--name-only', '--format=', 'HEAD']).trim(), METHOD);
-    assert.deepEqual(first.git.files.map((file: { path: string }) => file.path), ['notes.txt']);
-    assert.match(first.pushError ?? '', /no remote/);
-    assert.equal(f.store.task(f.task.id).committed?.hash, first.commit);
-    assert.notEqual(f.store.task(f.task.id).committed?.pushed, true, 'a failed push leaves a local commit');
-    // Someone edits the same file by hand: it is not this task's to commit.
-    fs.writeFileSync(path.join(disk.root, METHOD), fs.readFileSync(path.join(disk.root, METHOD), 'utf8') + '\nA hand edit.\n');
-    await f.workspace.refresh(f.task.id);
-    assert.deepEqual(f.store.task(f.task.id).review?.files, []);
-    await assert.rejects(f.workspace.commitTask(f.task.id, 'Not mine'), /no accepted changes left/);
-    // Accepting more makes the file this task's again.
-    await app.review.decide(target.name, { id: 'accept-second', action: 'accept', round: round.number, changes: [round.units[1].id] });
-    await f.workspace.refresh(f.task.id);
-    assert.deepEqual(f.store.task(f.task.id).review?.files, [METHOD]);
-    // A review write in progress on the paper holds the commit back, and the reverse.
-    const gate = deferred<void>();
-    const write = f.workspace.reviewWrite(f.task.id, true, () => gate.promise);
-    await assert.rejects(f.workspace.commitTask(f.task.id, 'Too early'), /review action/);
-    gate.resolve(); await write;
-    const committing = f.workspace.exclusiveCommit(f.task.projectId, () => new Promise(resolve => setTimeout(resolve, 20)));
-    await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => undefined), /commit is in progress/);
-    await committing;
-    const remote = path.join(disk.base, 'remote.git');
-    app.repo.run(['init', '--bare', remote]);
-    app.repo.run(['remote', 'add', 'origin', remote]);
-    const second = await f.workspace.commitTask(f.task.id, 'Accept the second sentence', true);
-    assert.equal(second.pushError, undefined);
-    assert.equal(f.store.task(f.task.id).committed?.hash, second.commit);
-    assert.equal(f.store.task(f.task.id).committed?.pushed, true);
-    assert.equal(app.repo.text(['rev-parse', '@{upstream}']).trim(), app.repo.rev('HEAD'));
-    const reopened = new Store(f.store.file);
-    try { assert.deepEqual(reopened.task(f.task.id).committed, f.store.task(f.task.id).committed); }
-    finally { reopened.close(); }
-    disk.edit(target, METHOD, 'Method sentence 7.', 'A later accepted sentence.');
-    const next = fakeRound(app, target.name);
-    await app.review.decide(target.name, { id: 'accept-next', action: 'accept', round: next.number, changes: next.units.map((unit: any) => unit.id) });
-    const third = await f.workspace.commitTask(f.task.id, 'Keep the next revision local');
-    assert.equal(third.pushError, undefined);
-    assert.equal(f.store.task(f.task.id).committed?.hash, third.commit);
-    assert.notEqual(f.store.task(f.task.id).committed?.pushed, true, 'a later local commit resets the previous push result');
-    assert.equal(third.git.ahead, 1);
   } finally { f.close(); await disk.close(); }
 });
 

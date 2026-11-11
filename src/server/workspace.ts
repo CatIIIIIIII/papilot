@@ -1203,7 +1203,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const deferred = summary.deferred === true || task.deferred;
       const delivery = summary.delivery ?? task.delivery;
       const reconciliation = summary.reconciliation ?? null;
-      const files = await acceptedFiles(project.path, task.name, deferred ? reconciliation?.base ?? (delivery && delivery.mode !== 'branch' ? delivery.accepted : undefined) : task.committed?.accepted);
+      const files = await acceptedFiles(project.path, task.name, reconciliation?.base ?? (delivery && delivery.mode !== 'branch' ? delivery.accepted : undefined));
       const current = this.store.task(taskId);
       if (current.status === 'deleting') return;
       const review = { state: summary.state, round: summary.round, counts: summary.counts, ready: summary.ready, job: current.review?.job, unsent, comments, files };
@@ -1346,7 +1346,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', true);
     const task = choice.taskId ? this.store.task(choice.taskId) : undefined;
     if (task && task.projectId !== projectId) throw new Error('Invalid task ID.');
-    const { files, patch, recent } = task?.deferred ? await this.taskCommitChanges(task) : await commitChanges(project.path, paths, choice.staged);
+    const { files, patch, recent } = task ? await this.taskCommitChanges(task) : await commitChanges(project.path, paths, choice.staged);
     const tasks = this.store.tasks().filter(task => task.projectId === projectId && task.review?.files?.some(file => paths.includes(file))).map(task => task.title);
     const prompt = [
       recent.length ? `Recent commit subjects in this repository:\n${recent.map(subject => `- ${subject}`).join('\n')}` : 'This repository has no commits yet.',
@@ -1425,38 +1425,6 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     ].join('\n\n');
     const summary = await this.oneOff(id, { cwd: project.path, sandbox: 'workspace-write', instructions: mergeInstructions, prompt, model, effort: model?.defaultEffort, timeout: 600000, what: 'resolve the conflicts' });
     return { summary: summary.trim(), remaining: files.filter(file => conflictMarkers(project.path, file)), agent: id, git: await gitStatus(project.path) };
-  }
-  // Commits what the author accepted from this task since its last commit,
-  // with the message they confirmed, and pushes it if they asked. Other
-  // uncommitted files stay as they are; a file another task also changed is
-  // committed as it is on disk.
-  async commitTask(taskId: string, message: string, push = false) {
-    const task = this.store.task(taskId);
-    if (task.deferred) {
-      if (push) throw new Error('Commit the task first, then push from Git.');
-      const result = await this.applyTask(taskId, false, { message });
-      return { ...result, commit: result.delivery?.commit, pushError: undefined };
-    }
-    if (task.status === 'deleting') throw new Error('This task is being deleted.');
-    if (task.pendingReview) throw new Error('Wait for the current review action before committing.');
-    const project = this.store.project(task.projectId);
-    return this.exclusiveCommit(project.id, async () => {
-      const accepted = await acceptedCommit(project.path, task.name);
-      const files = accepted ? await acceptedFiles(project.path, task.name, this.store.task(taskId).committed?.accepted) : [];
-      const paths = (await gitStatus(project.path)).files.filter(file => files.includes(file.path)).map(file => file.path);
-      if (!paths.length) throw new Error('This task has no accepted changes left to commit.');
-      const hash = await gitCommit(project.path, message, paths);
-      const committed = { hash, accepted: accepted!, at: Date.now() };
-      this.store.updateTask(taskId, { committed });
-      // The commit stands even when the push fails; the author can push again.
-      let pushError: string | undefined;
-      if (push) try {
-        await gitRemote(project.path, 'push');
-        this.store.updateTask(taskId, { committed: { ...committed, pushed: true } });
-      } catch (error) { pushError = errorText(error); }
-      await this.refresh(taskId);
-      return { commit: hash, git: await gitStatus(project.path), ...(pushError ? { pushError } : {}) };
-    });
   }
   // A commit reads the working tree that accepting, rejecting and undoing
   // write, so neither starts while the other runs on the same paper.

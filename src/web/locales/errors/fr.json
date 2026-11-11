@@ -47,7 +47,6 @@
   "Codex is installed but could not be run. Reinstall Codex, then select Reconnect.": "Codex est installé, mais n’a pas pu être exécuté. Réinstallez Codex, puis sélectionnez Reconnecter.",
   "Codex is not connected.": "Codex n’est pas connecté.",
   "Codex was not found on this computer. Install Codex, then select Reconnect.": "Codex est introuvable sur cet ordinateur. Installez Codex, puis sélectionnez Reconnecter.",
-  "Commit the task first, then push from Git.": "Validez d'abord la tâche, puis poussez depuis Git.",
   "Confirm permanent task deletion before continuing.": "Confirmez la suppression définitive de la tâche avant de continuer.",
   "Could not check for updates.": "Impossible de rechercher les mises à jour.",
   "Could not check for updates. Try again when connected.": "Impossible de vérifier les mises à jour. Réessayez une fois connecté.",

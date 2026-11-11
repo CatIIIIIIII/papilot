@@ -47,7 +47,6 @@
   "Codex is installed but could not be run. Reinstall Codex, then select Reconnect.": "Codex är installerat men kunde inte köras. Installera om Codex och välj sedan Återanslut.",
   "Codex is not connected.": "Codex är inte anslutet.",
   "Codex was not found on this computer. Install Codex, then select Reconnect.": "Codex hittades inte på den här datorn. Installera Codex och välj sedan Återanslut.",
-  "Commit the task first, then push from Git.": "Gör en commit för uppgiften först och pusha sedan från Git.",
   "Confirm permanent task deletion before continuing.": "Bekräfta permanent borttagning av uppgiften innan du fortsätter.",
   "Could not check for updates.": "Det gick inte att söka efter uppdateringar.",
   "Could not check for updates. Try again when connected.": "Kunde inte söka efter uppdateringar. Försök igen när du är ansluten.",

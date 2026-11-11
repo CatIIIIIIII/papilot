@@ -418,13 +418,8 @@ export async function buildApp(options: AppOptions) {
       if (preview.files) await manuscripts.predict(project.id, project.path, Object.fromEntries(Object.entries(preview.files).map(([file, data]) => [file, data === null ? null : Buffer.from(data, 'base64')])));
     })().catch(() => undefined);
   };
-  // A task's final selection: predict what applying it writes, or compile
-  // the manuscript that a task writing accepted changes directly has changed.
-  const decided = (taskId: string) => {
-    const current = store.findTask(taskId);
-    if (current?.deferred) predict(taskId);
-    else if (current) refreshManuscript(current.projectId);
-  };
+  // A task's final selection: predict what applying it writes.
+  const decided = (taskId: string) => { if (store.findTask(taskId)) predict(taskId); };
   workspace.on('decided', decided);
   app.addHook('onClose', async () => { workspace.off('decided', decided); });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/predict', task, request => {
@@ -479,16 +474,9 @@ export async function buildApp(options: AppOptions) {
     const text = feedback || skill || reviewNotes || attachments.length ? optional(b.text, 'Revision instructions') : string(b.text, 'Revision instructions');
     return workspace.enqueue(task.id, text, string(b.requestKey, 'Request ID', 100), true, { skill, feedback, reviewNotes, attachments });
   });
-  // Commits what the author accepted from this task, with the message they confirmed.
   // Applying writes the manuscript only once its delivery is complete: not
   // for a confirmation, a merge suggestion, a pending delivery or a branch.
   const delivered = (delivery: Task['delivery']) => Boolean(delivery && !delivery.pending && delivery.mode !== 'branch');
-  app.post<{ Params: { id: string } }>('/api/tasks/:id/commit', task, async request => {
-    const task = store.task(request.params.id), b = request.body as any;
-    const result = await serialGit(task.projectId, () => workspace.commitTask(task.id, string(b.message, 'Commit message', 5000), b.push === true));
-    if ('delivery' in result ? delivered(result.delivery) : result.commit) refreshManuscript(task.projectId);
-    return result;
-  });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/apply', task, async request => {
     const task = store.task(request.params.id), b = (request.body || {}) as any;
     if (b.mode !== undefined && b.mode !== 'workspace' && b.mode !== 'commit') throw new Error('Invalid save action.');

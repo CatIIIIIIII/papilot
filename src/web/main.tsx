@@ -54,8 +54,6 @@ import { connectNoteAlternatives } from './note-option-preferences.ts';
 import { connectNoteLocation } from './review-notes.tsx';
 import type { DiagnosticReport, SystemRequirements } from '../shared.ts';
 import { CommitDialog } from './commit-dialog.tsx';
-import { TaskCommit } from './task-commit.tsx';
-import { TaskCommitDraft } from './task-commit-draft.ts';
 import { TaskConflict } from './task-conflict.tsx';
 import { TaskApply } from './task-apply.tsx';
 import { TaskApplyState } from './task-apply-state.ts';
@@ -118,7 +116,7 @@ const preparingLabel = (task: Task) => task.mode === 'review' ? t('Preparing the
 function Status({ task }: { task: Task }) {
   const answered = noManuscriptChanges(task), done = task.status === 'reviewing' && task.review?.state === 'done';
   const saved = taskSaveStatus(task);
-  return <span className={`status ${task.status}${done || answered ? ' done' : ''}`}><i/>{saved === 'pushed' ? t('Committed and pushed') : saved === 'committed' ? t('Committed') : saved === 'applied' ? t('Applied to manuscript') : answered ? t('Completed') : done ? t('Review complete') : task.status === 'running' ? t('{agent} is working', { agent: agentName(task) }) : task.status === 'preparing' ? preparingLabel(task) : task.status === 'building' && task.review?.ready ? t('Ready for review') : statusNames()[task.status] || task.status}</span>;
+  return <span className={`status ${task.status}${done || answered ? ' done' : ''}`}><i/>{saved === 'committed' ? t('Committed') : saved === 'applied' ? t('Applied to manuscript') : answered ? t('Completed') : done ? t('Review complete') : task.status === 'running' ? t('{agent} is working', { agent: agentName(task) }) : task.status === 'preparing' ? preparingLabel(task) : task.status === 'building' && task.review?.ready ? t('Ready for review') : statusNames()[task.status] || task.status}</span>;
 }
 function time(timestamp: number) { return new Date(timestamp).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); }
 function ago(timestamp: number) {
@@ -1092,7 +1090,6 @@ function App() {
   const folderRequest = useRef(false);
   // Commit drafts survive switching tasks or moving between review and chat.
   const applyStates = useRef(new Map<string, TaskApplyState>());
-  const commitDrafts = useRef(new Map<string, TaskCommitDraft>());
   const newTaskInput = useRef<HTMLTextAreaElement>(null);
   const [newDraft, setNewDraft] = useState(() => browserStorage.getItem('papilot:new-task') || '');
   const [newSkill, setNewSkill] = useState<Skill | null>(null);
@@ -1591,15 +1588,14 @@ function App() {
   }, []);
   const needsManuscript = manuscriptOpen || Boolean(task && (task.mode !== 'review' || task.preparation));
   const manuscriptBuilding = manuscript.projectId === project?.id && manuscript.data?.build.status === 'building';
-  const holdingLegacyManuscript = Boolean(task && !manuscriptOpen && !task.deferred && (task.review?.counts?.pending ?? 0) > 0 && manuscript.projectId === project?.id && manuscript.data);
   useEffect(() => {
-    if (!needsManuscript || !project || holdingLegacyManuscript) return;
+    if (!needsManuscript || !project) return;
     void loadManuscript(project.id);
     const focus = () => void loadManuscript(project.id);
     window.addEventListener('focus', focus);
     window.addEventListener('papilot:manuscript', focus);
     return () => { ++manuscriptRequest.current; window.removeEventListener('focus', focus); window.removeEventListener('papilot:manuscript', focus); };
-  }, [needsManuscript, holdingLegacyManuscript, project?.id, project?.path, loadManuscript]);
+  }, [needsManuscript, project?.id, project?.path, loadManuscript]);
   // Starting a compile switches to fast polling immediately, including a
   // manual retry made between the regular working-tree refreshes.
   useEffect(() => {
@@ -1830,21 +1826,6 @@ function App() {
     await refresh(true);
     return result;
   };
-  // Older tasks accepted directly into the manuscript; retain their existing
-  // commit form while new isolated tasks save only their reviewed delta.
-  const legacyFiles = task && !hasReviewFeedback && !task.deferred && !projectGit?.merging && task.status === 'reviewing' && !task.pendingReview && !pending
-    ? (task.review?.files || []).filter(file => projectGit?.files.some(item => item.path === file)) : [];
-  const legacyKey = JSON.stringify([task?.id, legacyFiles, task?.committed?.accepted, projectGit?.branch]);
-  if (legacyFiles.length && !commitDrafts.current.has(legacyKey)) commitDrafts.current.set(legacyKey, new TaskCommitDraft());
-  const legacySave = task && legacyFiles.length ? <TaskCommit draft={commitDrafts.current.get(legacyKey)!} branch={projectGit?.branch ?? null} remote={Boolean(projectGit?.remote)} agent={agentName(task)} disabled={taskActionBusy}
-    generate={fresh => api<{ message: string }>(`/projects/${task.projectId}/git/message`, { paths: legacyFiles, agent: task.agent || 'codex', fresh }).then(result => result.message)}
-    commit={async (message, push) => {
-      const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/tasks/${task.id}/commit`, { message, push });
-      updateGit(task.projectId, result.git);
-      if (result.pushError) reportError(result.pushError);
-      await refresh(true);
-      return push && !result.pushError ? t('Committed {hash} and pushed.', { hash: result.commit }) : t('Committed {hash}.', { hash: result.commit });
-    }}/> : task?.committed && saved ? savedResult(saved === 'pushed' ? t('Committed {hash} and pushed.', { hash: task.committed.hash }) : t('Committed {hash}.', { hash: task.committed.hash })) : null;
   const applicationStep = task && (deliveryReady ? <TaskApply key={applyKey} draft={applyStates.current.get(applyKey)!} merging={Boolean(merging)} keepCurrent={mergeWaiting && merging?.ready} disabled={taskActionBusy}
     branch={projectGit?.branch ?? null} canCommit={Boolean(task.review?.files?.length || task.delivery?.mode === 'branch' || task.delivery?.pending)} preferred={merging?.intent?.mode}
     pending={task.delivery?.pending && task.delivery.mode !== 'branch' ? task.delivery.mode : undefined}
@@ -1853,7 +1834,7 @@ function App() {
     shown={isPlayground ? undefined : () => void api(`/tasks/${task.id}/predict`, {}).catch(() => undefined)}/>
     : merging ? <TaskConflict status={task.status} waiting={mergeWaiting} onChat={() => selectLayout('conversation')}/>
     : saved === 'committed' && task.delivery ? savedResult(t('Committed {hash} to {branch}', { hash: task.delivery.commit?.slice(0, 7) || '', branch: task.delivery.branch || '' }))
-    : !task.deferred ? legacySave : saved === 'applied' ? savedResult(t('Applied to manuscript')) : null);
+    : saved === 'applied' ? savedResult(t('Applied to manuscript')) : null);
   const reviewFeedback = (card: boolean) => task?.mode === 'review' ? (card && task.aiReview?.notes ? <button type="button" className="ai-review-link" onClick={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }}><Icon name="notes" size={14}/>{tn(task.aiReview.notes, 'View {n} review suggestion', 'View {n} review suggestions')}<Icon name="arrowRight" size={13}/></button> : null) : null;
   const sidebarToggle = (narrow || !sidebarVisible) && <button className="icon-button sidebar-toggle" aria-label={t('Show task list')} title={t('Show task list')} aria-expanded={sidebarShown} aria-controls="task-sidebar" onClick={() => narrow ? setSidebar(true) : setSidebarVisible(true)}><Icon name={narrow ? 'menu' : 'sidebar'} size={20}/>{addedTask && !sidebarShown && <span key={addedTask.id} className="task-added-dot" aria-hidden="true"/>}</button>;
   function selectLayout(next: typeof layout) {

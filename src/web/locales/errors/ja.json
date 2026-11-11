@@ -47,7 +47,6 @@
   "Codex is installed but could not be run. Reinstall Codex, then select Reconnect.": "Codex はインストールされていますが、実行できませんでした。Codex を再インストールしてから「再接続」を選択してください。",
   "Codex is not connected.": "Codex が接続されていません。",
   "Codex was not found on this computer. Install Codex, then select Reconnect.": "このコンピュータで Codex が見つかりませんでした。Codex をインストールしてから「再接続」を選択してください。",
-  "Commit the task first, then push from Git.": "先にタスクをコミットしてから、Git からプッシュしてください。",
   "Confirm permanent task deletion before continuing.": "続行する前に、タスクの完全な削除を確認してください。",
   "Could not check for updates.": "アップデートを確認できませんでした。",
   "Could not check for updates. Try again when connected.": "更新を確認できませんでした。接続時に再試行してください。",

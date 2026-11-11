@@ -1059,19 +1059,21 @@ async function decisionEngine(state: (route: string, body: any) => Record<string
 // A task that writes accepted changes directly to the manuscript, behind the
 // real review proxy. Its summary is the engine's: `summaries` answers each
 // read, and a test can hold one until it releases it.
-async function legacyBatchFixture(pending = 1) {
+// A task's final selection is announced once a summary read confirms it;
+// the app then predicts what applying the task writes.
+async function selectionFixture(pending = 1) {
   const f = await fixture(), engine = await decisionEngine();
   f.review.url = engine.url;
-  const refreshes: string[] = [];
-  f.manuscripts.refresh = async id => { refreshes.push(id); };
+  const announced: string[] = [];
+  f.workspace.on('decided', (id: string) => { announced.push(id); });
   const summary = (pending: number) => ({ state: pending ? 'reviewing' : 'done', round: 1, counts: { pending, accepted: 1 } });
-  f.store.updateTask('thesis-task', { deferred: false, review: { ...summary(pending), unsent: 0, files: [] } });
+  f.store.updateTask('thesis-task', { deferred: true, review: { ...summary(pending), unsent: 0, files: [] } });
   let summaries: () => Promise<object> = async () => summary(pending);
-  f.review.get = async (route: string) => (route.includes('/feedback') ? { feedback: [] } : route.startsWith('/api/jobs/') ? { status: 'done', round: 1 } : await summaries()) as any;
+  f.review.get = async (route: string) => (route.includes('/feedback') ? { feedback: [] } : route.endsWith('/preview') ? { files: null } : route.startsWith('/api/jobs/') ? { status: 'done', round: 1 } : await summaries()) as any;
   const base = '/review/thesis/api/tasks/p-thesis-task';
   const post = (route = 'decide', action = 'accept') => f.local.inject({ method: 'POST', url: `${base}/${route}`, headers: { ...LOCAL, 'x-review-token': 'review-token' }, payload: { id: crypto.randomUUID(), action, round: 1, changes: ['c001'], body: 'Shorter.' } });
   const poll = () => f.local.inject({ url: `${base}/state`, headers: LOCAL });
-  return { ...f, engine, refreshes, summary, post, poll, answer(next: () => Promise<object>) { summaries = next; }, async close() { await engine.close(); await f.close(); } };
+  return { ...f, engine, announced, summary, post, poll, answer(next: () => Promise<object>) { summaries = next; }, async close() { await engine.close(); await f.close(); } };
 }
 async function eventually(check: () => boolean) {
   const end = Date.now() + 2000;
@@ -1083,26 +1085,26 @@ function gate() {
   return { opened, release };
 }
 
-test('a final legacy accept, reject or comment replies first and refreshes the manuscript once its summary is read', { timeout: 10000 }, async () => {
+test('a final accept, reject or comment replies first and announces the selection once its summary is read', { timeout: 10000 }, async () => {
   for (const action of ['accept', 'reject', 'comment']) {
-    const f = await legacyBatchFixture(), held = gate();
+    const f = await selectionFixture(), held = gate();
     f.answer(async () => { await held.opened; return f.summary(0); });
     try {
       const response = await f.post('decide', action);
       assert.equal(response.statusCode, 200, response.body);
-      assert.deepEqual(f.refreshes, [], `${action} has not confirmed the final counts`);
+      assert.deepEqual(f.announced, [], `${action} has not confirmed the final counts`);
       let polled = false;
       const poll = f.poll().then(response => { polled = true; return response; });
       assert.equal((await f.local.inject({ url: '/api/state', headers: LOCAL })).statusCode, 200);
       assert.equal(polled, false, 'only the review poll waits for its summary');
       held.release(); assert.equal((await poll).statusCode, 200);
-      assert.deepEqual(f.refreshes, ['thesis']);
+      assert.deepEqual(f.announced, ['thesis-task']);
     } finally { held.release(); await f.close(); }
   }
 });
 
-test('rapid legacy decisions share one manuscript refresh, and an undo reopens the batch without one', { timeout: 10000 }, async () => {
-  const f = await legacyBatchFixture(2), reads: ReturnType<typeof gate>[] = [];
+test('rapid decisions share one announcement, and an undo reopens the selection without one', { timeout: 10000 }, async () => {
+  const f = await selectionFixture(2), reads: ReturnType<typeof gate>[] = [];
   let remaining = 2;
   f.answer(async () => { const held = gate(); reads.push(held); await held.opened; return f.summary(remaining); });
   try {
@@ -1111,45 +1113,45 @@ test('rapid legacy decisions share one manuscript refresh, and an undo reopens t
     assert.equal(reads.length, 1, 'one summary read at a time');
     reads[0].release(); await eventually(() => reads.length === 2);
     reads[1].release(); await f.poll();
-    assert.deepEqual(f.refreshes, ['thesis'], 'both decisions are in one final selection');
+    assert.deepEqual(f.announced, ['thesis-task'], 'both decisions are in one final selection');
     remaining = 1; assert.equal((await f.post('undo')).statusCode, 200);
     reads[2].release(); await f.poll();
     assert.equal(f.store.task('thesis-task').review?.counts.pending, 1);
-    assert.deepEqual(f.refreshes, ['thesis'], 'an undo leaves a pending change, so nothing compiles');
+    assert.deepEqual(f.announced, ['thesis-task'], 'an undo leaves a pending change, so nothing compiles');
     remaining = 0; assert.equal((await f.post()).statusCode, 200);
     reads[3].release(); await f.poll();
-    assert.deepEqual(f.refreshes, ['thesis', 'thesis'], 'deciding it again completes a new batch');
+    assert.deepEqual(f.announced, ['thesis-task', 'thesis-task'], 'deciding it again completes a new batch');
   } finally { reads.forEach(read => read.release()); await f.close(); }
 });
 
-test('a failed summary read cannot complete a legacy batch from the counts it last stored', { timeout: 10000 }, async () => {
-  const f = await legacyBatchFixture(1);
+test('a failed summary read cannot complete a selection from the counts it last stored', { timeout: 10000 }, async () => {
+  const f = await selectionFixture(1);
   let fail = true;
   f.answer(async () => { if (fail) throw new Error('Summary unavailable'); return f.summary(0); });
   try {
     assert.equal((await f.post()).statusCode, 200); await f.poll();
-    assert.deepEqual(f.refreshes, [], 'the read failed');
+    assert.deepEqual(f.announced, [], 'the read failed');
     assert.equal(f.store.task('thesis-task').review?.counts.pending, 1, 'the stored summary stays as it was');
     fail = false;
     assert.equal((await f.post('decide', 'comment')).statusCode, 200); await f.poll();
-    assert.deepEqual(f.refreshes, ['thesis'], 'the next successful read completes the batch');
+    assert.deepEqual(f.announced, ['thesis-task'], 'the next successful read completes the batch');
   } finally { await f.close(); }
 });
 
-test('a task deleted while its summary is read cannot refresh its manuscript', { timeout: 10000 }, async () => {
-  const f = await legacyBatchFixture(1), held = gate();
+test('a task deleted while its summary is read announces nothing', { timeout: 10000 }, async () => {
+  const f = await selectionFixture(1), held = gate();
   let read = false;
   f.answer(async () => { await held.opened; read = true; return f.summary(0); });
   try {
     assert.equal((await f.post()).statusCode, 200);
     f.store.deleteTask('thesis-task'); held.release(); await eventually(() => read);
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(f.refreshes, []); assert.ok(f.store.findTask('grant-task'));
+    assert.deepEqual(f.announced, []); assert.ok(f.store.findTask('grant-task'));
   } finally { held.release(); await f.close(); }
 });
 
-test('a replayed legacy decision completes its batch once a summary confirms it, keeping an earlier build error', { timeout: 10000 }, async () => {
-  const f = await legacyBatchFixture(1);
+test('a replayed decision completes its selection once a summary confirms it, keeping an earlier build error', { timeout: 10000 }, async () => {
+  const f = await selectionFixture(1);
   let available = false;
   f.answer(async () => { if (!available) throw new Error('Summary unavailable'); return f.summary(0); });
   const check = () => f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/reconcile', headers: f.as, payload: {} });
@@ -1160,16 +1162,16 @@ test('a replayed legacy decision completes its batch once a summary confirms it,
     assert.equal(response.statusCode, 200, response.body);
     assert.equal(response.json().pendingReview, null, 'the engine confirmed the replay');
     assert.equal(response.json().status, 'failed'); assert.equal(response.json().error, 'PDF build failed.');
-    assert.deepEqual(f.refreshes, [], 'no summary confirms the final counts yet');
+    assert.deepEqual(f.announced, [], 'no summary confirms the final counts yet');
     available = true; await f.workspace.refresh('thesis-task');
-    assert.deepEqual(f.refreshes, ['thesis'], 'the old error does not negate the confirmed final decision');
+    assert.deepEqual(f.announced, ['thesis-task'], 'the old error does not negate the confirmed final decision');
     assert.deepEqual(f.engine.calls.map(call => call.body.id), ['final-accept']);
   } finally { await f.close(); }
 });
 
-test('a legacy batch completed while an alternative builds refreshes once that build finishes', { timeout: 10000 }, async () => {
+test('a selection completed while an alternative builds is announced once that build finishes', { timeout: 10000 }, async () => {
   for (const confirmed of [true, false]) {
-    const f = await legacyBatchFixture(1), build = gate();
+    const f = await selectionFixture(1), build = gate();
     // After the job, the build reads the round it published; the summary
     // read that follows it is the one that can fail.
     let afterJob = -1;
@@ -1186,10 +1188,10 @@ test('a legacy batch completed while an alternative builds refreshes once that b
       // The last pending change is decided while the alternative still builds.
       assert.equal((await f.post()).statusCode, 200); await f.poll();
       assert.equal(f.store.task('thesis-task').review?.counts.pending, 0);
-      assert.deepEqual(f.refreshes, [], 'a result still being built is not the final selection');
+      assert.deepEqual(f.announced, [], 'a result still being built is not the final selection');
       build.release(); await building;
       assert.equal(f.store.task('thesis-task').status, 'reviewing', 'a missing summary does not fail a completed build');
-      assert.deepEqual(f.refreshes, confirmed ? ['thesis'] : [], 'only a confirmed summary after the build completes the batch');
+      assert.deepEqual(f.announced, confirmed ? ['thesis-task'] : [], 'only a confirmed summary after the build completes the batch');
     } finally { build.release(); await building; await f.close(); }
   }
 });
@@ -1197,14 +1199,14 @@ test('a legacy batch completed while an alternative builds refreshes once that b
 test('after a restart, a build resumed for a decided task announces its selection', { timeout: 10000 }, async () => {
   // The previous process stored the final counts while the build ran, and
   // held their announcement back for its result.
-  const f = await legacyBatchFixture(0);
+  const f = await selectionFixture(0);
   try {
     f.store.updateTask('thesis-task', { status: 'building', pendingBuild: { requestId: 'saved-option', job: 'option-job', runs: [], sendBack: false, restarts: 0 } });
     await f.workspace.resumeBuild('thesis-task');
     assert.equal(f.store.task('thesis-task').status, 'reviewing');
-    assert.deepEqual(f.refreshes, ['thesis']);
+    assert.deepEqual(f.announced, ['thesis-task']);
     await f.workspace.refresh('thesis-task');
-    assert.deepEqual(f.refreshes, ['thesis'], 'announced once');
+    assert.deepEqual(f.announced, ['thesis-task'], 'announced once');
   } finally { await f.close(); }
 });
 
@@ -1317,11 +1319,10 @@ test('save previews and status checks do not compile an unapplied manuscript', a
       { delivery: { mode: 'branch' } },
     ]) {
       f.workspace.applyTask = async () => result as any;
-      f.workspace.commitTask = async () => result as any;
-      for (const route of ['apply', 'commit']) {
-        const response = await f.local.inject({ method: 'POST', url: `/api/tasks/thesis-task/${route}`, headers, payload: { mode: 'commit', message: 'Save changes' } });
+      for (const mode of ['workspace', 'commit']) {
+        const response = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/apply', headers, payload: { mode, message: 'Save changes' } });
         assert.equal(response.statusCode, 200, response.body);
-        assert.equal(refreshes, 0, `${route} must wait for confirmed manuscript delivery`);
+        assert.equal(refreshes, 0, `${mode} must wait for confirmed manuscript delivery`);
       }
     }
     // A successful status check can merely confirm a decision or agent run.
@@ -1333,24 +1334,24 @@ test('save previews and status checks do not compile an unapplied manuscript', a
     // Exercise the real replay adapter: only it knows whether the recovered
     // action succeeded, independently of a previous build error.
     f.workspace.reconcile = Workspace.prototype.reconcile.bind(f.workspace);
-    for (const [deferred, pending, expected] of [[true, 0, 0], [false, 1, 0], [false, 0, 1]] as const) {
-      f.store.updateTask('thesis-task', { deferred, status: 'uncertain', pendingReview: { route: '/api/tasks/p-thesis-task/decide', body: { id: 'lost', action: 'accept' }, previousStatus: 'reviewing' } });
+    for (const pending of [0, 1]) {
+      f.store.updateTask('thesis-task', { deferred: true, status: 'uncertain', pendingReview: { route: '/api/tasks/p-thesis-task/decide', body: { id: 'lost', action: 'accept' }, previousStatus: 'reviewing' } });
       f.review.get = async (route: string) => (route.includes('/feedback') ? { feedback: [] } : { state: pending ? 'reviewing' : 'done', round: 1, counts: { pending, accepted: 1 } }) as any;
       const recovered = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/reconcile', headers, payload: {} });
       assert.equal(recovered.statusCode, 200, recovered.body);
-      assert.equal(refreshes, expected);
+      assert.equal(refreshes, 0);
     }
   } finally { await engine.close(); await f.close(); }
 });
 
-test('deferred commits refresh only after a completed manuscript delivery, even without a commit hash', async () => {
+test('task commits refresh only after a completed manuscript delivery, even without a commit hash', async () => {
   const f = await fixture();
   let refreshes = 0;
   f.manuscripts.refresh = async () => { refreshes++; };
   f.store.updateTask('thesis-task', { deferred: true });
   try {
-    // Use the real commitTask adapter: current-branch engine deliveries can
-    // omit the commit hash, while branch-only deliveries can include one.
+    // Current-branch engine deliveries can omit the commit hash, while
+    // branch-only deliveries can include one.
     for (const [result, expected] of [
       [{ commitReview: { token: 'confirm', diff: 'Confirm earlier edits.' } }, 0],
       [{ reconciliation: { id: 'merge', ready: true } }, 0],
@@ -1359,33 +1360,28 @@ test('deferred commits refresh only after a completed manuscript delivery, even 
       [{ delivery: { mode: 'commit', accepted: 'accepted' } }, 1],
     ] as const) {
       f.workspace.applyTask = async () => result as any;
-      const response = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/commit', headers: { ...LOCAL, 'x-papilot-token': 'local-csrf' }, payload: { message: 'Save reviewed changes' } });
+      const response = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/apply', headers: { ...LOCAL, 'x-papilot-token': 'local-csrf' }, payload: { mode: 'commit', message: 'Save reviewed changes' } });
       assert.equal(response.statusCode, 200, response.body);
       assert.equal(refreshes, expected, JSON.stringify(result));
     }
   } finally { await f.close(); }
 });
 
-test('intermediate decisions avoid manuscript refreshes and completed legacy batches refresh once', async () => {
+test('review decisions avoid manuscript refreshes until the task is applied', async () => {
   const f = await fixture();
   try {
     const refreshed: string[][] = [];
     f.manuscripts.refresh = async (id: string, root: string) => { refreshed.push([id, root]); };
-    f.workspace.commitTask = async () => ({ commit: 'abc', git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null } }) as any;
     const headers = { ...LOCAL, 'x-papilot-token': 'local-csrf' };
-    const committed = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/commit', headers, payload: { message: 'Apply the task' } });
-    assert.equal(committed.statusCode, 200, committed.body);
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(refreshed, [['thesis', '/unused/thesis']], 'the commit started the manuscript build');
     const failed = await f.local.inject({ method: 'POST', url: '/api/projects/thesis/git/stage', headers, payload: { paths: [] } });
     assert.equal(failed.statusCode, 400);
     await new Promise(resolve => setImmediate(resolve));
-    assert.equal(refreshed.length, 1, 'a request that changed nothing compiles nothing');
+    assert.equal(refreshed.length, 0, 'a request that changed nothing compiles nothing');
     // Exercise the real review proxy and the summary read after each write.
-    let pending = 2, commented = false;
+    let pending = 2;
     f.store.updateTask('thesis-task', { deferred: true });
     f.review.get = async (route: string) => (route.includes('/feedback') ? { feedback: [] }
-      : { state: pending ? 'reviewing' : commented ? 'revise' : 'done', round: 1, counts: { pending, accepted: 1 } }) as any;
+      : { state: pending ? 'reviewing' : 'done', round: 1, counts: { pending, accepted: 1 } }) as any;
     const engine = http.createServer((_request, response) => {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify({ task: 'p-thesis-task', csrf: 'review-token', closed: false, decisions: {}, job: null }));
@@ -1402,29 +1398,13 @@ test('intermediate decisions avoid manuscript refreshes and completed legacy bat
       for (const [route, action, remaining] of [['decide', 'accept', 1], ['decide', 'reject', 0], ['undo', undefined, 1], ['decide', 'accept', 0]] as const) {
         pending = remaining;
         await review(route, action);
-        assert.equal(refreshed.length, 1, `${route} does not refresh the manuscript`);
+        assert.equal(refreshed.length, 0, `${route} does not refresh the manuscript`);
       }
       f.workspace.applyTask = async () => ({ delivery: { mode: 'workspace', accepted: 'accepted' } }) as any;
       const applied = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/apply', headers, payload: { mode: 'workspace' } });
       assert.equal(applied.statusCode, 200, applied.body);
       await new Promise(resolve => setImmediate(resolve));
-      assert.equal(refreshed.length, 2, 'application starts one manuscript refresh');
-
-      // Legacy tasks write to the manuscript while reviewing. They refresh
-      // only once the selection is complete, and never for a note or undo.
-      f.store.updateTask('thesis-task', { deferred: false });
-      pending = 1; await review('decide', 'accept');
-      assert.equal(refreshed.length, 2);
-      pending = 0; await review('decide', 'reject');
-      assert.equal(refreshed.length, 3);
-      pending = 1; await review('undo');
-      assert.equal(refreshed.length, 3);
-      // A final comment resolves the last pending choice without writing a
-      // file, but must flush changes accepted earlier in this legacy batch.
-      await review('decide', 'accept');
-      assert.equal(refreshed.length, 3);
-      pending = 0; commented = true; await review('decide', 'comment');
-      assert.equal(refreshed.length, 4);
+      assert.deepEqual(refreshed, [['thesis', '/unused/thesis']], 'application starts one manuscript refresh');
     } finally { engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); }
   } finally { await f.close(); }
 });
@@ -1448,15 +1428,6 @@ test('deferred decisions wait until application before refreshing the manuscript
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(refreshed, []);
     assert.deepEqual(predicted, []);
-    // A task that writes accepted changes directly compiles them once its
-    // summary confirms the last pending change was decided.
-    f.store.updateTask('thesis-task', { deferred: false, review: { state: 'reviewing', round: 1, counts: { pending: 1 }, unsent: 0 } });
-    f.workspace.refresh = Workspace.prototype.refresh.bind(f.workspace);
-    f.review.get = async (route: string) => (route.includes('/feedback') ? { feedback: [] } : { state: 'done', round: 1, counts: { pending: 0, accepted: 1 } }) as any;
-    const legacy = await f.local.inject({ method: 'POST', url: '/review/thesis/api/tasks/p-thesis-task/decide', headers, payload: { id: 'legacy', round: 1, action: 'accept', changes: ['c001'] } });
-    assert.equal(legacy.statusCode, 200, legacy.body);
-    await f.local.inject({ url: '/review/thesis/api/tasks/p-thesis-task/state', headers: LOCAL });
-    assert.deepEqual(refreshed, ['thesis']);
   } finally { await engine.close(); await f.close(); }
 });
 

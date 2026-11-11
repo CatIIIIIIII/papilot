@@ -13,9 +13,9 @@ import type { Codex } from '../src/server/codex.ts';
 import type { Task } from '../src/shared.ts';
 
 class Agent extends EventEmitter { ready = false; close() {} }
-for (const deferred of [false, true]) test(`${deferred ? 'deferred' : 'legacy'} note decisions respect the final manuscript batch boundary`, async () => {
+test('note decisions announce the final selection only at its boundary, and never compile the manuscript', async () => {
   const f = new Fixture(), engine = f.app(); await engine.ready;
-  const task = engine.tasks.create('note-batch', 'Note batch', [], ['paper'], deferred);
+  const task = engine.tasks.create('note-batch', 'Note batch', [], ['paper'], true);
   f.edit(task, METHOD, 'Method sentence 2.', 'Approach sentence 2.');
   f.edit(task, METHOD, 'Detail sentence 15.', 'Detail proposal 15.');
   const round = fakeRound(engine, task.name);
@@ -36,10 +36,12 @@ for (const deferred of [false, true]) test(`${deferred ? 'deferred' : 'legacy'} 
     return route.includes('/rounds/') ? Promise.resolve(detail as T) : transport.get<T>(route);
   }, post: <T>(route: string, body?: unknown) => transport.post<T>(route, body) };
   const store = new Store(':memory:'), workspace = new Workspace(store, new Agent() as unknown as Codex, async () => client);
-  const manuscripts = new Manuscripts(); let refreshes = 0;
+  const manuscripts = new Manuscripts(); let refreshes = 0, announced = 0;
   manuscripts.refresh = async () => { refreshes++; };
+  // A completed selection is announced; the app then predicts what applying writes.
+  workspace.on('decided', () => { announced++; });
   store.saveProject({ id: 'paper', name: 'Paper', path: f.root, createdAt: 1 });
-  store.saveTask({ id: 'task', projectId: 'paper', name: task.name, title: task.title, worktree: task.worktree, instructions: '', deferred, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, review: { round: 1 }, error: null } as Task);
+  store.saveTask({ id: 'task', projectId: 'paper', name: task.name, title: task.title, worktree: task.worktree, instructions: '', deferred: true, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, review: { round: 1 }, error: null } as Task);
   store.saveRun({ id: 'run', taskId: 'task', requestKey: 'run', prompt: '', status: 'completed', createdAt: 1, finishedAt: 2, reviewRound: 1 });
   store.saveItem({ id: 'run', taskId: 'task', type: 'user', text: '', createdAt: 1, meta: { notes: [{ where: `${METHOD} line ${note.old_start}`, quote: 'Method', comment: 'Improve wording.' }] } });
   const local = await buildApp({ listener: { kind: 'local', port: 7274, publicOrigin: '', owner: '' }, store, workspace, manuscripts, csrf: 'test-csrf', serialGit: gitQueue(), dist: null, version: 'test', connectReview: async () => client });
@@ -49,32 +51,33 @@ for (const deferred of [false, true]) test(`${deferred ? 'deferred' : 'legacy'} 
   try {
     const first = await proxy('decide', { id: 'earlier', round: 1, changes: [earlier.id], action: 'accept' });
     assert.equal(first.statusCode, 200, first.body);
-    assert.equal(refreshes, 0, 'earlier proxy acceptance waits for the remaining note');
+    assert.equal(announced, 0, 'earlier proxy acceptance waits for the remaining note');
     const selection = await choose({});
     assert.equal(selection.statusCode, 200, selection.body);
     assert.equal((await choose({ id: 'invalid', round: 2, accept: true })).statusCode, 400);
-    assert.equal(refreshes, 0, 'a selection or failed decision is not a batch boundary');
+    assert.equal(announced, 0, 'a selection or failed decision is not a selection boundary');
     for (const [index, action] of ['accept', 'reject'].entries()) {
       const response = await choose({ id: `final-${action}`, [action]: true });
       assert.equal(response.statusCode, 200, response.body);
       assert.equal(store.task('task').review?.counts.pending, 0);
-      assert.equal(refreshes, deferred ? 0 : index + 1, 'the confirmed final drawer decision flushes only a legacy manuscript');
+      assert.equal(announced, index + 1, 'the confirmed final drawer decision completes the selection');
       const invalid = await choose({ id: `new-${action}`, [action]: true });
       assert.equal(invalid.statusCode, 400, invalid.body);
-      assert.equal(refreshes, deferred ? 0 : index + 1, 'a failed duplicate cannot trigger compilation');
+      assert.equal(announced, index + 1, 'a failed duplicate completes nothing');
       const undo = await proxy('undo', { id: `final-${action}` });
       assert.equal(undo.statusCode, 200, undo.body);
-      assert.equal(refreshes, deferred ? 0 : index + 1, 'undo reopens a pending batch');
+      assert.equal(announced, index + 1, 'undo reopens the selection');
     }
     // An accepted alternative finishes its decision in the engine build job,
-    // after the drawer's HTTP response. Resuming that job must flush as well.
+    // after the drawer's HTTP response. Resuming that job must announce as well.
     store.updateTask('task', { status: 'building', pendingBuild: { requestId: 'option-save', job: 'option-build', runs: [], sendBack: false, restarts: 0 } });
     const building = workspace.resumeBuild('task'); await buildStarted;
-    assert.equal(refreshes, deferred ? 0 : 2, 'an unfinished option build does not flush');
+    assert.equal(announced, 2, 'an unfinished option build does not complete the selection');
     await engine.review.decide(task.name, { id: 'built-option', round: 1, changes: [note.id], action: 'accept' });
     releaseBuild(); await building;
     assert.equal(store.task('task').status, 'reviewing');
-    assert.equal(refreshes, deferred ? 0 : 3, 'a confirmed option build flushes the final legacy batch');
+    assert.equal(announced, 3, 'a confirmed option build completes the selection');
+    assert.equal(refreshes, 0, 'deciding never compiles the manuscript; applying does');
   } finally { releaseBuild(); await local.close(); workspace.close(); store.close(); await server.close(); await f.close(); }
 });
 test('rejecting a note restores its source even when previewing an alternative; neighboring edits and undo survive', async () => {
