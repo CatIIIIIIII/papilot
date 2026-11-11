@@ -52,6 +52,12 @@
   .pdf-rail[data-collapsed=true]{bottom:max(6px,env(safe-area-inset-bottom));height:30px;padding:0;box-shadow:0 2px 8px rgb(0 0 0/.08),0 6px 18px rgb(0 0 0/.12);animation:markup-pill-in .16s var(--ease)}
   .pdf-rail[data-collapsed=true] .rail-toggle{width:auto;height:30px;padding:0 13px;gap:4px;color:var(--text-2)}
 }
+/* Ten tools need about 400px at full size; narrower phones (375–430px) get
+   slightly narrower buttons so the whole bar shows without scrolling. */
+@media (max-width:430px){
+  .rail-tool{width:32px}
+  .rail-separator{margin:0 1px}
+}
 
 /* Tools that do not select text let clicks reach the page instead. */
 .tool-point .pdf-container .textLayer,.tool-hand .pdf-container .textLayer{pointer-events:none}
