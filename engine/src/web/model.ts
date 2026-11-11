@@ -56,6 +56,15 @@ export function commentScope(units: (Unit & Partial<VisualUnit>)[]) {
     quote: units.map(unit => unit.new_text || unit.old_text).filter(Boolean).join("\n"),
   };
 }
+// Names for a task's review state; the viewer translates them where it shows them.
+export const STATUS: Record<string, string> = {
+  editing: "Editing",
+  reviewing: "In review",
+  revise: "Awaiting revision",
+  done: "All decided",
+  build_failed: "Publish failed",
+  building: "Publishing",
+};
 // Names for a change's state; the viewer translates them where it shows them.
 export const STATE: Record<string, string> = {
   pending: "Pending",

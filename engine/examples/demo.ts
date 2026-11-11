@@ -1,12 +1,9 @@
+// The example paper and the agent's edits to it, for the end-to-end and
+// browser tests.
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
 import { Repo } from "../src/core/git.ts";
-import { connect, type Client } from "../src/client.ts";
-import { sleep } from "../src/core/files.ts";
-import type { TaskInfo, JobResult } from "../src/types.ts";
 const here = path.dirname(fileURLToPath(import.meta.url));
 export interface DemoPlan {
   task: string;
@@ -54,58 +51,3 @@ export function applyDemo(worktree: string, plan: DemoPlan) {
     fs.writeFileSync(file, text.replace(edit.old, edit.new));
   }
 }
-export async function waitJob(client: Client, id: string) {
-  for (;;) {
-    const result = await client.get<JobResult & { status: string }>(
-      "/api/jobs/" + id,
-    );
-    if (result.status === "done") return result;
-    if (result.status === "failed") throw new Error(JSON.stringify(result));
-    await sleep(250);
-  }
-}
-async function main() {
-  const options = new Command()
-      .option("--dir <directory>")
-      .option("--no-open")
-      .parse()
-      .opts<{ dir?: string; open: boolean }>(),
-    base = options.dir
-      ? path.resolve(options.dir)
-      : fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-demo-")),
-    { root, plan } = prepareDemo(base),
-    client = await connect(root);
-  const task = await client.post<TaskInfo>("/api/tasks", {
-    name: plan.task,
-    title: plan.title,
-    sections: [plan.section],
-  });
-  applyDemo(task.worktree, plan);
-  console.log("Compiling both versions…");
-  const job = await client.post<{ job: string }>(
-      `/api/tasks/${task.task}/publish`,
-    ),
-    result = await waitJob(client, job.job);
-  console.log(
-    `Round ${result.round}: ${result.changes} changes ready at\n\n${task.url}\n\nRepository: ${root}\nWorktree: ${task.worktree}\nCopy PDF text with your usual copy shortcut, or use Copy reference for file/line/page context.`,
-  );
-  if (options.open) {
-    const { spawn } = await import("node:child_process");
-    // Windows has no open/xdg-open; start hands the URL to the default browser.
-    const command =
-      process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
-    const args = process.platform === "win32" ? ["/c", "start", "", `"${task.url}"`] : [task.url];
-    spawn(command, args, { stdio: "ignore" }).on("error", () => {});
-  }
-  console.log(
-    `\nClean up:\nnode scripts/review.mjs --repo ${root} --task ${task.task} finish --force\nnode scripts/review.mjs --repo ${root} server stop`,
-  );
-}
-if (
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-)
-  main().catch((e) => {
-    console.error(e.message);
-    process.exitCode = 1;
-  });

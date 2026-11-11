@@ -3,8 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { zhCN } from "../../src/web/zh-CN.ts";
 import { messages } from "../../src/web/locales/index.ts";
 import { LANGUAGES } from "../../src/locales.ts";
-import { STATUS } from "../../src/web/overview.tsx";
-import { STATE } from "../../src/web/model.ts";
+import { STATE, STATUS } from "../../src/web/model.ts";
 import { pageLanguage, t, language } from "../../src/web/i18n.ts";
 
 const web = new URL("../../src/web/", import.meta.url);

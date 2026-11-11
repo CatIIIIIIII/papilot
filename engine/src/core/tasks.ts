@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { Repo, cleanPath } from "./git.ts";
-import { readJson, writeJson, now } from "./files.ts";
+import { now } from "./files.ts";
 import { buildOutline, resolveSections, selectedRanges } from "./outline.ts";
 import type { Task, Scope } from "../types.ts";
 import type { App } from "../server.ts";
@@ -38,14 +38,6 @@ export const slug = (text: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 40)
     .replace(/-+$/g, "");
-export function taskMarker(folder: string): [string, string | null] {
-  const repo = new Repo(folder),
-    marker = readJson<{ root: string; task: string } | null>(
-      path.join(repo.gitDir(), "latex-review.json"),
-      null,
-    );
-  return marker ? [marker.root, marker.task] : [repo.toplevel(), null];
-}
 export async function revisionReaderAsync(repo: Repo, rev: string, folder: string) {
   const files = (await repo.runAsync(["ls-tree", "-r", "-z", "--name-only", rev, ...(folder ? ["--", folder] : [])]))
       .toString().split("\0").filter((p) => p.endsWith(".tex")),
@@ -195,10 +187,6 @@ export class Tasks {
   private record({ name, title, worktree }: { name: string; title: string; worktree: string }, base: string, scope: Scope, deferred: boolean) {
     const { app } = this;
     try {
-      writeJson(path.join(new Repo(worktree).gitDir(), "latex-review.json"), {
-        task: name,
-        root: app.project.root,
-      });
       app.repo.updateRef(`refs/latex-review/${name}/base`, base);
       app.store.transaction(() => {
         app.store.execute(

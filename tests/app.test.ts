@@ -1399,7 +1399,7 @@ test('intermediate decisions avoid manuscript refreshes and completed legacy bat
         // The review page's poll waits for the summary read after the write.
         await f.local.inject({ url: '/review/thesis/api/tasks/p-thesis-task/state', headers: LOCAL });
       };
-      for (const [route, action, remaining] of [['decide', 'accept', 1], ['decide', 'reject', 0], ['undo', undefined, 1], ['decide', 'accept', 0], ['note', undefined, 0]] as const) {
+      for (const [route, action, remaining] of [['decide', 'accept', 1], ['decide', 'reject', 0], ['undo', undefined, 1], ['decide', 'accept', 0]] as const) {
         pending = remaining;
         await review(route, action);
         assert.equal(refreshed.length, 1, `${route} does not refresh the manuscript`);
@@ -1418,7 +1418,6 @@ test('intermediate decisions avoid manuscript refreshes and completed legacy bat
       pending = 0; await review('decide', 'reject');
       assert.equal(refreshed.length, 3);
       pending = 1; await review('undo');
-      await review('note');
       assert.equal(refreshed.length, 3);
       // A final comment resolves the last pending choice without writing a
       // file, but must flush changes accepted earlier in this legacy batch.

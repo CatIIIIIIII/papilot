@@ -95,11 +95,11 @@ async function waitForExit(url: string, pid: number) {
     "The review server has not stopped yet. Retry after it finishes.",
   );
 }
-// A CLI command exits right away, so the server it starts runs on its own.
-// An app owns the server it starts: the server stops when the app's process
-// ends, however it ends, because their IPC channel closes. Either way it
-// gets its own process group, so killing the app's group cannot skip the
-// server's cleanup.
+// Papilot's npm server leaves the review server it starts running on its own,
+// since a service may restart around it. The desktop app owns the server it
+// starts: the server stops when the app's process ends, however it ends,
+// because their IPC channel closes. Either way it gets its own process group,
+// so killing the app's group cannot skip the server's cleanup.
 async function launch(root: string, port: number, owned: boolean): Promise<Client> {
   const home = serverHome(root);
   fs.mkdirSync(home, { recursive: true });

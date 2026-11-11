@@ -459,7 +459,7 @@ test("comments retain drafts and reach agent feedback with their source location
   await expect(page.locator('.change[data-state="commented"]')).toHaveCount(0);
 });
 
-test("review controls and overview remain usable on narrow screens", async ({
+test("review controls remain usable on narrow screens", async ({
   page,
 }) => {
   const total = await totalUnits(page);
@@ -484,13 +484,6 @@ test("review controls and overview remain usable on narrow screens", async ({
     expect(overflow).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `.cache/browser-paper-${width}.png` });
   }
-  await page.getByRole("link", { name: "All reviews" }).click();
-  await expect(
-    page.getByRole("heading", { name: "All reviews" }),
-  ).toBeVisible();
-  await page.screenshot({ path: ".cache/browser-overview-390.png" });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({ path: ".cache/browser-overview-1440.png" });
 });
 
 async function expectMapAligned(page: Page) {

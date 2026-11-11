@@ -72,7 +72,7 @@ export function annotateReviewState(value: unknown, tasks: readonly Task[]): unk
 export function allowedReviewRoute(route: string, method: string): boolean {
   if (route.includes('..') || route.includes('\\')) return false;
   if (method === 'GET') return route === '/' || /^\/option-files\/[a-z0-9-]+\/\d+\/[a-f0-9]{64}\/[\w.-]+\.(svg|png|pdf)$/.test(route) || /^\/(assets|fonts)\/[\w./-]+$/.test(route) || /^\/files\/[a-z0-9-]+\/\d+\/[\w.-]+\.(svg|png)$/.test(route) || /^\/applied\/[a-z0-9-]+\/[a-f0-9]{32}\.pdf$/.test(route) || /^\/api\/tasks(?:\/[a-z0-9-]+(?:\/(?:state|source|applied|rounds\/\d+(?:\/effects\/c\d+|\/references)?))?)?$/.test(route);
-  return method === 'POST' && /^\/api\/tasks\/[a-z0-9-]+\/(decide|undo|note|look|source(?:\/options)?|rounds\/\d+\/references\/confirm)$/.test(route);
+  return method === 'POST' && /^\/api\/tasks\/[a-z0-9-]+\/(decide|undo|look|source(?:\/options)?|rounds\/\d+\/references\/confirm)$/.test(route);
 }
 export function rewriteReviewJson(value: any, prefix: string): any {
   if (Array.isArray(value)) return value.map(v => rewriteReviewJson(v, prefix));

@@ -495,19 +495,6 @@ export function createServer(app: App) {
       },
       (request) => app.review.undo(request.params.name, request.body.id),
     );
-    server.post<{ Params: { name: string }; Body: { body: string } }>(
-      "/api/tasks/:name/note",
-      {
-        schema: {
-          body: {
-            ...objectSchema,
-            required: ["body"],
-            properties: { body: { type: "string" } },
-          },
-        },
-      },
-      (request) => app.review.note(request.params.name, request.body.body),
-    );
     server.post<{ Params: { name: string }; Body: { force?: boolean } }>(
       "/api/tasks/:name/finish",
       {

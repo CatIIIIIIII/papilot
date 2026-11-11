@@ -1,102 +1,82 @@
-import fs from "node:fs";
-import path from "node:path";
-import { beforeEach, afterEach, it, expect, vi } from "vitest";
-import { Fixture } from "./helpers.ts";
-import { feedback } from "../../src/cli.ts";
-import { Client } from "../../src/client.ts";
-import type { Feedback } from "../../src/types.ts";
-let f: Fixture;
-beforeEach(() => {
+// The feedback route Papilot polls to bring the author's decisions, comments
+// and build failures back to the agent.
+import { beforeEach, afterEach, it, expect } from "vitest";
+import { Fixture, METHOD, fakeRound } from "./helpers.ts";
+import { createServer, App } from "../../src/server.ts";
+import type { Feedback, Task } from "../../src/types.ts";
+let f: Fixture, app: App, server: ReturnType<typeof createServer>, task: Task;
+beforeEach(async () => {
   f = new Fixture();
-  vi.useFakeTimers();
+  app = f.app();
+  server = createServer(app);
+  await server.listen({ host: "127.0.0.1", port: 0 });
+  const address = server.server.address();
+  if (!address || typeof address === "string") throw new Error("No address");
+  app.url = `http://127.0.0.1:${address.port}`;
+  task = app.tasks.create("polish");
+  f.edit(task, METHOD, "Method sentence 2.", "Agent A.");
+  f.edit(task, METHOD, "Detail sentence 15.", "Agent B.");
+  fakeRound(app, task.name);
 });
 afterEach(async () => {
-  vi.useRealTimers();
-  vi.restoreAllMocks();
+  await server.close();
   await f.close();
 });
-const response = (
-  state: Feedback["state"],
-  cursor: number,
-  items: Feedback["feedback"] = [],
-): Feedback => ({
-  task: "test",
-  title: "Test",
-  state,
-  round: 1,
-  counts: { pending: 1, accepted: 0, rejected: 0, commented: 0 },
-  next: "",
-  cursor,
-  feedback: items,
-});
-const cursor = () => path.join(f.root, ".git/latex-review/agents/test.cursor");
-it.each(["reviewing", "building"] as const)(
-  "a user message interrupts an unlimited wait while %s",
-  async (state) => {
-    const client = new Client("unused", ""),
-      get = vi
-        .spyOn(client, "get")
-        .mockImplementation(
-          async (route) =>
-            (route.includes("/feedback?")
-              ? response(state, 9, [
-                  { id: 9, kind: "note", round: 1, text: "Pause here." },
-                ])
-              : { url: "http://localhost/review" }) as never,
-        ),
-      output = vi.fn();
-    await feedback(client, f.root, "test", null, false, output);
-    expect(output.mock.calls[0][0].feedback[0].text).toBe("Pause here.");
-    expect(fs.readFileSync(cursor(), "utf8")).toBe("9");
-    expect(get).toHaveBeenCalledTimes(2);
-  },
-);
-it("waits through partial comments without advancing the delivered cursor", async () => {
-  fs.mkdirSync(path.dirname(cursor()), { recursive: true });
-  fs.writeFileSync(cursor(), "7");
-  const client = new Client("unused", ""),
-    partial = {
-      id: 8,
-      kind: "comment" as const,
-      round: 1,
-      text: "Keep the example.",
-    },
-    queue = [
-      response("building", 7),
-      response("reviewing", 8, [partial]),
-      response("revise", 9, [partial, { id: 9, kind: "accept", round: 1 }]),
-    ];
-  vi.spyOn(client, "get").mockImplementation(async (route) => {
-    if (!route.includes("/feedback?")) return { url: "review" } as never;
-    expect(route).toContain("after=7");
-    expect(fs.readFileSync(cursor(), "utf8")).toBe("7");
-    return queue.shift() as never;
+async function post(route: string, data: unknown) {
+  const response = await fetch(`${app.url}/api/tasks/${task.name}/${route}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Review-Token": app.csrf },
+    body: JSON.stringify(data),
   });
-  const output = vi.fn(),
-    work = feedback(client, f.root, "test", null, false, output);
-  await vi.runAllTimersAsync();
-  await work;
-  expect(output).toHaveBeenCalledTimes(1);
-  expect(fs.readFileSync(cursor(), "utf8")).toBe("9");
+  expect(response.ok, await response.clone().text()).toBe(true);
+  return response.json();
+}
+async function feedback(after = 0) {
+  const response = await fetch(`${app.url}/api/tasks/${task.name}/feedback?after=${after}`);
+  expect(response.ok).toBe(true);
+  return (await response.json()) as Feedback;
+}
+
+it("returns every comment and message in full, with its source, and each only once", async () => {
+  const long = "保留这个公式，解释边界。".repeat(600);
+  await post("decide", { id: "first", action: "comment", round: 1, changes: ["c001"], body: long });
+  await post("decide", { id: "second", action: "comment", round: 1, changes: ["c002"], body: "Second independent opinion." });
+  for (let i = 0; i < 250; i++) app.review.note(task.name, `Opinion ${i}: keep this context.`);
+  const answer = await feedback();
+  expect(answer.state).toBe("revise");
+  expect(answer.feedback).toHaveLength(252);
+  expect(answer.feedback[0].text).toBe(long);
+  expect(answer.feedback[0].changes?.[0]).toMatchObject({ file: METHOD, old: "Method sentence 2", new: "Agent A" });
+  expect(answer.feedback.at(-1)?.text).toBe("Opinion 249: keep this context.");
+  expect((await feedback(answer.cursor)).feedback).toEqual([]);
 });
-it("returns on timeout and never consumes undelivered output", async () => {
-  const client = new Client("unused", "");
-  vi.spyOn(client, "get").mockImplementation(
-    async (route) =>
-      (route.includes("/feedback?")
-        ? response("reviewing", 4)
-        : { url: "review" }) as never,
+
+it("an undo after delivery reaches the agent, and the undone opinion is not replayed", async () => {
+  await post("decide", { id: "comment", action: "comment", round: 1, changes: ["c001"], body: "First opinion." });
+  const delivered = await feedback();
+  expect(delivered.feedback[0].text).toBe("First opinion.");
+  await post("undo", { id: "comment" });
+  expect((await feedback(delivered.cursor)).feedback[0]).toMatchObject({ kind: "undo", undid: "comment" });
+  expect((await feedback()).feedback).toEqual([]);
+});
+
+it("accepting every pending change keeps earlier comments", async () => {
+  await post("decide", { id: "keep-comment", action: "comment", round: 1, changes: ["c001"], body: "This still needs revision." });
+  await post("decide", { id: "accept-rest", action: "accept", round: 1, changes: ["c002"] });
+  const answer = await feedback();
+  expect(answer.state).toBe("revise");
+  expect(answer.counts).toMatchObject({ accepted: 1, commented: 1, pending: 0 });
+  expect(answer.feedback.map((item) => item.kind)).toEqual(["comment", "accept"]);
+});
+
+it("a failed build reports its diagnostics and log", async () => {
+  app.store.execute(
+    "INSERT INTO jobs(id,task,status,phase,result,created) VALUES('broken',?,'failed','build',?,?)",
+    task.name,
+    JSON.stringify({ error: "Your edits do not compile.", details: ["main.tex:17: Undefined control sequence"], log: "/tmp/compile.log", next: "Fix the macro." }),
+    Date.now() / 1000 + 1,
   );
-  const output = vi.fn(),
-    work = feedback(client, f.root, "test", 5, false, output);
-  await vi.runAllTimersAsync();
-  await work;
-  expect(output.mock.calls[0][0].waited).toBe(5);
-  fs.unlinkSync(cursor());
-  await expect(
-    feedback(client, f.root, "test", 0, false, () => {
-      throw new Error("stdout failed");
-    }),
-  ).rejects.toThrow("stdout failed");
-  expect(fs.existsSync(cursor())).toBe(false);
+  const result = await feedback();
+  expect(result.state).toBe("build_failed");
+  expect(result.build_error).toMatchObject({ details: ["main.tex:17: Undefined control sequence"], log: "/tmp/compile.log" });
 });

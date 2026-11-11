@@ -83,14 +83,20 @@ try {
     const viewerContext = await browser.newContext({ colorScheme: 'light', viewport: { width: 1280, height: 900 } });
     const viewer = await viewerContext.newPage();
     viewer.on('pageerror', error => failures.push(`${id}: ${error.message}`));
-    await viewer.route('**/api/**', route => route.fulfill({ json: { tasks: [] } }));
-    await viewer.goto(`${reviewOrigin}/?lang=${id}`);
-    const heading = id === 'en' ? 'All reviews' : reviewMessages[id]['All reviews'];
-    await viewer.getByRole('heading', { name: heading, exact: true }).waitFor();
+    // A task whose latest round has no changes: the viewer's own empty state.
+    await viewer.route('**/api/**', route => {
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname.endsWith('/state')) return route.fulfill({ json: { task: 'locale', title: 'Locale', csrf: 'fixture', closed: false, state: 'done', latest: 1, history: [{ number: 1, created: 1793322000 }], round: 1, revision: 'after-1', decisions: {}, comments: {}, undo: null, job: null } });
+      if (pathname.endsWith('/rounds/1')) return route.fulfill({ json: { task: 'locale', round: 1, before: 'before-1', after: 'after-1', warnings: [], files: '/files/locale/1/', sections: [], units: [], loose: [] } });
+      return route.fulfill({ json: {} });
+    });
+    await viewer.goto(`${reviewOrigin}/?task=locale&lang=${id}`);
+    const empty = id === 'en' ? 'No changes to review.' : reviewMessages[id]['No changes to review.'];
+    await viewer.getByText(empty, { exact: true }).first().waitFor();
     assert.equal(await viewer.locator('html').getAttribute('lang'), id);
     await viewer.screenshot({ path: `test-results/locales/reviews-${id}.png`, animations: 'disabled' });
     await viewer.setViewportSize({ width: 390, height: 844 });
-    assert.ok(await viewer.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${id} review overview overflows on mobile`);
+    assert.ok(await viewer.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${id} review viewer overflows on mobile`);
     await viewer.screenshot({ path: `test-results/locales/reviews-${id}-390.png`, animations: 'disabled' });
     await viewerContext.close();
   }

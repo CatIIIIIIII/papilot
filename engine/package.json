@@ -6,17 +6,12 @@
   "engines": {
     "node": ">=22.22.0"
   },
-  "bin": {
-    "latex-review": "scripts/review.mjs"
-  },
   "scripts": {
-    "review": "tsx src/cli.ts",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",
-    "demo": "tsx examples/demo.ts",
     "test:browser": "playwright test",
     "test:corpus": "tsx scripts/validate-corpus.ts",
     "fixture:prepare": "tsx scripts/prepare-fixture.ts",

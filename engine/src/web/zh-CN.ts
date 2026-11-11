@@ -29,26 +29,6 @@ export const zhCN: Record<string, string> = {
   "Choose how to save the accepted changes to your manuscript.": "请选择如何将已接受的改动保存到论文。",
   "There are no accepted changes to save.": "没有需要保存的已接受改动。",
 
-  // Overview
-  "All reviews": "全部审阅",
-  "Search reviews": "搜索审阅",
-  "Search by title or task name": "按标题或任务名搜索",
-  "Filter reviews": "筛选审阅",
-  "All tasks": "全部任务",
-  "Awaiting your review": "等待你审阅",
-  "Not published yet": "尚未发布",
-  "Review →": "审阅 →",
-  "Open →": "打开 →",
-  "No reviews match this filter.": "没有符合筛选条件的审阅。",
-  "No open reviews yet. Start a task from your document repository.":
-    "还没有进行中的审阅。请在文档仓库中开始一个任务。",
-  "{n} open review": "{n} 个进行中的审阅",
-  "{n} open reviews": "{n} 个进行中的审阅",
-  "{n} accepted": "{n} 已接受",
-  "{n} rejected": "{n} 已拒绝",
-  "{n} commented": "{n} 已评论",
-  "{n} pending": "{n} 待定",
-
   // Review states
   Editing: "编辑中",
   "In review": "审阅中",

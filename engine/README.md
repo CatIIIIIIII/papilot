@@ -1,31 +1,9 @@
-<h1 align="center">
-  <img src="docs/logo.svg" width="460" alt="LaTeX Review Skill">
-</h1>
+# Papilot review engine
 
-<p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
+<p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-Review an agent's LaTeX edits directly in the PDF. Accept, reject, or comment; feedback returns to the agent through the CLI.
+The review engine behind Papilot. For each task it keeps a Git worktree of the agent's edits, compiles the accepted text and the proposal with `latexmk`, and serves the PDF comparison in which the author accepts, rejects or comments on each change. Accepted edits merge into the working tree without creating a commit.
 
-![LaTeX review demo](docs/demo.gif)
+Papilot starts one engine per repository through `src/client.ts` (`src/cli.ts serve`) and talks to it over HTTP on 127.0.0.1. It is not installed or used on its own.
 
-## Install
-
-Requires macOS, Linux or Windows, Node.js 22.22+, Git, and TeX Live or MacTeX with `latexmk` and `synctex`.
-
-```sh
-npx skills add cu1ch3n/latex-review-skill -g
-```
-
-## Use
-
-Open your LaTeX Git repository in the agent and ask:
-
-> Use latex-review-skill to tighten Section 3 while preserving its technical meaning. Let me review the changes before they reach the manuscript.
-
-Open the review link the agent provides. Inspect the PDF and source diff, then accept, reject, or comment. Accepted edits merge into your working tree without creating a commit.
-
-- Select and copy PDF text; use the minimap to jump between changes.
-- Say **“accept all”** to apply pending edits through the CLI.
-- Keep the agent session running; completing the round returns your feedback automatically.
-
-[Reference](docs/reference.md) · [Agent instructions](SKILL.md) · [Tests and corpus](docs/corpus.md) · [MIT License](LICENSE)
+[Reference](docs/reference.md) · [Tests and corpus](docs/corpus.md) · [MIT License](LICENSE)

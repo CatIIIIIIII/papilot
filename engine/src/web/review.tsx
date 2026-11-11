@@ -36,7 +36,6 @@ const stateRoute = (round?: number | null) => {
 };
 import { EFFECTS_EVENT, EFFECTS_STORAGE, readExpandedEffects } from "./effect-preferences.ts";
 import { readView, VIEW_EVENT, VIEW_CHOSEN_EVENT, VIEW_STORAGE, type ReviewView } from "./view-preferences.ts";
-import { STATUS } from "./overview.tsx";
 import { language, locale, t, tn, withLanguage } from "./i18n.ts";
 import {
   ConfirmReferences,
@@ -62,6 +61,7 @@ import {
   progress,
   resolvedSide,
   stopState,
+  STATUS,
   visibleStop,
   wordDiff,
 } from "./model.ts";
@@ -1597,9 +1597,6 @@ export function ReviewApp({
   return (
     <>
       <header className="bar">
-        <a className="ghost overview-link" href={withLanguage("/")}>
-          ← {t("All reviews")}
-        </a>
         <div className="identity">
           <h1>{state?.title ?? "LaTeX Review"}</h1>
           <span className="muted">

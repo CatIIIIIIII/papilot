@@ -83,7 +83,7 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     }
     .review-body{margin-left:var(--papilot-rail,0px)}
     .bar{display:flex;align-items:center;height:var(--papilot-bar-height,44px);min-height:var(--papilot-bar-height,44px);padding:0 max(14px,calc(var(--papilot-tools,0px) + 4px)) 0 calc(var(--papilot-lead,0px) + 14px);gap:12px;flex-wrap:nowrap;overflow:hidden}
-    .bar .overview-link,.bar .identity h1,.bar .identity span{display:none}
+    .bar .identity h1,.bar .identity span{display:none}
     .bar .identity{flex:1;min-width:0;flex-direction:row;gap:6px}
     .bar .identity span{font-size:13px;font-weight:600;color:var(--text-2);overflow:hidden;text-overflow:ellipsis}
     .bar .meter{display:flex;order:initial;width:auto;font-size:13px}
