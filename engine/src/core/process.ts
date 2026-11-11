@@ -164,7 +164,13 @@ export function runAsync(
       terminateTree(child, "SIGKILL");
     }, options.timeout ?? 300000);
     // SIGKILL ends a stopped process group too, without continuing it first.
-    const cancel = () => { cancelled = true; terminateTree(child, "SIGKILL"); };
+    // A command that already exited has finished its work: its result stands
+    // even if its output is still closing, as when a helper holds it open.
+    const cancel = () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      cancelled = true;
+      terminateTree(child, "SIGKILL");
+    };
     if (options.signal?.aborted) cancel();
     else options.signal?.addEventListener("abort", cancel, { once: true });
     const receive = (data: Buffer) => {
