@@ -135,35 +135,4 @@ Wrapper executable paths are preserved.
 
 The locked SDK runtime is in `nix/runtime`; it is built independently of the
 application and review-engine npm trees. Linux native helpers are patched at
-build time. The `checks.x86_64-linux.desktop-vm` check boots a NixOS desktop,
-launches Papilot with a minimal PATH, and checks SQLite, PDF/SyncTeX compilation,
-read-only store files and writable user data. ARM Linux runtime validation is
-still required; evaluation is not a native execution test.
-Run the VM check manually with `nix build .#checks.x86_64-linux.desktop-vm -L`.
-It is not run by GitHub Actions.
-
-Real agent testing is deliberately opt-in and never runs in normal CI:
-`PAPILOT_LIVE_AGENT=codex node --import tsx scripts/check-live-agent.mjs`.
-The harness also supports `claude`, `cursor`, `antigravity`, `kimi`, `opencode`,
-and `copilot`. Codex and Claude authentication is checked automatically. For the
-other clients, first verify an included subscription or free allowance, remove
-unrelated API credentials, and explicitly set
-`PAPILOT_LIVE_CONFIRMED_SUBSCRIPTION` to the selected agent. The test never buys
-credits. OpenCode may have several providers: restrict its enabled providers
-and helper model as well as the task model to the verified allowance.
-
-`PAPILOT_LIVE_MODEL` and `PAPILOT_LIVE_SWITCH_MODEL` choose the two models;
-`PAPILOT_LIVE_MODEL_PREFIX` restricts both choices to a provider. Set
-`PAPILOT_LIVE_EXTENDED=1` to test an image, a paper skill, and interrupting a real
-turn. Results include outgoing SDK/CLI/ACP settings and available model
-acknowledgements, separately from Papilot's adapter model, and are saved beside
-a disposable paper and isolated database. Not every client reports the model
-that served a response.
-
-Approvals stop the test by default. For a supervised run, set
-`PAPILOT_LIVE_APPROVAL_DIR` to a private directory outside the paper. Inspect
-each `<id>.request.json` and its underlying ACP tool payload, then write
-`<id>.decision.json` containing `{"decision":"accept"}` (allow once),
-`{"decision":"decline"}`, or `{"decision":"cancel"}`. The harness never
-chooses approval decisions on its own. Keep these logs local because tool
-arguments can contain private content.
+build time.

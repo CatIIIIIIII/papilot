@@ -79,14 +79,9 @@ The proxy must listen on a LAN interface if it runs on another computer. Agent s
 ```powershell
 npm.cmd run typecheck
 node --import tsx --test tests/windows.test.ts tests/wsl.test.ts
-# With TeX installed, also verify real compilation and source mapping:
-node --import tsx scripts/check-windows-compile.mjs
 $env:PAPILOT_DESKTOP_EXECUTABLE = "$PWD\release\desktop\win-unpacked\Papilot.exe"
 npm.cmd run test:desktop
 node scripts/check-desktop-environments.mjs
-# With a prepared WSL distribution:
-$env:PAPILOT_WSL_TEST_DISTRIBUTION = 'Ubuntu'
-node scripts/check-desktop-wsl.mjs
 ```
 
 The focused tests check Unicode/spaces, drive and UNC path rejection where a relative path is required, npm `.cmd` launchers with multiline arguments, SyncTeX source lookup, dependency junctions, descendant process cleanup and a real SQLite backend startup/shutdown. The desktop smoke test checks the window, demo PDF, imports, persistence and app updates. Run the desktop smoke test in an interactive Windows desktop session; a background SSH session alone is not a substitute for GUI verification.

@@ -62,21 +62,14 @@ test('setup distinguishes missing tools from failed probes and retries timeouts 
   } finally { fs.rmSync(bin, { recursive: true, force: true }); }
 });
 
-test('a cold latexmk process that exceeds the deadline is retried instead of reported missing', { skip: process.platform === 'win32', timeout: 30000 }, async () => {
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-requirements-cold-'));
-  try {
-    fs.writeFileSync(path.join(bin, 'latexmk'), '#!/bin/sh\nexec /bin/sleep 6\n', { mode: 0o755 });
-    const report = await checkSystemRequirements({ PATH: bin });
-    assert.deepEqual(report.checks.find(check => check.id === 'latexmk'), { id: 'latexmk', ok: true });
-  } finally { fs.rmSync(bin, { recursive: true, force: true }); }
-});
-
-test('native Windows probes distinguish real timeouts, slow success and failed exits', { skip: process.platform !== 'win32', timeout: 30000 }, async () => {
-  // Use the installed runtime rather than generating an unsigned executable,
-  // which endpoint protection can quarantine before the probe runs.
-  const slow = ['-e', 'setTimeout(() => {}, 6000)'];
-  assert.equal(await probeRequiredTool(process.execPath, slow, process.env, 5000), 'timeout');
-  assert.equal(await probeRequiredTool(process.execPath, slow, process.env, 10000), true, 'The longer retry budget must allow a native process to finish');
+// The retry and its longer deadline are checked above with a fake probe;
+// this checks the real probe on every platform. It uses the installed runtime
+// rather than generating an unsigned executable, which endpoint protection on
+// Windows can quarantine before the probe runs.
+test('real probes distinguish timeouts, slow success and failed exits', { timeout: 30000 }, async () => {
+  const slow = ['-e', 'setTimeout(() => {}, 1500)'];
+  assert.equal(await probeRequiredTool(process.execPath, slow, process.env, 500), 'timeout');
+  assert.equal(await probeRequiredTool(process.execPath, slow, process.env, 8000), true, 'A longer deadline lets the same process finish');
   assert.equal(await probeRequiredTool(process.execPath, ['-e', 'process.exit(1)'], process.env, 5000), false);
   assert.equal(await probeRequiredTool(process.execPath, ['--version'], process.env, 5000), true, 'A fresh probe recovers after failure');
 });

@@ -6,6 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Annotation, Project, Task, Run, TimelineItem } from '../shared.ts';
 
+// A thread's task, through the task_threads index.
+export const TASK_BY_THREAD = "SELECT data FROM tasks WHERE json_extract(data,'$.threadId')=? ORDER BY rowid LIMIT 1";
+
 export class Store extends EventEmitter {
   db: DatabaseSync;
   constructor(public readonly file: string) {
@@ -48,7 +51,7 @@ export class Store extends EventEmitter {
   taskProject(id: string) { return (this.db.prepare('SELECT project_id FROM tasks WHERE id=?').get(id) as { project_id: string } | undefined)?.project_id; }
   taskByThread(threadId: unknown) {
     if (typeof threadId !== 'string' || !threadId) return undefined;
-    const row = this.db.prepare("SELECT data FROM tasks WHERE json_extract(data,'$.threadId')=? ORDER BY rowid LIMIT 1").get(threadId) as { data: string } | undefined;
+    const row = this.db.prepare(TASK_BY_THREAD).get(threadId) as { data: string } | undefined;
     return row ? JSON.parse(row.data) as Task : undefined;
   }
   projectByPath(p: string) { return this.projects().find(project => project.path === p); }

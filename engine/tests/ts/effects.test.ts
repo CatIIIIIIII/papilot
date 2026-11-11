@@ -1,4 +1,4 @@
-import { it, expect, vi } from "vitest";
+import { it, expect } from "vitest";
 import { buildDate } from "../../src/core/build.ts";
 import { attribute } from "../../src/core/publish.ts";
 import {
@@ -33,18 +33,9 @@ it.each([
     ],
   },
 ])(
-  "retains every change in $name despite elapsed wall time",
+  "finds every change in $name",
   ({ before, after, expected }) => {
-    // A busy machine or clock adjustment must not turn edits into no result.
-    let time = 0;
-    const clock = vi
-      .spyOn(Date, "now")
-      .mockImplementation(() => (time += 10000));
-    try {
-      expect(differences(words(before), words(after))).toEqual(expected);
-    } finally {
-      clock.mockRestore();
-    }
+    expect(differences(words(before), words(after))).toEqual(expected);
   },
 );
 

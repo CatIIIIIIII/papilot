@@ -29,7 +29,9 @@ export async function health(port: number, version: string, instance?: string) {
   } catch { return false; }
 }
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-export async function probeInstallation(root: string, version: string, stage: string, log: number) {
+// A fresh desktop data directory also seeds the example paper. Cold disks
+// and concurrent builds can take longer than ten seconds to initialize it.
+export async function probeInstallation(root: string, version: string, stage: string, log: number, timeout = 60000) {
   const server = net.createServer();
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const port = (server.address() as net.AddressInfo).port;
@@ -40,9 +42,7 @@ export async function probeInstallation(root: string, version: string, stage: st
   let ended = false, error: Error | undefined;
   child.once('error', e => { error = e; ended = true; }); child.once('exit', () => { ended = true; });
   try {
-    // A fresh desktop data directory also seeds the example paper. Cold disks
-    // and concurrent builds can take longer than ten seconds to initialize it.
-    const deadline = Date.now() + 60000;
+    const deadline = Date.now() + timeout;
     while (Date.now() < deadline && !ended) { if (await health(port, version)) return; await sleep(250); }
     throw error || new Error('The new version did not pass its startup check. Your current version is still running.');
   } finally {

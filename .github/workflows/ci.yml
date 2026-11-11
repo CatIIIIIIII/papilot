@@ -45,13 +45,17 @@ jobs:
         if: matrix.node == 22
         uses: ./.github/actions/setup-tex
       - run: npm run typecheck
-      - run: npm test
-      - name: PDF diff engine tests
-        run: npm --prefix engine test
       - name: Install browser for PDF review tests
         if: matrix.node == 22
         working-directory: engine
         run: npx playwright install --with-deps chromium
+      - run: npm test
+        env:
+          # The viewer's lock test drives the built review viewer in Chromium.
+          PAPILOT_REVIEW_BROWSER: ${{ matrix.node == 22 && '1' || '' }}
+          PAPILOT_BROWSER_CHANNEL: chromium
+      - name: PDF diff engine tests
+        run: npm --prefix engine test
       - name: PDF review browser tests
         if: matrix.node == 22
         run: npm --prefix engine run test:browser

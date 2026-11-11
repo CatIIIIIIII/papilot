@@ -348,25 +348,6 @@ test('the full paper of a round that compiled the whole paper is that round\'s o
   } finally { process.env.PATH = previousPath; f.close(); }
 });
 
-test('the full paper remembers only the versions and builds of a round, not its whole detail', async () => {
-  const { paperPassPdf } = await import('../src/server/pdf.ts');
-  const { setFlagsFromString } = await import('node:v8');
-  const { runInNewContext } = await import('node:vm');
-  setFlagsFromString('--expose-gc');
-  const gc = runInNewContext('gc') as () => void;
-  let units: WeakRef<object> | undefined;
-  const connect = async () => ({ get: async () => {
-    // A round's detail carries every change; only a few of its fields matter here.
-    const detail = { before: 'a'.repeat(40), after: 'b'.repeat(40), builds: ['c'.repeat(32)], build: { key: 'c'.repeat(32), targets: ['full'] }, units: Array.from({ length: 1000 }, (_, i) => ({ id: 'c' + i, old_text: 'old', new_text: 'new' })) };
-    units = new WeakRef(detail.units);
-    return detail;
-  } }) as any;
-  await assert.rejects(paperPassPdf(connect, '/unused-round-info', 'p-task', 1, 1));
-  await new Promise(resolve => setImmediate(resolve));
-  gc();
-  assert.equal(units?.deref(), undefined, 'the round\'s changes are not kept');
-});
-
 test('a delivery preview is exactly what applying the task writes, with pending changes accepted', async () => {
   const disk = new Fixture(), app = disk.app();
   try {

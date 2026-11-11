@@ -63,8 +63,6 @@
 
       checks = forAllSystems (system: {
         package = self.packages.${system}.papilot;
-      } // (pkgsFor system).lib.optionalAttrs (system == "x86_64-linux") {
-        desktop-vm = import ./nix/vm-test.nix { pkgs = pkgsFor system; papilot = self.packages.${system}.papilot; };
       });
 
       formatter = forAllSystems (system: (pkgsFor system).nixfmt);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ReadRequest, canStreamUpdates, mergeTimeline, visibleTimeline } from '../src/web/refresh.ts';
-import { Store } from '../src/server/store.ts';
+import { Store, TASK_BY_THREAD } from '../src/server/store.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -179,7 +179,7 @@ test('agent events find their task and message without reading the whole history
   assert.equal(store.taskByThread('thread-c')?.id, 'old');
   store.deleteTask('again');
   assert.equal(store.taskByThread('thread-a'), undefined);
-  const plan = store.db.prepare("EXPLAIN QUERY PLAN SELECT data FROM tasks WHERE json_extract(data,'$.threadId')=? ORDER BY rowid LIMIT 1").all('thread-a') as { detail: string }[];
+  const plan = store.db.prepare(`EXPLAIN QUERY PLAN ${TASK_BY_THREAD}`).all('thread-a') as { detail: string }[];
   assert.ok(plan.some(row => row.detail.includes('task_threads')), 'the thread lookup uses its index');
   assert.equal(store.findTask('new')?.id, 'new'); assert.equal(store.findTask('gone'), undefined);
   assert.equal(store.taskProject('new'), 'paper'); assert.equal(store.taskProject('gone'), undefined);

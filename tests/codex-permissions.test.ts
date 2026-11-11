@@ -11,10 +11,15 @@ import { Workspace } from '../src/server/workspace.ts';
 import { taskAccessInstructions } from '../src/server/task-permissions.ts';
 import type { Task } from '../src/shared.ts';
 
-// Opt in with a real app-server binary. The model endpoint is local and canned:
-// no credentials, external API requests or model charges are needed.
+// The real app-server from the @openai/codex dev dependency. The model
+// endpoint is local and canned: no credentials, external API requests or
+// model charges are needed.
+const CODEX = path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'codex.cmd' : 'codex');
 for (const history of ['new', 'legacy-loaded', 'legacy-restarted'] as const)
-for (const initial of ['workspace', 'full'] as const) test(`real Codex switches permissions with ${history} history starting with ${initial}`, { skip: !process.env.PAPILOT_CODEX_TEST_BIN, timeout: 60000 }, async () => {
+for (const initial of ['workspace', 'full'] as const) test(`real Codex switches permissions with ${history} history starting with ${initial}`,
+  // Codex resolves workspace-write to read-only on Windows (Papilot then refuses
+  // to start); see the workspace permission handling in src/server/codex.ts.
+  { skip: process.platform === 'win32' && 'Codex has no workspace-write sandbox on Windows', timeout: 60000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-native-permissions-'));
   const cwd = path.join(dir, 'paper'), extra = path.join(dir, 'extra'), home = path.join(dir, 'home');
   for (const item of [cwd, extra, home]) fs.mkdirSync(item);
@@ -39,7 +44,7 @@ for (const initial of ['workspace', 'full'] as const) test(`real Codex switches 
   const port = (server.address() as { port: number }).port;
   const args = ['app-server', '--listen', 'stdio://'];
   for (const setting of ['model="fixture"', 'model_provider="fixture"', 'model_providers.fixture.name="Fixture"', `model_providers.fixture.base_url="http://127.0.0.1:${port}/v1"`, 'model_providers.fixture.wire_api="responses"', 'model_providers.fixture.requires_openai_auth=false', `sandbox_workspace_write.writable_roots=[${JSON.stringify(extra)}]`, 'sandbox_workspace_write.exclude_tmpdir_env_var=true', 'sandbox_workspace_write.exclude_slash_tmp=true']) args.push('-c', setting);
-  const codex = new Codex(process.env.PAPILOT_CODEX_TEST_BIN!, args, { PATH: process.env.PATH, HOME: home, CODEX_HOME: home, TMPDIR: os.tmpdir() });
+  const codex = new Codex(CODEX, args, { PATH: process.env.PATH, HOME: home, CODEX_HOME: home, TMPDIR: os.tmpdir() });
   const store = new Store(':memory:');
   const workspace = new Workspace(store, codex);
   const task: Task = { id: 'permission-task', projectId: 'paper', agent: 'codex', name: 'p-task', title: 'Edit', instructions: 'Edit the manuscript and an external experiment script when authorized.', worktree: cwd, threadId: null, turnId: null, model: null, status: 'idle', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };

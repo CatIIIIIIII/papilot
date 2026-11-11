@@ -84,7 +84,7 @@ test('state annotation preserves decision response extras and ignores non-state 
   }
 });
 
-// Opt in after building the engine's viewer:
+// Needs the built viewer and a browser; CI runs it on Node 22 with Chromium:
 // PAPILOT_REVIEW_BROWSER=1 npx tsx --test tests/review-state.test.ts
 test('viewer locks buttons and keyboard decisions, permits comments, and follows lock changes', {
   skip: process.env.PAPILOT_REVIEW_BROWSER !== '1', timeout: 30000,
@@ -120,7 +120,8 @@ test('viewer locks buttons and keyboard decisions, permits comments, and follows
     await page.route('**/api/tasks/example/**', async route => {
       const url = new URL(route.request().url());
       if (url.pathname.endsWith('/rounds/1')) return route.fulfill({ json: detail });
-      if (route.request().method() === 'POST') {
+      // Which view the page shows is reported with /look; it decides nothing.
+      if (route.request().method() === 'POST' && !url.pathname.endsWith('/look')) {
         const body = route.request().postDataJSON();
         writes.push(body);
         if (body.action === 'comment') current.comments.first = body.body;
