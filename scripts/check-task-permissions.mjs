@@ -7,7 +7,7 @@ import staticFiles from '@fastify/static';
 import { Codex } from '../src/server/codex.ts';
 import { ClaudeAgent } from '../src/server/agents.ts';
 import { CursorAgent } from '../src/server/cursor.ts';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();

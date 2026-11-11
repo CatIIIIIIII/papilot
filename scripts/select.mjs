@@ -2,7 +2,7 @@
 // the native picker, so checks choose an option the way a person does: open
 // the chip, then click the option. The list follows the chip, in a frame too,
 // and must be closed afterwards, even when a label wraps the chip.
-import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { expect } from './playwright.mjs';
 export const selectOptions = select => select.locator('xpath=following-sibling::*[@role="listbox"][1]').locator('[role="option"]');
 export async function selectOption(select, value) {
   // A control near the bottom of Settings may need scrolling into view.

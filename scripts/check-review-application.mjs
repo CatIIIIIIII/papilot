@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Builder } from '../engine/src/core/build.ts';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-review-application-'));
 process.env.PAPILOT_DATA = path.join(temp, 'data');
@@ -24,7 +24,8 @@ const build = process.argv.includes('-outdir=build');
 const parts = process.cwd().split(require('node:path').sep);
 if (build) fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ cwd: process.cwd(), key: parts[parts.lastIndexOf('builds') + 1], args: process.argv.slice(2) }) + String.fromCharCode(10));
 if (build && fs.existsSync(${JSON.stringify(fail)})) { console.error('Intentional compilation failure'); process.exit(1); }
-const deadline = Date.now() + 30000;
+// The script removes the hold; the deadline only ends a shim it left behind.
+const deadline = Date.now() + 120000;
 while (build && fs.existsSync(${JSON.stringify(hold)}) && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30);
 const result = require('node:child_process').spawnSync(${JSON.stringify(latexmk)}, process.argv.slice(2), { stdio: 'inherit' });
 process.exit(result.status ?? 1);
@@ -233,13 +234,17 @@ try {
     assert.deepEqual(await viewer().locator('body').evaluate(() => window.readyWhileUnavailable), [], 'no transient ready toast while comparisons build or fail');
   };
   f.edit(retry, 'paper/first.tex', 'Recovery first', 'Updated first');
+  // Platform fonts can wrap the toolbar; compilation keeps whatever height it has.
+  const bar = viewer().locator('.bar');
+  await bar.evaluate(el => el.ownerDocument.fonts.ready);
+  const barHeight = await bar.evaluate(el => el.offsetHeight);
   fs.writeFileSync(hold, '');
   await page.locator('.review-rebuild').click();
   await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'true');
   await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCSS('clip-path', 'inset(50%)');
   await expect(viewer().locator('.comparison-waiting[data-state="pending"]').first()).toBeVisible();
   await noFalseReady();
-  assert.equal(await viewer().locator('.bar').evaluate(el => el.offsetHeight), 44);
+  await expect.poll(() => bar.evaluate(el => el.offsetHeight), { message: 'compilation preserves the toolbar height' }).toBe(barHeight);
   await page.screenshot({ path: 'test-results/review-application-real-build.png' });
   fs.rmSync(hold);
   await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'false', { timeout: 60000 });

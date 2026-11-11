@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 import { checkPdfLifecycle } from './check-pdf-lifecycle.mjs';
 
 // A plain file server, with no Papilot server, route mocking or API handlers.

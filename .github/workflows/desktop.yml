@@ -52,6 +52,20 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             engine/package-lock.json
+      # Electron and electron-builder fetch their binaries from GitHub releases
+      # on every build, and a 504 or reset connection there failed the build.
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
       - name: Install Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |

@@ -123,13 +123,19 @@ export function startBackend(options: { node: string; root: string; data: string
 export function idleCheck(child: ChildProcess, send: (message: { type: string; id: string }) => void | Promise<void>) {
   return new Promise<boolean>((resolve, reject) => {
     const id = randomUUID();
-    const timer = setTimeout(() => { child.off('message', receive); reject(new Error('Could not check running tasks. Try again after Papilot responds.')); }, 5000);
+    const timer = setTimeout(() => fail(new Error('Could not check running tasks. Try again after Papilot responds.')), 5000);
+    const cleanup = () => { clearTimeout(timer); child.off('message', receive); child.off('disconnect', closed); child.off('exit', closed); };
     const receive = (message: any) => {
       if (message?.type !== 'papilot:can-switch' || message.id !== id) return;
-      clearTimeout(timer); child.off('message', receive); resolve(message.busy === false);
+      cleanup(); resolve(message.busy === false);
     };
-    const fail = (error: unknown) => { clearTimeout(timer); child.off('message', receive); reject(error); };
-    child.on('message', receive);
+    const fail = (error: unknown) => { cleanup(); reject(error); };
+    // A server that closed its channel or exited can no longer answer. A
+    // write into a pipe its peer is closing does not always fail, so the
+    // closing itself ends the check instead of the timeout.
+    const closed = () => fail(new Error('The local server closed its connection.'));
+    if (child.exitCode !== null || child.signalCode !== null) return closed();
+    child.on('message', receive); child.once('disconnect', closed); child.once('exit', closed);
     try { void Promise.resolve(send({ type: 'papilot:can-switch', id })).catch(fail); }
     catch (error) { fail(error); }
   });

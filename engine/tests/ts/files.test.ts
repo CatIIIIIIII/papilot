@@ -71,9 +71,7 @@ it("losing a held lock is reported, not thrown from a timer", async () => {
     // Another process removes the lock folder, as when it took over the lock
     // or shut down holding a stale one.
     fs.rmSync(file + ".lock", { recursive: true, force: true });
-    await new Promise(resolve => setTimeout(resolve, 1600));
-    expect(warn.mock.calls.some(([message]) => String(message).includes("Lost the lock"))).toBe(true);
-    expect(lost).toBe(1);
+    await vi.waitFor(() => expect(lost).toBe(1), { timeout: 10000 });
     await expect(release()).resolves.toBeUndefined();
   } finally {
     warn.mockRestore();

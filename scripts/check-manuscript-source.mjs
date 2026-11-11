@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-source-edit-'));
 process.env.PAPILOT_DATA = path.join(temp, 'data');

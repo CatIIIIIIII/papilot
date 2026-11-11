@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 
 // The PDF's tool rail: each tool marks the way its name says, keys pick
 // tools, the magic pen's wheel and number keys add quick notes, its menu and

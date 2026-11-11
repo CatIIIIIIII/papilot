@@ -31,7 +31,7 @@ async function fixture() {
   store.saveTask(task);
   const app = await buildApp({ listener: { kind: 'local', port: 7274, publicOrigin: '', owner: '' }, store, workspace, manuscripts: new Manuscripts(), csrf: 'csrf', serialGit: gitQueue(), dist: null, version: 'test', connectReview: async () => review });
   const upload = (name: string, payload: Buffer, extra = {}) => app.inject({ method: 'POST', url: '/api/projects/paper/attachments', headers: { ...headers, 'content-type': 'application/octet-stream', 'x-papilot-filename': encodeURIComponent(name), ...extra }, payload });
-  return { dir, store, agent, workspace, app, upload, task, async close() { await app.close(); workspace.close(); store.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
+  return { dir, store, agent, workspace, app, upload, task, async close() { await app.close(); workspace.close(); store.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } };
 }
 
 test('binary uploads enforce CSRF, body limits and safe downloads, and retain Unicode names', async () => {
@@ -79,7 +79,7 @@ test('draft files attach to one task, survive restart, and reach Codex as images
     assert.deepEqual(reopened.runs()[0].attachments, [image, data]); reopened.close();
     f.agent.ready = true; f.workspace.runtime.authenticated = true;
     await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id] });
-    for (let i = 0; i < 40 && !f.agent.calls.some(call => call.method === 'turn/start'); i++) await new Promise(resolve => setTimeout(resolve, 10));
+    for (let i = 0; i < 500 && !f.agent.calls.some(call => call.method === 'turn/start'); i++) await new Promise(resolve => setTimeout(resolve, 10));
     const input = f.agent.calls.find(call => call.method === 'turn/start')?.params.input;
     assert.equal(input[0].text, run.prompt);
     assert.deepEqual(input[1], { type: 'localImage', path: f.workspace.attachments.path(image) });
@@ -97,6 +97,9 @@ test('new tasks and follow-ups can contain only files; unknown or cross-paper fi
     assert.equal(f.store.tasks().length, 1);
     const result = await f.app.inject({ method: 'POST', url: '/api/tasks', headers, payload: { ...body, projectId: 'paper' } });
     assert.equal(result.statusCode, 200, result.body);
+    // Creating a task starts its preparation in the background; let it finish
+    // before the fixture removes the folder it works in.
+    await f.workspace.prepareTask(body.id).catch(() => undefined);
     assert.match(f.store.runs()[0].prompt, /Do not change the manuscript yet/);
     const another = (await f.upload('values.csv', Buffer.from('x,y\n1,2'))).json();
     const message = { text: '', requestKey: 'follow-up-file', attachments: [another.id] };

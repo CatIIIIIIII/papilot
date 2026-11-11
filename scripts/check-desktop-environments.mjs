@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { _electron as electron, expect } from './playwright.mjs';
 
 if (process.platform !== 'win32') throw new Error('Run this test on Windows.');
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-environments-test-'));

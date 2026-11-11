@@ -80,21 +80,23 @@ test('the development desktop app ignores legacy web update state and rejects in
 const write = (file: string, value: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value)); };
 const fingerprint = 'f'.repeat(64);
 
-for (const mode of ['concurrent', 'closed IPC', 'idle closed IPC', 'throwing send', 'unresponsive'] as const) test(`desktop backend stop handles ${mode} and waits for process exit`, { timeout: 15000 }, async t => {
+// Whether a write into a pipe its peer is closing fails is up to Node and the
+// OS. These modes fail the send through its callback or a throw instead, and
+// close the channel only after the child has received the message.
+for (const mode of ['concurrent', 'failed send', 'throwing send', 'unresponsive', 'closed channel during an idle check'] as const) test(`desktop backend stop handles ${mode} and waits for process exit`, { timeout: 15000 }, async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-desktop-stop-')), root = path.join(directory, 'server'), data = path.join(directory, 'data');
-  const closedIPC = mode === 'closed IPC' || mode === 'idle closed IPC';
   write(path.join(root, 'package.json'), { type: 'module' });
   fs.symlinkSync(path.join(process.cwd(), 'node_modules'), path.join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   write(path.join(root, 'src/server/start.ts'), `import fs from 'node:fs';import path from 'node:path';
     setInterval(()=>{},1000);
-    ${closedIPC ? `setInterval(()=>{if(process.connected && fs.existsSync(path.join(process.env.PAPILOT_DATA,'close-ipc'))) {
-      process.disconnect();fs.writeFileSync(path.join(process.env.PAPILOT_DATA,'ipc-closed'),'yes');
-    }},10);` : ''}
     ${mode === 'unresponsive' ? "process.on('SIGTERM',()=>{});" : ''}
-    process.on('message',message=>{if(message.type==='papilot:shutdown') {
-      fs.appendFileSync(path.join(process.env.PAPILOT_DATA,'shutdowns'),'shutdown\\n');
-      ${mode === 'unresponsive' ? '' : 'setTimeout(()=>process.exit(0),100);'}
-    }});
+    process.on('message',message=>{
+      if(message.type==='papilot:can-switch') process.disconnect();
+      if(message.type==='papilot:shutdown') {
+        fs.appendFileSync(path.join(process.env.PAPILOT_DATA,'shutdowns'),'shutdown\\n');
+        ${mode === 'unresponsive' ? '' : 'setTimeout(()=>process.exit(0),100);'}
+      }
+    });
     process.send({type:'papilot:ready',url:'http://127.0.0.1:12345'});`);
   const backend = startBackend({ node: process.execPath, root, data, log: path.join(data, 'server.log'), env: backendEnvironment(process.execPath, root, data) });
   const send = backend.child.send, errors: Error[] = [];
@@ -109,31 +111,22 @@ for (const mode of ['concurrent', 'closed IPC', 'idle closed IPC', 'throwing sen
   });
   await backend.ready;
   let sends = 0, exited = false;
-  const sendFailures: Error[] = [];
   backend.child.once('exit', () => { exited = true; });
-  backend.child.send = ((...args: any[]) => {
-    sends++;
-    if (closedIPC) {
-      // Let the child close its real pipe while this event loop is held, so
-      // connected still reflects the state before the peer disconnected.
-      fs.writeFileSync(path.join(data, 'close-ipc'), 'yes');
-      const deadline = performance.now() + 3000, closed = path.join(data, 'ipc-closed');
-      while (!fs.existsSync(closed) && performance.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
-      assert.ok(fs.existsSync(closed)); assert.equal(backend.child.connected, true);
-      const callback = args.at(-1);
-      if (typeof callback === 'function') args[args.length - 1] = (error: Error | null) => { if (error) sendFailures.push(error); callback(error); };
-    }
-    if (mode === 'throwing send') throw Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
-    return (send as any).apply(backend.child, args);
-  }) as typeof send;
-  if (mode === 'idle closed IPC') {
+  if (mode === 'closed channel during an idle check') {
     const failure = await backend.idle().then(() => undefined, error => error);
-    assert.deepEqual(errors, [], 'An idle check must reject its IPC error instead of emitting an unhandled error');
-    assert.match(String(failure), /EPIPE|closed|pipe/i);
+    assert.deepEqual(errors, [], 'An idle check must reject instead of emitting an unhandled error');
+    assert.match(String(failure), /closed its connection/);
     await backend.stop();
     assert.equal(exited, true); assert.deepEqual(errors, []);
     return;
   }
+  backend.child.send = ((...args: any[]) => {
+    sends++;
+    const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+    if (mode === 'throwing send') throw epipe;
+    if (mode === 'failed send') { const callback = args.at(-1); setImmediate(() => callback(epipe)); return false; }
+    return (send as any).apply(backend.child, args);
+  }) as typeof send;
   const first = backend.stop(), second = backend.stop();
   if (mode === 'concurrent') assert.equal(first, second, 'All callers share one shutdown promise');
   await Promise.all([first, second]);
@@ -141,7 +134,8 @@ for (const mode of ['concurrent', 'closed IPC', 'idle closed IPC', 'throwing sen
   assert.equal(exited, true, 'stop must observe process exit, including after forced termination');
   assert.ok(backend.child.exitCode !== null || backend.child.signalCode !== null);
   assert.equal(sends, 1, 'Concurrent stop calls send shutdown only once');
-  if (mode === 'closed IPC') assert.equal(sendFailures.length, 1, 'The real closed pipe must report a send failure');
+  // A failed shutdown message terminates at once rather than at the deadline.
+  if (process.platform !== 'win32' && (mode === 'failed send' || mode === 'throwing send')) assert.equal(backend.child.signalCode, 'SIGTERM');
   if (mode === 'concurrent' || mode === 'unresponsive') assert.equal(fs.readFileSync(path.join(data, 'shutdowns'), 'utf8'), 'shutdown\n');
   assert.equal(backend.stop(), first, 'Calls after exit reuse the completed shutdown');
 });

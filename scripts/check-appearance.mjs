@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
 import { selectOption } from './select.mjs';
-import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { expect } from './playwright.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { expect } from './playwright.mjs';
 
 // Exercise the real PdfView and PDF.js worker in the built static playground.
 // Holding the first GetPage reply makes navigating away during initialization

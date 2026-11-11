@@ -64,7 +64,12 @@ export class Fixture {
   }
   async close() {
     for (const app of this.apps) await app.close();
-    await fs.promises.rm(this.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await fs.promises.rm(this.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch((error) => {
+      // Windows can hold a file in the temporary folder for a moment after git
+      // exits. Removing it is not what any test checks.
+      if (process.platform !== "win32" || !["EPERM", "EBUSY"].includes(error?.code)) throw error;
+      console.warn(`Could not remove ${this.base}: ${error.message}`);
+    });
   }
 }
 export function fakeRound(app: App, name: string) {

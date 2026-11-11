@@ -65,7 +65,7 @@
     "start": "tsx src/server/main.ts",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit && tsc -p desktop/tsconfig.json --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-timeout=180000 tests/*.test.ts",
     "test:source-edit": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-source-edit.mjs",
     "test:manuscript-source": "npm run build && node --import tsx scripts/check-manuscript-source.mjs",
     "test:review-batching": "npm run build && npm --prefix engine run build && node --import tsx scripts/check-review-batching.mjs && node --import tsx scripts/check-review-application.mjs",

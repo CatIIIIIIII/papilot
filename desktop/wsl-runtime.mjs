@@ -62,6 +62,11 @@ if (action === 'install') {
   const bundle = { root, version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
     fingerprint: options.nodeMajor === String(major) ? options.fingerprint : `${options.fingerprint}-wsl-node-${major}` };
   let backend, running = root, stopping = false, switching = false, instance, transition;
+  // Switch checks the backend has not answered yet. A backend that closes its
+  // channel cannot answer, and a write into a closing pipe does not always
+  // fail, so its disconnect reports them busy.
+  const unanswered = new Set();
+  const busy = id => { if (unanswered.delete(id) && !stopping) send({ type: 'papilot:can-switch', id, busy: true }); };
   const stop = async () => {
     // Transition failures may also request shutdown. Do not let that request
     // wait on the transition currently unwinding its database rollback.
@@ -93,11 +98,11 @@ if (action === 'install') {
       const message = JSON.parse(line);
       if (message.type === 'papilot:shutdown') void stop();
       else if (message.type === 'papilot:can-switch' && !stopping) {
-        const unavailable = () => { if (!stopping) send({ type: message.type, id: message.id, busy: true }); };
-        if (!backend?.child.connected) unavailable();
+        unanswered.add(message.id);
+        if (!backend?.child.connected) busy(message.id);
         else {
-          try { backend.child.send(message, error => { if (error) unavailable(); }); }
-          catch { unavailable(); }
+          try { backend.child.send(message, error => { if (error) busy(message.id); }); }
+          catch { busy(message.id); }
         }
       }
       else if (message.type === 'papilot:rebind') rebind(message.instance);
@@ -123,8 +128,9 @@ if (action === 'install') {
     if (health?.desktopInstance !== instance) { await next.stop(); throw new Error('The WSL backend did not identify this launch.'); }
     options.port = Number(new URL(url).port);
     next.child.once('exit', code => { if (!stopping && !switching && backend === next) { reportLog(); process.exit(code || 1); } });
+    next.child.once('disconnect', () => { for (const id of [...unanswered]) busy(id); });
     next.child.on('message', message => {
-      if (message?.type === 'papilot:can-switch') { send(message); return; }
+      if (message?.type === 'papilot:can-switch') { unanswered.delete(message.id); send(message); return; }
       if (message?.type !== 'papilot:activate' || switching || stopping) return;
       switching = true;
       transition = switchServer(data, bundle, message, running, () => next.stop(), launch).then(root => { running = root; })

@@ -9,7 +9,7 @@ import { createServer } from 'node:net';
 import http from 'node:http';
 import { buildLayer } from './desktop-layer.mjs';
 import { findCommand } from '../engine/src/core/platform.mjs';
-import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { _electron as electron, expect } from './playwright.mjs';
 import { selectOption, selectedValue } from './select.mjs';
 import { checkDesktopNotifications } from './check-desktop-notifications.mjs';
 import { assertInstalledTools } from './desktop-requirements.mjs';

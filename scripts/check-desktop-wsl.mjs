@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { spawnSync } from 'node:child_process';
-import { _electron as electron, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { _electron as electron, expect } from './playwright.mjs';
 
 const distro = process.env.PAPILOT_WSL_TEST_DISTRIBUTION;
 if (process.platform !== 'win32' || !distro) throw new Error('Run on Windows with PAPILOT_WSL_TEST_DISTRIBUTION set to a prepared Linux distribution.');

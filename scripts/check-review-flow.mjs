@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 import { annotateReviewState, rewriteReviewHtml } from '../src/server/review.ts';
 
 fs.mkdirSync('test-results', { recursive: true });
@@ -172,7 +172,7 @@ try {
   await expect(indirect().locator('.place')).toHaveCount(2);
   // Turning them on warns that rounds compile more.
   await expect(settings().getByRole('note')).toContainText('requires additional compilations');
-  assert.equal(indirectChanges, true, 'The server keeps the setting');
+  await expect.poll(() => indirectChanges, { message: 'The server keeps the setting' }).toBe(true);
   await page.screenshot({ path: 'test-results/indirect-effects-settings.png', fullPage: true });
   await settings().getByRole('button', { name: 'Close', exact: true }).click();
   assert.equal(writes.length, 0, 'Changing disclosure must not send review decisions');
@@ -401,7 +401,7 @@ try {
       // These comparisons are already usable while the next round builds.
       await expect(bar.locator('.accept-all')).toBeEnabled();
       await expect(bar.locator('.reject-all')).toBeEnabled();
-      assert.equal(await bar.evaluate(el => el.offsetHeight), height, `compilation preserves the ${language} toolbar at ${width}px`);
+      await expect.poll(() => bar.evaluate(el => el.offsetHeight), { message: `compilation preserves the ${language} toolbar at ${width}px` }).toBe(height);
       if (language === 'zh-CN' && width === 1100) await page.screenshot({ path: 'test-results/review-building-zh.png' });
       task.status = 'reviewing'; delete task.review.job; update(); await sync();
       await expect(bar.locator('.accept-all')).toBeEnabled();
@@ -430,7 +430,7 @@ try {
     await sync();
     await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'true');
     await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCSS('clip-path', 'inset(50%)');
-    assert.equal(await viewer().locator('.bar').evaluate(el => el.offsetHeight), height, 'phone compilation preserves toolbar height');
+    await expect.poll(() => viewer().locator('.bar').evaluate(el => el.offsetHeight), { message: 'phone compilation preserves toolbar height' }).toBe(height);
     task.status = 'reviewing'; delete task.review.job; update(); await sync();
     await expect(page.locator('.review-rebuild')).toHaveAttribute('aria-busy', 'false');
     await expect(viewer().locator('.bar .status[data-state="building"]')).toHaveCount(0);
@@ -602,8 +602,8 @@ try {
   await sync();
   await expect(card.getByRole('button', { name: 'Keep latest wording and apply', exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Keep latest wording and apply', exact: true }).click();
-  assert.equal(applyRequests.at(-1).keepCurrent, true);
   await expect(taskStatus).toHaveText('Applied to manuscript');
+  assert.equal(applyRequests.at(-1).keepCurrent, true);
   // If AI needs an answer or is interrupted, continue in chat without a source editor.
   task.delivery = null; task.review.files = ['main.tex'];
   task.reconciliation = { id: 'pending-merge', round: latest, files: ['main.tex'], ready: true };
@@ -628,8 +628,8 @@ try {
   await expect(card.locator('.task-commit-preview')).toContainText('Final reviewed title');
   await page.screenshot({ path: 'test-results/combined-title-commit.png', fullPage: true });
   await card.getByRole('button', { name: 'Commit together', exact: true }).click();
-  assert.equal(commitRequests.at(-1).confirmation, 'combined-version');
   await expect(taskStatus).toHaveText('Committed');
+  assert.equal(commitRequests.at(-1).confirmation, 'combined-version');
   task.delivery = null; task.review.files = ['main.tex']; await sync();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();

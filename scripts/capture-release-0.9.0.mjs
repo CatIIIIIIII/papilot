@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 import { Fixture, METHOD } from '../engine/tests/ts/helpers.ts';
 import { Builder } from '../engine/src/core/build.ts';
 import { createServer } from '../engine/src/server.ts';

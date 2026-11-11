@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 import { SkillLibrary } from '../src/server/skill-library.ts';
 import { registerSkillRoutes } from '../src/server/skill-routes.ts';
 import { listedSkill, loadSkills } from '../src/server/skills.ts';

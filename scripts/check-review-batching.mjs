@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 import { Fixture, METHOD } from '../engine/tests/ts/helpers.ts';
 import { createServer } from '../engine/src/server.ts';
 import { Builder } from '../engine/src/core/build.ts';
@@ -57,7 +57,7 @@ try {
   await expect.poll(() => app.review.pageState(task.name).decisions.c001).toBe('accepted');
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   await expect.poll(() => app.review.pageState(task.name).decisions.c001).toBe('pending');
-  await page.waitForTimeout(500);
+  // A build started by either would also fail the checks at the end.
   assert.deepEqual(builds, [], 'decisions and undo do not refresh or predict the manuscript');
 
   // Hold a failing round: the pages before the broken one have carried comparisons.

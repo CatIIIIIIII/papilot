@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { expect } from './playwright.mjs';
 
 // Exercise the actual sandboxed preload and main process without depending on
 // an OS notification daemon, permission prompt or sound device in CI.

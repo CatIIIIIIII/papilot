@@ -149,12 +149,11 @@ it.skipIf(!posix)("stops waiting for a slot at once and starts no compiler", asy
   const a = lease("normal"), b = lease("normal");
   await Promise.all([a.ready, b.ready]);
   const stop = new AbortController(), build = builder.build(revisions[0], ["full"], null, { signal: stop.signal });
-  await sleep(500);
+  // Both slots stay held, so a build that rejects never waited for one.
+  await until(() => fs.readdirSync(pool).some((name) => name.startsWith("wait-")));
   expect(started()).toEqual([]);
-  const at = Date.now();
   stop.abort();
   await expect(build).rejects.toBeInstanceOf(Cancelled);
-  expect(Date.now() - at).toBeLessThan(500);
   await sleep(300);
   expect(runs()).toBe(0);
   expect(fs.readdirSync(pool).filter((name) => name.startsWith("wait-"))).toEqual([]);

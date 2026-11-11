@@ -5,7 +5,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium } from '../engine/node_modules/playwright/index.mjs';
-import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { expect } from './playwright.mjs';
 import { taskNoteResults } from '../src/server/note-results.ts';
 import { rewriteReviewHtml } from '../src/server/review.ts';
 import { messages } from '../src/web/locales/index.ts';
@@ -105,6 +105,14 @@ await page.route('**/review/**', async route => {
 const frame = () => page.frameLocator('.review-frame');
 const sent = index => page.locator(`[data-note-result="request-1:${index}"]`);
 const controls = () => page.locator('#review-panel .review-note-controls');
+// The review round can replace the iframe, so evaluating inside the old one
+// fails with a detached frame. Dispatch in its current window from the page.
+const decided = () => expect.poll(() => page.evaluate(() => {
+  const view = document.querySelector('.review-frame')?.contentWindow;
+  if (!view || view.document.readyState !== 'complete') return false;
+  view.dispatchEvent(new view.Event('latex-review:decided'));
+  return true;
+})).toBe(true);
 try {
   await page.goto(origin);
   await controls().getByRole('button', { name: 'Retry linking changes', exact: true }).waitFor();
@@ -113,12 +121,12 @@ try {
   await controls().getByRole('button', { name: 'Retry linking changes', exact: true }).click();
   await frame().getByRole('button', { name: 'Show note 1: Keep the technical term.', exact: true }).waitFor();
   assert.equal(await frame().getByRole('button', { name: 'Show note 1: Shorten the opening.', exact: true }).count(), 0, 'an older note must not label a newer round');
-  assert.deepEqual(optionReads.sort(), ['request-2:0', 'request-2:1', 'request-2:2'], 'Every current note\'s small manifest is read, so each change can offer its options');
+  await expect.poll(() => [...optionReads].sort(), { message: 'Every current note\'s small manifest is read, so each change can offer its options' }).toEqual(['request-2:0', 'request-2:1', 'request-2:2']);
   assert.deepEqual(previewReads, [], 'Opening the review never prefetches option PDFs');
   await frame().getByRole('button', { name: 'Other options · 1', exact: true }).click();
   await controls().getByRole('tab', { name: 'Concise', exact: true }).waitFor();
   assert.equal(optionReads.length, 3, 'Opening a cached note does not repeat its manifest request');
-  assert.deepEqual(previewReads[0], { key: 'request-2:0', round: 2, option: 'current' }, 'The visible comparison loads first; the note\'s other options follow while the author reads');
+  await expect.poll(() => previewReads[0], { message: 'The visible comparison loads first; the note\'s other options follow while the author reads' }).toEqual({ key: 'request-2:0', round: 2, option: 'current' });
   await frame().locator('.source-fixture p').first().click();
   await controls().waitFor({ state: 'hidden' });
   const original = await page.locator('[data-note-result]').allTextContents();
@@ -139,7 +147,7 @@ try {
   assert.match(await page.locator('.review-frame').getAttribute('src'), /round=1&history=1/);
 
   decisions[1].c1 = 'accepted';
-  await frame().locator('body').evaluate(element => element.ownerDocument.defaultView.dispatchEvent(new Event('latex-review:decided')));
+  await decided();
   await sent(0).click();
   assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 1 / 3');
   await expect(frame().locator('[data-papilot-link]')).toHaveCount(2);
@@ -214,7 +222,7 @@ try {
   assert.equal(await sourceView.locator('.note-source-unit[data-unit="other"] ins, .note-source-unit[data-unit="other"] del').count(), 0, 'unrelated edits retain context without focused colors');
   assert.deepEqual(optionWrites, [], 'source and option switches never generate or apply a proposal');
   comparisonVersion = 'rejected-neighbor'; task.updatedAt++;
-  await frame().locator('body').evaluate(element => element.ownerDocument.defaultView.dispatchEvent(new Event('latex-review:decided')));
+  await decided();
   await controls().locator('.note-option-source[data-revision="candidate-brief-rejected-neighbor"]').waitFor();
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/note-options-latex.png', fullPage: true });
@@ -236,8 +244,9 @@ try {
   await page.screenshot({ path: 'test-results/note-results-desktop-light.png', fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
 
-  await page.reload();
+  // Load the phone layout directly rather than resizing a page mid-load.
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await sent(0).click();
   await frame().locator('[data-papilot-link][data-stop="0"]').waitFor();

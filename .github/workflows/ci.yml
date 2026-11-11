@@ -61,6 +61,8 @@ jobs:
       # Checks the generated UI demos and local asset links before main.
       - run: npm run site
       - name: Verify the static playground without a backend
+        # The static pages do not depend on the server's Node version.
+        if: matrix.node == 22
         run: |
           engine/node_modules/.bin/playwright install --with-deps chromium
           node scripts/check-site-blog.mjs
@@ -94,15 +96,39 @@ jobs:
         working-directory: engine
         run: npx playwright install --with-deps chromium
       - run: npm run build
-      - name: Review batching, compilation and note review
-        run: |
-          node --import tsx scripts/check-review-batching.mjs
-          node --import tsx scripts/check-review-application.mjs
-          node --import tsx scripts/check-review-flow.mjs
-          node --import tsx scripts/check-note-results.mjs
-          node --import tsx scripts/check-note-options-flow.mjs
+      # One step each, so one failure does not hide the others' results.
+      - name: Review batching
+        run: node --import tsx scripts/check-review-batching.mjs
         env:
           PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Review application and compilation
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-review-application.mjs
+        env:
+          PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Review flow
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-review-flow.mjs
+        env:
+          PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Note results
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-note-results.mjs
+        env:
+          PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Note options
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-note-options-flow.mjs
+        env:
+          PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Keep screenshots of a failed check
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-browser-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # The same checks on a native Windows host: the CLI, server and review engine
   # run there too, and the tests that need POSIX signals skip themselves.

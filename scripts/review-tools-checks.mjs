@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { expect } from './playwright.mjs';
 
 // Exercise the shared rail against the real embedded review, including drafts
 // sent to the task rather than accept/reject mutations.

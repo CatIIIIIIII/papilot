@@ -2,7 +2,7 @@
 // disposable repository; no agent or manuscript owned by the user is used.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { chromium, expect } from '../engine/node_modules/@playwright/test/index.mjs';
+import { chromium, expect } from './playwright.mjs';
 import { Fixture, METHOD } from '../engine/tests/ts/helpers.ts';
 import { createServer } from '../engine/src/server.ts';
 

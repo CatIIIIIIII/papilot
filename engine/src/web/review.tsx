@@ -844,7 +844,9 @@ export function ReviewApp({
     },
   };
   async function undo() {
-    if ((!state?.undo && !queue.current!.pending.length) || !latest || snapshot.current.busy)
+    // The snapshot has the decision confirmed a moment ago, before this
+    // render's state does: Undo pressed right after a decision takes it back.
+    if ((!snapshot.current.state?.undo && !queue.current!.pending.length) || !latest || snapshot.current.busy)
       return;
     // The latest decision has not been sent yet: it is simply dropped, and
     // nothing reaches the server or compiles.

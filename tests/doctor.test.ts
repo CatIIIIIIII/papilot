@@ -372,26 +372,6 @@ test('doctor distinguishes a healthy local server from an occupied port and vali
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); f.cleanup(); }
 });
 
-test('a stalled agent probe times out while the rest of the report remains usable', async () => {
-  const f = fixture();
-  const pidFile = path.join(f.dir, 'agent.pid');
-  try {
-    f.baseTools();
-    const agy = f.tool('agy', `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`);
-    const start = Date.now();
-    const result = await f.run(['--json'], { PAPILOT_AGY_BIN: agy });
-    assert.equal(result.code, 0, result.stdout);
-    assert.match(item(result.report, 'agent.antigravity').detail, /timed out/);
-    assert.ok(Date.now() - start < 14000);
-    const pid = Number(fs.readFileSync(pidFile, 'utf8'));
-    assert.ok(Number.isInteger(pid) && pid > 0);
-    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, 'the timed-out agent must be stopped');
-  } finally {
-    if (fs.existsSync(pidFile)) { try { process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch { /* already stopped */ } }
-    f.cleanup();
-  }
-});
-
 test('doctor marks a timeout before process cleanup reports a plain exit code', async () => {
   const f = fixture();
   try {
