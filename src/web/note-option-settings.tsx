@@ -27,7 +27,7 @@ export function NoteOptionSettings() {
           void (choice === 'off' ? saveNoteAlternatives(false) : saveNoteAlternatives(true, choice));
         }}/>
       </div>
-      <div className="effort-scale note-count-scale" aria-hidden="true">{choices.map((choice, step) => <span key={choice.id} className={step === index ? 'active' : undefined} style={step > 0 && step < choices.length - 1 ? { left: centre(step) } : undefined}>{choice.label}</span>)}</div>
+      <div className="effort-scale note-count-scale" aria-hidden="true">{choices.map((choice, step) => <span key={choice.id} className={step === index ? 'active' : undefined}>{choice.label}</span>)}</div>
       <span className="sr-only" id={description}>{help}</span>
     </div>
   </div>;

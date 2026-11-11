@@ -878,13 +878,11 @@ body.resizing iframe{pointer-events:none}
 .settings-note-count .effort-track input::-webkit-slider-thumb{width:16px;height:16px;margin-top:1px}
 .settings-note-count .effort-track input::-moz-range-thumb{width:16px;height:16px}
 .settings-note-count .note-count-scale{margin-top:3px}
-.note-count-scale{position:relative;height:16px;font-size:11px}
-.note-count-scale span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+/* The labels are spaced out from end to end rather than placed under each
+   stop, so long translations such as Spanish "Desactivado" never overlap. */
+.note-count-scale{font-size:11px}
+.note-count-scale span{white-space:nowrap}
 .note-count-scale span.active{color:var(--text-2)}
-.note-count-scale span:first-child{left:0;transform:none}
-.note-count-scale span:last-child{right:0;transform:none}
-/* Long translated Off labels need their own space on the smallest screens. */
-@media(max-width:360px){.note-count-scale span{position:static;transform:none}}
 @media(max-width:480px){.settings-note-count{align-self:flex-end}}
 .settings-name{font-size:14px;font-weight:500;color:var(--text)}
 .segmented{display:inline-flex;gap:2px;padding:3px;border-radius:var(--r-md);background:var(--bg-muted)}

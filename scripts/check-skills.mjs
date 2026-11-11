@@ -21,7 +21,7 @@ const skills = [
   { id: 'proofread', name: 'Proofread', description: 'Fix typos, grammar and punctuation without rewording', hint: 'Which part? Leave empty for the whole paper', source: 'builtin' },
   { id: 'venue', name: 'Venue style', description: 'Follow the venue style guide', hint: '', icon: 'book', source: 'paper' },
 ];
-const task = { id: 'skill-fixture-0001', projectId: 'paper', name: 'p-skill', title: 'Polish: the introduction', instructions: 'x', worktree: '/tmp/paper-tasks/p-skill', threadId: 't', turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null,
+const task = { id: 'skill-fixture-0001', projectId: 'paper', name: 'p-skill', title: 'Polish: the introduction', instructions: 'x', worktree: '/tmp/paper-tasks/p-skill', threadId: 't', turnId: null, model: null, status: 'reviewing', deferred: true, createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null,
   review: { state: 'done', round: 2, counts: { pending: 0, accepted: 2, rejected: 1, commented: 0 }, unsent: 3, comments: 0, files: ['sections/intro.tex'] } };
 const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Paper', path: '/tmp/paper', createdAt: 1 }], tasks: [task], requests: [], runtime: { connected: true, authenticated: true, account: null, error: null, models: [] } };
 const git = { remote: true, branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, head: { hash: 'abc1234', subject: 'Draft', date: 1 }, files: [{ path: 'sections/intro.tex', status: 'M', staged: false, lines: [3, 2] }] };
@@ -51,6 +51,8 @@ await page.route('**/api/**', async route => {
   }
   if (url.pathname.endsWith('/items')) return json({ items: taskItems.get(url.pathname.split('/')[3]) || items });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
+  // A decided task compiles what applying it writes, ahead of time.
+  if (url.pathname.endsWith('/predict')) return json({ ok: true });
   if (url.pathname.endsWith('/git')) return json(git);
   // A finished review writes its commit message as soon as it opens.
   if (url.pathname.endsWith('/git/message') || url.pathname.endsWith('/commit-message')) return json({ message: 'Polish the introduction', agent: 'codex' });
@@ -107,10 +109,10 @@ try {
   assert.equal(messages[0].feedback, true);
   task.review = { ...task.review, unsent: 0, comments: 0 }; await sync();
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
-  // The accepted change is in the manuscript; committing it is offered, not required.
+  // The accepted changes are saved when the author chooses: applied or committed.
   const commitCard = page.locator('.thread .commit-card');
-  await expect(commitCard.getByRole('textbox', { name: 'Commit message', exact: true })).toHaveValue('Polish the introduction');
-  await expect(commitCard.getByRole('button', { name: 'Commit', exact: true })).toBeEnabled();
+  await expect(commitCard.getByRole('button', { name: 'Apply to workspace', exact: true })).toBeEnabled();
+  await expect(commitCard.getByRole('textbox', { name: 'Commit message', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Split', exact: true }).click();
 
   // "/" lists skills in the follow-up composer; the chosen one runs without text.

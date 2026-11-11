@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { chromium, expect } from './playwright.mjs';
+import { afterRender, chromium, expect } from './playwright.mjs';
 import { Fixture, METHOD } from '../engine/tests/ts/helpers.ts';
 import { createServer } from '../engine/src/server.ts';
 import { Builder } from '../engine/src/core/build.ts';
@@ -53,6 +53,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${listener.port}/review/paper/?task=batch`);
   await expect(page.locator('.change.current')).toHaveAttribute('data-stop', '0');
+  await afterRender(page);
   await page.keyboard.press('a');
   await expect.poll(() => app.review.pageState(task.name).decisions.c001).toBe('accepted');
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');

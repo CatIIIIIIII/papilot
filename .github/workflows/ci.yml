@@ -45,10 +45,13 @@ jobs:
         if: matrix.node == 22
         uses: ./.github/actions/setup-tex
       - run: npm run typecheck
+      # The runner image already has the libraries Chromium needs. Installing
+      # them (--with-deps) needs Ubuntu's package mirror, which the runner
+      # sometimes cannot resolve for an hour or more.
       - name: Install browser for PDF review tests
         if: matrix.node == 22
         working-directory: engine
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - run: npm test
         env:
           # The viewer's lock test drives the built review viewer in Chromium.
@@ -68,8 +71,11 @@ jobs:
         # The static pages do not depend on the server's Node version.
         if: matrix.node == 22
         run: |
-          engine/node_modules/.bin/playwright install --with-deps chromium
+          engine/node_modules/.bin/playwright install chromium
           node scripts/check-site-blog.mjs
+          node scripts/check-site.mjs
+          node scripts/check-site-analytics.mjs
+          node scripts/check-site-privacy.mjs
           node scripts/check-playground.mjs
         env:
           PAPILOT_BROWSER_CHANNEL: chromium
@@ -98,7 +104,7 @@ jobs:
         uses: ./.github/actions/setup-tex
       - name: Install browser
         working-directory: engine
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - run: npm run build
       # One step each, so one failure does not hide the others' results.
       - name: Review batching
@@ -130,6 +136,151 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: review-browser-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Every other interface check, against the real built app with mocked or
+  # real services, real LaTeX where a check compiles. One step each, so one
+  # failure does not hide the others.
+  interface:
+    name: Interface checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PAPILOT_BROWSER_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            engine/package-lock.json
+      - run: npm ci
+      - run: npm run setup:review
+      - name: Install TeX
+        uses: ./.github/actions/setup-tex
+      - name: Install browser
+        working-directory: engine
+        run: npx playwright install chromium
+      - run: npm run build
+      - name: ai-review
+        run: node --import tsx scripts/check-ai-review.mjs
+      - name: appearance
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-appearance.mjs
+      - name: attachments
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-attachments.mjs
+      - name: build-problems
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-build-problems.mjs
+      - name: comparison-progress
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-comparison-progress.mjs
+      - name: compilation
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-compilation.mjs
+      - name: fast-decisions
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-fast-decisions.mjs
+      - name: git-panel
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-git-panel.mjs
+      - name: git-workspace
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-git-workspace.mjs
+      - name: imports
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-imports.mjs
+      - name: locales
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-locales.mjs
+      - name: manuscript-source
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-manuscript-source.mjs
+      - name: note-groups
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-note-groups.mjs
+      - name: note-new-pass
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-note-new-pass.mjs
+      - name: note-selection
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-note-selection.mjs
+      - name: papers
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-papers.mjs
+      - name: pdf-tools
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-pdf-tools.mjs
+      - name: pdf-words
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-pdf-words.mjs
+      - name: persistent-pdf
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-persistent-pdf.mjs
+      - name: places
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-places.mjs
+      - name: reply-duplicates
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-reply-duplicates.mjs
+      - name: review-notes
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-review-notes.mjs
+      - name: review-pdf-appearance
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-review-pdf-appearance.mjs
+      - name: review-tools
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-review-tools.mjs
+      - name: settings-layout
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-settings-layout.mjs
+      - name: skill-library
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-skill-library.mjs
+      - name: skills
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-skills.mjs
+      - name: source-edit
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-source-edit.mjs
+      - name: system-requirements
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-system-requirements.mjs
+      - name: task-model
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-task-model.mjs
+      - name: task-permissions
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-task-permissions.mjs
+      - name: task-preparation
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-task-preparation.mjs
+      - name: ui
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-ui.mjs
+      - name: unified-review
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-unified-review.mjs
+      - name: updates
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-updates.mjs
+      - name: workspace-switcher-notes
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-workspace-switcher-notes.mjs
+      - name: workspace-switcher
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-workspace-switcher.mjs
+      - name: Keep screenshots of a failed check
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-results
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
@@ -196,7 +347,7 @@ jobs:
   passed:
     name: CI passed
     if: always()
-    needs: [check, review, windows, changes, desktop]
+    needs: [check, review, interface, windows, changes, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -204,6 +355,7 @@ jobs:
         env:
           CHECK_RESULT: ${{ needs.check.result }}
           REVIEW_RESULT: ${{ needs.review.result }}
+          INTERFACE_RESULT: ${{ needs.interface.result }}
           WINDOWS_RESULT: ${{ needs.windows.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}

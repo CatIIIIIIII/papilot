@@ -147,10 +147,12 @@ try {
   await page.reload();
   await page.getByRole('button', { name: /^Review(?:,|$)/ }).click();
   await expect(frame.locator('html')).toHaveAttribute('data-papilot-phone', '');
-  await expect.poll(() => frame.locator('.change.current .dock').evaluate(dock => {
-    const box = dock.getBoundingClientRect();
-    return box.bottom <= innerHeight && box.bottom >= innerHeight - 16 && box.left >= 0 && box.right <= innerWidth;
-  })).toBe(true);
+  // The decision dock floats just above the marking tools, fully on screen.
+  const dockPlacement = async () => {
+    const dock = await frame.locator('.change.current .dock').boundingBox(), tools = await page.locator('.review-marking-rail .pdf-rail').boundingBox();
+    return Boolean(dock && tools) && dock.x >= 0 && dock.x + dock.width <= 390 && dock.y >= 0 && dock.y + dock.height <= tools.y && tools.y - (dock.y + dock.height) <= 24;
+  };
+  await expect.poll(dockPlacement).toBe(true);
   assert.deepEqual(errors, []);
   console.log('PASS: all 12 UI/PDF/review appearance combinations, inline and standalone changes, preview filters, controls, LaTeX colors, per-edit action hover states, pending/decided toolbars at 320/500/700 px, localized two-digit numbers, pointer target sizes, and phone dock positioning.');
 } catch (error) {

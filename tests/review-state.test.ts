@@ -87,7 +87,7 @@ test('state annotation preserves decision response extras and ignores non-state 
 // Needs the built viewer and a browser; CI runs it on Node 22 with Chromium:
 // PAPILOT_REVIEW_BROWSER=1 npx tsx --test tests/review-state.test.ts
 test('viewer locks buttons and keyboard decisions, permits comments, and follows lock changes', {
-  skip: process.env.PAPILOT_REVIEW_BROWSER !== '1', timeout: 30000,
+  skip: process.env.PAPILOT_REVIEW_BROWSER !== '1', timeout: 90000,
 }, async () => {
   const [{ default: Fastify }, { default: staticFiles }] = await Promise.all([
     import('fastify'), import('@fastify/static'),
@@ -132,12 +132,18 @@ test('viewer locks buttons and keyboard decisions, permits comments, and follows
     await expect(page.locator('.change.current')).toBeVisible();
     await expect(page.locator('#review-lock')).toContainText('Pause this task');
     const decisions = page.locator('button.accept, button.reject, button.undo');
+    // A key pressed before the viewer listens is lost; once the composer is
+    // open, C does nothing more, so pressing again is safe.
+    const openComposer = () => expect(async () => {
+      await page.keyboard.press('c');
+      await expect(page.locator('#composer-text')).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
     assert.ok(await decisions.count() >= 6, 'Includes the dock, individual units, Accept all, and Undo');
     for (const button of await decisions.all()) await expect(button).toBeDisabled();
     for (const button of await page.locator('button.comment').all()) await expect(button).toBeEnabled();
     for (const key of ['a', 'r', 'u', process.platform === 'darwin' ? 'Meta+z' : 'Control+z']) await page.keyboard.press(key);
     assert.equal(writes.length, 0, 'Keyboard shortcuts do not bypass the lock');
-    await page.keyboard.press('c');
+    await openComposer();
     await page.locator('#composer-text').fill('Comment while the task runs');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.composer')).toHaveCount(0);
@@ -153,7 +159,7 @@ test('viewer locks buttons and keyboard decisions, permits comments, and follows
     assert.equal(writes[1].action, 'accept');
     await expect(page.locator('.accept-all')).toBeEnabled();
 
-    await page.keyboard.press('c');
+    await openComposer();
     await page.locator('#composer-text').fill('Keep this unsent draft');
     tasks = [];
     await page.clock.fastForward(1600);

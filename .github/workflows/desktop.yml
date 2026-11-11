@@ -66,11 +66,54 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
-      - name: Install Linux desktop dependencies
+      # The image has most of the packages the Linux smoke test needs. The rest
+      # come from a cache of their .deb files per image, like TeX's, so a run
+      # needs Ubuntu's mirror only on a new image: the runners sometimes cannot
+      # resolve it for an hour or more.
+      - name: Find missing Linux desktop packages
+        id: desktop-packages
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y libgtk-3-0 libnss3 libxss1 libxtst6 libasound2 libgbm1 libnotify4 libsecret-1-0 libfuse2 xvfb xauth openbox
+          missing=()
+          for package in libgtk-3-0 libnss3 libxss1 libxtst6 libasound2 libgbm1 libnotify4 libsecret-1-0 libfuse2 xvfb xauth openbox; do
+            dpkg -s "$package" >/dev/null 2>&1 || missing+=("$package")
+          done
+          echo "Missing: ${missing[*]:-none}"
+          echo "list=${missing[*]}" >> "$GITHUB_OUTPUT"
+          echo "dir=/tmp/papilot-desktop-debs" >> "$GITHUB_OUTPUT"
+          echo "key=desktop-debs-v1-$ImageOS-$ImageVersion-$(uname -m)-$(sha256sum <<< "${missing[*]}" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - id: desktop-cache
+        if: runner.os == 'Linux' && steps.desktop-packages.outputs.list != ''
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.desktop-packages.outputs.dir }}
+          key: ${{ steps.desktop-packages.outputs.key }}
+      - name: Install Linux desktop packages from the cache
+        id: desktop-cached
+        if: steps.desktop-cache.outputs.cache-hit == 'true'
+        continue-on-error: true
+        env:
+          DIR: ${{ steps.desktop-packages.outputs.dir }}
+        run: sudo dpkg -i "$DIR"/*.deb
+      - name: Install Linux desktop packages from the mirror
+        id: desktop-download
+        if: steps.desktop-packages.outputs.list != '' && (steps.desktop-cache.outputs.cache-hit != 'true' || steps.desktop-cached.outcome == 'failure')
+        env:
+          DIR: ${{ steps.desktop-packages.outputs.dir }}
+          PACKAGES: ${{ steps.desktop-packages.outputs.list }}
+        run: |
+          apt=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Dir::Cache::archives="$DIR" -o APT::Keep-Downloaded-Packages=true)
+          mkdir -p "$DIR/partial" && sudo chown _apt "$DIR/partial"
+          sudo apt-get "${apt[@]}" update -qq
+          sudo apt-get "${apt[@]}" install -y $PACKAGES
+          sudo rm -rf "$DIR/partial" "$DIR/lock"
+          sudo chown -R "$(id -u):$(id -g)" "$DIR"
+      # Only main saves, as for TeX: pull requests restore its cache.
+      - if: github.ref == 'refs/heads/main' && steps.desktop-download.outcome == 'success'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ steps.desktop-packages.outputs.dir }}
+          key: ${{ steps.desktop-packages.outputs.key }}
       - run: npm ci
       # Making the installers takes most of a full build. The smoke tests
       # launch the unpacked app, which --dir builds by itself.
