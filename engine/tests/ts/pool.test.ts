@@ -331,13 +331,29 @@ it.skipIf(!posix)("keeps a borrow for longer than a stale lock takes", () => sta
   await until(() => !stopped(lender.pgid));
 }), 20000);
 
+it.skipIf(!posix)("borrows a background slot whose stopped process group has an unreaped child", async () => {
+  const lender = lease("background"), busy = lease("normal");
+  await Promise.all([lender.ready, busy.ready]);
+  compiler(busy);
+  const child = spawn("sh", ["-c", "sleep 0.05 & exec sleep 120"], { detached: true, stdio: "ignore" });
+  groups.push(child.pid!);
+  lender.attach(child);
+  await sleep(150);
+  const urgent = lease("foreground");
+  await urgent.ready;
+  expect([urgent.borrowed, urgent.slot]).toEqual([true, lender.slot]);
+  expect(stopped(child.pid!)).toBe(true);
+  await urgent.release();
+  await until(() => !stopped(child.pid!));
+});
+
 it.skipIf(!posix)("runs a speculative build at full speed beside a round, and stops it only when the round's other side needs its slot", async () => {
   const f = new Fixture(), bin = path.join(f.base, "bin"), gates = path.join(f.base, "gates"), previousPath = process.env.PATH;
   fs.mkdirSync(bin); fs.mkdirSync(gates);
   // A latexmk that records its process ID and finishes when told to, or
   // after a minute, so that a test stopped midway leaves nothing running.
   fs.writeFileSync(path.join(bin, "pdflatex"), "#!/bin/sh\necho 'pdfTeX 3.14 (fake)'\n", { mode: 0o755 });
-  fs.writeFileSync(path.join(bin, "latexmk"), `#!/bin/sh\nkey=$(basename "$(dirname "$PWD")")\necho $$ > "${gates}/pid-$key"\ni=0; while [ ! -e "${gates}/go-$key" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, "latexmk"), `#!/bin/sh\nkey=$(basename "$(dirname "$PWD")")\necho $$ > "${gates}/pid-$key"\ni=0; while [ ! -e "${gates}/go-$key" ] && [ ! -e "${gates}/stop" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done\nmkdir -p build && echo pdf > build/main.pdf\n`, { mode: 0o755 });
   process.env.PATH = `${bin}${path.delimiter}${previousPath}`;
   const started = () => fs.readdirSync(gates).filter((name) => name.startsWith("pid-")).map((name) => name.slice(4));
   const pidOf = (key: string) => Number(fs.readFileSync(path.join(gates, `pid-${key}`), "utf8"));
@@ -368,6 +384,7 @@ it.skipIf(!posix)("runs a speculative build at full speed beside a round, and st
     go(speculative);
     await builds[0];
   } finally {
+    fs.writeFileSync(path.join(gates, "stop"), "");
     for (const key of fs.readdirSync(gates).filter((name) => name.startsWith("pid-")).map((name) => name.slice(4))) go(key);
     await Promise.allSettled(builds);
     process.env.PATH = previousPath;

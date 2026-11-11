@@ -144,9 +144,9 @@ function adopt(root: string, revision: string, info: RoundInfo, side: 'before' |
   return found;
 }
 
-async function ready(root: string, revision: string, follow = false) {
+async function ready(root: string, revision: string, follow = false, priority: Priority = 'foreground') {
   for (let attempt = 0; ; attempt++) {
-    const paper = preparePaper(root, revision, 'foreground', follow);
+    const paper = preparePaper(root, revision, priority, follow);
     await paper.done;
     if (paper.failure) throw paper.failure;
     // The build cache may have removed an old PDF meanwhile.
@@ -160,6 +160,18 @@ export async function fullPaperPdf(connect: Connect, root: string, name: string,
   const info = await roundInfo(connect, root, name, round);
   await adopt(root, info[side], info, side);
   return ready(root, info[side]);
+}
+
+/** A round's already-compiled PDF for the retained fallback reader, or a
+ *  background build when neither the full paper nor changed chapters exist. */
+export async function retainedPaperPdf(connect: Connect, root: string, name: string, round: number): Promise<string> {
+  const info = await roundInfo(connect, root, name, round);
+  await adopt(root, info.after, info);
+  const existing = papers.get(JSON.stringify([root, info.after]))?.pdf;
+  if (existing && await fs.promises.access(existing).then(() => true, () => false)) return existing;
+  const chapters = await chaptersPdf(root, info);
+  if (chapters) return chapters;
+  return ready(root, info.after, false, 'background');
 }
 
 /** What the review's full paper shows next, after version `after`: a later

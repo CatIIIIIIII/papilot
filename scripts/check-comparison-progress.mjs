@@ -32,6 +32,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/items')) return json({ items: [{ id: 'answer', taskId: task.id, type: 'assistant', text: '已根据 5 条批注完成修改。', createdAt: 2 }] });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
+  if (url.pathname.endsWith('/manuscript')) return json({ annotations: [], build: { status: 'building' }, git: { files: [] } });
   if (url.pathname.endsWith('/git')) return json({ files: [], branch: 'main', ahead: 0, behind: 0 });
   throw new Error(`Unexpected request: ${url.pathname}`);
 });

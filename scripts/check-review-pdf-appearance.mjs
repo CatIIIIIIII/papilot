@@ -26,6 +26,7 @@ const detail = { task: 'colors', round: 1, before: 'before', after: 'after', war
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
+  if (/\/api\/tasks\/[^/]+\/pdf$/.test(url.pathname)) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });

@@ -26,6 +26,7 @@ await context.route('**/api/**', route => {
   const url = new URL(route.request().url());
   const json = data => route.fulfill({ json: data });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
+  if (url.pathname.endsWith('/manuscript')) return route.fulfill({ json: { annotations: [], build: { status: 'idle' }, git: { files: [] } } });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });

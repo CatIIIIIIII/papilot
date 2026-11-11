@@ -77,6 +77,7 @@ await page.route('**/api/**', async route => {
     return route.fulfill({ json: task });
   }
   if (url.pathname.endsWith('/git')) return route.fulfill({ json: { branch: 'main', upstream: 'origin/main', remote: true, ahead: 0, behind: 0, head: null, files: gitFiles } });
+  if (/\/api\/tasks\/[^/]+\/pdf$/.test(url.pathname)) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname.endsWith('/manuscript')) return route.fulfill({ json: { git: { branch: 'main', remote: true, ahead: 0, behind: 0, head: null, files: gitFiles }, build: { status: 'building', current: false }, annotations: [] } });
   if (url.pathname.endsWith('/git/message') || url.pathname.endsWith('/commit-message')) { messageRequests.push(route.request().postDataJSON()); return route.fulfill({ json: { message: 'Explain the method', agent: 'codex' } }); }
   if (url.pathname.endsWith('/apply')) {
@@ -705,54 +706,50 @@ try {
   await expect(viewer().getByRole('button', { name: 'Back to review', exact: true })).toBeInViewport();
   await page.screenshot({ path: 'test-results/review-history-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
-  // A completed question with no file changes is a normal answer, not a
-  // missing review. It uses chat without overwriting the author's PDF layout.
+  // Questions keep the author's PDF layout and offer both PDF and chat.
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await page.getByRole('button', { name: 'Split', exact: true }).click();
   const question = { ...task, id: 'question-fixture', name: 'question', title: 'What does this equation mean?', status: 'reviewing', review: { state: 'editing', round: null, counts: {}, job: { status: 'done', outcome: 'empty' } } };
   snapshot.tasks.push(question); await sync();
   await page.locator('[data-task="question-fixture"] .task-link').click();
   await expect(page.locator('[data-task="question-fixture"] .status')).toHaveText('Completed');
   await expect(page.getByText('This equation expresses conservation of mass.', { exact: true })).toBeVisible();
-  await expect(page.locator('.review-panel')).toBeHidden();
+  await expect(page.locator('.review-panel')).toBeVisible();
   const questionViews = page.getByRole('group', { name: 'Workspace view' });
-  await expect(questionViews.getByRole('button')).toHaveCount(1);
-  const questionChat = questionViews.getByRole('button', { name: 'Chat', exact: true });
-  await expect(questionChat).toHaveAttribute('aria-pressed', 'true');
-  await expect(questionChat).toHaveAttribute('title', 'This conversation has no manuscript changes.');
-  await expect(questionChat.locator('span')).toBeVisible();
-  await questionChat.click();
+  await expect(questionViews.getByRole('button')).toHaveCount(3);
+  await expect(questionViews.getByRole('button', { name: 'Split', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Generate PDF comparison', exact: true })).toHaveCount(0);
-  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:layout')), 'review');
   await page.reload();
+  await expect(page.locator('.review-panel')).toBeVisible();
   await expect(page.getByText('This equation expresses conservation of mass.', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/answer-only-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(questionViews.getByRole('button')).toHaveCount(2);
+  await questionViews.getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(page.locator('.review-panel')).toBeVisible();
+  await questionViews.getByRole('button', { name: 'Chat', exact: true }).click();
   await expect(page.getByText('This equation expresses conservation of mass.', { exact: true })).toBeVisible();
-  await expect(page.locator('.review-panel')).toBeHidden();
   await expect(page.locator('.sidebar')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Show task list', exact: true })).toBeVisible();
-  await expect(questionViews.getByRole('button')).toHaveCount(1);
-  await expect(questionChat).toBeVisible();
-  await expect(questionChat.locator('span')).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
   await page.screenshot({ path: 'test-results/answer-only-mobile.png', fullPage: true });
   for (const status of ['running', 'queued', 'waiting_input']) {
     question.status = status; await sync();
     await expect(page.locator('.task-grid')).toHaveClass(/show-conversation/);
-    await expect(questionViews.getByRole('button')).toHaveCount(1);
+    await expect(questionViews.getByRole('button')).toHaveCount(2);
     await expect(page.getByText('This equation expresses conservation of mass.', { exact: true })).toBeVisible();
   }
   question.status = 'reviewing';
   question.review = { ...task.review, job: { status: 'done', outcome: 'published' } };
   await page.setViewportSize({ width: 1440, height: 1000 }); await sync();
+  await questionViews.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.locator('.review-frame')).toBeVisible();
   await expect(questionViews.getByRole('button')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveAttribute('aria-pressed', 'true');
   question.review.job.outcome = 'unchanged'; await sync();
   await expect(page.locator('.review-frame')).toBeVisible();
   assert.equal(await page.evaluate(() => localStorage.getItem('papilot:layout')), 'review');
-  console.log('PASS: Answer-only tasks complete in chat without a generate prompt; reload, mobile, follow-up questions, and later manuscript changes preserve the review preference');
+  console.log('PASS: Answer-only tasks keep the PDF and chat views without a generate prompt; reload, mobile, follow-up questions, and later manuscript changes preserve the review preference');
   assert.deepEqual(errors, []);
   console.log('PASS: Current changes resolve to clean PDF; history and explicit undo; sent/working states; notes on accepted text; mixed decisions; new rounds; older rounds read-only; mobile');
 } finally { await browser.close(); await server.close(); }

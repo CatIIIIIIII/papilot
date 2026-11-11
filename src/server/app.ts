@@ -11,7 +11,7 @@ import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
 import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
-import { fullPaperPdf, nextPaperPass, paperPassPdf } from './pdf.ts';
+import { fullPaperPdf, nextPaperPass, paperPassPdf, retainedPaperPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
@@ -441,12 +441,14 @@ export async function buildApp(options: AppOptions) {
     const located = await manuscripts.locateBuild(project.path, string(b.key, 'PDF key', 32), page, b.rect, rects, typeof b.quote === 'string' ? b.quote.slice(0, 20000) : '', current.worktree);
     return { source: located?.source ? { file: located.source.file, lines: located.source.lines } : null };
   });
-  app.get<{ Params: { id: string }; Querystring: { round?: string; version?: string; download?: string } }>('/api/tasks/:id/pdf', task, async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { round?: string; version?: string; download?: string; retained?: string } }>('/api/tasks/:id/pdf', task, async (request, reply) => {
     const task = store.task(request.params.id), project = store.project(task.projectId);
     const round = request.query.round === undefined ? task.review?.round : Number(request.query.round);
     const side = request.query.version || 'after';
     if (!round || !Number.isSafeInteger(round) || round < 1 || (side !== 'before' && side !== 'after')) return reply.code(400).send({ error: 'Select an existing review round and either the before or after PDF.' });
-    const pdf = await fullPaperPdf(connectReview, project.path, task.name, round, side);
+    const pdf = request.query.retained === '1' && side === 'after'
+      ? await retainedPaperPdf(connectReview, project.path, task.name, round)
+      : await fullPaperPdf(connectReview, project.path, task.name, round, side);
     const filename = `papilot-${task.name}-r${round}-${side}.pdf`;
     return reply.type('application/pdf').header('Content-Disposition', `${request.query.download === '1' ? 'attachment' : 'inline'}; filename="${filename}"`).sendFile(path.basename(pdf), path.dirname(pdf), { cacheControl: false });
   });

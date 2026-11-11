@@ -1523,6 +1523,13 @@ export function ReviewApp({
     if (fullPaper) root.dataset.fullPaper = "available";
     else delete root.dataset.fullPaper;
   }, [fullPaper]);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (detail?.round) {
+      root.dataset.papilotRound = String(detail.round);
+      window.dispatchEvent(new Event("papilot:round"));
+    } else delete root.dataset.papilotRound;
+  }, [detail?.round]);
   // Keep the selected change in view when the view changes, from here or the host.
   const shownView = useRef(paperView);
   useEffect(() => {

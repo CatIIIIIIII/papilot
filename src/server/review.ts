@@ -80,6 +80,6 @@ export function rewriteReviewJson(value: any, prefix: string): any {
   return typeof value === 'string' && (value.startsWith('/files/') || value.startsWith('/option-files/') || value.startsWith('/applied/')) ? prefix + value : value;
 }
 export function rewriteReviewHtml(html: string, prefix: string): string {
-  const script = `<script>(()=>{const prefix=${JSON.stringify(prefix)};if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(20)),b=>b.toString(16).padStart(2,'0')).join('');const original=window.fetch;window.fetch=(input,init)=>{if(typeof input==='string'&&input.startsWith('/api/'))input=prefix+input;const response=original.call(window,input,init);if(typeof input==='string'&&/\\/rounds\\/\\d+$/.test(input))response.then(r=>{if(r.ok)r.clone().json().then(value=>{if(Number.isSafeInteger(value.round)){document.documentElement.dataset.papilotRound=String(value.round);window.dispatchEvent(new Event('papilot:round'));}}).catch(()=>{});}).catch(()=>{});return response};})();</script>`;
+  const script = `<script>(()=>{const prefix=${JSON.stringify(prefix)};if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(20)),b=>b.toString(16).padStart(2,'0')).join('');const original=window.fetch;window.fetch=(input,init)=>{if(typeof input==='string'&&input.startsWith('/api/'))input=prefix+input;return original.call(window,input,init);};})();</script>`;
   return html.replace(/(src|href)="\/(?!\/)/g, `$1="${prefix}/`).replace('<head>', '<head>' + script);
 }

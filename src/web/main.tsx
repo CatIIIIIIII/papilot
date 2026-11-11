@@ -1,3 +1,4 @@
+import { TaskDocument } from './task-document.tsx';
 import { requestApi, requestState } from './api.ts';
 import { agentsSettled, chosenAgent, noAgent, offeredAgents } from './agent-choice.ts';
 import { isPlayground, pdfAsset, wordAsset, requestPlaygroundDownload } from './playground-mode.ts';
@@ -1570,19 +1571,21 @@ function App() {
     } catch (e) { if (request === manuscriptRequest.current) setManuscript(current => ({ projectId, data: current.projectId === projectId ? current.data : null, error: e instanceof Error ? e.message : String(e) })); }
     finally { if (rebuild) { manuscriptBuildRequests.current.delete(projectId); setPendingManuscriptBuilds(new Set(manuscriptBuildRequests.current)); } }
   }, []);
+  const needsManuscript = manuscriptOpen || Boolean(task && (task.mode !== 'review' || task.preparation));
   const manuscriptBuilding = manuscript.projectId === project?.id && manuscript.data?.build.status === 'building';
+  const holdingLegacyManuscript = Boolean(task && !manuscriptOpen && !task.deferred && (task.review?.counts?.pending ?? 0) > 0 && manuscript.projectId === project?.id && manuscript.data);
   useEffect(() => {
-    if (!manuscriptOpen || !project) return;
+    if (!needsManuscript || !project || holdingLegacyManuscript) return;
     void loadManuscript(project.id);
     const focus = () => void loadManuscript(project.id);
     window.addEventListener('focus', focus);
     window.addEventListener('papilot:manuscript', focus);
     return () => { ++manuscriptRequest.current; window.removeEventListener('focus', focus); window.removeEventListener('papilot:manuscript', focus); };
-  }, [manuscriptOpen, project?.id, project?.path, loadManuscript]);
+  }, [needsManuscript, holdingLegacyManuscript, project?.id, project?.path, loadManuscript]);
   // Starting a compile switches to fast polling immediately, including a
   // manual retry made between the regular working-tree refreshes.
   useEffect(() => {
-    if (!manuscriptOpen || !project) return;
+    if ((!manuscriptOpen && !manuscriptBuilding) || !needsManuscript || !project) return;
     // Papilot compiles after its own writes and tells the view; this notices
     // edits saved by another editor.
     const delay = manuscriptBuilding ? 1500 : 5000;
@@ -1590,7 +1593,7 @@ function App() {
     const tick = async () => { await loadManuscript(project.id); if (!stopped) timer = setTimeout(() => void tick(), delay); };
     timer = setTimeout(() => void tick(), delay);
     return () => { stopped = true; clearTimeout(timer); };
-  }, [manuscriptOpen, project?.id, manuscriptBuilding, loadManuscript]);
+  }, [manuscriptOpen, needsManuscript, project?.id, manuscriptBuilding, loadManuscript]);
   // Accepting a change updates the working tree, so the status reloads with
   // the tasks' reviews as well as every 20 seconds.
   const reviewKey = (state?.tasks || []).filter(t => t.projectId === project?.id).map(t => `${t.review?.files?.join()}:${t.review?.counts?.accepted}`).join('|');
@@ -1788,10 +1791,7 @@ function App() {
   // telling the agent about them stays optional.
   const asksRevision = Boolean(reviewSubmission(localReview).notes.length || (pendingReviewFeedback(task?.review || null) && (task?.review?.comments ?? task?.review?.counts?.commented ?? 0) > 0));
   const active = Boolean(task && ACTIVE.includes(task.status));
-  const answerOnly = Boolean(task && task.mode !== 'review' && (noManuscriptChanges(task) || (active && task.review?.round === null)));
-  // Do not save this as the author's layout preference: switching back to a
-  // task with manuscript changes should restore their chosen review layout.
-  const taskLayout = answerOnly ? 'conversation' : layout, taskTab = answerOnly ? 'conversation' : mobileTab;
+  const taskLayout = layout, taskTab = mobileTab;
   const conversationVisible = mobile ? taskTab === 'conversation' : taskLayout !== 'review';
   const pause = () => { if (task) void action('/tasks/' + task.id + '/interrupt'); };
   // With only the chat in view, the feedback bar moves to the end of the conversation.
@@ -1877,15 +1877,13 @@ function App() {
           {task.status === 'deleting' ? <button className="button secondary compact" onClick={() => setDeleteTarget(task)}>{t('Retry deletion')}</button> : task.status === 'uncertain' ? <button className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/reconcile')}><Icon name="refresh" size={14}/>{t('Check status')}</button> : active && !conversationVisible ? <button className="button secondary compact" aria-label={t('Pause task')} title={t('Pause {agent}', { agent: agentName(task) })} disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={pause}><Icon name="pause" size={14}/><span className="button-label">{t('Pause')}</span></button> : task.error ? <button className="button secondary compact" onClick={() => { setMobileTab('conversation'); setLayout('conversation'); }}>{t('View details')}</button> : null}
         </div>
   );
-  const workspaceViews = task && <div className={'view-selector workspace-view-selector' + (answerOnly ? ' single-view' : '')} role="group" aria-label={t('Workspace view')}>{answerOnly ?
-          <button type="button" aria-label={replyNeeded ? t('Chat (reply needed)') : t('Chat')} title={noManuscriptChanges(task) ? t('This conversation has no manuscript changes.') : t('Chat only')} aria-pressed="true"><Icon name="chat" size={16}/><span>{t('Chat')}</span>{replyNeeded && <i className="attention-dot" aria-hidden="true"/>}</button>
-        : mobile ? <>
+  const workspaceViews = task && <div className="view-selector workspace-view-selector" role="group" aria-label={t('Workspace view')}>{mobile ? <>
           <button aria-label={pending ? t('Review, {n} to decide', { n: pending }) : t('Review')} aria-pressed={mobileTab === 'review'} onClick={() => selectLayout('review')}><Icon name="paper" size={16}/><span>{t('Review')}</span>{pending > 0 && <b className="view-count" aria-hidden="true">{pending}</b>}</button>
           <button aria-label={replyNeeded ? t('Chat (reply needed)') : t('Chat')} aria-pressed={mobileTab === 'conversation'} onClick={() => selectLayout('conversation')}><Icon name="chat" size={16}/><span>{t('Chat')}</span>{replyNeeded && <i className="attention-dot" aria-hidden="true"/>}</button>
         </> : <>
           <button aria-label={t('Review')} title={t('PDF review only')} aria-pressed={layout === 'review'} onClick={() => selectLayout('review')}><Icon name="paper" size={16}/><span>{t('Review')}</span></button>
           <button aria-label={t('Split')} title={t('Review and chat side by side')} aria-pressed={layout === 'split'} onClick={() => selectLayout('split')}><Icon name="split" size={16}/><span>{t('Split')}</span></button>
-          <button aria-label={replyNeeded ? t('Chat (reply needed)') : t('Chat')} title={t('Chat only')} aria-pressed={layout === 'conversation'} onClick={() => selectLayout('conversation')}><Icon name="chat" size={16}/><span>{t('Chat')}</span>{replyNeeded && <i className="attention-dot" aria-hidden="true"/>}</button>
+          <button aria-label={replyNeeded ? t('Chat (reply needed)') : t('Chat')} title={noManuscriptChanges(task) ? t('This conversation has no manuscript changes.') : t('Chat only')} aria-pressed={layout === 'conversation'} onClick={() => selectLayout('conversation')}><Icon name="chat" size={16}/><span>{t('Chat')}</span>{replyNeeded && <i className="attention-dot" aria-hidden="true"/>}</button>
         </>}</div>;
   const taskControls = task && <>{taskStateActions}{workspaceViews}</>;
   const reviewOpen = task && fullPdfUrl ? <a className="icon-button review-open" href={reviewUrl(task)} target="_blank" rel="noreferrer" aria-label={t('Open review in new tab')} title={t('Open review in new tab')}><Icon name="external" size={16}/></a> : null;
@@ -2002,9 +2000,9 @@ function App() {
       {task ? <div className={`task-grid layout-${taskLayout} show-${taskTab}`} style={chatWidth ? { '--chat-width': `${chatWidth}px` } as React.CSSProperties : undefined}>
           {!mobile && taskLayout === 'split' && <div className="panel-resizer" role="separator" aria-orientation="vertical" aria-label={t('Resize chat panel')} aria-valuenow={chatWidth || undefined} aria-valuemin={300} tabIndex={0} title={t('Drag to resize · Double-click to reset')} onPointerDown={resizeChat} onDoubleClick={() => setChatWidth(0)} onKeyDown={nudgeChat}/>}
           <section id="review-panel" className="review-panel" aria-label={t('PDF review')}>
-          {!mobile && !chatOnly && (task.mode !== 'review' || task.preparation) && (!task.review?.round || task.status === 'deleting') && (sidebarToggle || !conversationVisible) && <div className="review-placeholder-toolbar">{sidebarToggle}{!conversationVisible && workspaceViews}<div className="panel-tools">{!conversationVisible && taskStateActions}</div></div>}
-          {task.status === 'failed' && task.review?.job?.status === 'failed' && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
-          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : task.preparation ? <PreparingTask task={task}/> : task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : task.review?.round ? <ReviewFrame key={task.id} task={task} onDecided={() => void refresh(true)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>}
+          {!mobile && !chatOnly && task.status === 'deleting' && (sidebarToggle || !conversationVisible) && <div className="review-placeholder-toolbar">{sidebarToggle}{!conversationVisible && workspaceViews}<div className="panel-tools">{!conversationVisible && taskStateActions}</div></div>}
+          {(task.review?.state === 'build_failed' || task.status === 'failed' && task.review?.job?.status === 'failed') && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
+          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : !task.preparation && task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : <TaskDocument key={task.id} projectId={task.projectId} manuscript={manuscriptData.data} placeholder={task.preparation ? <PreparingTask task={task}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>} task={task} onDecided={() => void refresh(true)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}/>}
         </section><Activity key={task.id} onRevealQuote={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} errorActions={task.preparation && task.status === 'failed' ? <div className="task-error-actions">
             <button type="button" className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/prepare')}><Icon name="refresh" size={14}/>{t('Retry')}</button>
             <button type="button" className="button secondary compact" onClick={() => setDeleteTarget(task)}><Icon name="trash" size={14}/>{t('Delete task…')}</button>

@@ -2126,7 +2126,7 @@ try {
   const restrictedPage = await restricted.newPage();
   const restrictedErrors = [];
   restrictedPage.on('pageerror', error => restrictedErrors.push(error.message));
-  await restrictedPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/runtime/requirements') ? readyRequirements : route.request().url().endsWith('/api/state') ? { ...snapshot, tasks: [secondTask], requests: [] } : { items: [] } }));
+  await restrictedPage.route('**/api/**', route => route.fulfill({ json: route.request().url().endsWith('/api/runtime/requirements') ? readyRequirements : route.request().url().endsWith('/api/state') ? { ...snapshot, tasks: [secondTask], requests: [] } : route.request().url().endsWith('/manuscript') ? { annotations: [], build: { status: 'idle' }, git: { files: [] } } : { items: [] } }));
   await restrictedPage.goto(origin);
   const restrictedInput = restrictedPage.getByRole('textbox', { name: 'Instructions for Codex' });
   await restrictedInput.fill('A usable draft with storage disabled.');

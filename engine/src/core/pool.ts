@@ -67,12 +67,12 @@ async function readKept<T extends { pid: number }>(file: string, stale: number):
   return { value, kept: Boolean(value && stat && Date.now() - stat.mtimeMs <= stale && alive(value.pid)) };
 }
 const touch = (file: string) => { const now = new Date(); return fs.promises.utimes(file, now, now); };
-// Whether every process of a group is stopped. An empty group has ended.
+// Whether every live process of a group is stopped. An empty group has ended.
 async function groupState(pgid: number): Promise<"stopped" | "running" | "gone"> {
   const lines = (await capture("ps", ["-A", "-o", "pgid=,stat="], { check: false })).stdout.toString().split("\n");
   const states = lines.flatMap((line) => {
     const [group, stat] = line.trim().split(/\s+/);
-    return Number(group) === pgid && stat ? [stat] : [];
+    return Number(group) === pgid && stat && !stat.startsWith("Z") ? [stat] : [];
   });
   if (!states.length) return "gone";
   return states.every((stat) => stat.startsWith("T")) ? "stopped" : "running";

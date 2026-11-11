@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { readPlace, savePlace } from './places.ts';
 import { browserStorage } from './storage.ts';
 import { VIEW_STORAGE, type ReviewView } from '../../engine/src/web/view-preferences.ts';
 
@@ -18,4 +19,16 @@ export function saveDefaultReviewView(value: ReviewView) {
 }
 export function useDefaultReviewView() {
   return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => view);
+}
+export function useTaskReviewView(taskId?: string): [ReviewView, (value: ReviewView) => void] {
+  const place = taskId ? 'review-view:' + taskId : '';
+  const defaultView = useDefaultReviewView();
+  const [chosen, setChosen] = useState<ReviewView>(() => (place && readPlace<ReviewView>(place)) || defaultView);
+  const followed = useRef(defaultView);
+  useEffect(() => {
+    if (followed.current === defaultView) return;
+    followed.current = defaultView; setChosen(defaultView); if (place) savePlace(place, undefined);
+  }, [defaultView, place]);
+  const choose = useCallback((value: ReviewView) => { setChosen(value); if (place) savePlace(place, value); }, [place]);
+  return [chosen, choose];
 }

@@ -36,6 +36,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
+  if (/\/api\/tasks\/[^/]+\/pdf$/.test(url.pathname)) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname === '/api/state') return json(snapshot);
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: false });
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
@@ -176,12 +177,17 @@ try {
   await expect(page.locator('.review-host-bar .pdf-pages')).toHaveText('/ 2');
   await expect.poll(() => full.locator('#paper').evaluate(root => Math.abs(root.querySelector('.paper-page').getBoundingClientRect().width - root.clientWidth))).toBeLessThan(2);
   await page.getByRole('button', { name: 'Contents', exact: true }).click();
-  const entries = page.locator('.pdf-contents-menu [role="menuitemradio"]');
+  const entries = page.locator('.review-host-bar .pdf-contents-menu [role="menuitemradio"]');
   const sectionTitles = await entries.allTextContents();
   assert.ok(sectionTitles.length >= 2, 'the review reads PDF bookmarks');
   await entries.last().click();
   await expect(page.getByRole('textbox', { name: 'Page number', exact: true })).toHaveValue('2');
   await expect.poll(() => scrollOf(paper())).toBeGreaterThan(500);
+  const inlineSource = full.locator('.change.inline').first().getByRole('button', { name: /LaTeX/ });
+  await inlineSource.click();
+  await expect(full.locator('.change.inline .source').first()).toBeVisible();
+  await inlineSource.click();
+  await expect(full.locator('.change.inline .source')).toHaveCount(0);
 
   // Fit and explicit zoom use the same picker in both readers.
   const chooseZoom = async label => {
@@ -318,8 +324,10 @@ try {
   await expect(page.locator('.pdf-find-count')).toHaveText('1 of 1');
   await expect(full.locator('.paper-find-mark.selected')).toHaveCount(1);
   await nextRound(3, async () => {
-    await expect(search).toHaveValue('operator applies');
-    await expect(page.locator('.pdf-find-count')).toBeEmpty();
+    // The last PDF remains readable while the comparison's search controller loads.
+    await expect(page.locator('.task-document-preview .pdfViewer canvas').first()).toBeVisible();
+    await expect(page.locator('.review-host-bar').getByRole('textbox', { name: 'Search the PDF', exact: true, includeHidden: true })).toHaveValue('operator applies');
+    await expect(page.locator('.review-host-bar .pdf-find-count')).toBeEmpty();
   });
   await expect(page.locator('.pdf-find-count')).toHaveText('1 of 1');
   await expect(full.locator('.paper-find-mark.selected')).toHaveCount(1);
@@ -331,7 +339,7 @@ try {
   await expect(page.getByRole('button', { name: 'Contents', exact: true })).toBeVisible();
   await expect.poll(() => full.locator('#paper').evaluate(root => Math.abs(root.querySelector('.paper-page').getBoundingClientRect().width - root.clientWidth))).toBeLessThan(2);
   await page.getByRole('button', { name: 'Contents', exact: true }).click();
-  await expect(page.locator('.pdf-contents-menu')).toBeVisible();
+  await expect(page.locator('.review-host-bar .pdf-contents-menu')).toBeVisible();
   await entries.last().click();
   await expect(page.getByRole('textbox', { name: 'Page number', exact: true })).toHaveValue('2');
   await page.screenshot({ path: 'test-results/review-reader-phone.png' });

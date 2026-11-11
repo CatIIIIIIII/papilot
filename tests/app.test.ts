@@ -1558,6 +1558,28 @@ test('the review page shows each TeX pass of a round\'s new version in the full 
   } finally { engine.close(); await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
 });
 
+test('retained task PDF previews reuse compiled chapter PDFs without forcing a foreground full-paper build', async () => {
+  const f = await fixture(), base = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-retained-')), root = path.join(base, 'paper');
+  try {
+    fs.mkdirSync(root);
+    execFileSync('git', ['-C', root, 'init', '-q']);
+    fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+    fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\\begin{document}\\undefinedmacro\\end{document}\n');
+    const buildKey = '0123456789abcdef0123456789abcdef';
+    const cacheDir = path.join(root, '.git/latex-review/cache/builds', buildKey);
+    const chaptersPdfPath = path.join(cacheDir, 'chapters.pdf');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(chaptersPdfPath, '%PDF-1.4\nchapters\n');
+    fs.writeFileSync(path.join(cacheDir, 'result.json'), JSON.stringify({ pdf: chaptersPdfPath }));
+    f.store.saveProject({ id: 'paper', name: 'Paper', path: root, createdAt: 1 });
+    f.store.saveTask({ id: 'chapter-task', projectId: 'paper', agent: 'codex', name: 'chapter-task', title: 'Edit chapter', instructions: '', worktree: root, threadId: null, turnId: null, model: null, status: 'reviewing', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: { state: 'reviewing', round: 1, counts: { pending: 1 } } } as any);
+    f.review.get = async (route: string) => (route.endsWith('/rounds/1') ? { before: 'before-rev', after: 'after-rev', build: { key: buildKey, targets: ['chapters/intro'] } } : {}) as any;
+    const reply = await f.local.inject({ url: '/api/tasks/chapter-task/pdf?round=1&retained=1', headers: LOCAL });
+    assert.equal(reply.statusCode, 200, reply.body);
+    assert.equal(reply.body, '%PDF-1.4\nchapters\n');
+  } finally { await f.close(); fs.rmSync(base, { recursive: true, force: true }); }
+});
+
 
 test('large instructions and note batches reach tasks and follow-ups without content limits', async () => {
   const f = await fixture();

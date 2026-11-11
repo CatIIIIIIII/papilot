@@ -62,7 +62,9 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/updates') return route.fulfill({ json: { currentVersion: snapshot.version, latestVersion: null, phase: 'idle', checkedAt: 1, error: null, canUpdate: true } });
   if (url.pathname === '/api/quick-notes') return route.fulfill({ json: { quickNotes: null } });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
+  if (/\/api\/tasks\/[^/]+\/pdf$/.test(url.pathname)) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname === '/api/state') return route.fulfill({ json: snapshot });
+  if (url.pathname.endsWith('/predict')) return route.fulfill({ json: { ok: true } });
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
   if (url.pathname === '/api/tasks/question-fixture/items') return route.fulfill({ json: { items: [{ id: 'answer', taskId: 'question-fixture', type: 'assistant', text: 'This equation expresses conservation of mass.', createdAt: 1 }] } });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items: timeline } });

@@ -261,6 +261,16 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .manuscript-lead{container-type:inline-size}
 .review-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:24px;text-align:center;color:var(--text-2);font-size:14px;line-height:1.6;overflow:auto;background:var(--canvas)}
 .review-loading p{max-width:340px}
+.task-document{position:relative;display:flex;flex:1;min-width:0;min-height:0}
+.task-document-actions{flex:none;max-height:40vh;overflow:auto;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
+/* Its own stacking context: the PDF's raised scroll host stays below the review above it. */
+.task-document-preview{position:absolute;inset:0;isolation:isolate;display:flex;flex-direction:column;min-height:0}
+.task-document.has-review>.task-document-preview{visibility:hidden}
+.task-document>.review-viewport{position:absolute;inset:0}
+.task-document .keeps-pdf.review-pending{pointer-events:none}
+.task-document .keeps-pdf.review-pending>.review-host-bar,.task-document .keeps-pdf.review-pending>.review-marking-rail{visibility:hidden}
+.task-document .keeps-pdf>.review-loading{inset:auto 0 0;flex-direction:row;flex-wrap:wrap;gap:8px;padding:8px 12px;pointer-events:auto;border-top:1px solid var(--line);background:var(--bg);font-size:12px}
+.task-document .keeps-pdf>.review-loading p{max-width:none;margin:0}
 .review-placeholder{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px;overflow:auto;text-align:center;color:var(--text-2)}
 .placeholder-icon{display:flex;align-items:center;justify-content:center;width:48px;height:48px;color:var(--text-3);margin-bottom:16px}
 .review-placeholder h2{font:400 21px/1.3 var(--serif);margin:0 0 6px;color:var(--text)}
