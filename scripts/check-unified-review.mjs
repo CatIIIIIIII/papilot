@@ -66,6 +66,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/skills')) return route.fulfill({ json: { skills: [] } });
   if (url.pathname === '/api/tasks/question-fixture/items') return route.fulfill({ json: { items: [{ id: 'answer', taskId: 'question-fixture', type: 'assistant', text: 'This equation expresses conservation of mass.', createdAt: 1 }] } });
   if (url.pathname.endsWith('/items')) return route.fulfill({ json: { items: timeline } });
+  if (url.pathname.endsWith('/predict')) return route.fulfill({ json: { ok: true } });
   if (url.pathname.endsWith('/note-results')) return route.fulfill({ json: { notes: noteResults } });
   if (url.pathname.endsWith('/note-options/preview')) return route.fulfill({ json: detail(Number(url.searchParams.get('round')) || latest) });
   if (url.pathname.endsWith('/note-options')) return route.fulfill({ json: { key: url.searchParams.get('key'), round: latest, options: [], locked: 'Options are not available for this source range yet.' } });
@@ -116,6 +117,7 @@ await page.route('**/review/**', async route => {
   const round = Number(url.searchParams.get('round') || latest);
   if (/\/rounds\/\d+$/.test(relative)) return route.fulfill({ json: detail(Number(relative.split('/').at(-1))) });
   if (relative.endsWith('/effects/first')) { effectRequests++; return route.fulfill({ json: { places: [effectPlace('extra')] } }); }
+  if (relative.endsWith('/look')) return route.fulfill({ json: { ok: true } });
   let restored;
   if (route.request().method() === 'POST') {
     const body = route.request().postDataJSON(); writes.push(body);

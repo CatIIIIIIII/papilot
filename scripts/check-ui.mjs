@@ -1828,9 +1828,10 @@ try {
     assert.ok(send.x >= 0 && send.x + send.width <= width);
     if (width < 681) {
       await page.getByRole('button', { name: /Review/ }).first().click();
-      // Phone layouts keep PDF tools in the viewer and the new-tab link in navigation.
-      await page.locator('.review-tools').getByRole('link', { name: 'Full PDF', exact: true }).waitFor();
-      assert.equal(await page.locator('.workspace-navigation').getByRole('link', { name: 'Open review in new tab', exact: true }).isVisible(), true);
+      // Phone layouts hide desktop new-tab links and keep rebuild in the review bar.
+      await page.locator('.review-tools').getByRole('button', { name: 'Regenerate PDF comparison', exact: true }).waitFor();
+      assert.equal(await page.locator('.review-tools').getByRole('link', { name: 'Full PDF', exact: true }).isVisible(), false);
+      assert.equal(await page.locator('.workspace-navigation').getByRole('link', { name: 'Open review in new tab', exact: true }).isVisible(), false);
       await page.screenshot({ path: `test-results/english-mobile-${width}.png`, fullPage: true });
     }
     const drawerToggle = page.getByRole('button', { name: 'Show task list', exact: true });

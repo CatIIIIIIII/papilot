@@ -67,19 +67,45 @@
   .settings-card .settings-row{gap:16px}
 }
 @media(max-width:760px){
-  .modal.settings-dialog{--settings-card-padding:16px;--settings-card-radius:12px;display:block;width:100%;height:92dvh;padding:0}
+  .modal.settings-dialog{--settings-card-padding:16px;--settings-card-radius:14px;display:block;width:100%;height:92dvh;padding:0}
   .settings-sidebar{display:none;height:100%;padding:24px 16px;border:0}
   .settings-browse .settings-sidebar{display:flex}
   .settings-browse .settings-content{display:none}
   .settings-sidebar .settings-sidebar-title{margin-right:36px}
   .settings-category{min-height:46px;font-size:14px}
-  .settings-content{height:100%;padding:24px 20px 28px}
-  .settings-content .settings-content-header{margin-bottom:28px}
+  .settings-content{height:100%;padding:24px 18px 28px}
+  .settings-content .settings-content-header{margin-bottom:24px}
   .settings-content-people .settings-content-header{margin-bottom:12px}
   .settings-content-skills .settings-content-header{margin-bottom:12px}
   .settings-content-header #settings-title{font-size:23px}
-  .settings-content-header .settings-mobile-back{display:flex;margin-bottom:16px}
-  .settings-card .settings-row{padding:18px 0;gap:16px}
+  .settings-content-header .settings-mobile-back{display:flex;margin-bottom:14px}
+  .settings-card .settings-row{padding:16px 0;gap:14px}
+}
+@media(max-width:680px){
+  /* Phone Settings: iOS inset-grouped modal sheet without desktop shortcut remapping */
+  .modal.settings-dialog{--settings-mobile-surface:color-mix(in srgb,var(--canvas) 82%,var(--bg));height:calc(var(--viewport-height,100dvh) - 10px);max-height:calc(var(--viewport-height,100dvh) - 10px);border:0;border-top:.5px solid var(--line-strong);border-radius:20px 20px 0 0;background:var(--settings-mobile-surface)}
+  .settings-sidebar{padding:20px 16px max(20px,env(safe-area-inset-bottom));background:var(--settings-mobile-surface)}
+  .settings-sidebar .settings-sidebar-title{font:700 28px/1.2 var(--sans);letter-spacing:-.02em;margin:2px 44px 14px 4px}
+  .settings-search{margin:0 0 18px}
+  .settings-dialog .settings-search input{height:38px;border:0;border-radius:11px;background:color-mix(in srgb,var(--text) 6%,var(--bg));font-size:16px}
+  .settings-category-group{margin:0 0 18px}
+  .settings-category-group h3{margin:0 14px 6px;font-size:12px;font-weight:500;letter-spacing:.03em;text-transform:uppercase;color:var(--text-3)}
+  .settings-category[data-settings-page="shortcuts"]{display:none}
+  .settings-category{min-height:48px;padding:11px 14px;border-inline:.5px solid var(--line);border-radius:0;background:var(--bg);font-size:15.5px;color:var(--text)}
+  .settings-category>svg{color:var(--accent)}
+  .settings-category::after{content:"";flex:none;width:7px;height:7px;margin-right:2px;border-right:1.75px solid var(--text-3);border-top:1.75px solid var(--text-3);transform:rotate(45deg);opacity:.55}
+  .settings-category-group>h3+.settings-category{border-top:.5px solid var(--line);border-top-left-radius:13px;border-top-right-radius:13px}
+  .settings-category:not(:has(~.settings-category:not([data-settings-page="shortcuts"]))){border-bottom:.5px solid var(--line);border-bottom-left-radius:13px;border-bottom-right-radius:13px}
+  .settings-category+.settings-category:not([data-settings-page="shortcuts"]){border-top:.5px solid var(--line)}
+  .settings-category:hover,.settings-browse .settings-category[aria-current=page]{background:var(--bg);color:var(--text);font-weight:400}
+  .settings-category:active{background:var(--bg-hover)!important}
+  .settings-content{padding:18px 16px max(28px,env(safe-area-inset-bottom));background:var(--settings-mobile-surface)}
+  .settings-content .settings-content-header{margin-bottom:20px}
+  .settings-content-header .settings-mobile-back{display:inline-flex;margin:0 0 12px -4px;color:var(--accent);font-size:15px;font-weight:500}
+  .settings-content-header #settings-title{font:700 24px/1.25 var(--sans);letter-spacing:-.02em}
+  .settings-card{background:var(--bg);border:.5px solid var(--line);box-shadow:0 1px 2px rgb(0 0 0/.03)}
+  .settings-content .button{min-height:40px;border-radius:10px;font-size:14px}
+  .settings-content .chip-select{height:38px}
 }
 .settings-section-title{margin:0 0 12px;font-size:14px;font-weight:500;color:var(--text)}
 .settings-card .settings-resource{text-decoration:none;padding:18px 0;gap:12px;border-radius:0}

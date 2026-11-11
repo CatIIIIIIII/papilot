@@ -128,9 +128,22 @@ export async function checkReviewTools(page, writes, sent) {
   assert.equal(writes.length, 0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('group', { name: 'Workspace view', exact: true }).getByRole('button', { name: /^Review/ }).click();
-  await expect(rail()).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Mark region', exact: true })).toBeVisible();
+  await expect(page.locator('.review-tools .markup-toggle')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Mark region', exact: true })).toBeHidden();
+  await expect(rail()).toBeVisible();
+  await expect(rail()).toHaveAttribute('aria-orientation', 'horizontal');
+  await expect(viewer().locator('.change.current .change-head .dock')).toBeVisible();
+  await expect.poll(async () => {
+    const dockBox = await viewer().locator('.change.current .change-head .dock').boundingBox();
+    const railBox = await rail().boundingBox();
+    return Boolean(dockBox && railBox && dockBox.y + dockBox.height <= railBox.y);
+  }).toBe(true);
   await expect.poll(() => viewer().locator('.review-body').evaluate(element => parseFloat(getComputedStyle(element).marginLeft))).toBe(0);
+  await tool('Collapse marking tools').click();
+  await expect(rail()).toHaveAttribute('data-collapsed', 'true');
+  await expect(tool('Expand marking tools')).toBeVisible();
+  await tool('Expand marking tools').click();
+  await expect(rail()).toHaveAttribute('data-collapsed', 'false');
   await expect(page.locator('html')).not.toHaveClass(/switching-workspace/);
   await page.screenshot({ path: 'test-results/review-tools-mobile.png' });
   await page.setViewportSize({ width: 1440, height: 1000 });

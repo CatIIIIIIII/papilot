@@ -194,20 +194,32 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     /* Only the host window, never an iframe's width, selects the phone
        layout. Navigation and position stay alongside the decisions. */
     :root[data-papilot-phone]{
-      .bar{gap:8px}.bar .ghost:not(.history){min-height:36px;font-size:12px}
-      .review-body>#paper{padding-left:8px;padding-right:24px;padding-bottom:132px}
-      .change-map{right:4px;width:12px}
+      .bar{gap:6px;min-height:var(--papilot-bar-height,42px);padding:0 max(8px,calc(var(--papilot-tools,0px) + 4px)) 0 calc(var(--papilot-lead,0px) + 10px);background:color-mix(in srgb,var(--bg) 90%,transparent);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);border-bottom:.5px solid color-mix(in srgb,var(--line-strong) 75%,transparent)}
+      .bar .meter{font-size:12.5px;font-weight:500;color:var(--text-2);font-variant-numeric:tabular-nums}
+      .bar .ghost:not(.history){min-height:30px;height:30px;padding:0 9px;border-radius:999px;font-size:12px}
+      .review-body>#paper{--paper-top:12px;padding:12px 18px calc(136px + var(--papilot-bottom-rail,0px)) 10px}
+      .sheet{border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgb(0 0 0/.06),0 8px 24px rgb(0 0 0/.07)}
+      .change-map{right:3px;width:10px}
       .side.before::after,.side.after::after{content:none}
-      .change-head{padding:4px 6px 4px 10px;gap:6px}
-      .change-head .link{min-height:36px;padding:0 6px}
-      .change-head .dock{display:flex;position:fixed;z-index:6;left:8px;right:8px;bottom:8px;margin:0}
-      .change-head .actions{display:flex;width:100%;flex-wrap:wrap;justify-content:center;gap:4px;padding:5px;border-radius:12px;border-color:var(--line-strong);box-shadow:0 2px 4px rgb(0 0 0/.05),0 6px 20px rgb(0 0 0/.12)}
+      .change-head{padding:5px 8px 5px 12px;min-height:38px;gap:6px}
+      .change-head .change-number{margin-right:auto;font-size:13px;font-weight:600}
+      .change-head .change-where{position:absolute;width:1px;height:1px;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+      .change-head .copy-reference{display:none}
+      .change-head .link{min-height:32px;height:32px;padding:0 6px;border-radius:8px}
+      .change-head .source-toggle{width:32px}
+      .change-head .dock{display:flex;position:fixed;z-index:6;left:50%;right:auto;transform:translateX(-50%);width:min(352px,calc(100% - 20px));bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--papilot-bottom-rail,0px));margin:0;transition:bottom .16s cubic-bezier(.2,0,0,1)}
+      .change-head .actions{display:flex;width:100%;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:5px;padding:5px 6px;border-radius:999px;background:color-mix(in srgb,var(--bg) 82%,transparent);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);border:.5px solid color-mix(in srgb,var(--line-strong) 85%,transparent);box-shadow:0 4px 14px rgb(0 0 0/.08),0 12px 32px rgb(0 0 0/.14)}
       .change-head .actions>*{order:initial!important}
-      .change-head .actions button{flex:1 1 auto;min-width:0;height:44px;gap:5px;padding:0 6px;border-radius:8px;font-size:13px}
-      .change-head .actions .nav{flex:0 0 32px;width:32px;min-width:32px;height:44px;padding:0}
-      .change-head .position{min-width:30px;font-size:11.5px}
-      .change-head .actions .undo{flex:0 0 auto;margin-left:0;padding:0 6px;font-size:13px}
-      @media(max-width:360px){
+      .change-head .actions button{flex:1 1 auto;min-width:0;height:40px;gap:5px;padding:0 8px;border-radius:999px;font-size:13px}
+      .change-head .actions .nav{flex:0 0 36px;width:36px;min-width:36px;height:40px;padding:0;border-radius:999px}
+      .change-head .actions .accept:not(:disabled){background:var(--green-soft)}
+      .change-head .actions .reject:not(:disabled){background:var(--red-soft)}
+      .change-head .actions .comment:not(:disabled){background:var(--accent-soft)}
+      .change-head .position{flex:0 0 auto;min-width:32px;text-align:center;font-size:12px;font-weight:600}
+      .change-head .actions .undo{flex:0 0 auto;margin-left:0;padding:0 10px;font-size:13px;background:var(--bg-muted)}
+      @media(max-width:350px){
+        .change-head .dock{left:8px;right:8px;width:auto;transform:none}
+        .change-head .actions{border-radius:20px;flex-wrap:wrap}
         .change-head .actions:has(.nav){display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
         .change-head .actions .nav{width:100%;min-width:0;grid-row:1}
         .change-head .actions>.nav:first-child{grid-column:1}
@@ -215,9 +227,9 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
         .change-head .position{grid-row:1;grid-column:2;justify-self:center}
         .change-head .actions button:not(.nav){grid-row:2}
       }
-      .composer{left:0!important;right:0!important;width:auto!important;max-width:none;top:var(--papilot-review-bar-height,48px);bottom:auto;transform:none;max-height:calc(100% - var(--papilot-review-bar-height,48px) - var(--keyboard,0px));overflow:auto;border-width:0 0 1px;border-radius:0 0 16px 16px}
+      .composer{left:8px!important;right:8px!important;width:auto!important;max-width:none;top:calc(var(--papilot-review-bar-height,42px) + 8px);bottom:auto;transform:none;max-height:calc(100% - var(--papilot-review-bar-height,42px) - var(--keyboard,0px) - 16px);overflow:auto;border-width:1px;border-radius:18px;box-shadow:0 8px 30px rgb(0 0 0/.16)}
       #root:has(>.composer) .change-head .dock{display:none}
-      .composer textarea{font-size:16px;min-height:76px;max-height:min(140px,30vh)}.composer-head{padding:10px 10px 0 16px}.composer-close{width:40px;height:40px}.composer-send{width:44px;height:44px}
+      .composer textarea{font-size:16px;min-height:76px;max-height:min(140px,30vh)}.composer-head{padding:12px 10px 0 16px}.composer-close{width:40px;height:40px;border-radius:999px}.composer-send{width:40px;height:40px;border-radius:999px}
       .composer-row{justify-content:flex-end;padding:4px 12px 12px 16px}.composer-row .muted{display:none}
       .side .pdf-strip,.context .pdf-strip{width:calc(100% * var(--pdf-crop-scale,1));margin-left:calc(-100% * var(--pdf-crop-scale,1) * var(--pdf-crop-shift,0))}
       .side,.context{overflow-x:clip}
@@ -440,23 +452,41 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
       root.toggleAttribute('data-papilot-phone', phone.matches);
       root.toggleAttribute('data-papilot-reader', readingPdf);
       root.style.setProperty('--papilot-tools', `${reserve}px`);
-      root.style.setProperty('--papilot-rail', `${railSlot?.offsetWidth || 0}px`);
+      root.style.setProperty('--papilot-rail', `${phone.matches ? 0 : railSlot?.offsetWidth || 0}px`);
+      const mobileRail = phone.matches ? railSlot?.querySelector<HTMLElement>('.pdf-rail') : null;
+      root.style.setProperty('--papilot-bottom-rail', `${mobileRail && mobileRail.offsetHeight > 0 ? mobileRail.offsetHeight + 8 : 0}px`);
       root.style.setProperty('--papilot-lead', `${leadWidth}px`);
       root.style.setProperty('--papilot-bar-height', `${host.offsetHeight}px`);
-      root.toggleAttribute('data-papilot-toolbar-stacked', box.clientWidth - reserve - leadWidth < 220);
+      root.toggleAttribute('data-papilot-toolbar-stacked', box.clientWidth - reserve - leadWidth < (phone.matches ? 185 : 220));
       const button = toolbar.current?.querySelector<HTMLElement>('.icon-button');
       if (button) root.style.setProperty('--papilot-button-size', `${button.offsetWidth}px`);
       if (bar) {
         root.style.setProperty('--papilot-review-bar-height', `${bar.offsetHeight}px`);
-        railSlot?.style.setProperty('top', `${bar.offsetHeight + (readingPdf ? host.offsetHeight : 0)}px`);
+        if (phone.matches) railSlot?.style.removeProperty('top');
+        else railSlot?.style.setProperty('top', `${bar.offsetHeight + (readingPdf ? host.offsetHeight : 0)}px`);
       }
     };
     const observer = new ResizeObserver(sync);
     observer.observe(box); observer.observe(host);
     if (bar) observer.observe(bar);
-    if (railSlot) observer.observe(railSlot);
-    phone.addEventListener('change', sync); sync();
-    return () => { observer.disconnect(); phone.removeEventListener('change', sync); };
+    let observedRail: HTMLElement | null = null;
+    const watchRail = () => {
+      const next = railSlot?.querySelector<HTMLElement>('.pdf-rail') || null;
+      if (next !== observedRail) {
+        if (observedRail) observer.unobserve(observedRail);
+        observedRail = next;
+        if (observedRail) observer.observe(observedRail);
+      }
+      sync();
+    };
+    let railWatcher: MutationObserver | null = null;
+    if (railSlot) {
+      observer.observe(railSlot);
+      railWatcher = new MutationObserver(watchRail);
+      railWatcher.observe(railSlot, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-collapsed', 'data-suspended'] });
+    }
+    phone.addEventListener('change', sync); watchRail();
+    return () => { observer.disconnect(); railWatcher?.disconnect(); phone.removeEventListener('change', sync); };
   }, [reserve, leadWidth, document, railSlot, readingPdf]);
   function loaded() {
     observer.current?.disconnect();

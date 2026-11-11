@@ -41,10 +41,18 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
   history?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
 }) {
   const suspendedRef = useRef(suspended); suspendedRef.current = suspended;
-  const railId = useId(), [railCollapsed, setRailCollapsed] = useState(() => browserStorage.getItem('papilot:pdf-tools-collapsed') === 'true');
+  const railId = useId(), [collapsed, setCollapsed] = useState(() => browserStorage.getItem('papilot:pdf-tools-collapsed') === 'true');
+  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 680px)').matches);
+  const mobileRef = useRef(mobile); mobileRef.current = mobile;
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const rail = useRef<HTMLDivElement>(null);
   const railTipFrame = useRef<number | null>(null);
   const railTipTarget = useRef<Element | null>(null);
+  function toggleCollapse(next = !collapsed) {
+    setCollapsed(next);
+    browserStorage.setItem('papilot:pdf-tools-collapsed', String(next));
+    if (mobile && next && tool !== 'select') onTool('select');
+  }
   // Menu dismissal restores focus synchronously. Defer all tooltip operations
   // until that native popover operation has finished, and coalesce focus/scroll.
   function queueRailTip(button: Element | null = railTipTarget.current) {
@@ -55,14 +63,19 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
     railTipFrame.current = requestAnimationFrame(() => {
       railTipFrame.current = null;
       const owner = rail.current, target = railTipTarget.current;
-      if (!target || !owner?.contains(target) || !target.matches(':hover, :focus-visible') || suspendedRef.current) hideRailTips(owner);
+      if (mobileRef.current || !target || !owner?.contains(target) || !target.matches(':hover, :focus-visible') || suspendedRef.current) hideRailTips(owner);
       else showRailTip(target);
     });
   }
   useEffect(() => {
+    const media = window.matchMedia('(max-width: 680px)');
+    const sync = () => { setMobile(media.matches); if (media.matches) queueRailTip(null); };
     const hide = () => queueRailTip(null);
+    sync();
+    media.addEventListener('change', sync);
     window.addEventListener('resize', hide);
     return () => {
+      media.removeEventListener('change', sync);
       window.removeEventListener('resize', hide);
       if (railTipFrame.current !== null) cancelAnimationFrame(railTipFrame.current);
       railTipFrame.current = null;
@@ -79,24 +92,40 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
     { id: 'select', icon: 'toolSelect', label: t('Select'), key: 'V', hint: t('Select text to copy it or add a note from the button beside it.') },
     { id: 'hand', icon: 'toolHand', label: t('Hand'), key: 'H', hint: t('Drag to move around the page. Hold Space to use it with any tool.') },
   ];
-  return <div ref={rail} className="pdf-rail" data-collapsed={railCollapsed} role="toolbar" aria-orientation="vertical" aria-label={t('Marking tools')}
+  const visibleTools = mobile ? railTools.filter(item => item.id !== 'hand') : railTools;
+  return <div ref={rail} className="pdf-rail" data-collapsed={collapsed} data-suspended={suspended || editing || undefined} role="toolbar" aria-orientation={mobile ? 'horizontal' : 'vertical'} aria-label={t('Marking tools')}
+      onTouchStart={event => {
+        if (!mobile || event.touches.length !== 1) { swipeStart.current = null; return; }
+        swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      }} onTouchEnd={event => {
+        const start = swipeStart.current; swipeStart.current = null;
+        if (!mobile || !start || !event.changedTouches.length) return;
+        const dx = event.changedTouches[0].clientX - start.x, dy = event.changedTouches[0].clientY - start.y;
+        if (Math.abs(dy) <= Math.abs(dx) * 1.5) return;
+        if (!collapsed && dy > 28) toggleCollapse(true);
+        else if (collapsed && dy < -20) toggleCollapse(false);
+      }} onTouchCancel={() => { swipeStart.current = null; }}
       onPointerMove={event => {
+        if (mobile || event.pointerType === 'touch') return;
         const button = (event.target as Element).closest('.rail-tool');
         if (button !== railTipTarget.current) queueRailTip(button);
       }} onPointerOut={event => {
         const button = (event.target as Element).closest('.rail-tool');
         if (button === railTipTarget.current && !button?.contains(event.relatedTarget as Node | null) && !button?.matches(':focus-visible')) queueRailTip(null);
-      }} onFocus={event => { if (event.target.matches(':focus-visible')) queueRailTip(event.target.closest('.rail-tool')); }}
+      }} onFocus={event => { if (!mobile && event.target.matches(':focus-visible')) queueRailTip(event.target.closest('.rail-tool')); }}
       onBlur={() => queueRailTip(null)} onPointerDownCapture={() => queueRailTip(null)}
       onKeyDownCapture={() => queueRailTip(null)} onScrollCapture={() => queueRailTip()}>
-      <button type="button" className="rail-tool rail-toggle" aria-expanded={!railCollapsed} aria-controls={railId}
-        aria-label={railCollapsed ? t('Expand marking tools') : t('Collapse marking tools')} title={railCollapsed ? t('Expand marking tools') : t('Collapse marking tools')}
-        onClick={() => { const next = !railCollapsed; setRailCollapsed(next); browserStorage.setItem('papilot:pdf-tools-collapsed', String(next)); }}>
-        <Icon name={railCollapsed ? 'chevronRight' : 'chevronLeft'} size={16}/>
+      <button type="button" className="rail-tool rail-toggle" aria-expanded={!collapsed} aria-controls={railId}
+        aria-label={collapsed ? t('Expand marking tools') : t('Collapse marking tools')} title={collapsed ? t('Expand marking tools') : t('Collapse marking tools')}
+        onClick={() => toggleCollapse()}>
+        {mobile
+          ? collapsed ? <><Icon name="toolNote" size={14}/><Icon name="chevronUp" size={14}/></> : <Icon name="chevronDown" size={16}/>
+          : <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={16}/>}
       </button>
-      <div id={railId} className="rail-items" hidden={railCollapsed}>
+      {mobile && !collapsed && <span className="rail-separator rail-collapse-separator" aria-hidden="true"/>}
+      <div id={railId} className="rail-items" hidden={collapsed}>
       <div className="rail-tools">
-      {!railCollapsed && railTools.map(item => {
+      {!collapsed && visibleTools.map(item => {
         const content = <><Icon name={item.icon} size={item.id === 'magic' ? 22 : 18}/>
           {item.id === 'magic' && locked !== null && <span className="rail-badge" aria-hidden="true">{slotKey(locked)}</span>}
           <span className="rail-tip" popover="manual" aria-hidden="true"><span className="rail-tip-title">{item.label}<kbd>{item.key}</kbd></span><span>{item.hint}</span></span></>;
@@ -111,7 +140,7 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
         </Fragment>;
       })}
       </div>
-      {!railCollapsed && history && <div className="rail-history">
+      {!collapsed && history && <div className="rail-history">
         <span className="rail-separator" aria-hidden="true"/>
         {(['undo', 'redo'] as const).map(action => {
           const label = action === 'undo' ? t('Undo') : t('Redo');

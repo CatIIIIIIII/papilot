@@ -431,11 +431,33 @@ try {
   await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Escape');
 
-  // Narrow viewers keep the old toolbar controls.
-  await page.setViewportSize({ width: 520, height: 844 });
+  // Phones show the floating bottom capsule by default, and collapse it down into a compact pill.
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('group', { name: 'Manuscript view' }).getByRole('button', { name: 'PDF', exact: true }).click();
-  await expect(rail()).toBeHidden();
-  await expect(page.locator('.pdf-compact-tools')).toBeVisible();
+  await expect(page.locator('.pdf-compact-tools')).toBeHidden();
+  await expect(page.locator('.pdf-toolbar .markup-toggle')).toHaveCount(0);
+  await expect(rail()).toBeVisible();
+  await expect(rail()).toHaveAttribute('aria-orientation', 'horizontal');
+  await expect(rail().getByRole('button')).toHaveCount(9);
+  await expect(rail().getByRole('button', { name: 'Hand', exact: true })).toHaveCount(0);
+  const mobileRailBox = await settled(rail());
+  assert.ok(mobileRailBox.x >= 0 && mobileRailBox.x + mobileRailBox.width <= 390 && mobileRailBox.y > 700, 'Phone marking capsule floats within the bottom viewport');
+  await tool('Note').click(); await tool('Note').click();
+  const palette = page.getByRole('menu', { name: 'Annotation group color' });
+  await expect(palette).toBeVisible();
+  const paletteBox = await palette.boundingBox();
+  assert.ok(paletteBox.y + paletteBox.height <= mobileRailBox.y && paletteBox.x >= 0 && paletteBox.x + paletteBox.width <= 390, 'Color palette opens above the bottom capsule');
+  await page.keyboard.press('Escape');
+  await collapse().click();
+  await expect(rail()).toHaveAttribute('data-collapsed', 'true');
+  await expect(rail().getByRole('button')).toHaveCount(1);
+  await expect(expand()).toBeVisible();
+  const pillBox = await settled(rail());
+  assert.ok(pillBox.height <= 34 && pillBox.y > mobileRailBox.y, 'Collapsed phone pill shrinks down to the bottom edge');
+  await expect(page.locator('.pdf-view')).toHaveClass(/tool-select/);
+  await expand().click();
+  await expect(rail()).toHaveAttribute('data-collapsed', 'false');
+  await expect(rail().getByRole('button')).toHaveCount(9);
   assert.deepEqual(errors, []);
-  console.log('PASS: collapsible rail, bottom undo/redo, history retries and keyboard shortcuts, native text undo, deletions with replacements, the magic pen wheel, number lock, menu and settings, points, sticky notes, hand and Space, tool-after-selection, and narrow viewers.');
+  console.log('PASS: collapsible rail, bottom undo/redo, history retries and keyboard shortcuts, native text undo, deletions with replacements, the magic pen wheel, number lock, menu and settings, points, sticky notes, hand and Space, tool-after-selection, and phone collapsible bottom capsule.');
 } finally { await browser.close(); await server.close(); }

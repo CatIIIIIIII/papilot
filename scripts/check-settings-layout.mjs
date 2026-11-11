@@ -53,6 +53,11 @@ try {
       await page.setViewportSize({ width, height: width < 500 ? 640 : 620 });
       for (const name of pages) {
         const category = page.locator(`[data-settings-page="${name}"]`);
+        if (width <= 680 && name === 'shortcuts') {
+          if (!await page.locator('.settings-sidebar').isVisible()) await page.locator('.settings-mobile-back').click();
+          await expect(category).toBeHidden();
+          continue;
+        }
         if (!await category.isVisible()) await page.locator('.settings-mobile-back').click();
         await category.click();
         if (name === 'latex') await page.locator('.latex-installation-facts').waitFor();

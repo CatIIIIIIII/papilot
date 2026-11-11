@@ -624,7 +624,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
     <button type="button" aria-pressed={detail === 'history'} onClick={() => showDetail('history')}><Icon name="restore" size={16}/><span>{t('Version history')}</span></button>
   </div>;
   const diffOpen = detail === 'changes' && Boolean(source?.path);
-  return <section className="git-workspace" aria-label={t('Version Management')} aria-busy={Boolean(busy)}>
+  return <section className="git-workspace" data-git-detail={detail} aria-label={t('Version Management')} aria-busy={Boolean(busy)}>
     <div className="git-workspace-body">
     <section className={'git-panel' + (advanced ? ' git-advanced' : '')} aria-label={t('Changes')}>
     <div className="git-toolbar" role="group" aria-label={t('Version Management')}>
@@ -1024,7 +1024,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
           history={actions.history} noteActions={{ has: actions.selection.has, toggle: note => actions.selection.set([note.id], !actions.selection.has(note.id)), remove: actions.remove, restore: actions.restore, edit: actions.edit, onEditing: actions.onEditing, onBusy: actions.onReviewBusy, disabled: actions.sending }} onDeselect={() => setActive('')}
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
-      {readingNotes && <aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} currentKey={build?.key} active={active} actions={actions} onShow={show} onAnnotate={annotate}/></aside>}
+      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} currentKey={build?.key} active={active} actions={actions} onShow={show} onAnnotate={annotate}/></aside></>}
     </section>}
     <aside id={panelId} className="manuscript-side" aria-label={t('Manuscript panels')} hidden={hidden}>
       <div className="manuscript-side-header">
@@ -1555,6 +1555,7 @@ function App() {
     if (!gitAvailable) return;
     if (manuscriptNavigationGuard.current && !await manuscriptNavigationGuard.current.save()) return;
     if (snapshotRef.current?.gitAvailable === false) return;
+    if (mobile && project) savePlace('git-view:' + project.id, 'changes');
     setSelected(''); setPage('git'); setRegion(false); setSidebar(false);
   }
   const loadManuscript = useCallback(async (projectId: string, rebuild = false) => {
@@ -1905,12 +1906,11 @@ function App() {
     <CompileButton key={project.id} label={t('Recompile PDF')} status={pendingManuscriptBuilds.has(project.id) ? 'building' : manuscriptData.error ? 'unknown' : manuscriptData.data?.build.status || 'unknown'} disabled={!manuscriptData.data && !manuscriptData.error} onCompile={async () => isPlayground ? requestPlaygroundDownload() : loadManuscript(project.id, true)}/>
   </>;
   const manuscriptNavigation = manuscriptOpen && project && <>
-    {manuscriptTools}
     <div className="view-selector manuscript-view-selector" role="group" aria-label={t('Manuscript view')}>
           <button aria-label="PDF" data-notes-home="pdf" aria-pressed={manuscriptView === 'pdf'} onClick={() => setManuscriptView('pdf')}><Icon name="pdf" size={16}/><span>PDF</span></button>
           <button aria-label={t('New task')} data-task-home aria-pressed={manuscriptView === 'task'} onClick={() => { setManuscriptView('task'); setRegion(false); }}><Icon name="compose" size={16}/><span>{t('New task')}</span>{noteSelection.selected.length > 0 && <b className="view-count" aria-hidden="true">{noteSelection.selected.length}</b>}</button>
         </div>
-    {manuscriptShare}
+    {manuscriptView === 'pdf' && <div className="workspace-nav-end">{manuscriptTools}{manuscriptShare}</div>}
   </>;
   const newTaskPanel = (attachments: React.ReactNode) => <section className={'new-task-panel' + (noteSelection.selected.length ? ' has-notes' : '')} aria-label={t('New task')}>
     <div className="new-task-start">

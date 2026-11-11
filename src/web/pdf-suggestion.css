@@ -22,6 +22,7 @@
 .pdf-suggestion-undo{position:absolute;z-index:15;bottom:12px;left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);padding:8px 12px;border:1px solid var(--line);border-radius:8px;box-shadow:var(--float);background:var(--bg);color:var(--text);font-size:12px}
 .pdf-suggestion-undo button{color:var(--accent);text-decoration:underline;margin-left:8px}
 @media(pointer:coarse){.pdf-note-card .icon-button{width:36px;height:36px}.pdf-suggestion-navigation{gap:0;margin-left:0}.pdf-suggestion-navigation .icon-button{width:32px}.pdf-suggestion-navigation>span{min-width:24px}.pdf-personal-note .pdf-note-text,.pdf-note-input{font-size:16px}}
+@media(max-width:680px){.pdf-note-card:not(.pdf-note-inline){border-radius:16px;border-color:color-mix(in srgb,var(--line-strong) 70%,transparent);box-shadow:0 8px 30px rgb(0 0 0/.16)}.pdf-suggestion-undo{z-index:25;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 56px)}}
 
 .pdf-note-card.pdf-note-inline{--note-tool:24px;position:relative;z-index:auto;width:100%;gap:4px;padding:8px 10px;box-shadow:none;border-radius:10px}
 .pdf-note-inline:hover,.note-list>li.active>.pdf-note-inline{border-color:var(--line-strong)}

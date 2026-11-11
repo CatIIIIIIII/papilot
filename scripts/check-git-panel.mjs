@@ -332,6 +332,13 @@ try {
   const chinesePanel = page.locator('.git-panel');
   await chinesePanel.getByRole('button', { name: '提交', exact: true }).waitFor();
   await chinesePanel.screenshot({ path: 'test-results/git-simple-zh.png' });
+  // The restore above left Version history open. On a phone it takes the whole
+  // height, keeping only the toolbar; Changes brings back the draft and files.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(page.locator('.git-panel-content')).toBeHidden();
+  await expect(page.locator('.git-repository-view')).toBeVisible();
+  await expect(chinesePanel.locator('.git-toolbar')).toBeVisible();
+  await page.locator('.git-detail-switcher').getByRole('button', { name: '改动', exact: true }).click();
   for (const width of [900, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await chinesePanel.screenshot({ path: `test-results/git-simple-${width}.png` });

@@ -35,4 +35,7 @@
   .manuscript.show-source-diff .manuscript-pages,.manuscript.show-source-diff .manuscript-side{display:none}
   .manuscript.show-git.show-source-diff .git-diff-view{display:flex}
   .git-diff-navigation .icon-button{width:34px;height:36px}
+  .git-source-scroll{font-size:12px}
+  .git-source-line{grid-template-columns:32px 32px 18px minmax(0,1fr)}
+  .git-source-number{padding-right:5px;font-size:10.5px}
 }

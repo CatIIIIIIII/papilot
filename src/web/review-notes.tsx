@@ -292,9 +292,9 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
   return <>
     <span className="pdf-compact-tools">
       <GroupPicker value={group} onChange={chooseGroup} disabled={!doc || busy}/>
-      <button type="button" className="icon-button" aria-label={t('Mark region')} title={t('Mark region')} aria-pressed={region} disabled={!doc || busy} onClick={() => annotate(!region)}><Icon name="region" size={16}/></button>
+      <button type="button" className="icon-button region-toggle" aria-label={t('Mark region')} title={t('Mark region')} aria-pressed={region} disabled={!doc || busy} onClick={() => annotate(!region)}><Icon name="region" size={16}/></button>
     </span>
-    {railSlot && createPortal(<PdfToolRail tool={tool} onTool={chooseTool} group={group} onGroup={chooseGroup} disabled={!doc || busy} stamps={stamps} locked={locked} onLock={setLocked}
+    {railSlot && createPortal(<PdfToolRail tool={tool} onTool={chooseTool} group={group} onGroup={chooseGroup} disabled={!doc || busy} suspended={!doc} stamps={stamps} locked={locked} onLock={setLocked}
       history={{ canUndo: !busy && draft.canUndo, canRedo: !busy && draft.canRedo, undo: () => { store.undo(); }, redo: () => { store.redo(); } }}/>, railSlot)}
     {wheel && <StampWheel x={wheel.x} y={wheel.y} stamps={stamps} onPick={pickStamp} onClose={() => { setWheel(null); doc?.defaultView?.focus(); }} onFree={() => { addGrouped(wheel.mark); setWheel(null); onComment(); }}/>}
     {doc && createPortal(<style>{styles + noteStyles + groupStyles}</style>, doc.head)}

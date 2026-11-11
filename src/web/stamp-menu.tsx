@@ -22,9 +22,10 @@ export function StampMenu({ label, keys, pressed, disabled, content, stamps, loc
   const items = () => Array.from(menu.current!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]'));
   function show() {
     const panel = menu.current!, rect = trigger.current!.getBoundingClientRect();
+    const horizontal = Boolean(trigger.current?.closest('[aria-orientation="horizontal"]'));
     panel.showPopover();
-    panel.style.left = `${Math.max(8, Math.min(rect.right + 8, window.innerWidth - panel.offsetWidth - 8))}px`;
-    panel.style.top = `${Math.max(8, Math.min(rect.top - 8, window.innerHeight - panel.offsetHeight - 8))}px`;
+    panel.style.left = `${Math.max(8, Math.min(horizontal ? rect.left + (rect.width - panel.offsetWidth) / 2 : rect.right + 8, window.innerWidth - panel.offsetWidth - 8))}px`;
+    panel.style.top = `${Math.max(8, Math.min(horizontal ? rect.top - panel.offsetHeight - 10 : rect.top - 8, window.innerHeight - panel.offsetHeight - 8))}px`;
     (items().find(item => item.getAttribute('aria-checked') === 'true') || items()[0])?.focus();
   }
   function pick(slot: number | null) { menu.current?.hidePopover(); trigger.current?.focus(); onLock(slot); }

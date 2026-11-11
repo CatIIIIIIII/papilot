@@ -466,25 +466,31 @@ export const PdfView = forwardRef<PdfHandle, {
     // waits a moment, so a double click still selects a word.
     // A click that closes an open card does only that. The card closes on
     // the same press, so whether one was open is read before anything else.
-    let down: { x: number; y: number } | null = null, pointTimer: ReturnType<typeof setTimeout> | undefined;
+    let down: { x: number; y: number; time: number } | null = null, pointTimer: ReturnType<typeof setTimeout> | undefined;
     const pressStart = (event: PointerEvent) => {
       pressed.current.card = Boolean(latest.current.active || editingRef.current);
-      clearTimeout(pointTimer); down = event.button === 0 && box.contains(event.target as Node) ? { x: event.clientX, y: event.clientY } : null;
+      clearTimeout(pointTimer); down = event.button === 0 && box.contains(event.target as Node) ? { x: event.clientX, y: event.clientY, time: performance.now() } : null;
     };
+    const clearDown = () => { down = null; };
     const finishMark = (event: PointerEvent) => {
       const tool = toolRef.current, start = down; down = null;
-      if ((tool !== 'note' && tool !== 'delete' && tool !== 'magic') || latest.current.readOnly || latest.current.markingDisabled || editingRef.current || event.pointerType === 'touch' || event.button !== 0
+      const touchMagic = event.pointerType === 'touch' && tool === 'magic' && !picking.current?.active() && Boolean(start && performance.now() - start.time < 450);
+      if ((tool !== 'note' && tool !== 'delete' && tool !== 'magic') || latest.current.readOnly || latest.current.markingDisabled || editingRef.current || (event.pointerType === 'touch' && !touchMagic) || event.button !== 0
         || !box.contains(event.target as Node) || (event.target as Element).closest('button,input,textarea,select,.pdf-note-card')) return;
       const at = { x: event.clientX, y: event.clientY }, page = (event.target as Element).closest<HTMLElement>('.page');
-      const click = Boolean(start && !pressed.current.card && Math.hypot(at.x - start.x, at.y - start.y) < 5), onNote = Boolean(noteAt(event));
+      const click = Boolean(start && !pressed.current.card && Math.hypot(at.x - start.x, at.y - start.y) < (event.pointerType === 'touch' ? 10 : 5)), onNote = Boolean(noteAt(event));
       setTimeout(() => {
-        if (disposed) return;
-        const value = select();
+        if (disposed || (event.pointerType === 'touch' && picking.current?.active())) return;
+        const value = event.pointerType === 'touch' ? null : select();
         if (value) { markRef.current({ page: value.page, rect: bounds(value.rects), rects: value.rects, quote: value.quote }, at); return; }
-        if (tool === 'magic' && page && click && !onNote) pointTimer = setTimeout(() => { if (!disposed && !editingRef.current) markRef.current(pointAt(page, at.x, at.y), at); }, 220);
+        if (tool === 'magic' && page && click && !onNote) {
+          if (event.pointerType === 'touch') markRef.current(pointAt(page, at.x, at.y), at);
+          else pointTimer = setTimeout(() => { if (!disposed && !editingRef.current) markRef.current(pointAt(page, at.x, at.y), at); }, 220);
+        }
       }, 0);
     };
     window.addEventListener('pointerdown', pressStart, true);
+    window.addEventListener('pointercancel', clearDown, true);
     document.addEventListener('pointerup', finishMark);
     // The hand drags the pages, whichever tool is chosen while Space is held.
     let pan: { id: number; x: number; y: number; left: number; top: number } | null = null;
@@ -570,7 +576,7 @@ export const PdfView = forwardRef<PdfHandle, {
     return () => {
       disposed = true; clearTimeout(timer); clearTimeout(pointTimer); picking.current?.stop(); picking.current = null;
       resize.disconnect(); cancelAnimationFrame(resizeFrame);
-      document.removeEventListener('selectionchange', selectionChange); document.removeEventListener('pointerup', finishMark); window.removeEventListener('pointerdown', pressStart, true);
+      document.removeEventListener('selectionchange', selectionChange); document.removeEventListener('pointerup', finishMark); window.removeEventListener('pointerdown', pressStart, true); window.removeEventListener('pointercancel', clearDown, true);
       box.removeEventListener('pointerdown', panStart); box.removeEventListener('pointermove', panMove); box.removeEventListener('pointerup', panEnd); box.removeEventListener('pointercancel', panEnd);
       box.removeEventListener('pointerdown', pressNote); box.removeEventListener('scroll', cancelPress);
       document.removeEventListener('pointermove', moveNote); document.removeEventListener('pointerup', releaseNote); document.removeEventListener('pointercancel', cancelPress);
@@ -785,7 +791,7 @@ export const PdfView = forwardRef<PdfHandle, {
       <PdfPageControls page={page} pages={pages} zoom={zoom} onPage={number => { if (tools.current) tools.current.viewer.currentPageNumber = number; }} onZoom={value => { if (tools.current) tools.current.viewer.currentScaleValue = value; }} onZoomBy={factor => tools.current?.viewer.updateScale({ scaleFactor: factor })}/>
       <PdfFindButton open={findOpen} onClick={() => { if (findOpen) closeFind(); else setFindOpen(true); }}/>
 
-      {/* Narrow viewers have no tool rail; their marking tools stay up here. */}
+      {/* Narrow desktop panes keep compact tools; phones show a collapsible bottom capsule. */}
       {markable && <span className="pdf-compact-tools">
         <button type="button" className={'icon-button region-toggle' + (props.region ? ' active' : '')} aria-label={t('Mark region')} aria-pressed={props.region} title={t('Mark a figure or region')} onClick={() => pickTool(props.region ? 'select' : 'region')}><Icon name="region" size={16}/></button>
         {props.onGroupChange && <GroupPicker value={props.group || null} onChange={group => { props.onGroupChange!(group); if (group && tool !== 'region') choose('note'); }} disabled={props.markingDisabled || Boolean(editing)}/>}

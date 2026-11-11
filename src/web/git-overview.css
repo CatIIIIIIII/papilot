@@ -38,6 +38,8 @@
   .git-workspace .git-panel{border-right:0;border-bottom:1px solid var(--line)}
   .git-details-toolbar{min-height:42px;padding:4px 8px}
   .git-details .git-detail-switcher>button{height:30px;min-height:30px;width:auto;padding-inline:10px}
+  .git-workspace[data-git-detail="history"] .git-workspace-body{grid-template-rows:auto minmax(0,1fr)}
+  .git-workspace[data-git-detail="history"] .git-panel-content{display:none}
 }
 @media(pointer:coarse){.git-toolbar-tools .icon-button,.git-toolbar-tools .more-button,.git-remote-action{min-height:36px;min-width:34px}}
 /* Views, as in an editor's source control: a title, its actions, its content. */

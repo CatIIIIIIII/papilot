@@ -28,9 +28,10 @@ export function GroupPicker({ value, onChange, disabled, tool }: { value: NoteGr
   function choices() { return Array.from(menu.current!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')); }
   function show() {
     const panel = menu.current!, rect = trigger.current!.getBoundingClientRect();
+    const horizontal = rail && Boolean(trigger.current?.closest('[aria-orientation="horizontal"]'));
     panel.showPopover();
-    panel.style.left = `${Math.max(8, Math.min(rail ? rect.right + 8 : rect.left, window.innerWidth - panel.offsetWidth - 8))}px`;
-    panel.style.top = `${Math.max(8, Math.min(rail ? rect.top - 8 : rect.bottom + 6, window.innerHeight - panel.offsetHeight - 8))}px`;
+    panel.style.left = `${Math.max(8, Math.min(horizontal ? rect.left + (rect.width - panel.offsetWidth) / 2 : rail ? rect.right + 8 : rect.left, window.innerWidth - panel.offsetWidth - 8))}px`;
+    panel.style.top = `${Math.max(8, Math.min(horizontal ? rect.top - panel.offsetHeight - 10 : rail ? rect.top - 8 : rect.bottom + 6, window.innerHeight - panel.offsetHeight - 8))}px`;
     (choices().find(item => item.getAttribute('aria-checked') === 'true') || choices()[0])?.focus();
   }
   function choose(next: NoteGroup | null) {

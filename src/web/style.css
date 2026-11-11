@@ -188,6 +188,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 /* Navigation shares the content toolbars; phones keep a compact view switcher. */
 .workspace-navigation,.review-placeholder-toolbar{height:44px;flex-shrink:0;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 8px;gap:6px;background:var(--bg)}
 .workspace-navigation>.view-selector{margin-left:auto}
+.workspace-nav-end{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .paper-rename{display:flex;min-width:0;width:100%;padding:0 4px}
 .paper-rename input{min-width:0;width:100%;height:36px;padding:0 8px;border:1px solid var(--accent);border-radius:var(--r);background:var(--bg);font-size:14px;color:var(--text);box-shadow:var(--ring);outline:none}
 .task-state-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
@@ -686,7 +687,7 @@ body.resizing iframe{pointer-events:none}
 .pdf-find input{flex:1;min-width:0;height:30px;padding:0 10px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--bg);font-size:13.5px;outline:none}
 .pdf-find input:focus{border-color:var(--accent);box-shadow:var(--ring)}
 .pdf-find-count{min-width:72px;text-align:right;font-size:12.5px;color:var(--text-3);white-space:nowrap;font-variant-numeric:tabular-nums}
-.pdf-scroll-host{position:relative;flex:1;min-height:0}
+.pdf-scroll-host{position:relative;z-index:1;isolation:isolate;flex:1;min-height:0}
 .pdf-container{position:absolute;inset:0;overflow:auto;background:var(--canvas);outline:none;touch-action:pan-x pan-y}
 .pdf-container .pdfViewer{padding:20px 0 56px}
 .pdf-container .pdfViewer.removePageBorders .page{margin:0 auto 20px;border-radius:2px;background-color:var(--pdf-page);box-shadow:0 1px 2px rgb(0 0 0/.06),0 8px 24px rgb(0 0 0/.08)}
@@ -903,6 +904,11 @@ body.resizing iframe{pointer-events:none}
 .settings-dialog input.switch:checked::before{transform:translateX(16px)}
 .settings-dialog input.switch:focus-visible{box-shadow:var(--ring)}
 .settings-dialog input.switch:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:680px){
+  .settings-dialog input.switch{width:44px;height:26px}
+  .settings-dialog input.switch::before{width:22px;height:22px;box-shadow:0 1px 3px rgb(0 0 0/.24)}
+  .settings-dialog input.switch:checked::before{transform:translateX(18px)}
+}
 .settings-test{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-bottom:4px;font-size:13px;color:var(--text-2)}
 .settings-test .button{display:inline-flex;align-items:center;gap:6px}
 @media(max-width:480px){.settings-row:not(.settings-notifications):not(.settings-toggle){flex-direction:column;align-items:stretch;gap:8px}.segmented{display:flex}.segmented label{flex:1;justify-content:center}.settings-dialog select{width:100%}}
@@ -936,108 +942,173 @@ body.resizing iframe{pointer-events:none}
   .git-row{min-height:40px}
   .app-shell{position:fixed;inset:auto 0 auto 0;top:var(--viewport-top,0px);height:var(--viewport-height,100dvh)}
   .main{height:100%;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
-  .sidebar,.sidebar-collapsed>.sidebar{height:var(--viewport-height,100dvh);padding-bottom:max(10px,env(safe-area-inset-bottom))}
-  .workspace-navigation{padding:0 6px 0 4px}
-  .workspace-navigation .icon-button{width:44px;height:44px}
+  .sidebar,.sidebar-collapsed>.sidebar{height:var(--viewport-height,100dvh);background:var(--bg-subtle);border-right:.5px solid var(--line);padding:0 12px max(12px,env(safe-area-inset-bottom))}
+  .sidebar-scrim{background:rgb(0 0 0/.32);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  /* Unified iOS frosted-glass navigation bar: navigation on the left, actions on the right */
+  .workspace-navigation{display:flex;align-items:center;height:48px;padding:0 6px 0 4px;gap:4px;background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:.5px solid color-mix(in srgb,var(--line-strong) 72%,transparent)}
+  .workspace-navigation>.sidebar-toggle{order:1;flex-shrink:0}
+  .workspace-navigation>.view-selector{order:2;margin-left:0}
+  .workspace-navigation>.task-state-actions,.workspace-navigation>.workspace-nav-end{order:3;margin-left:auto}
+  .workspace-navigation>.review-open{display:none}
+  .workspace-nav-end{gap:0}
+  .workspace-navigation .icon-button{width:44px;height:44px;border-radius:10px}
   .paper-rename input{height:36px;font-size:16px}
-  .task-state-actions .button{height:36px;padding:0 10px}
-  .view-selector>button{height:36px;padding:0 10px;gap:5px}
+  .task-state-actions .button{height:32px;padding:0 10px;border-radius:999px;font-size:12.5px}
+  /* iOS UISegmentedControl */
+  .view-selector{gap:2px;padding:3px;border:0;border-radius:10px;background:color-mix(in srgb,var(--text) 7%,var(--bg-subtle))}
+  .view-selector>button{height:30px;padding:0 12px;gap:5px;border-radius:8px;font-size:13px;font-weight:500}
   .view-selector>button>span{display:inline}
+  .view-selector>button[aria-pressed=true]{background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgb(0 0 0/.12),0 .5px 1px rgb(0 0 0/.08)}
+  :root[data-theme="dark"] .view-selector>button[aria-pressed=true]{background:var(--bg-active);box-shadow:0 1px 3px rgb(0 0 0/.32)}
   .task-grid{display:flex;flex:1;min-height:0}
   .task-grid>.review-panel,.task-grid>.activity-panel{width:100%}
   .show-conversation>.review-panel,.show-review>.activity-panel{display:none}
   .activity-panel{border-left:0}
   .activity-panel>.panel-heading{display:none}
-  .messages{padding:14px 14px 10px}
-  .message-body,.message.user .message-body{font-size:16px}
-  .composer-wrap{flex-shrink:0;padding:6px 10px max(10px,env(safe-area-inset-bottom))}
-  .composer textarea{font-size:16px;min-height:46px;max-height:min(140px,28dvh)}
+  .messages{padding:16px 14px 12px}
+  .message-body{font-size:15.5px;line-height:1.58}
+  .message.user .message-body{padding:10px 15px;border-radius:20px 20px 6px 20px;background:color-mix(in srgb,var(--accent) 11%,var(--bg-muted));font-size:15.5px;line-height:1.5}
+  .composer-wrap{flex-shrink:0;padding:6px 10px max(10px,env(safe-area-inset-bottom));background:var(--bg);border-top:.5px solid color-mix(in srgb,var(--line) 75%,transparent)}
+  .composer{border-radius:20px;border-color:color-mix(in srgb,var(--line-strong) 80%,transparent);background:var(--bg-subtle);box-shadow:0 1px 4px rgb(0 0 0/.04)}
+  .composer:focus-within{background:var(--bg);border-color:var(--accent-line);box-shadow:0 3px 14px rgb(0 0 0/.07)}
+  .composer textarea{font-size:16px;min-height:44px;max-height:min(140px,28dvh);padding:11px 15px 4px}
+  .composer-footer{padding:4px 8px 8px 10px}
   .composer .send-button{width:36px;height:36px}
-  .chip-select{height:36px;min-width:0;flex-shrink:1}
-  .composer-options{flex-wrap:nowrap;min-width:0}
-  .agent-picker-trigger{height:36px}
+  .chip-select{height:34px;min-width:0;flex-shrink:1}
+  .composer-options{flex-wrap:nowrap;min-width:0;gap:4px}
+  .agent-picker-trigger{height:34px;border-radius:10px}
+  .model-search{height:40px;border-radius:11px;border:0;background:var(--bg-muted)}
   .model-search input{font-size:16px}
-  .model-option{min-height:40px}
+  .model-option{min-height:42px;border-radius:10px;font-size:14px}
   .effort-scale button{min-height:32px}
-  .composer-plus{width:36px;height:36px}
-  .home{padding:18px 14px}
+  .composer-plus{width:34px;height:34px}
+  .home{padding:22px 16px}
   .home h1{font-size:26px;margin-bottom:18px}
-  .new-task-panel{padding:12px 12px max(12px,env(safe-area-inset-bottom))}
-  .new-task-start{padding-bottom:32px}
-  .new-task-panel .composer textarea{font-size:16px;min-height:128px}
+  .new-task-panel{padding:14px 14px max(14px,env(safe-area-inset-bottom));background:var(--bg-subtle)}
+  .new-task-panel .composer{background:var(--bg);border-radius:20px;box-shadow:0 2px 12px rgb(0 0 0/.05)}
+  .new-task-start{padding-bottom:28px}
+  .new-task-welcome{gap:12px;margin-bottom:16px}
+  .new-task-welcome img{width:44px;height:44px}
+  .new-task-welcome h2{font-size:23px}
+  .new-task-panel .composer textarea{font-size:16px;min-height:120px}
   .usage summary{min-height:40px}
-  .composer.large{border-radius:var(--r-lg)}
+  .composer.large{border-radius:20px}
   .composer.large textarea{min-height:52px;max-height:min(200px,30dvh);padding:12px 16px 4px;font-size:16px}
   .composer.large .composer-footer{padding:4px 8px 8px 12px}
-  /* Menus open as bottom sheets within thumb reach. */
-  .action-menu{left:8px!important;right:8px!important;top:auto!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;width:auto;min-width:0!important;max-width:none;padding:6px;border-radius:var(--r-xl)}
-  .action-menu:popover-open{animation:sheet-in .22s var(--ease)}
-  .action-menu::backdrop{background:rgb(0 0 0/.3)}
-  .action-menu::before{content:attr(aria-label);padding:8px 12px 6px;font-size:13px;font-weight:500;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .action-menu>button,.action-menu>a{min-height:50px;font-size:16px;padding:4px 12px;gap:12px;border-radius:var(--r-md)}
+  /* Menus and agent picker open as iOS bottom sheets within thumb reach. */
+  .action-menu{left:8px!important;right:8px!important;top:auto!important;bottom:max(8px,env(safe-area-inset-bottom))!important;width:auto;min-width:0!important;max-width:none;padding:8px;border:.5px solid color-mix(in srgb,var(--line-strong) 75%,transparent);border-radius:20px;background:color-mix(in srgb,var(--bg) 94%,transparent);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:0 8px 36px rgb(0 0 0/.2)}
+  .action-menu:popover-open{transform-origin:bottom center;animation:sheet-in .18s var(--ease)}
+  .action-menu::backdrop{background:rgb(0 0 0/.32);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  .action-menu::before{content:attr(aria-label);padding:6px 12px 6px;font-size:12.5px;font-weight:600;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .action-menu>button,.action-menu>a{min-height:48px;font-size:16px;padding:4px 12px;gap:12px;border-radius:12px}
+  .agent-picker-panel{left:8px!important;right:8px!important;top:auto!important;bottom:max(8px,env(safe-area-inset-bottom))!important;width:auto;max-height:calc(var(--viewport-height,100dvh) - 16px);padding:16px 12px 12px;border:.5px solid color-mix(in srgb,var(--line-strong) 75%,transparent);border-radius:20px;background:var(--bg);box-shadow:0 8px 36px rgb(0 0 0/.22)}
+  .agent-picker-panel:popover-open{transform-origin:bottom center;animation:sheet-in .18s var(--ease)}
+  .agent-picker-panel::backdrop{background:rgb(0 0 0/.32);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  .agent-picker-panel::before{content:"";display:block;width:36px;height:4px;margin:-8px auto 10px;border-radius:999px;background:var(--line-strong)}
+  .agent-picker-panel.has-permissions .model-list{max-height:min(184px,25dvh)}
+  .task-permission-choices{border:0;border-radius:10px;background:color-mix(in srgb,var(--text) 7%,var(--bg-subtle));padding:3px}
+  .task-permission-option{min-height:36px;border-radius:8px;font-size:13px}
   .select-list{max-height:min(70vh,520px)!important}
-  .select-option{min-height:50px;font-size:16px;padding:4px 12px;gap:12px;border-radius:var(--r-md)}
-  .review-tools{min-height:48px;padding-right:4px}
-  .review-lead{min-height:48px}
-  .chip-select.zoom-chip{height:36px}
-  .review-tools .icon-button{width:44px;height:44px}
+  .select-option{min-height:48px;font-size:16px;padding:4px 12px;gap:12px;border-radius:12px}
+  /* Small-screen trade-offs: hide desktop-only new-tab links; marking tools open in a floating Markup dock */
+  .review-tools .full-pdf-link,.review-tools .region-toggle,.pdf-toolbar .region-toggle,.paper-tools{display:none}
+  .review-marking-rail{inset:0;top:0;z-index:4;pointer-events:none;display:block}
+  .review-marking-rail>.pdf-rail{pointer-events:auto}
+  .review-tools{min-height:42px;padding-right:6px;gap:2px}
+  .review-lead{min-height:42px;padding-left:8px}
+  .chip-select.zoom-chip{height:34px}
+  .review-tools .icon-button{width:36px;height:36px;border-radius:9px}
   .review-panel{padding-bottom:env(safe-area-inset-bottom)}
-  .review-feedback{padding:6px 8px 6px 14px}
-  .review-feedback .button{height:40px}
+  .review-feedback{padding:8px 10px 8px 14px}
+  .review-feedback .button{height:38px;border-radius:999px}
   .review-placeholder{padding:24px 20px}
-  .review-ready .button{height:40px}
+  .review-ready .button{height:38px;border-radius:999px}
   .manuscript{display:flex;flex-direction:column}
   .manuscript-side{max-height:none;flex:1;border-top:0;padding-bottom:env(safe-area-inset-bottom)}
   .manuscript-side-header{display:none}
   .manuscript.show-pdf .manuscript-side,.manuscript.show-task .manuscript-pages{display:none}
-  .pdf-contents-trigger{width:36px;height:40px}
+  .pdf-contents-trigger{width:34px;height:34px;padding:0;justify-content:center;border-radius:9px}
+  .pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:none}
   .action-menu.pdf-contents-menu{width:auto}
-  .pdf-contents-menu>button{min-height:44px;font-size:15px}
-  .note-entry-actions .button{min-height:40px}
+  .pdf-contents-menu>button{min-height:46px;font-size:15px}
+  .note-entry-actions .button{min-height:38px;border-radius:9px}
   .manuscript-pages{flex:1;display:flex;flex-direction:column}
-  .pdf-toolbar{gap:2px;padding:0 4px}
+  .pdf-toolbar{height:42px;min-height:42px;gap:3px;padding:0 6px;background:color-mix(in srgb,var(--bg) 92%,transparent);-webkit-backdrop-filter:saturate(180%) blur(16px);backdrop-filter:saturate(180%) blur(16px);border-bottom:.5px solid color-mix(in srgb,var(--line-strong) 72%,transparent)}
   .pdf-zoom{display:none}
-  .pdf-modes>button{width:36px;height:32px;padding:0}
+  .pdf-modes{border:0;padding:2px;border-radius:8px;background:color-mix(in srgb,var(--text) 7%,var(--bg-subtle))}
+  .pdf-modes>button{width:30px;height:28px;padding:0;border-radius:6px}
   .pdf-modes>button>span{display:none}
-  .pdf-toolbar .icon-button{width:40px;height:40px}
-  .pdf-pager input{width:38px;height:34px;font-size:16px}
-  .pdf-find input{font-size:16px}
-  .pdf-container .pdfViewer{padding:10px 0 40px}
-  .pdf-container .pdfViewer.removePageBorders .page{margin-bottom:10px}
+  .pdf-modes.labeled{padding:3px;border-radius:10px}
+  .pdf-modes.labeled>button{width:auto;height:30px;padding:0 12px;border-radius:8px}
+  .pdf-modes.labeled>button>span{display:inline}
+  .pdf-toolbar .icon-button{width:36px;height:36px;border-radius:9px}
+  .pdf-toolbar [data-notes-home] .notes-count,.pdf-toolbar .notes-received::after{top:2px;right:1px;min-width:15px;height:15px;padding:0 3.5px;font-size:9.5px;line-height:15px}
+  .pdf-pager{height:30px;padding:0 7px 0 3px;border-radius:8px;background:var(--bg-muted);gap:1px}
+  .pdf-pager input{width:30px;height:26px;padding:0 2px;border:0;border-radius:6px;background:transparent;font-size:14px;font-weight:600;color:var(--text)}
+  .pdf-pager input:focus{background:var(--bg);box-shadow:var(--ring)}
+  .pdf-pages{min-width:20px;padding-left:2px;font-size:12.5px}
+  .pdf-find{height:44px;padding:0 6px 0 12px;background:var(--bg)}
+  .pdf-find input{height:32px;border:0;border-radius:9px;background:var(--bg-muted);font-size:16px}
+  .pdf-container .pdfViewer{padding:10px 6px 76px}
+  .pdf-container .pdfViewer.removePageBorders .page{margin-bottom:12px;border-radius:6px}
   .add-note{height:40px;font-size:14px}
-  .sidebar-header{min-height:56px}
+  /* iOS inset-grouped sidebar drawer */
+  .sidebar-header{min-height:54px;padding:6px 0 4px}
+  .sidebar-actions{background:var(--bg);border:.5px solid var(--line);border-radius:12px;padding:3px;gap:1px;margin-bottom:12px;box-shadow:0 1px 2px rgb(0 0 0/.03)}
+  .manuscript-link,.git-link{min-height:44px;border-radius:9px;padding:0 12px}
+  .manuscript-link.active,.git-link.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .manuscript-link.active>svg,.git-link.active>svg{color:var(--accent)}
+  .sidebar-footer{padding:8px 0 0 4px;border-top:.5px solid var(--line)}
   .sidebar-footer .brand{min-height:44px}
   .sidebar-footer .update-badge{min-height:44px}
-  .sidebar .icon-button{width:44px;height:44px}
-  .paper-tools{min-height:44px}
-  .task-list-tools{padding-right:0}
-  .project-switcher{min-height:44px}
+  .sidebar .icon-button{width:44px;height:44px;border-radius:10px}
+  .task-list-tools{padding-right:0;margin-bottom:8px;gap:6px}
+  .project-switcher{min-height:44px;padding:6px 8px;border-radius:10px}
   .nav-link,.add-project{min-height:44px;font-size:15px}
-  .task-link{min-height:56px;padding:10px 4px 10px 10px}
-  .task-title{font-size:15px}
-  .task-search{min-height:40px}
+  .task-row{border-radius:12px;margin-bottom:3px}
+  .task-row.active{--task-row-background:var(--bg);background:var(--bg);box-shadow:0 1px 3px rgb(0 0 0/.06),0 0 0 .5px var(--line)}
+  :root[data-theme="dark"] .task-row.active{--task-row-background:var(--bg-muted);background:var(--bg-muted);box-shadow:0 1px 3px rgb(0 0 0/.24),0 0 0 .5px var(--line-strong)}
+  .task-link{min-height:54px;padding:9px 4px 9px 11px}
+  .task-title{font-size:14.5px}
+  .task-search{min-height:38px;border:0;border-radius:10px;background:var(--bg-muted);padding:0 11px}
+  .task-search:hover{background:var(--bg-muted)}
+  .task-search:focus-within{background:var(--bg);box-shadow:var(--ring)}
   .task-search input{font-size:16px}
-  .task-row .more-button{width:44px;height:44px}
-  .task-rename input{height:44px;font-size:16px}
+  .task-row .more-button{width:40px;height:40px;border-radius:10px}
+  .task-rename input{height:42px;font-size:16px}
   .message-action{height:36px}
-  .tool-item summary{min-height:40px}
+  .tool-item summary{min-height:38px}
   .request-card button,.question input,.connection-banner>button,.agent-connection>button,.agent-connection-actions>.button,.jump-latest,.delete-dialog .button,.modal .button{min-height:44px}
   .question input,.modal input{font-size:16px}
-  .modal-backdrop{top:var(--viewport-top,0px);bottom:auto;height:var(--viewport-height,100dvh);padding:12px;align-items:flex-end}
-  .modal{max-height:100%;padding:22px 18px}
-  .modal-close{width:44px;height:44px;right:6px;top:6px}
-  .toast{top:60px}
+  .modal-backdrop{top:var(--viewport-top,0px);bottom:auto;height:var(--viewport-height,100dvh);padding:10px;align-items:flex-end}
+  .modal-backdrop:has(.settings-dialog){padding:0}
+  .modal{max-height:100%;padding:22px 18px;border-radius:20px}
+  .modal-close{width:36px;height:36px;right:10px;top:10px;border-radius:999px;background:var(--bg-muted)}
+  .toast{top:56px;border-radius:16px}
+}
+@media(max-width:680px) and (max-height:620px){
+  .agent-picker-panel{padding:12px 10px 10px}
+  .agent-picker-panel.has-permissions .model-list{max-height:108px}
+  .agent-picker-panel>.agent-effort{margin-top:8px;padding-top:8px}
+  .agent-picker-panel .effort-description{display:none}
+  .agent-picker-panel .task-permissions{margin-top:8px;padding-top:8px}
 }
 /* A resized desktop pane needs the same room for controls as a small phone. */
-@container (max-width:480px){
-  .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding:4px}
-  .pdf-toolbar:has(.pdf-contents-trigger) .pdf-toolbar-spacer{flex:0 0 100%;height:0}
-  .pdf-contents-trigger{width:auto;padding:0 8px}
-  .pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:inline}
+@media(min-width:681px){
+  @container (max-width:480px){
+    .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding:4px}
+    .pdf-toolbar:has(.pdf-contents-trigger) .pdf-toolbar-spacer{flex:0 0 100%;height:0}
+    .pdf-contents-trigger{width:auto;padding:0 8px}
+    .pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:inline}
+  }
 }
-/* The paper's views and its share button fit a large phone when only the open view keeps its label. */
-@media(max-width:520px){.manuscript-view-selector>button:not([aria-pressed=true])>span{display:none}}
-@media(max-width:400px){.view-selector>button>span{display:none}.view-selector>button{padding:0 11px}.task-state-actions .button-label{display:none}}
+/* On ultra-narrow phones (320px), collapse segmented text labels to icons and allow PDF toolbar wrap if crowded. */
+@media(max-width:359px){
+  .view-selector>button>span{display:none}
+  .view-selector>button{padding:0 11px}
+  .task-state-actions .button-label{display:none}
+  .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:42px;flex-wrap:wrap;padding:4px 6px}
+}
 
 @keyframes pulse{50%{opacity:.35}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -1054,7 +1125,7 @@ body.resizing iframe{pointer-events:none}
 @keyframes task-received{40%{transform:scale(1.12);color:var(--accent)}}
 @keyframes notes-received-count{0%{opacity:0;transform:scale(.4)}15%{opacity:1;transform:scale(1.15)}25%,80%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-3px)}}
 @keyframes task-toggle-notify{0%,100%{transform:none}30%{transform:translateX(-3px)}60%{transform:translateX(2px)}}
-@keyframes sheet-in{from{opacity:0;transform:translateY(16px)}}
+@keyframes sheet-in{from{opacity:0;transform:scale(.98)}}
 /* Touch screens have no hover, so pressed states confirm each tap. */
 @media(hover:none){
   .task-row:active,.nav-link:active,.add-project:active,.project-switcher:active,.action-menu>button:active,.action-menu>a:active,.answer-options button:active,.icon-button:active,.view-selector>button:active,.tool-item summary:active{background:var(--bg-hover)}
@@ -1071,10 +1142,19 @@ body.resizing iframe{pointer-events:none}
 .note-mark[data-review].active{background:rgb(217 119 6/.3)}
 .note-tag[data-review]{background:#92400e}
 
+.pdf-reading-notes-scrim{display:none}
 .pdf-reading-notes{position:absolute;z-index:30;top:52px;right:8px;bottom:8px;width:min(360px,calc(100% - 16px));display:flex;flex-direction:column;padding:8px 10px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:var(--float)}
 .pdf-reading-notes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:2px;font-size:13px;color:var(--text-2);flex:none}
 @media(pointer:fine){.pdf-reading-notes-head .icon-button{width:28px;height:28px;margin-right:-4px}}
 .pdf-reading-notes .notes-panel{overflow:auto}
+@media(max-width:680px){
+  .pdf-reading-notes-scrim{display:block;position:absolute;inset:42px 0 0 0;z-index:29;background:rgb(0 0 0/.28);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:fade-in .18s}
+  .pdf-reading-notes{position:absolute;z-index:30;inset:auto 0 0 0;width:100%;max-height:min(76dvh,calc(100% - 46px));padding:18px 14px max(14px,env(safe-area-inset-bottom));border:0;border-top:.5px solid var(--line-strong);border-radius:20px 20px 0 0;background:var(--bg);box-shadow:0 -8px 36px rgb(0 0 0/.18);transform-origin:bottom center;animation:sheet-in .18s var(--ease)}
+  .pdf-reading-notes::before{content:"";position:absolute;top:7px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:999px;background:var(--line-strong)}
+  .pdf-reading-notes-head{padding-bottom:8px;margin-bottom:4px;border-bottom:.5px solid var(--line);font-size:16px}
+  .pdf-reading-notes-head strong{font-weight:600;color:var(--text)}
+  .pdf-reading-notes-head .icon-button{width:32px;height:32px;border-radius:999px;background:var(--bg-muted)}
+}
 .task-notes-panel{flex:1;min-height:0;overflow:auto;font-size:12px;color:var(--text-2)}
 .task-note-list{list-style:none;margin:0;padding:0}
 .task-note-reference{padding:8px;margin:6px 0;border:1px solid var(--line);border-radius:8px;background:var(--bg)}

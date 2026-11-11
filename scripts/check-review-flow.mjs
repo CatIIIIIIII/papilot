@@ -419,7 +419,7 @@ try {
     await expect(viewer().getByRole('button', { name: 'Previous change', exact: true })).toBeInViewport();
     await expect(viewer().getByRole('button', { name: 'Next change', exact: true })).toBeInViewport();
     await expect(viewer().getByRole('button', { name: 'History', exact: true })).toBeInViewport();
-    await expect(page.getByRole('link', { name: 'Open review in new tab', exact: true })).toBeInViewport();
+    await expect(page.getByRole('link', { name: 'Open review in new tab', exact: true })).toBeHidden();
     await expect(page.locator('.review-tools .review-rebuild')).toBeInViewport();
     await expect.poll(() => viewer().locator('.change.current .dock').evaluate(el => getComputedStyle(el).position)).toBe('fixed');
     assert.equal(await viewer().locator('#paper').evaluate(el => el.scrollWidth > el.clientWidth + 1), false);
