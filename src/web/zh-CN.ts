@@ -386,6 +386,8 @@ export const zhCN: Record<string, string> = {
   'No agent is set up on this computer yet. Add one, such as Codex or Claude Code, then select Reconnect.': '这台电脑上还没有可用的智能体。先添加一个，比如 Codex 或 Claude Code，然后点“重新连接”。',
   'Add an agent': '添加智能体', 'No agent': '没有智能体',
   'Connecting to {agent}…': '正在连接 {agent}…', 'Connecting…': '正在连接…', 'Reconnect': '重新连接',
+  'Refresh': '刷新', 'Refreshing…': '正在刷新…', 'Use the current {agent} sign-in on the Papilot host': '使用 Papilot 主机上当前的 {agent} 登录',
+  'Sign in as the user running Papilot, then select Refresh.': '请使用运行 Papilot 的用户登录，然后选择“刷新”。',
   'Resize chat panel': '调整对话面板宽度', 'Drag to resize · Double-click to reset': '拖动调整宽度 · 双击还原',
   'PDF review': 'PDF 审阅', 'Could not generate the PDF comparison.': 'PDF 对比生成失败。', 'Retry build': '重新生成',
   'Deletion is in progress': '正在删除', 'This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.': '在确认工作树清理完成之前，此任务会保留。如果连接中断，请使用“重试删除”。',

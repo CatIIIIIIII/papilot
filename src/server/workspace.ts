@@ -88,6 +88,12 @@ const VIEW_PDF_UNSUPPORTED = /dynamicTools|experimental/i;
 const viewedPlaces = (args: any) => [...(Array.isArray(args?.locations) ? args.locations : []), ...(Array.isArray(args?.pages) ? args.pages.map((page: unknown) => `p. ${page}`) : [])].filter(place => typeof place === 'string').join(', ') + (args?.accepted === true ? ' (accepted)' : '');
 
 const AGENTS: AgentId[] = AGENT_IDS;
+// Codex reports a lost sign-in as `unauthorized`, an HTTP 401, or, when its
+// refresh token was revoked or rotated by another Codex on the host, only in
+// its message ("Your access token could not be refreshed … sign in again.").
+const SIGN_IN_FAILURE = /\b401\b|unauthori[sz]ed|could not be refreshed|sign in again/i;
+const signInFailure = (error: { message?: unknown; codexErrorInfo?: unknown } | null | undefined) =>
+  Boolean(error && (error.codexErrorInfo === 'unauthorized' || /"httpStatusCode":401\b/.test(JSON.stringify(error.codexErrorInfo ?? null)) || SIGN_IN_FAILURE.test(String(error.message ?? ''))));
 // The small model an agent offers for short text such as a commit message,
 // by the names agents give them (GPT Luna and mini, Claude Haiku, Gemini Flash).
 const LIGHT = /\b(?:luna|mini|nano|haiku|flash|lite)\b/i;
@@ -208,14 +214,26 @@ export class Workspace extends EventEmitter {
     // Reconnect looks again. A running agent stays connected.
     runtime.installed = agent.ready || !agent.detect || agent.detect();
     if (!runtime.installed) { Object.assign(runtime, blankRuntime(), { installed: false }); return; }
+    // Codex reads its sign-in once, when it starts. Refreshing a signed-out
+    // Codex starts it again, so it uses the host's current sign-in, such as
+    // one renewed by `codex login` or by another Codex sharing it. Its turns
+    // in progress were failing without a sign-in; they can be resumed.
+    // close() does not announce the disconnect, so it is announced here: the
+    // tasks (see disconnected) and helper turns waiting on it settle now.
+    if (id === 'codex' && agent.ready && runtime.connected && !runtime.authenticated) {
+      agent.close();
+      agent.emit('disconnected', new Error('Codex restarted to load the current sign-in.'));
+    }
     try {
       await agent.start();
-      const account = await agent.request('account/read', { refreshToken: false });
+      let account;
+      try { account = await agent.request('account/read', { refreshToken: false }); }
+      catch (e) { if (id === 'codex' && signInFailure({ message: errorText(e) })) { this.signedOut(id); return; } throw e; }
       runtime.permissionOptions = agent.permissionOptions?.() || [];
       runtime.connected = true;
       runtime.authenticated = Boolean(account.account) || account.requiresOpenaiAuth === false;
       runtime.account = account.account?.email || account.account?.type || (runtime.authenticated ? `Local ${name} configuration` : null);
-      runtime.error = runtime.authenticated ? null : account.reason || `Sign in to ${name} on this host, then select Reconnect.`;
+      runtime.error = runtime.authenticated ? null : account.reason || `Sign in to ${name} on this host, then select Refresh.`;
       const [catalog, configuration] = await Promise.allSettled([
         agent.request('model/list', {}, 20000),
         id === 'codex' ? agent.request('config/read', { includeLayers: false }, 20000) : Promise.resolve(null),
@@ -236,6 +254,12 @@ export class Workspace extends EventEmitter {
       }
       await this.readUsage(id);
     } catch (e) { runtime.error = errorText(e); runtime.connected = false; }
+  }
+  // A Codex that lost its sign-in is still running but cannot work. Showing
+  // it signed out offers Refresh, and holds queued tasks until it is back.
+  private signedOut(id: AgentId) {
+    Object.assign(this.runtimes[id], { connected: true, authenticated: false, account: null, error: 'Codex sign-in expired. Select Refresh to load the current sign-in on the Papilot host. If it is still signed out, run papilot codex login there first.' });
+    this.emit('change');
   }
   private async projectRoot(input: string) {
     const expanded = input.startsWith('~/') ? path.join(process.env.HOME!, input.slice(2)) : input;
@@ -659,6 +683,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.earlyCompletions.delete(run.taskId); this.earlyRequests.delete(run.taskId);
     this.store.saveRun({ ...run, status: 'failed', finishedAt: Date.now() });
     this.holdForReview(run.taskId, { status: 'failed', turnId: null, pendingRunId: null, error: errorText(error) });
+    if (this.agentOf(this.store.task(run.taskId)) === 'codex' && signInFailure({ message: errorText(error) })) this.signedOut('codex');
     this.schedule();
   }
   // The agent writes files: the review engine compiles ahead what the round
@@ -775,6 +800,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       // A completed turn builds; publish() holds that build for the action.
       if (status === 'completed') this.store.updateTask(task.id, { ...ended, status: 'building' });
       else this.holdForReview(task.id, { ...ended, status });
+      if (status === 'failed' && agent === 'codex' && signInFailure(p.turn.error)) this.signedOut(agent);
       this.schedule();
       if (status === 'completed') {
         if (task.mode === 'review') this.finishAiReview(task, run, eventTurn);
@@ -783,6 +809,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     } else if (method === 'error' && !p.willRetry) {
       if (!this.active.has(task.id) || (eventTurn && !task.turnId)) return;
       this.store.updateTask(task.id, { error: p.error?.message || `${AGENT_NAMES[agent]} encountered an error.` });
+      if (agent === 'codex' && signInFailure(p.error)) this.signedOut(agent);
     }
   }
   private serverRequest(message: any, agent: AgentId = 'codex') {

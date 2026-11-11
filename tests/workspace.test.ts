@@ -2370,6 +2370,53 @@ for (const stage of ['reviewed', 'interrupted', 'waiting_input'] as const) test(
   } finally { f.close(); await disk.close(); }
 });
 
+const failedTurn = (error: { message: string; codexErrorInfo: unknown }) => ({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'turn-new', status: 'failed', error } } });
+
+test('a Codex turn that lost its sign-in shows Codex signed out, and Refresh restarts it with the host\'s current sign-in', async () => {
+  const f = fixture();
+  let closes = 0, starts = 0;
+  try {
+    f.workspace.runtime.connected = true;
+    await agentTurn(f);
+    // Another Codex on the host signed in again, which revoked this one's refresh token.
+    await (f.workspace as any).notification(failedTurn({ message: 'Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.', codexErrorInfo: 'other' }));
+    assert.equal(f.store.task(f.task.id).status, 'failed');
+    assert.match(f.store.task(f.task.id).error || '', /could not be refreshed/, 'the task keeps what Codex said');
+    assert.deepEqual([f.workspace.runtime.connected, f.workspace.runtime.authenticated, f.workspace.runtime.account], [true, false, null]);
+    assert.match(f.workspace.runtime.error || '', /Select Refresh/);
+    // A helper turn still waiting when Refresh restarts Codex fails at once rather than at its timeout.
+    f.codex.handler = async method => method === 'thread/start' ? { thread: { id: 'helper' } } : { turn: { id: 'helper-turn' } };
+    const helper = (f.workspace as any).helperTurn('codex', { cwd: '/unused', sandbox: 'read-only', instructions: '', prompt: 'Write.', timeout: 600000, what: 'write a commit message' });
+    await tick();
+    (f.codex as any).close = () => { closes++; f.codex.ready = false; };
+    (f.codex as any).start = async () => { starts++; f.codex.ready = true; };
+    f.codex.handler = async method => method === 'account/read' ? { account: { email: 'me@example.com' }, requiresOpenaiAuth: true } : method === 'model/list' ? { data: [] } : {};
+    await (f.workspace as any).connectAgent('codex');
+    await assert.rejects(helper, /Codex disconnected before it could write a commit message/);
+    assert.deepEqual([closes, starts], [1, 1], 'Refresh starts Codex again, so it reads the current sign-in');
+    assert.deepEqual([f.workspace.runtime.connected, f.workspace.runtime.authenticated, f.workspace.runtime.account, f.workspace.runtime.error], [true, true, 'me@example.com', null]);
+    await (f.workspace as any).connectAgent('codex');
+    assert.equal(closes, 1, 'a signed-in Codex keeps running');
+  } finally { f.close(); }
+});
+
+test('other Codex failures leave it signed in, and an unauthorized account read shows it signed out', async () => {
+  const f = fixture();
+  try {
+    f.workspace.runtime.connected = true;
+    await agentTurn(f);
+    await (f.workspace as any).notification(failedTurn({ message: 'The model `gpt-x` does not exist or you do not have access to it.', codexErrorInfo: 'modelNotFound' }));
+    assert.equal(f.store.task(f.task.id).status, 'failed');
+    assert.deepEqual([f.workspace.runtime.authenticated, f.workspace.runtime.error], [true, null]);
+    // A Codex started with a revoked sign-in may refuse to read the account at all.
+    (f.codex as any).start = async () => { f.codex.ready = true; };
+    f.codex.handler = async method => { if (method === 'account/read') throw new RpcResponseError('workspace routing discovery unauthorized (401)'); return {}; };
+    await (f.workspace as any).connectAgent('codex');
+    assert.deepEqual([f.workspace.runtime.connected, f.workspace.runtime.authenticated], [true, false], 'signed out offers Refresh rather than an unavailable agent');
+    assert.match(f.workspace.runtime.error || '', /Select Refresh/);
+  } finally { f.close(); }
+});
+
 test('agents that are not found on the host are neither started nor offered, and Reconnect looks again', async () => {
   const store = new Store(':memory:');
   class Detected extends FakeCodex {

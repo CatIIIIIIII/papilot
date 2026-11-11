@@ -141,6 +141,14 @@ try {
   Object.assign(runtime, { connected: true, authenticated: false, error: null });
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(connection.getByRole('status')).toHaveText('Sign-in required');
+  // A running agent that lost its sign-in offers Refresh, which loads the host's current one.
+  await expect(connection.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+  await expect(connection.getByRole('button', { name: 'Reconnect', exact: true })).toHaveCount(0);
+  Object.assign(runtime, { error: 'Codex sign-in expired. Select Refresh to load the current sign-in on the Papilot host. If it is still signed out, run papilot codex login there first.' });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(connection.getByRole('status')).toHaveText('Codex sign-in expired');
+  await expect(connection.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+  await page.screenshot({ path: 'test-results/agent-sign-in-expired-mobile.png' });
   Object.assign(runtime, { connected: true, authenticated: true, error: null });
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(connection).toHaveCount(0);

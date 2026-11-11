@@ -129,6 +129,11 @@
     "textHash": "fa148e274e231c08ab8b636254708196defe9641ca3bfeab74b6d0a328fcc960",
     "model": "gemini-4-argon-medium"
   },
+  "Choose a source file.": {
+    "revision": "cd9a4e523392abdc56d549d94639f76c039c8e7b507059dba4230a5c451bcc23",
+    "textHash": "53d2bb548616ae0927f1756f890ae8847d12f5f7de64a686a4b3c0c2ba91adff",
+    "model": "gemini-4-argon-medium"
+  },
   "Choose a supported LaTeX engine.": {
     "revision": "af71d1f555b4011ba36a61655c4c2f3d47d5978e600623927df11c0a60c942a3",
     "textHash": "f35f806a07792c6608654b76926529598815d054242795e0838b132e9229f6e0",
@@ -194,6 +199,11 @@
     "textHash": "fbe588745a9240b86b45005a60517f34851d8c779d1054a185d3f1cda897491a",
     "model": "gemini-4-argon-medium"
   },
+  "Click the text whose source you want to edit.": {
+    "revision": "ca282654cd1539ab9d55511cd1062fb1b608a82170dca0c2b03596f635b1322e",
+    "textHash": "478f5412723da8809bfcf25901a2972710f8d8dfe858ca9dd9f573d384ca2356",
+    "model": "gemini-4-argon-medium"
+  },
   "Codex disconnected. Resume the task before retrying.": {
     "revision": "c80a07236d7c554097eef2dc3a121859655cbdbe5d7821efc4d0beb5a321f697",
     "textHash": "a1fc8138fefaa1ca3830c229f1bb72edf7fb66500b70e6af9cdd7316c105957d",
@@ -202,6 +212,16 @@
   "Codex is not connected.": {
     "revision": "82813ed798d3a239180af3961fc58b31c2cb3ac106d4bf910effb6fe73dd2bfd",
     "textHash": "7d8309e44966502e7eebd9208bd3f6dcf14667ce835e9e8ed05e28d1482de024",
+    "model": "gemini-4-argon-medium"
+  },
+  "Codex restarted to load the current sign-in.": {
+    "revision": "274daae31a6784a09c069893cefec33c58267da40565c83ccfabcdde5c1c8377",
+    "textHash": "66167a4e1dcfa6b21d5b71a4ad0686d482413f70d0a2f9f1f3d8074700a63606",
+    "model": "gemini-4-argon-medium"
+  },
+  "Codex sign-in expired. Select Refresh to load the current sign-in on the Papilot host. If it is still signed out, run papilot codex login there first.": {
+    "revision": "ec2860348105553f6b1ec031ea500d2c784895e9255cc9a0fcbbe75f761b3b31",
+    "textHash": "dfe7cf2610434c75a40ccc8bfa3d4019d400d1d897accc9743a5fa935990854a",
     "model": "gemini-4-argon-medium"
   },
   "Confirm permanent task deletion before continuing.": {
@@ -359,6 +379,11 @@
     "textHash": "eaa737438732fadd093db047380756e9e7e65be8a002fb25af0db721c691cf63",
     "model": "gemini-4-argon-medium"
   },
+  "Invalid line range.": {
+    "revision": "d957b207ed90f18308b191ae3c069b2fac12ada8f64c488045d75966387e053a",
+    "textHash": "cf7f6aeb1a1e567104a63c6b4596c16a26c65e5a95db9df486904701be1b247f",
+    "model": "gemini-4-argon-medium"
+  },
   "Invalid model.": {
     "revision": "bc4b461071c469774baf4d7870f352ca5dcc7c898b6f01df8ccfb8fb8cda2a49",
     "textHash": "f75b9a27de3e28e257f51fd3d7cd78076d2b327f887924a8b2b16714b3fd2209",
@@ -393,6 +418,11 @@
     "revision": "1550080d26ce6100682b5513ed3bbfeb745e76b5c17e70d35d04bce0bd29be9a",
     "textHash": "e983dd395aeec7525ca1f2063a950188eaf59d40c198857cc1ea6a3bf65e395e",
     "model": "gemini-4-argon-high"
+  },
+  "Invalid source edit.": {
+    "revision": "3630c899437b83f0ff3b88458b635414a555c520ff74c164948ddd553a2c4ee9",
+    "textHash": "02b2551247cad8fa4c7fc4e1deb2b6a7ad28263851fe06ec50bbabc7a1e6c7f2",
+    "model": "gemini-4-argon-medium"
   },
   "Invalid task ID.": {
     "revision": "1aca2297569b64cd29e6e765ebce07902877e3fb97caac123fd93ca04ab2e0b9",
@@ -829,6 +859,11 @@
     "textHash": "6a02c7f253e11fcdab190cbfc34671fff80992e3b78f3367fff3d21b2514c733",
     "model": "gemini-4-argon-medium"
   },
+  "This PDF is out of date. Refresh it and try again.": {
+    "revision": "a5d2e9c98102fb5d0e4e7367bd9ebf16c64b6ab2b9e9ca603a31e3067a3b6f90",
+    "textHash": "0549c1a89672e29921d02cf8d9548e89e48fbe4dccaa523250416c38664c82a4",
+    "model": "gemini-4-argon-medium"
+  },
   "This agent does not report usage.": {
     "revision": "af246bbd6e13759c94fd06aee9b97298ba719b9897a977d2f49fa183f7dfafe3",
     "textHash": "2909636c97c6f44b63683fa347b09c39d7ce47041aacc08c29b8e29076fd0b0a",
@@ -849,6 +884,11 @@
     "textHash": "26dd3b81f4eb60262e6f501ae672ead267005972e119c9b0c704b12262a8b125",
     "model": "gemini-4-argon-medium"
   },
+  "This edit ID was already used for another edit.": {
+    "revision": "875f82c2345ea49020d0caff57725ce76152e50d388da0e1fd83191f897553da",
+    "textHash": "6292a90262fb62071d9ab772a1d1022831648418e13cb92ca89e50809a48c152",
+    "model": "gemini-4-argon-medium"
+  },
   "This entry is no longer among the changes. Refresh the page.": {
     "revision": "6e50b4bd29e2211aea217b7b52a684e6d076b518e9c6a0a17ebc2ae7d4c08fbf",
     "textHash": "187edea105a881ad855fae52fc8082c463689cb8802a5b82e37f70365ca48311",
@@ -859,9 +899,19 @@
     "textHash": "823ba0d438dd0d7cd829dde5fb6523f2af9c6265690027121b3cb41936302f3d",
     "model": "gemini-4-argon-medium"
   },
+  "This file cannot be edited here.": {
+    "revision": "f7c67824da759b38b634eef52f9442ebb1d8bdb88c753d4352fffb3821b86f15",
+    "textHash": "3254fa726da48dbb82973fba70f6c05122f5099c54db5758fa82d976645ecd7e",
+    "model": "gemini-4-argon-medium"
+  },
   "This file is empty.": {
     "revision": "579b50bf9a03a17f841bd8b71bc0da89528b3e15b87b72cdd6a8035b5dea164a",
     "textHash": "6c09928e21e361aaa5f4b90f263a0d3ecf4eafe9bb0b2bc4293d606edbbc8706",
+    "model": "gemini-4-argon-medium"
+  },
+  "This file is not text that can be edited here.": {
+    "revision": "c29f1b1ca1f946dba298e878c3de049cd7378988875810b7cec153589b68533c",
+    "textHash": "6f9adfbbfa4c37dcd11d8be4bb3c1cbf48f48f1787c9d27e336ceece23e7c77d",
     "model": "gemini-4-argon-medium"
   },
   "This folder belongs to a parent Git repository. Select its root folder, or upload a copy.": {
@@ -957,6 +1007,16 @@
   "This review task does not belong to this workspace.": {
     "revision": "e630c1fdda48502418f2c15fc27bd55651328629ec534c108697ee9b7b3a16c2",
     "textHash": "b4c0beb6649ed40ff14046e042b8784f7ae7d0dfe9f07419c5240286f91495fe",
+    "model": "gemini-4-argon-medium"
+  },
+  "This source file is too large to edit here.": {
+    "revision": "b157a26d4d7c016fc6bc53a19caeab0c5d1e5a558881c032e759107960911305",
+    "textHash": "170e244994ef14fe5b290da89a2e6a64057c96c46b3dcd68dcdcade8177dba11",
+    "model": "gemini-4-argon-medium"
+  },
+  "This source file no longer exists.": {
+    "revision": "a49bba2f76618ccd1ce9db504df0f2565f9a97ea9b73362bbb69770ff92c0596",
+    "textHash": "c0fd398c44399a75f00ad97a3a45801dc6d6592eb67c2355baca49f430c39fe7",
     "model": "gemini-4-argon-medium"
   },
   "This suggestion does not belong to this review task.": {
@@ -1097,56 +1157,6 @@
   "npm is unavailable to Papilot.": {
     "revision": "09ec27b4945d2049bb2bc78321e6988fa4235e005c484f774dcb95a4e2f38610",
     "textHash": "28e354c9874ce50fe248b58e0fa98278a640a76ea2452c66ab506befee9218a7",
-    "model": "gemini-4-argon-medium"
-  },
-  "Choose a source file.": {
-    "revision": "cd9a4e523392abdc56d549d94639f76c039c8e7b507059dba4230a5c451bcc23",
-    "textHash": "53d2bb548616ae0927f1756f890ae8847d12f5f7de64a686a4b3c0c2ba91adff",
-    "model": "gemini-4-argon-medium"
-  },
-  "Click the text whose source you want to edit.": {
-    "revision": "ca282654cd1539ab9d55511cd1062fb1b608a82170dca0c2b03596f635b1322e",
-    "textHash": "478f5412723da8809bfcf25901a2972710f8d8dfe858ca9dd9f573d384ca2356",
-    "model": "gemini-4-argon-medium"
-  },
-  "Invalid line range.": {
-    "revision": "d957b207ed90f18308b191ae3c069b2fac12ada8f64c488045d75966387e053a",
-    "textHash": "cf7f6aeb1a1e567104a63c6b4596c16a26c65e5a95db9df486904701be1b247f",
-    "model": "gemini-4-argon-medium"
-  },
-  "Invalid source edit.": {
-    "revision": "3630c899437b83f0ff3b88458b635414a555c520ff74c164948ddd553a2c4ee9",
-    "textHash": "02b2551247cad8fa4c7fc4e1deb2b6a7ad28263851fe06ec50bbabc7a1e6c7f2",
-    "model": "gemini-4-argon-medium"
-  },
-  "This PDF is out of date. Refresh it and try again.": {
-    "revision": "a5d2e9c98102fb5d0e4e7367bd9ebf16c64b6ab2b9e9ca603a31e3067a3b6f90",
-    "textHash": "0549c1a89672e29921d02cf8d9548e89e48fbe4dccaa523250416c38664c82a4",
-    "model": "gemini-4-argon-medium"
-  },
-  "This edit ID was already used for another edit.": {
-    "revision": "875f82c2345ea49020d0caff57725ce76152e50d388da0e1fd83191f897553da",
-    "textHash": "6292a90262fb62071d9ab772a1d1022831648418e13cb92ca89e50809a48c152",
-    "model": "gemini-4-argon-medium"
-  },
-  "This file cannot be edited here.": {
-    "revision": "f7c67824da759b38b634eef52f9442ebb1d8bdb88c753d4352fffb3821b86f15",
-    "textHash": "3254fa726da48dbb82973fba70f6c05122f5099c54db5758fa82d976645ecd7e",
-    "model": "gemini-4-argon-medium"
-  },
-  "This file is not text that can be edited here.": {
-    "revision": "c29f1b1ca1f946dba298e878c3de049cd7378988875810b7cec153589b68533c",
-    "textHash": "6f9adfbbfa4c37dcd11d8be4bb3c1cbf48f48f1787c9d27e336ceece23e7c77d",
-    "model": "gemini-4-argon-medium"
-  },
-  "This source file is too large to edit here.": {
-    "revision": "b157a26d4d7c016fc6bc53a19caeab0c5d1e5a558881c032e759107960911305",
-    "textHash": "170e244994ef14fe5b290da89a2e6a64057c96c46b3dcd68dcdcade8177dba11",
-    "model": "gemini-4-argon-medium"
-  },
-  "This source file no longer exists.": {
-    "revision": "a49bba2f76618ccd1ce9db504df0f2565f9a97ea9b73362bbb69770ff92c0596",
-    "textHash": "c0fd398c44399a75f00ad97a3a45801dc6d6592eb67c2355baca49f430c39fe7",
     "model": "gemini-4-argon-medium"
   }
 }

@@ -19,10 +19,12 @@ export function AgentConnectionNotice({ name, runtime, reconnecting, onReconnect
   // An agent that was not found is not connecting: say so until it is installed and Reconnect finds it.
   const message = runtime.installed === false ? t('{agent} was not found on this computer. Install or set it up, then select Reconnect.', { agent: name })
     : error ? (first.length <= 120 ? first : t('{agent} is unavailable', { agent: name })) : runtime.connected ? t('Sign-in required') : t('Connecting to {agent}…', { agent: name });
+  // A running agent without a sign-in reloads the host's current one (see connectAgent).
+  const signedOut = runtime.connected && !runtime.authenticated;
   return <div className="agent-connection" data-state={connecting ? 'connecting' : 'error'}>
     <div className="agent-connection-message" role="status">{connecting ? <span className="spinner" aria-hidden="true"/> : <Icon name="alert" size={14}/>}<span>{message}</span></div>
     {error && error !== message && <details><summary>{t('Connection details')}</summary><p>{error}</p></details>}
-    <button type="button" disabled={reconnecting} onClick={onReconnect}><Icon name="refresh" size={12}/>{reconnecting ? t('Connecting…') : t('Reconnect')}</button>
+    <button type="button" disabled={reconnecting} title={signedOut ? t('Use the current {agent} sign-in on the Papilot host', { agent: name }) : undefined} onClick={onReconnect}><Icon name="refresh" size={12}/>{reconnecting ? signedOut ? t('Refreshing…') : t('Connecting…') : signedOut ? t('Refresh') : t('Reconnect')}</button>
   </div>;
 }
 

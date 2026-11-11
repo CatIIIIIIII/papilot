@@ -3289,6 +3289,11 @@
     "textHash": "6a515270b18fd7cc02197c860189d16eedd10946e602630e011e03d3c0cb9e9f",
     "model": "gemini-4-argon-medium"
   },
+  "Refresh": {
+    "revision": "7fb8479befd9d2399b4985656cb1b72cba8ea4c702276cf7476c6a0200e6472d",
+    "textHash": "8259f9d353516e60d2990fbd0630ae3c0d082f46a47b18426f9fa6025af79f52",
+    "model": "gemini-4-argon-medium"
+  },
   "Refresh changes": {
     "revision": "45d3d69144a51d98c900aa68dbb666ab67d8e63fd6497682b57c21dd691ca09c",
     "textHash": "802c8ce851422a2a4af8d8fe427c04ff119526f49e2f4d24b5c544d642249942",
@@ -3302,6 +3307,11 @@
   "Refresh worktrees and history": {
     "revision": "8993e785b0b26c200d342e6997f7b95c324ccf5267f38cef7d9bb662ffee5b3b",
     "textHash": "858301789ea0874227701c79cd95fa731832fb593c23fbdbe8ab31aac99b4abc",
+    "model": "gemini-4-argon-medium"
+  },
+  "Refreshing…": {
+    "revision": "6e2f43a56d16529730163ea42e5cd3a1a0e0cff829ff2f15b7e43d6e1a76037a",
+    "textHash": "7d7c37bfd35073ec9eba1942ea39ac9f17d85906a9b61761845b94c23066fa95",
     "model": "gemini-4-argon-medium"
   },
   "Regenerate PDF comparison": {
@@ -4007,6 +4017,11 @@
   "Sign in as the user running Papilot, then restart Papilot.": {
     "revision": "cdcd1d3813411ffba1153f37211b3daec72d6e31256f63124011c9171de336a6",
     "textHash": "02e2cbd49daf2cbeaabd46d04c5b55850c4351f79dd0d9bc32953bc05bb7bbd8",
+    "model": "gemini-4-argon-medium"
+  },
+  "Sign in as the user running Papilot, then select Refresh.": {
+    "revision": "4c5216254052db20bca5a8b1276615e33557e68c683ceea4fa10da36b869a42c",
+    "textHash": "a0a90a16f69805778fe8d7f4804193d2e4b30b6ff801a4a38307bc13ad2172e9",
     "model": "gemini-4-argon-medium"
   },
   "Sign in on the Papilot host to continue.": {
@@ -4772,6 +4787,11 @@
   "Use lowercase letters, numbers and hyphens. This is also the / command name.": {
     "revision": "c1e799de21abe8191ce96fe40e9545cfbb2539ec3e4d0f0ce85681d9af103b66",
     "textHash": "119f916cdf5509dbca747c0e1e9b41a7ee840a684b4265eaf0eb219cd8130dda",
+    "model": "gemini-4-argon-medium"
+  },
+  "Use the current {agent} sign-in on the Papilot host": {
+    "revision": "c83461e5976c1b43861c22f05ec9ca5b2a5aae8703b8c18434b5eebbcf7e74ab",
+    "textHash": "95fbd398ad9f2baeaf10a3ee2db6c0952dbfbe50f9aa049e28020495a8bf1234",
     "model": "gemini-4-argon-medium"
   },
   "Used for new tasks. Saved in this browser.": {
