@@ -16,10 +16,7 @@ import type { Task } from '../src/shared.ts';
 // model charges are needed.
 const CODEX = path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'codex.cmd' : 'codex');
 for (const history of ['new', 'legacy-loaded', 'legacy-restarted'] as const)
-for (const initial of ['workspace', 'full'] as const) test(`real Codex switches permissions with ${history} history starting with ${initial}`,
-  // Codex resolves workspace-write to read-only on Windows (Papilot then refuses
-  // to start); see the workspace permission handling in src/server/codex.ts.
-  { skip: process.platform === 'win32' && 'Codex has no workspace-write sandbox on Windows', timeout: 60000 }, async () => {
+for (const initial of ['workspace', 'full'] as const) test(`real Codex switches permissions with ${history} history starting with ${initial}`, { timeout: 60000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-native-permissions-'));
   const cwd = path.join(dir, 'paper'), extra = path.join(dir, 'extra'), home = path.join(dir, 'home');
   for (const item of [cwd, extra, home]) fs.mkdirSync(item);
@@ -115,7 +112,8 @@ for (const initial of ['workspace', 'full'] as const) test(`real Codex switches 
     const closed = codex.child ? once(codex.child, 'close') : Promise.resolve();
     workspace.close(); await closed; store.close();
     server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
-    fs.rmSync(dir, { recursive: true, force: true });
+    // Codex's Windows sandbox can hold the folder for a moment after it closes.
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });
 
@@ -128,4 +126,40 @@ test('Codex refuses a workspace policy resolver that retains full access and cle
   };
   await assert.rejects(codex.taskPermissionConfig('workspace', '/work'), /could not apply workspace permissions/);
   assert.deepEqual(calls, ['thread/start', 'thread/unsubscribe']);
+});
+
+test('on Windows, Codex threads get the sandbox that needs no setup unless the user configured one', { timeout: 60000 }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-codex-windows-'));
+  const start = async (platform: NodeJS.Platform) => {
+    const codex = new Codex(CODEX, ['app-server', '--listen', 'stdio://'], { PATH: process.env.PATH, HOME: home, CODEX_HOME: home, TMPDIR: os.tmpdir() }, platform);
+    await codex.start();
+    const sent: any[] = [], write = codex.child!.stdin!.write.bind(codex.child!.stdin!);
+    codex.child!.stdin!.write = ((line: string, ...rest: any[]) => { sent.push(JSON.parse(line)); return (write as any)(line, ...rest); }) as any;
+    const resolved = await codex.request('thread/start', { cwd: home, ephemeral: true, approvalPolicy: 'on-request', sandbox: 'workspace-write', config: { 'sandbox_workspace_write.network_access': true } });
+    await codex.request('thread/unsubscribe', { threadId: resolved.thread.id }).catch(() => {});
+    const closed = once(codex.child!, 'close'); codex.close(); await closed;
+    return sent.find(message => message.method === 'thread/start').params.config;
+  };
+  try {
+    assert.deepEqual(await start('win32'), { 'windows.sandbox': 'unelevated', 'sandbox_workspace_write.network_access': true });
+    assert.deepEqual(await start('linux'), { 'sandbox_workspace_write.network_access': true }, 'other systems are unchanged');
+    fs.writeFileSync(path.join(home, 'config.toml'), '[windows]\nsandbox = "elevated"\n');
+    assert.deepEqual(await start('win32'), { 'sandbox_workspace_write.network_access': true }, "the user's own sandbox is kept");
+  } finally { fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); }
+});
+
+test('a Codex that exits while its config is read does not count as connected', { timeout: 30000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-codex-exit-')), server = path.join(dir, 'app-server.mjs');
+  // Answers initialize, then exits when asked for its config.
+  fs.writeFileSync(server, `import { createInterface } from 'node:readline';
+createInterface({ input: process.stdin }).on('line', line => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + '\\n');
+  if (message.method === 'config/read') process.exit(1);
+});`);
+  const codex = new Codex(process.execPath, [server], process.env, 'win32');
+  try {
+    await assert.rejects(codex.start(), /Codex exited|not connected/);
+    assert.equal(codex.ready, false);
+  } finally { codex.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -87,6 +87,8 @@ else if(m.method==='echo')setTimeout(()=>send({id:m.id,result:m.params}),m.param
 else if(m.method==='fail')send({id:m.id,error:{message:'intentional failure'}});
 else if(m.method==='approve'){send({id:999,method:'item/commandExecution/requestApproval',params:{threadId:'test'}});send({id:m.id,result:{}})}
 else if(m.id===999)send({method:'approved',params:m.result});
+// Like Codex, any other request gets an error rather than silence.
+else if(m.method&&m.id!==undefined)send({id:m.id,error:{code:-32601,message:'Method not found'}});
 });`);
   const codex = new Codex(process.execPath, [fake]);
   try {

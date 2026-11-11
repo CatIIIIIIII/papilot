@@ -45,7 +45,12 @@ export class Codex extends EventEmitter {
   ready = false;
   stderr = '';
   // Without a binary of its own, this host's Codex is used (see codex-binary.ts).
-  constructor(private binary?: string, private args = ['app-server', '--listen', 'stdio://'], private env: NodeJS.ProcessEnv = process.env) { super(); }
+  constructor(private binary?: string, private args = ['app-server', '--listen', 'stdio://'], private env: NodeJS.ProcessEnv = process.env, private platform = process.platform) { super(); }
+  // Codex sandboxes commands on Windows only with a Windows sandbox set up.
+  // Without one configured, workspace access resolves to read-only and its
+  // sandbox cannot start; Papilot's threads then use the sandbox that needs no
+  // administrator setup. A sandbox the user configured is kept.
+  private threadConfig: Record<string, unknown> = {};
   detect() { return Boolean(this.binary || codexCandidates(this.env, DATA, ROOT).length); }
   start(): Promise<void> {
     if (this.ready) return Promise.resolve();
@@ -80,7 +85,16 @@ export class Codex extends EventEmitter {
     // The experimental API carries the tools Papilot gives its threads (see VIEW_PDF_TOOL).
     await this.request('initialize', { clientInfo: { name: 'papilot', title: 'Papilot', version: VERSION }, capabilities: { experimentalApi: true } });
     if (generation !== this.generation) throw new Error('Codex is not connected.');
-    this.notify('initialized', {}); this.ready = true;
+    this.notify('initialized', {});
+    this.threadConfig = {};
+    if (this.platform === 'win32') {
+      // An older Codex without config/read answers with an error: keep its
+      // defaults. A Codex that exits meanwhile fails this launch.
+      const effective = await this.request('config/read', {}).catch(error => { if (error instanceof RpcResponseError) return null; throw error; });
+      if (generation !== this.generation || this.child !== child) throw new Error('Codex is not connected.');
+      if (effective && !effective.config?.windows?.sandbox) this.threadConfig = { 'windows.sandbox': 'unelevated' };
+    }
+    this.ready = true;
   }
   private receive(message: any) {
     if (message.method) { this.emit(message.id === undefined ? 'notification' : 'request', message); return; }
@@ -92,6 +106,8 @@ export class Codex extends EventEmitter {
   }
   request(method: string, params: unknown, timeout = 60000): Promise<any> {
     if (!this.child) return Promise.reject(new Error('Codex is not connected.'));
+    if ((method === 'thread/start' || method === 'thread/resume') && Object.keys(this.threadConfig).length && params && typeof params === 'object')
+      params = { ...params, config: { ...this.threadConfig, ...(params as { config?: Record<string, unknown> }).config } };
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Codex request timed out: ${method}. Check the task status before retrying.`)); }, timeout);
