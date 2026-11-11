@@ -190,7 +190,6 @@ try {
   await sourceDiff.getByRole('button', { name: 'Previous change', exact: true }).click();
   await sourceDiff.getByText('Updated result.', { exact: true }).waitFor();
   await sourceDiff.locator('.git-source-scroll').press('Escape');
-  await expect(page.locator('.git-diff-view')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'results.tex chapters', exact: true })).toBeFocused();
   await panel.screenshot({ path: 'test-results/git-simple-desktop.png' });
   await syncFromMenu();
@@ -344,7 +343,6 @@ try {
   await page.locator('.git-diff-view').getByRole('button', { name: '下一处改动', exact: true }).click();
   await page.locator('.git-diff-view').getByText('Late updated result.', { exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/git-diff-phone.png' });
-  await page.getByRole('button', { name: '返回文件列表', exact: true }).click();
   await expect(chinesePanel).toBeVisible();
   assert.deepEqual(errors, []);
   console.log('PASS: Git settings, basic/advanced views, commit/sync, failure recovery and responsive layout');

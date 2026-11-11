@@ -5,7 +5,7 @@
 [data-desktop] .sidebar-header>.icon-button{position:absolute;top:7px;right:12px;z-index:21;-webkit-app-region:no-drag}
 .sidebar-collapsed .desktop-window-drag{width:92px}
 [data-desktop] .sidebar-collapsed .sidebar-toggle{margin-left:92px}
-[data-desktop] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar){-webkit-app-region:drag}
+[data-desktop] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar,.git-toolbar,.git-details-toolbar,.git-diff-toolbar){-webkit-app-region:drag}
 [data-desktop] :is(button,a,input,select,textarea,[role="slider"],[role="combobox"]){-webkit-app-region:no-drag}
 /* app-region inherits, so a popover or dialog opened from a toolbar would be a
    drag handle too. On macOS that stops every click reaching the window. */
@@ -30,9 +30,13 @@
 [data-desktop="win32"] .main{--desktop-window-space:138px}
 [data-desktop="win32"] .manuscript:not(.panel-collapsed)>.manuscript-pages,
 [data-desktop="win32"] .task-grid.layout-split>.review-panel{--desktop-window-space:0px}
-[data-desktop="win32"] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar,.panel-heading,.manuscript-side-header,.git-diff-toolbar,.review-tools){padding-right:calc(8px + var(--desktop-window-space,0px))}
-[data-desktop="win32"] .git-workspace-header{padding-right:152px;-webkit-app-region:drag}
-[data-desktop="win32"] .git-workspace-body{--desktop-window-space:0px}
+[data-desktop="win32"] :is(.pdf-toolbar,.workspace-navigation,.review-placeholder-toolbar,.panel-heading,.manuscript-side-header,.git-details-toolbar,.git-diff-toolbar,.review-tools){padding-right:calc(8px + var(--desktop-window-space,0px))}
+[data-desktop="win32"] .git-workspace .git-panel{--desktop-window-space:0px}
+@media(max-width:680px){
+  [data-desktop="win32"] .git-workspace .git-panel{--desktop-window-space:138px}
+  [data-desktop="win32"] .git-toolbar{padding-right:calc(8px + var(--desktop-window-space,0px))}
+  [data-desktop="win32"] .git-details{--desktop-window-space:0px}
+}
 @container (max-width:180px){[data-desktop="win32"] .side-tabs>button .tab-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}}
 @media(max-width:900px){
   [data-desktop="win32"] .sidebar{position:fixed}

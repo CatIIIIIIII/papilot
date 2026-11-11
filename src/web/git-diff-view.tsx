@@ -9,9 +9,9 @@ const ROW_HEIGHT = 24;
 // Tab stops and wide characters need room even when their row is off screen.
 const columns = (text: string) => Array.from(text).reduce((n, char) => n + (char === '\t' ? 4 - n % 4 : char.codePointAt(0)! > 255 ? 2 : 1), 0);
 
-export function GitDiffView({ path, scopeLabel, revision, live = false, load, onClose, closeLabel, lead, tools }: {
+export function GitDiffView({ path, scopeLabel, revision, live = false, load, onClose, lead, tools }: {
   path: string; scopeLabel: string; revision: string; live?: boolean; load: (path: string, signal: AbortSignal) => Promise<GitDiff>;
-  onClose: () => void; closeLabel: string; lead?: ReactNode; tools?: ReactNode;
+  onClose?: () => void; lead?: ReactNode; tools?: ReactNode;
 }) {
   const [diff, setDiff] = useState<GitDiff | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(true), [retry, setRetry] = useState(0);
   const scroll = useRef<HTMLDivElement>(null);
@@ -79,22 +79,22 @@ export function GitDiffView({ path, scopeLabel, revision, live = false, load, on
   };
   const slash = path.lastIndexOf('/');
   return <section className="manuscript-pages git-diff-view" aria-label={t('Changes in {path}', { path })} aria-busy={loading} onKeyDown={event => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
+    if (event.key === 'Escape' && onClose) { event.preventDefault(); event.stopPropagation(); onClose(); }
   }}>
     <div className="git-diff-toolbar">
       {lead}
-      <button type="button" className="icon-button" aria-label={closeLabel} title={closeLabel} onClick={onClose}><Icon name="chevronLeft" size={18}/></button>
-      <div className="git-diff-title" title={path}><Icon name="diff" size={16}/><strong>{path.slice(slash + 1)}</strong>{slash > 0 && <span>{path.slice(0, slash)}</span>}</div>
-      <span className="git-diff-scope" title={scopeLabel}>{scopeLabel}</span>
-      {diff && <span className="git-diff-totals" aria-label={t('{added} lines added, {deleted} lines removed', { added: parsed.added, deleted: parsed.deleted })}><span className="add">+{parsed.added}</span><span className="del">−{parsed.deleted}</span></span>}
-      <div className="git-diff-navigation">
-        <span className="git-diff-position">{parsed.changes.length ? `${current + 1} / ${parsed.changes.length}` : ''}</span>
-        <button type="button" className="icon-button" aria-label={t('Previous change')} title={t('Previous change')} disabled={!parsed.changes.length || current === 0} onClick={() => jump(current - 1)}><Icon name="arrowUp" size={16}/></button>
-        <button type="button" className="icon-button" aria-label={t('Next change')} title={t('Next change')} disabled={!parsed.changes.length || current === parsed.changes.length - 1} onClick={() => jump(current + 1)}><Icon name="arrowDown" size={16}/></button>
+      <div className="git-diff-file-bar">
+        <div className="git-diff-title" title={path}><strong>{path.slice(slash + 1)}</strong>{slash > 0 && <span>{path.slice(0, slash)}</span>}</div>
+        {scopeLabel && <span className="git-diff-scope" title={scopeLabel}>{scopeLabel}</span>}
+        {diff && <span className="git-diff-totals" aria-label={t('{added} lines added, {deleted} lines removed', { added: parsed.added, deleted: parsed.deleted })}><span className="add">+{parsed.added}</span><span className="del">−{parsed.deleted}</span></span>}
+        <div className="git-diff-navigation">
+          <span className="git-diff-position">{parsed.changes.length ? `${current + 1} / ${parsed.changes.length}` : ''}</span>
+          <button type="button" className="icon-button" aria-label={t('Previous change')} title={t('Previous change')} disabled={!parsed.changes.length || current === 0} onClick={() => jump(current - 1)}><Icon name="arrowUp" size={15}/></button>
+          <button type="button" className="icon-button" aria-label={t('Next change')} title={t('Next change')} disabled={!parsed.changes.length || current === parsed.changes.length - 1} onClick={() => jump(current + 1)}><Icon name="arrowDown" size={15}/></button>
+        </div>
+        {tools}
       </div>
-      {tools}
     </div>
-    <div className="git-diff-columns" aria-hidden="true"><span>{t('Before')}</span><span>{t('After')}</span></div>
     <div ref={scroll} className="git-source-scroll" tabIndex={0} onScroll={event => {
       const box = event.currentTarget;
       if (box.scrollTop !== viewport.top) {

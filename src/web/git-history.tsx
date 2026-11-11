@@ -10,13 +10,14 @@ export type HistorySelection = { list: 'history'; path: string; hash: string; su
 const subject = (version: GitVersion) => version.message.split('\n')[0];
 const date = (value: number) => new Date(value).toLocaleString(locale(), { month: 'short', day: 'numeric', year: new Date(value).getFullYear() === new Date().getFullYear() ? undefined : 'numeric', hour: '2-digit', minute: '2-digit' });
 
-export function VersionHistory({ git, busy, load, loadVersion, restore, onOpenDiff, selection }: {
-  git: GitStatus; busy: boolean; load: (before: string | null, signal: AbortSignal) => Promise<GitHistory>;
+export function VersionHistory({ git, busy, collapsible = true, refreshKey = 0, load, loadVersion, restore, onOpenDiff, selection }: {
+  git: GitStatus; busy: boolean; collapsible?: boolean; refreshKey?: number; load: (before: string | null, signal: AbortSignal) => Promise<GitHistory>;
   loadVersion: (hash: string, signal: AbortSignal) => Promise<GitVersionDetail>;
   restore: (hash: string, head: string) => Promise<void>;
   onOpenDiff: (selection: HistorySelection) => void; selection: HistorySelection | null;
 }) {
-  const [open, toggle] = usePane('versions', true);
+  const [paneOpen, toggle] = usePane('versions', true);
+  const open = collapsible ? paneOpen : true;
   const [data, setData] = useState<GitHistory | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false), [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState(''), [restoring, setRestoring] = useState<GitVersion | null>(null);
   const request = useRef<AbortController | null>(null), loadingMore = useRef(false);
@@ -28,7 +29,7 @@ export function VersionHistory({ git, busy, load, loadVersion, restore, onOpenDi
       if (!controller.signal.aborted) setError(failure.message);
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [load, git.head?.hash, open, refresh]);
+  }, [load, git.head?.hash, open, refresh, refreshKey]);
   async function more() {
     const controller = request.current;
     if (!data?.next || !controller || loadingMore.current) return;
@@ -39,9 +40,7 @@ export function VersionHistory({ git, busy, load, loadVersion, restore, onOpenDi
     } catch (failure) { if (!controller.signal.aborted) setError((failure as Error).message); }
     finally { if (!controller.signal.aborted) { setLoading(false); loadingMore.current = false; } }
   }
-  return <GitPane title={t('Version history')} className="git-versions" open={open} onToggle={() => toggle()} actions={
-    <button type="button" className="icon-button" aria-label={t('Refresh version history')} title={t('Refresh version history')} disabled={loading} onClick={() => { toggle(true); setRefresh(value => value + 1); }}><Icon name="refresh" size={14}/></button>
-  }>
+  const content = <>
     {error && <p className="inline-error git-overview-note" role="alert">{error} <button type="button" onClick={() => setRefresh(value => value + 1)}>{t('Retry')}</button></p>}
     {!data && loading && <p className="git-overview-note" role="status">{t('Loading versions…')}</p>}
     {data && !data.versions.length && <p className="git-overview-note">{t('Your commits will appear here.')}</p>}
@@ -64,7 +63,11 @@ export function VersionHistory({ git, busy, load, loadVersion, restore, onOpenDi
       if (!data?.versions[0]) return;
       await restore(restoring.hash, data.versions[0].hash); setRestoring(null); setSelected('');
     }}/>}
-  </GitPane>;
+  </>;
+  if (!collapsible) return <section className="git-pane git-versions git-versions-flat open" aria-label={t('Version history')}>{content}</section>;
+  return <GitPane title={t('Version history')} className="git-versions" open={open} onToggle={() => toggle()} actions={
+    <button type="button" className="icon-button" aria-label={t('Refresh version history')} title={t('Refresh version history')} disabled={loading} onClick={() => { toggle(true); setRefresh(value => value + 1); }}><Icon name="refresh" size={14}/></button>
+  }>{content}</GitPane>;
 }
 
 function VersionDetail({ version, load, selection, onOpenDiff }: {

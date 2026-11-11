@@ -59,7 +59,7 @@ import { TaskApply } from './task-apply.tsx';
 import { TaskApplyState } from './task-apply-state.ts';
 import { taskSaveStatus } from './task-save-status.ts';
 import { TaskSaved } from './task-saved.tsx';
-import { GitPane, GitRepository, usePane } from './git-overview.tsx';
+import { GitRepository } from './git-overview.tsx';
 import { useAdvancedGit } from './git-preferences.ts';
 import { GitDiffView } from './git-diff-view.tsx';
 import { VersionHistory, type HistorySelection } from './git-history.tsx';
@@ -465,29 +465,27 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   const [busy, setBusy] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [resolution, setResolution] = useState<{ agent: string; summary: string } | null>(null);
   const [discarding, setDiscarding] = useState<GitFile[] | null>(null);
-  const [changesOpen, toggleChanges] = usePane('changes', true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<'changes' | 'history'>(() => readPlace('git-view:' + projectId) === 'history' ? 'history' : 'changes');
   const showDetail = (value: 'changes' | 'history') => { setDetail(value); savePlace('git-view:' + projectId, value); };
   const [source, setSource] = useState<GitSelection | null>(() => readPlace<GitSelection>('git-selection:' + projectId) || { path: '', list: 'changes' });
-  const [diffRefresh, setDiffRefresh] = useState(0);
+  const [diffRefresh, setDiffRefresh] = useState(0), [historyRefresh, setHistoryRefresh] = useState(0);
   const sourceOpener = useRef<HTMLElement | null>(null);
   const selectSource = (value: GitSelection | null) => { setSource(value); savePlace('git-selection:' + projectId, value); };
   const onOpenDiff = (value: GitSelection) => { sourceOpener.current = document.activeElement as HTMLElement | null; selectSource(value); showDetail('changes'); setDiffRefresh(value => value + 1); };
-  const closeSource = () => { if (source?.list === 'history') showDetail('history'); selectSource(null); requestAnimationFrame(() => { if (sourceOpener.current?.isConnected) sourceOpener.current.focus({ preventScroll: true }); }); };
+  const closeSource = () => { if (source?.list === 'history') { showDetail('history'); selectSource({ path: '', list: 'changes' }); } requestAnimationFrame(() => { if (sourceOpener.current?.isConnected) sourceOpener.current.focus({ preventScroll: true }); }); };
   const historyHash = source?.list === 'history' ? source.hash : null;
   const loadDiff = useCallback((path: string, signal: AbortSignal) => api<GitDiff>(historyHash ? `/projects/${projectId}/git/history/${historyHash}/diff?path=${encodeURIComponent(path)}` : `/projects/${projectId}/git/diff?path=${encodeURIComponent(path)}&scope=${source?.list === 'staged' ? 'staged' : 'unstaged'}`, undefined, signal), [projectId, historyHash, source?.list]);
   useEffect(() => {
-    if (!git || !source || source.list === 'history') return;
-    const file = git.files.find(file => file.path === source.path) || git.files[0];
-    if (!file) selectSource(null);
+    if (!git || source?.list === 'history') return;
+    const file = git.files.find(file => file.path === source?.path) || git.files[0];
+    if (!file) { if (source) selectSource(null); }
     else {
-      const list = !git.merging && file.staged && (!file.unstaged || source.list === 'staged') ? 'staged' : 'changes';
-      if (source.path !== file.path || source.list !== list) selectSource({ path: file.path, list });
+      const list = !git.merging && file.staged && (!file.unstaged || source?.list === 'staged') ? 'staged' : 'changes';
+      if (source?.path !== file.path || source?.list !== list) selectSource({ path: file.path, list });
     }
   }, [git, source]);
   const selection = source;
-  const heading = <header className="git-workspace-header">{navigation}<Icon name="restore" size={18}/><h2>{t('Version Management')}</h2></header>;
   const latest = useRef({ busy, onStatus });
   latest.current = { busy, onStatus };
   // Discover incoming commits while this panel is visible; status alone only
@@ -511,7 +509,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
     return () => { controller.abort(); clearInterval(timer); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); };
   }, [projectId, git?.remote]);
   const files = git?.files || [];
-  if (!git || !Array.isArray(git.files)) return <section className="git-workspace" aria-label={t('Version Management')}>{heading}<p className="git-clean" role="status">{t('Loading version management…')}</p></section>;
+  if (!git || !Array.isArray(git.files)) return <section className="git-workspace" aria-label={t('Version Management')}><div className="git-toolbar">{navigation}</div><p className="git-clean" role="status">{t('Loading version management…')}</p></section>;
   const staged = files.filter(file => file.staged), unstaged = files.filter(file => file.unstaged), chosen = staged.length ? staged : files.filter(file => !ignorable(file));
   const stage = (paths: string[], on: boolean) => { if (paths.length) void run('stage', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/stage`, { paths, stage: on }), () => ''); };
   const saveMessage = (value: string) => { setMessage(value); if (value) browserStorage.setItem(draftKey, value); else browserStorage.removeItem(draftKey); };
@@ -595,7 +593,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
           <Icon name="paper" size={14}/><span className="git-name">{file.path.slice(slash + 1)}</span>{slash > 0 && <span className="git-dir">{file.path.slice(0, slash)}</span>}
         </button>
         {!merging && <span className="git-row-actions">
-          {list === 'changes' && <button type="button" className="icon-button" aria-label={t('Discard changes in {path}', { path: file.path })} title={t('Discard changes')} disabled={Boolean(busy)} onClick={() => setDiscarding([file])}><Icon name="undo" size={16}/></button>}
+          {list === 'changes' && <button type="button" className="icon-button git-discard-action" aria-label={t('Discard changes in {path}', { path: file.path })} title={t('Discard changes')} disabled={Boolean(busy)} onClick={() => setDiscarding([file])}><Icon name="undo" size={16}/></button>}
           {list === 'changes'
             ? <button type="button" className="icon-button" aria-label={t('Stage {path}', { path: file.path })} title={t('Stage changes')} disabled={Boolean(busy)} onClick={() => stage([file.path], true)}><Icon name="plus" size={16}/></button>
             : <button type="button" className="icon-button" aria-label={t('Unstage {path}', { path: file.path })} title={t('Unstage changes')} disabled={Boolean(busy)} onClick={() => stage([file.path], false)}><Icon name="minus" size={16}/></button>}
@@ -606,47 +604,44 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   };
   const group = (list: 'staged' | 'changes', items: GitFile[]) => {
     const name = list === 'staged' ? t('Staged changes') : t('Changes'), shut = collapsed[list];
+    const stageable = list === 'changes' ? items.filter(file => !ignorable(file)) : items;
     return <div className="git-group" role="group" aria-label={name}>
       <div className="git-group-header">
-        <button type="button" className="git-group-toggle" aria-expanded={!shut} onClick={() => setCollapsed(current => ({ ...current, [list]: !shut }))}><Icon name={shut ? 'chevronRight' : 'chevronDown'} size={12}/><span>{name}</span></button>
+        <button type="button" className="git-group-toggle" aria-expanded={!shut} onClick={() => setCollapsed(current => ({ ...current, [list]: !shut }))}><Icon name={shut ? 'chevronRight' : 'chevronDown'} size={12}/><span>{name}</span><span className="git-count" aria-hidden="true">{items.length}</span></button>
         {!merging && <span className="git-row-actions">
-          {list === 'changes' && <button type="button" className="icon-button" aria-label={t('Discard all changes')} title={t('Discard all changes')} disabled={Boolean(busy)} onClick={() => setDiscarding(items)}><Icon name="undo" size={16}/></button>}
+          {list === 'changes' && <button type="button" className="icon-button git-discard-action" aria-label={t('Discard all changes')} title={t('Discard all changes')} disabled={Boolean(busy)} onClick={() => setDiscarding(items)}><Icon name="undo" size={15}/></button>}
           {list === 'changes'
-            ? <button type="button" className="icon-button" aria-label={t('Stage all changes')} title={t('Stage all changes')} disabled={Boolean(busy)} onClick={() => stage(items.filter(file => !ignorable(file)).map(file => file.path), true)}><Icon name="plus" size={16}/></button>
-            : <button type="button" className="icon-button" aria-label={t('Unstage all changes')} title={t('Unstage all changes')} disabled={Boolean(busy)} onClick={() => stage(items.map(file => file.path), false)}><Icon name="minus" size={16}/></button>}
+            ? <button type="button" className="icon-button" aria-label={t('Stage all changes')} title={t('Stage all changes')} disabled={Boolean(busy) || !stageable.length} onClick={() => stage(stageable.map(file => file.path), true)}><Icon name="plus" size={15}/></button>
+            : <button type="button" className="icon-button" aria-label={t('Unstage all changes')} title={t('Unstage all changes')} disabled={Boolean(busy)} onClick={() => stage(items.map(file => file.path), false)}><Icon name="minus" size={15}/></button>}
         </span>}
-        <span className="git-count">{items.length}</span>
       </div>
       {!shut && <ul className="git-files">{items.map(file => row(file, list))}</ul>}
     </div>;
   };
   const sync = git.upstream && (git.ahead > 0 || git.behind > 0) ? <span className="git-sync">{git.ahead > 0 && <span>↑{git.ahead}</span>}{git.behind > 0 && <span>↓{git.behind}</span>}</span> : null;
+  const switcher = <div className="git-detail-switcher view-selector" role="group" aria-label={t('Workspace view')}>
+    <button type="button" aria-pressed={detail === 'changes'} onClick={() => { if (source?.list === 'history') selectSource({ path: '', list: 'changes' }); showDetail('changes'); }}><Icon name="diff" size={16}/><span>{t('Changes')}</span></button>
+    <button type="button" aria-pressed={detail === 'history'} onClick={() => showDetail('history')}><Icon name="restore" size={16}/><span>{t('Version history')}</span></button>
+  </div>;
+  const diffOpen = detail === 'changes' && Boolean(source?.path);
   return <section className="git-workspace" aria-label={t('Version Management')} aria-busy={Boolean(busy)}>
-    {heading}
     <div className="git-workspace-body">
-    <aside className={'git-panel' + (advanced ? ' git-advanced' : '')} aria-label={t('Changes')}>
+    <section className={'git-panel' + (advanced ? ' git-advanced' : '')} aria-label={t('Changes')}>
     <div className="git-toolbar" role="group" aria-label={t('Version Management')}>
-      <div className="git-toolbar-branch">
-        <span className="git-branch" title={git.upstream ? `${t('Tracking')} ${git.upstream}` : t('No upstream branch')}><Icon name="branch" size={14}/><code>{git.branch || t('detached HEAD')}</code>{sync}</span>
-        {advanced && git.remote && <button type="button" className="icon-button" aria-label={t('Fetch from the remote')} title={t('Fetch from the remote')} disabled={Boolean(busy)} onClick={() => remote('fetch')}>{busy === 'fetch' ? <span className="spinner"/> : <Icon name="fetch" size={15}/>}</button>}
+      {navigation}
+      <span className="git-branch" title={git.upstream ? `${t('Tracking')} ${git.upstream}` : t('No upstream branch')}><Icon name="branch" size={14}/><code>{git.branch || t('detached HEAD')}</code>{sync}</span>
+      <div className="git-toolbar-tools">
+        {advanced && git.remote && <>
+          <button type="button" className="icon-button" aria-label={t('Fetch from the remote')} title={t('Fetch from the remote')} disabled={Boolean(busy)} onClick={() => remote('fetch')}>{busy === 'fetch' ? <span className="spinner"/> : <Icon name="fetch" size={15}/>}</button>
+          {git.upstream && <button type="button" className={'git-remote-action' + (git.behind > 0 ? ' has-count' : '')} aria-label={diverged ? t('Merge') : t('Pull')} title={diverged ? t('{branch} and {upstream} have both changed. Merge brings in the remote commits.', { branch: git.branch ?? '', upstream: git.upstream }) : t('Pull')} disabled={Boolean(busy) || Boolean(merging) || !git.behind} onClick={() => remote(diverged ? 'merge' : 'pull')}>{busy === 'pull' || busy === 'merge' ? <span className="spinner"/> : <Icon name="pull" size={14}/>}{git.behind > 0 && <span className="git-action-count" aria-hidden="true">{git.behind}</span>}</button>}
+          {(git.upstream || publish) && <button type="button" className={'git-remote-action' + ((git.upstream && git.ahead > 0) || publish ? ' has-count' : '')} aria-label={git.upstream ? t('Push') : t('Publish branch')} title={git.upstream ? t('Push') : t('Publish branch')} disabled={Boolean(busy) || Boolean(merging) || Boolean(git.upstream && !git.ahead)} onClick={() => remote('push')}>{busy === 'push' ? <span className="spinner"/> : <Icon name="push" size={14}/>}{git.upstream && git.ahead > 0 && <span className="git-action-count" aria-hidden="true">{git.ahead}</span>}</button>}
+        </>}
+        <button type="button" className="icon-button" aria-label={t('Refresh changes')} title={t('Refresh changes')} disabled={Boolean(busy)} onClick={reload}>{busy === 'reload' ? <span className="spinner"/> : <Icon name="refresh" size={14}/>}</button>
       </div>
-      {advanced && git.remote && <div className="git-toolbar-actions">
-        {git.upstream && <button type="button" className="button secondary compact" aria-label={diverged ? t('Merge') : t('Pull')} title={diverged ? t('{branch} and {upstream} have both changed. Merge brings in the remote commits.', { branch: git.branch ?? '', upstream: git.upstream }) : t('Pull')} disabled={Boolean(busy) || Boolean(merging) || !git.behind} onClick={() => remote(diverged ? 'merge' : 'pull')}>{busy === 'pull' || busy === 'merge' ? <span className="spinner"/> : <Icon name="pull" size={15}/>}<span>{diverged ? t('Merge') : t('Pull')}</span>{git.behind > 0 && <span className="git-action-count" aria-hidden="true">{git.behind}</span>}</button>}
-        {(git.upstream || publish) && <button type="button" className="button secondary compact" aria-label={git.upstream ? t('Push') : t('Publish branch')} disabled={Boolean(busy) || Boolean(merging) || Boolean(git.upstream && !git.ahead)} onClick={() => remote('push')}>{busy === 'push' ? <span className="spinner"/> : <Icon name="push" size={15}/>}<span>{git.upstream ? t('Push') : t('Publish branch')}</span>{git.upstream && git.ahead > 0 && <span className="git-action-count" aria-hidden="true">{git.ahead}</span>}</button>}
-      </div>}
     </div>
     {error && <p className="inline-error git-message" role="alert">{error}</p>}
-    {notice && !error && <p className={'git-message git-notice' + (merging ? ' git-warning' : '')} role="status"><Icon name={merging ? 'alert' : 'check'} size={14}/>{notice}</p>}
+    {notice && !error && <p className={'git-message git-notice' + (merging ? ' git-warning' : '')} role="status"><Icon name={merging ? 'alert' : 'check'} size={14}/><span>{notice}</span></p>}
     <div className="git-panel-content">
-    <GitPane className="git-changes" title={t('Changes')} open={changesOpen} onToggle={() => toggleChanges()} actions={<>
-      <button type="button" className="icon-button" aria-label={t('Refresh changes')} title={t('Refresh changes')} disabled={Boolean(busy)} onClick={reload}>{busy === 'reload' ? <span className="spinner"/> : <Icon name="refresh" size={14}/>}</button>
-      <ActionMenu label={t('More Git actions')} disabled={Boolean(busy) || Boolean(merging)} actions={[
-        ...(ignored.length ? [{ label: t('Add to .gitignore'), detail: tn(ignored.length, '{n} build file', '{n} build files'), title: t('Untracked build output. Add to .gitignore adds:') + '\n' + patterns.join('\n'), icon: 'archive', select: ignore }] : []),
-        { label: t('Stage all changes'), icon: 'plus', disabled: !unstaged.length, select: () => stage(unstaged.filter(file => !ignorable(file)).map(file => file.path), true) },
-        { label: t('Unstage all changes'), icon: 'minus', disabled: !staged.length, select: () => stage(staged.map(file => file.path), false) },
-        { label: t('Discard all changes'), icon: 'undo', danger: true, disabled: !unstaged.length, select: () => setDiscarding(unstaged) },
-      ]}><Icon name="more" size={15}/></ActionMenu>
-    </>}>
       {merging && <div className={'git-merge' + (merging.conflicts.length ? '' : ' resolved')} role="group" aria-label={t('Merge in progress')}>
         <p><strong>{merging.conflicts.length ? tn(merging.conflicts.length, 'Merging: {n} file has conflicts', 'Merging: {n} files have conflicts') : t('Merging: no conflicts left')}</strong><span>{merging.message}</span></p>
         {resolution && <div className="git-merge-summary markdown" aria-label={t('{agent} on the merge', { agent: resolution.agent })}><Markdown text={resolution.summary}/></div>}
@@ -660,40 +655,42 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
       {!merging && <form className="git-commit-form" onSubmit={event => { event.preventDefault(); submitPrimary(); }}>
         <div className="git-message-box">
           <textarea aria-label={t('Commit message')} placeholder={placeholder} rows={1} value={message} readOnly={busy === 'commit' || busy === 'message'} onChange={event => saveMessage(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, touch())) { event.preventDefault(); commit(); } }}/>
-          <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: AGENT_LABELS[writer.agent] })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
-        </div>
-        <div className="git-commit-split has-menu">
-          <button className="button primary git-commit-button" aria-label={primaryLabel} title={syncPrimary ? needsSync ? syncTitle : t('Up to date with the remote.') : commitTitle} disabled={primaryDisabled}>{busy === 'commit' || syncing ? <span className="spinner"/> : <Icon name={syncPrimary && needsSync ? 'refresh' : 'check'} size={15}/>}<span>{primaryLabel}</span>{syncPrimary && needsSync && sync}</button>
-          <ActionMenu label={t('More commit actions')} className="button primary git-commit-more" disabled={Boolean(busy)} actions={[
-            { label: t('Commit'), icon: 'check', disabled: commitDisabled, select: () => commit() },
-            { label: t('Commit and sync'), icon: 'refresh', disabled: commitDisabled || !canSync, select: () => commit('sync') },
-            { label: t('Sync'), icon: 'refresh', divider: true, disabled: !canSync, title: syncTitle, select: syncRemote },
-            ...(advanced ? [{ label: t('Commit (Amend)'), icon: 'undo', disabled: commitDisabled || !git.head, divider: true, select: () => commit('amend') },
-              ...(canPush ? [{ label: t('Commit and push'), icon: 'push', disabled: commitDisabled, select: () => commit('push') }] : [])] : []),
-          ]}><Icon name="chevronDown" size={14}/></ActionMenu>
+          <div className="git-compose-bar">
+            <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: AGENT_LABELS[writer.agent] })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
+            <div className={'git-commit-split has-menu' + (busy === 'commit' || syncing ? ' is-busy' : '')}>
+              <button className="button primary git-commit-button" aria-label={primaryLabel} title={syncPrimary ? needsSync ? syncTitle : t('Up to date with the remote.') : commitTitle} disabled={primaryDisabled}>{busy === 'commit' || syncing ? <span className="spinner light"/> : <Icon name={syncPrimary && needsSync ? 'refresh' : 'check'} size={14}/>}<span>{primaryLabel}</span>{syncPrimary && needsSync && sync}</button>
+              <ActionMenu label={t('More commit actions')} className="button primary git-commit-more" disabled={Boolean(busy)} actions={[
+                { label: t('Commit'), icon: 'check', disabled: commitDisabled, select: () => commit() },
+                { label: t('Commit and sync'), icon: 'refresh', disabled: commitDisabled || !canSync, select: () => commit('sync') },
+                { label: t('Sync'), icon: 'refresh', divider: true, disabled: !canSync, title: syncTitle, select: syncRemote },
+                ...(advanced ? [{ label: t('Commit (Amend)'), icon: 'undo', disabled: commitDisabled || !git.head, divider: true, select: () => commit('amend') },
+                  ...(canPush ? [{ label: t('Commit and push'), icon: 'push', disabled: commitDisabled, select: () => commit('push') }] : [])] : []),
+              ]}><Icon name="chevronDown" size={13}/></ActionMenu>
+            </div>
+          </div>
         </div>
       </form>}
       <div className="git-file-lists">
+      {ignored.length > 0 && !merging && <button type="button" className="git-ignore-banner" title={t('Untracked build output. Add to .gitignore adds:') + '\n' + patterns.join('\n')} disabled={Boolean(busy)} onClick={ignore}><Icon name="archive" size={14}/><span>{t('Add to .gitignore')}</span><small>{tn(ignored.length, '{n} build file', '{n} build files')}</small></button>}
       {merging ? files.length > 0 && group('changes', files) : <>
         {staged.length > 0 && group('staged', staged)}
         {unstaged.length > 0 && group('changes', unstaged)}
       </>}
-      {!files.length && <p className="git-clean">{t('No uncommitted changes')}</p>}
+      {!files.length && <p className="git-clean"><Icon name="check" size={14}/><span>{t('No uncommitted changes')}</span></p>}
       </div>
-    </GitPane>
     </div>
-    </aside>
+    </section>
     <section className="git-details" aria-label={t('Workspace view')}>
-      <div className="git-detail-switcher view-selector" role="group" aria-label={t('Workspace view')}>
-        <button type="button" aria-pressed={detail === 'changes'} onClick={() => showDetail('changes')}><Icon name="diff" size={16}/><span>{t('Changes')}</span></button>
-        <button type="button" aria-pressed={detail === 'history'} onClick={() => showDetail('history')}><Icon name="restore" size={16}/><span>{t('Version history')}</span></button>
-      </div>
+      {!diffOpen && <div className="git-details-toolbar">
+        {switcher}
+        {detail === 'history' && !advanced && <button type="button" className="icon-button git-details-refresh" aria-label={t('Refresh version history')} title={t('Refresh version history')} disabled={Boolean(busy)} onClick={() => setHistoryRefresh(value => value + 1)}><Icon name="refresh" size={14}/></button>}
+      </div>}
       <div className="git-file-preview" hidden={detail !== 'changes'}>
-        {detail === 'changes' && source?.path ? <GitDiffView key={projectId + ':' + source.list + ':' + historyHash + ':' + source.path} path={source.path} scopeLabel={source.list === 'history' ? source.subject : source.list === 'staged' ? t('Staged changes') : t('Changes')} revision={historyHash || JSON.stringify([git.head?.hash, git.files, diffRefresh])} live={source.list !== 'history'} load={loadDiff} onClose={closeSource} closeLabel={t('Back to files')}/>
-          : <p className="git-empty-diff"><Icon name="check" size={18}/>{files.length ? t('Changes') : t('No uncommitted changes')}</p>}
+        {diffOpen && source ? <GitDiffView key={projectId + ':' + source.list + ':' + historyHash + ':' + source.path} lead={switcher} path={source.path} scopeLabel={source.list === 'history' ? source.subject : source.list === 'staged' ? t('Staged changes') : ''} revision={historyHash || JSON.stringify([git.head?.hash, git.files, diffRefresh])} live={source.list !== 'history'} load={loadDiff} onClose={closeSource}/>
+          : <p className="git-empty-diff"><Icon name={files.length ? 'diff' : 'check'} size={18}/><span>{files.length ? t('Changes') : t('No uncommitted changes')}</span></p>}
       </div>
       <div className="git-repository-view" hidden={detail !== 'history'}>
-    <VersionHistory git={git} busy={Boolean(busy)} load={loadHistory} loadVersion={loadVersion} selection={selection?.list === 'history' ? selection : null} onOpenDiff={onOpenDiff} restore={async (hash, head) => {
+    <VersionHistory git={git} busy={Boolean(busy)} collapsible={advanced} refreshKey={historyRefresh} load={loadHistory} loadVersion={loadVersion} selection={selection?.list === 'history' ? selection : null} onOpenDiff={onOpenDiff} restore={async (hash, head) => {
       if (busy) return;
       setBusy('restore'); setError(''); setNotice('');
       try {

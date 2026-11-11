@@ -2334,11 +2334,6 @@
     "textHash": "079552d3fad410a57de0b9a8b44a6118d91f7b8682f71876174ed1eb747caafb",
     "model": "gemini-4-argon-medium"
   },
-  "More Git actions": {
-    "revision": "9a907f57aba1a3424523845fae0b4c135f96d88165f0b9cef9f73d97aaaeca76",
-    "textHash": "2bbfbb7e7abff7a3b3839603fd7a287486c4ca9ca84ebf0308c58eb003344db3",
-    "model": "gemini-4-argon-medium"
-  },
   "More commit actions": {
     "revision": "e56f59f4deb9619e260604c5b0c26f01b01ead95af3aaf939d5c38cf70fbb089",
     "textHash": "699d8d2f7818ff76e5d4df6d6a2da808e00ae4cc41688e8ae4d933c90aaaa5c2",

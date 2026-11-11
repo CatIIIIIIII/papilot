@@ -1262,10 +1262,9 @@ try {
     if (await graph.getByRole('alert').count()) throw error;
   });
   await graph.getByRole('alert').waitFor({ state: 'detached' });
-  // Build output goes into .gitignore from the Changes menu, one pattern per kind.
+  // Build output goes into .gitignore directly from Changes, one pattern per kind.
   await unstagedList.getByText('main.aux', { exact: true }).waitFor();
-  await changes.getByRole('button', { name: 'More Git actions', exact: true }).click();
-  const ignoreItem = page.getByRole('menuitem', { name: /^Add to \.gitignore/ });
+  const ignoreItem = changes.getByRole('button', { name: /^Add to \.gitignore/ });
   await expect(ignoreItem).toContainText('2 build files');
   await ignoreItem.click();
   await gitPanel.getByRole('status').filter({ hasText: 'Added 2 patterns to .gitignore.' }).waitFor();
@@ -1278,7 +1277,6 @@ try {
   assert.equal(await commitButton.isDisabled(), true);
   await unstagedList.getByRole('button', { name: 'main.tex', exact: true }).click();
   await page.getByRole('region', { name: 'Changes in main.tex' }).getByText('New line.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Back to files', exact: true }).click();
   // + stages a file and − unstages it; Commit then takes only what is staged.
   await unstagedList.getByRole('button', { name: 'Stage main.tex', exact: true }).click();
   await stagedList.getByText('main.tex', { exact: true }).waitFor();
