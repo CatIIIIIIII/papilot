@@ -10,7 +10,6 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { ENGINE, ROOT } from './paths.ts';
 import type { Annotation, BuildProblem, BuildProgress, GitDiffScope, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
-import { notesInstructions } from '../notes.ts';
 import { ignorePattern } from '../commit.ts';
 import { PdfReader } from './pdf-reader.ts';
 import { annotatePdf, type ExportNote } from './annotated-pdf.ts';
@@ -372,14 +371,6 @@ async function engine() {
     import(pathToFileURL(path.join(ENGINE, 'src/render/pdf.ts')).href),
   ]);
   return { Builder, BuildError, reprioritize, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
-}
-
-// One task for every pending note, quoting the marked text and its source so
-// the agent can find each place without guessing.
-export function annotationTask(notes: Annotation[]) {
-  const lead = notes[0], first = lead.kind === 'delete' ? lead.comment.trim() ? 'Replace marked text' : 'Delete marked text' : lead.comment.split('\n').find(line => line.trim())?.trim() || 'Address a PDF note';
-  const title = notes.length === 1 ? (first.length > 80 ? first.slice(0, 79).replace(/\s+\S*$/, '') + '…' : first) : `Address ${notes.length} PDF notes`;
-  return { title, instructions: notesInstructions(notes) };
 }
 
 // Every word on a page with its exact place, for the PDF view's selection

@@ -1,4 +1,4 @@
-type Action = 'commit' | 'push' | 'apply';
+type Action = 'commit' | 'push';
 type State = { message: string; writing: boolean; busy: Action | ''; error: string; result: string };
 
 export class TaskCommitDraft {
@@ -24,7 +24,7 @@ export class TaskCommitDraft {
     } finally { if (generation === this.generation) this.update({ writing: false }); }
   }
   async submit(action: Action, send: (message: string) => Promise<string>) {
-    if (this.state.busy || this.state.result || (action !== 'apply' && !this.state.message.trim())) return;
+    if (this.state.busy || this.state.result || !this.state.message.trim()) return;
     // The author's own message can be submitted while generation is running.
     // Its late response must not replace that message, including after failure.
     this.generation++;

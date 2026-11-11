@@ -32,13 +32,7 @@ The screenshots show the real Papilot UI and a disposable TeX-compiled example. 
 | [version-history.png](version-history.png) | Browse earlier versions and inspect the restore action. |
 | [inline-source.png](inline-source.png) | Make a precise LaTeX correction inside the PDF review. |
 
-The first three images appear in the release introduction; the other two support follow-up posts. PNGs are 2880×1600, captured at 2× scale from a 1440×800 viewport. Regenerate with TeX, Chrome (or `PAPILOT_BROWSER_CHANNEL`) and the repository dependencies installed:
-
-```sh
-npm run build
-npm --prefix engine run build
-node --import tsx scripts/capture-release-0.9.0.mjs
-```
+The first three images appear in the release introduction; the other two support follow-up posts. PNGs are 2880×1600, captured at 2× scale from a 1440×800 viewport by `scripts/capture-release-0.9.0.mjs`, which remains in the repository at the `v0.9.0` tag.
 
 ## Release checks
 

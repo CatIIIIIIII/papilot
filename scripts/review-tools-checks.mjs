@@ -128,7 +128,6 @@ export async function checkReviewTools(page, writes, sent) {
   assert.equal(writes.length, 0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('group', { name: 'Workspace view', exact: true }).getByRole('button', { name: /^Review/ }).click();
-  await expect(page.locator('.review-tools .markup-toggle')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Mark region', exact: true })).toBeHidden();
   await expect(rail()).toBeVisible();
   await expect(rail()).toHaveAttribute('aria-orientation', 'horizontal');

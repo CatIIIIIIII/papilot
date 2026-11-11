@@ -1367,18 +1367,6 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     written.catch(() => { if (this.messages.get(key) === written) this.messages.delete(key); });
     return written;
   }
-  // A finished review offers to commit what it accepted, so after the
-  // author's last decision its commit message is written ahead.
-  async prepareCommitMessage(taskId: string) {
-    try {
-      const task = this.store.task(taskId), files = task.review?.files || [];
-      if (task.status !== 'reviewing' || task.review?.counts?.pending || !files.length) return;
-      if (task.deferred) return;
-      const project = this.store.project(task.projectId), git = await gitStatus(project.path);
-      const paths = git.merging ? [] : files.filter(file => git.files.some(item => item.path === file));
-      if (paths.length) await this.commitMessage(project.id, paths, { agent: this.agentOf(task) });
-    } catch { /* The inline commit form retries when the review is shown. */ }
-  }
   private async taskCommitChanges(task: Task) {
     const root = this.store.project(task.projectId).path;
     const delivered = task.reconciliation?.base ?? (task.delivery?.mode !== 'branch' ? task.delivery?.accepted : undefined);
@@ -1388,22 +1376,6 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     if (!paths.length) throw new Error('This task has no accepted changes left to commit.');
     const { stdout: patch } = await execute('git', ['-C', root, 'diff', '--no-ext-diff', '--no-textconv', before, after, '--'], { maxBuffer: 8 * 1024 * 1024 });
     return { files: paths.map(path => ({ path, status: 'M', from: undefined })), patch, recent: [] as string[] };
-  }
-  async deliverTask(taskId: string, mode: 'workspace' | 'branch', message = '') {
-    const task = this.store.task(taskId), project = this.store.project(task.projectId);
-    if (task.mode === 'review') throw new Error('AI review has no manuscript changes to deliver.');
-    if (!task.deferred) throw new Error('This task already applies accepted changes to the working directory.');
-    if (task.status !== 'reviewing' || this.active.has(taskId) || this.publishing.has(taskId) || task.pendingReview || this.store.runs().some(run => run.taskId === taskId && run.status === 'queued'))
-      throw new Error('Wait for the task and review actions to finish before choosing a destination.');
-    return this.exclusiveCommit(project.id, async () => {
-      this.reviewWrites.add(taskId);
-      try {
-        const client = await this.connectReview(project.path);
-        const delivery = await client.post<NonNullable<Task['delivery']>>(`${taskRoute(task.name)}/deliver`, { mode, message });
-        this.store.updateTask(taskId, { delivery });
-        return { ...delivery, git: await gitStatus(project.path) };
-      } finally { await this.refresh(taskId); this.reviewWrites.delete(taskId); this.schedule(); }
-    });
   }
   async applyTask(taskId: string, keepCurrent = false, commit?: { message: string; confirmation?: string }) {
     const task = this.store.task(taskId), project = this.store.project(task.projectId);

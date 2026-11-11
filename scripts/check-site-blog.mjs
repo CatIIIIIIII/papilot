@@ -55,7 +55,6 @@ try {
     assert.equal(await page.locator('html').getAttribute('lang'), locale);
     assert.equal(await page.title(), ui.indexSeoTitle);
     assert.equal(await page.locator('h1').innerText(), ui.indexTitle);
-    assert.equal(await page.locator('.blog-index .blog-cta').count(), 0, 'index stays a compact article list');
     assert.equal(await page.locator('.blog-card-image').count(), posts.filter(post => post.locales[locale]).length);
     assert.equal(await page.locator('meta[name=description]').getAttribute('content'), ui.indexSeoDescription);
     for (const width of [320,390,768,1440]) {
@@ -110,7 +109,6 @@ try {
         assert.equal(await modified.count(), 0);
       }
       assert.equal(article.isPartOf['@id'], 'https://papilot.ai' + blogRoute(locale) + '#blog');
-      assert.equal(await page.locator('.blog-updated, .blog-image-credit, .blog-cta').count(), 0, 'article has no update line or promotional ending');
       assert.equal(await page.locator('.blog-meta time').getAttribute('datetime'), post.published);
       const sitemapDoc = await page.evaluate(xml => { const doc = new DOMParser().parseFromString(xml,'application/xml'); return {error:!!doc.querySelector('parsererror'),urls:[...doc.querySelectorAll('url')].map(node=>({loc:node.querySelector('loc').textContent,alternates:[...node.getElementsByTagNameNS('http://www.w3.org/1999/xhtml','link')].map(link=>({locale:link.getAttribute('hreflang'),url:link.getAttribute('href')}))}))};}, sitemap);
       assert.equal(sitemapDoc.error,false);

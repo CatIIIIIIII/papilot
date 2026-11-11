@@ -14,7 +14,7 @@ import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteR
 import { fullPaperPdf, nextPaperPass, paperPassPdf, retainedPaperPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
-import { type Manuscripts, annotationTask, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
+import { type Manuscripts, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
 import { gitHistory, gitVersion, gitVersionDiff, gitRestoreVersion } from './git-history.ts';
 import { locateSource, placeSource, readFile, saveSource } from './manuscript-source.ts';
 import { gitOverview } from './git-overview.ts';
@@ -286,7 +286,6 @@ export async function buildApp(options: AppOptions) {
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
   const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
-  app.post('/api/projects', async request => { const b = request.body as any; return workspace.addProject(string(b.path, 'Repository path', 4000), b.name ? string(b.name, 'Paper name', 120) : undefined); });
   app.post('/api/projects/open', request => openFolder((request.body || {}) as any, root => workspace.projectByPath(root), (root, name) => workspace.addProject(root, name)));
   app.post('/api/imports', { bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
   app.get<{ Params: { id: string } }>('/api/imports/:id', request => imports!.get(request.params.id));
@@ -682,19 +681,6 @@ export async function buildApp(options: AppOptions) {
     store.saveAnnotation(restored);
     // Return the original order, including any notes added since the deletion.
     return { annotations: store.annotations(request.params.id).filter(note => !note.taskId && !isTaskReviewNote(note)) };
-  });
-  app.post<{ Params: { id: string } }>('/api/projects/:id/annotations/send', project(), async request => {
-    const project = store.project(request.params.id), b = request.body as any, id = string(b.id, 'Task ID', 64);
-    // A retried send returns its task; an ID from another paper is refused.
-    const existing = store.findTask(id);
-    if (existing) { if (existing.projectId !== project.id) throw new Error('Invalid task ID.'); return workspace.retryTask(existing.id); }
-    if (!Array.isArray(b.annotations) || !b.annotations.length || b.annotations.some((id: unknown) => typeof id !== 'string' || !id || id.length > 64)) throw new Error('Select valid PDF notes for this task.');
-    // The note-only send path needs the same source lookup as task creation.
-    await Promise.all(b.annotations.map((note: string) => locating.get(note)));
-    const notes = [...new Set<string>(b.annotations)].map(id => store.annotation(project.id, id));
-    if (notes.some(note => note.taskId || isTaskReviewNote(note) || note.deletedAt !== undefined)) throw new Error('Select unsent PDF notes for this task.');
-    const { title } = annotationTask(notes);
-    return workspace.createTask({ id, projectId: project.id, title, instructions: '', permissions: b.permissions, annotations: notes.map(note => note.id), agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
   });
   // What the last build reported, placed on its PDF, and the TeX log itself.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));

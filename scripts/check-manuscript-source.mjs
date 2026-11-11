@@ -99,7 +99,6 @@ try {
   await expect(tabs.getByRole('tab', { name: 'intro.tex' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.source-mark').first()).toBeVisible();
   await expect.poll(flashed, { message: 'the passage flashes in the editor' }).toContain('A separate paragraph about pelicans.');
-  await expect(page.locator('.source-beam'), 'only highlights join the page and the editor').toHaveCount(0);
   await expect(panel.locator('.cm-change-bar')).toHaveCount(0);
   await page.waitForTimeout(700);
   await shot('open');

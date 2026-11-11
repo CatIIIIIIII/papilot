@@ -1,10 +1,3 @@
 .note-quote{margin:4px 0 0;padding:4px 8px;border-left:2px solid var(--line-strong);border-radius:0 4px 4px 0;background:var(--bg-muted)}
 .note-quote .note-quote-text{margin:0;padding:0;border:0;font:13px/1.5 var(--sans);color:var(--text-2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:8em;overflow:auto}
 .note-body{margin-top:4px;padding:0 2px}
-.note-comment.note-comment{display:flex;align-items:flex-start;gap:8px;width:100%;padding:2px 0;border:0;border-radius:4px;background:transparent;color:var(--text);font:14px/1.5 var(--sans);text-align:left;cursor:text}
-.note-comment span{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
-.note-comment svg{flex:none;margin-top:4px;color:var(--text-3,var(--text-2));opacity:0;transition:opacity .15s}
-.note-comment:hover svg,.note-comment:focus-visible svg{opacity:1}
-.note-comment:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
-.note-comment:disabled{cursor:default}
-@media(pointer:coarse){.note-comment svg{opacity:.6}.note-comment.note-comment{min-height:40px}}

@@ -435,7 +435,6 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('group', { name: 'Manuscript view' }).getByRole('button', { name: 'PDF', exact: true }).click();
   await expect(page.locator('.pdf-compact-tools')).toBeHidden();
-  await expect(page.locator('.pdf-toolbar .markup-toggle')).toHaveCount(0);
   await expect(rail()).toBeVisible();
   await expect(rail()).toHaveAttribute('aria-orientation', 'horizontal');
   // Every desktop tool but Hand: one finger already scrolls the page.

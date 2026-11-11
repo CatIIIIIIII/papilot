@@ -1103,9 +1103,9 @@ function App() {
   const [newPermissions, setNewPermissions] = useState<TaskPermissions>('workspace');
   const [savedAgent, setAgentChoice] = useState<AgentId | null>(() => { const saved = browserStorage.getItem('papilot:agent'); return isAgentId(saved) ? saved : null; });
   const [agentPrefs, setAgentPrefs] = useState(() => Object.fromEntries(AGENT_IDS.map(id => [id, {
-    model: browserStorage.getItem(`papilot:model:${id}`) ?? (id === 'codex' ? browserStorage.getItem('papilot:model') : null) ?? '',
+    model: browserStorage.getItem(`papilot:model:${id}`) ?? '',
     // null until an effort is chosen; '' is an explicit choice of the model's default.
-    effort: browserStorage.getItem(`papilot:effort:${id}`) ?? (id === 'codex' ? browserStorage.getItem('papilot:effort') : null) ?? (isPlayground && id === 'codex' ? 'xhigh' : null),
+    effort: browserStorage.getItem(`papilot:effort:${id}`) ?? (isPlayground && id === 'codex' ? 'xhigh' : null),
     fast: browserStorage.getItem(`papilot:fast:${id}`) === 'true',
   }])) as Record<AgentId, { model: string; effort: string | null; fast: boolean }>);
   const [creating, setCreating] = useState(false), [createError, setCreateError] = useState('');
@@ -1836,7 +1836,7 @@ function App() {
     ? (task.review?.files || []).filter(file => projectGit?.files.some(item => item.path === file)) : [];
   const legacyKey = JSON.stringify([task?.id, legacyFiles, task?.committed?.accepted, projectGit?.branch]);
   if (legacyFiles.length && !commitDrafts.current.has(legacyKey)) commitDrafts.current.set(legacyKey, new TaskCommitDraft());
-  const legacySave = task && legacyFiles.length ? <TaskCommit draft={commitDrafts.current.get(legacyKey)!} branch={projectGit?.branch ?? null} isolated={false} remote={Boolean(projectGit?.remote)} agent={agentName(task)} disabled={taskActionBusy}
+  const legacySave = task && legacyFiles.length ? <TaskCommit draft={commitDrafts.current.get(legacyKey)!} branch={projectGit?.branch ?? null} remote={Boolean(projectGit?.remote)} agent={agentName(task)} disabled={taskActionBusy}
     generate={fresh => api<{ message: string }>(`/projects/${task.projectId}/git/message`, { paths: legacyFiles, agent: task.agent || 'codex', fresh }).then(result => result.message)}
     commit={async (message, push) => {
       const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/tasks/${task.id}/commit`, { message, push });

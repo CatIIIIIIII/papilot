@@ -176,7 +176,7 @@ try {
   await expect(staged).toHaveCount(0);
   await panel.getByRole('button', { name: 'main.tex', exact: true }).click();
   await page.getByRole('region', { name: 'Changes in main.tex', exact: true }).getByText('Updated.', { exact: true }).waitFor();
-  await expect(panel.locator('.git-panel .git-diff-view,.git-panel .git-diff-wrap')).toHaveCount(0);
+  await expect(panel.locator('.git-panel .git-diff-view')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'main.tex', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await panel.getByRole('button', { name: 'results.tex chapters', exact: true }).click();
   const sourceDiff = page.getByRole('region', { name: 'Changes in chapters/results.tex', exact: true });

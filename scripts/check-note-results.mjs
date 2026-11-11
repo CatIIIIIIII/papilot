@@ -141,7 +141,6 @@ try {
   assert.equal(await frame().locator('.papilot-note-options button').count(), 0, 'Historical changes do not advertise unavailable alternatives');
   assert.equal(await controls().locator('.review-note-position').textContent(), 'Note 2 / 3');
   await expect(frame().locator('[data-papilot-link=target]')).toHaveAttribute('data-stop', '1');
-  await expect(controls().locator('.note-review-targets')).toHaveCount(0);
   assert.equal(await controls().getByRole('button', { name: 'Previous note', exact: true }).isEnabled(), true);
   assert.equal(await controls().getByRole('button', { name: 'Next note', exact: true }).isEnabled(), true);
   assert.match(await page.locator('.review-frame').getAttribute('src'), /round=1&history=1/);

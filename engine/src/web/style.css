@@ -1138,10 +1138,6 @@ kbd {
 .overview-heading p {
   margin: 6px 0;
 }
-.overview-summary {
-  font-size: 13px;
-  color: var(--muted);
-}
 .task-tools {
   display: flex;
   gap: 10px;

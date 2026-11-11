@@ -39,11 +39,6 @@
     "textHash": "6ef56d9bad9e5ac179a83754f459b4eeab42c8da8f0acee5ec7162b3d4793e61",
     "model": "gemini-4-argon-high"
   },
-  "AI review has no manuscript changes to deliver.": {
-    "revision": "bb6c8bc11ee86c42ac4ef713f57bec340b7558fa94b162d7c54386e43107e99e",
-    "textHash": "1ae844a4b6e6c4eabb3d17885bc0b7ec8426085cbfe916f8f25a2edc230186f4",
-    "model": "gemini-4-argon-medium"
-  },
   "AI review uses manuscript PDF notes, not change decisions.": {
     "revision": "5eeadffa64afeb22be3b42dd40f4c5070cb739bcf860ea80a6d0b71a2b25b13b",
     "textHash": "ebb4680ff68d5dca02c13392892c1193c75a58cf75a5eb8db18248e757ace99f",
@@ -589,11 +584,6 @@
     "textHash": "28d13735a50ec5fbed669c839e86debf80d6780ed1c1d28aaaa0d51382cd4864",
     "model": "gemini-4-argon-medium"
   },
-  "Select unsent PDF notes for this task.": {
-    "revision": "1764fb1741bc0ea4b52f8e25d9f8d14891856939bf75e313599f851562368cc6",
-    "textHash": "4c8b2baed6a06b6cba3cfde667cc0716f7c774967baf5555ea22b46786e61559",
-    "model": "gemini-4-argon-medium"
-  },
   "Select up to 10 valid attachments.": {
     "revision": "40a3fa61352d2363b191f5535ccc0c62aae4eb99c55c3bf3ce9c8e227c55af76",
     "textHash": "254fd67faf3d39dd6c797a527c28af84dff43364923775f9c8bae4eb46a329ee",
@@ -994,11 +984,6 @@
     "textHash": "7f67a3fbf731f9d075714f4e4c18828b5c23cd6867dadfec3167fb824b4b795e",
     "model": "gemini-4-argon-medium"
   },
-  "This task already applies accepted changes to the working directory.": {
-    "revision": "09a4825ee7f18291535db05d2945f398a01cc582eca6150290f2b50be6d034a4",
-    "textHash": "5c38fad7284a7825990d9e52dc8da32000a3eb417c8126f2ba65a833bfb9a48a",
-    "model": "gemini-4-argon-medium"
-  },
   "This task already has queued instructions. Wait or pause it first.": {
     "revision": "b59a5bc6eb18aa17273b266cbcf746d68a311ed5dc3f7983525187bc797dcc8e",
     "textHash": "8faf97d0e7c6dc473a2c2e048adf5ae26f56eef93a0b5ccf4587aa741c37c6af",
@@ -1113,11 +1098,6 @@
     "revision": "329e245771de727d1903f74939f400244125b3b96b0862647de3424d34bcdbfe",
     "textHash": "c492137e7e8c90b7f353facd69149090bd6a7d253dd3ef0923d1142f127ebe6e",
     "model": "gemini-4-argon-high"
-  },
-  "Wait for the task and review actions to finish before choosing a destination.": {
-    "revision": "6bb0a1f4e9f972f3d1492665f5cd76d8e7c6e28dd328d1c22bfb079b10382f5d",
-    "textHash": "957895eef5a83a7f9991af59752017451ea89c76339a2441ca5ffa12f1fc27c8",
-    "model": "gemini-4-argon-medium"
   },
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": {
     "revision": "d2112216468ea0e37f0733d79a86781b2e3f3f0754cef89793ed5a9155cc0838",

@@ -2016,17 +2016,6 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { fresh: true }), { message: 'Shorten the opening sentence', agent: 'codex' });
     assert.equal(turns(), 2);
     assert.equal((await f.workspace.commitMessage(f.task.projectId, ['main.tex'])).message, 'Shorten the opening sentence');
-    // Once the author has decided every change, the review's message is written ahead.
-    fs.writeFileSync(path.join(root, 'main.tex'), 'An even tighter opening.\n');
-    replies.push('Tighten the opening again');
-    f.store.updateTask(f.task.id, { status: 'reviewing', review: { state: 'done', round: 1, counts: { pending: 1 }, files: ['main.tex'] } });
-    await f.workspace.prepareCommitMessage(f.task.id);
-    assert.equal(turns(), 2, 'a review with undecided changes waits');
-    f.store.updateTask(f.task.id, { review: { state: 'done', round: 1, counts: { accepted: 1 }, files: ['main.tex'] } });
-    await f.workspace.prepareCommitMessage(f.task.id);
-    assert.equal(turns(), 3);
-    assert.equal((await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' })).message, 'Tighten the opening again');
-    assert.equal(turns(), 3);
     f.codex.ready = false;
     await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex']), /Sign in to an agent, such as Codex/);
   } finally { f.close(); fs.rmSync(root, { recursive: true, force: true }); }
@@ -2508,7 +2497,7 @@ test('AI review uses normal agent tools and approvals, saves PDF notes, and neve
     await f.workspace.refresh(f.task.id);
     assert.equal(f.calls.length, 0, 'No engine feedback, publish, build or delivery requests');
     assert.throws(() => f.workspace.publish(f.task.id), /cannot publish/);
-    await assert.rejects(f.workspace.deliverTask(f.task.id, 'workspace'), /no manuscript changes/);
+    await assert.rejects(f.workspace.applyTask(f.task.id), /no manuscript changes/);
     await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => {}), /PDF notes/);
     await assert.rejects(f.workspace.enqueue(f.task.id, 'Apply the notes', 'wrong-mode', true, { notes }), /editing task/);
     assert.equal(f.store.items(f.task.id).filter(item => item.type === 'assistant').at(-1)!.text, 'Clarify the assumptions.');

@@ -4,24 +4,8 @@
 .review-region-capture{position:absolute;inset:0;pointer-events:auto;cursor:crosshair;touch-action:none}
 .review-note-tag{position:absolute;pointer-events:auto;background:var(--primary);color:#fff;border:0;border-radius:16px;padding:5px 10px;font:500 13px/1.4 var(--sans);cursor:pointer;box-shadow:0 2px 8px #0002}
 .review-note-tag{z-index:1;left:8px;min-width:24px;padding:3px 6px}
-.review-notes-panel{position:fixed;z-index:20;right:16px;bottom:16px;width:min(360px,calc(100% - 32px));max-height:calc(100% - 80px);overflow:auto;padding:14px;box-sizing:border-box;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);box-shadow:var(--float);font:14px/1.5 var(--sans)}
-.review-notes-panel *{box-sizing:border-box}
-.review-notes-panel header,.review-notes-panel footer,.review-note-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.review-notes-panel header{margin-bottom:10px}
-.review-notes-panel button{font:inherit;cursor:pointer;border:0;border-radius:7px;background:var(--bg-muted);padding:5px 10px;color:var(--text-2)}
-.review-notes-panel button:disabled{opacity:.45;cursor:default}
-.review-notes-panel button:focus-visible,.review-select-menu button:focus-visible,.review-note-tag:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-.review-notes-panel button.primary{background:var(--primary);color:white;padding:7px 12px}
-.review-notes-panel footer{justify-content:flex-end;margin-top:10px}
-.review-notes-panel p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
-.review-notes-panel small{color:var(--text-2);overflow-wrap:anywhere}
-.review-notes-panel blockquote{margin:8px 0;padding-left:10px;border-left:2px solid var(--line);font-size:13px;color:var(--text-2);max-height:110px;overflow:auto}
-.review-notes-panel textarea{display:block;resize:vertical;width:100%;min-height:80px;padding:8px;border:1px solid var(--line-strong);border-radius:8px;font:14px/1.5 var(--sans);color:var(--text);background:var(--bg)}
-.review-notes-panel textarea:focus{outline:2px solid var(--accent-line);border-color:var(--primary)}
-.review-notes-panel ol{list-style:none;margin:0;padding:0}
-.review-notes-panel li+li{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
-.review-notes-panel button.review-note-location{text-align:left;background:none;padding:0;font-size:12px;color:var(--text-2);overflow-wrap:anywhere}
-.review-notes-panel .review-notes-error{color:var(--red)}
+.review-note-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.review-select-menu button:focus-visible,.review-note-tag:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .review-notes-empty{text-align:center;padding:8px 0;color:var(--text-2)}
 .review-note-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 .review-note-actions button{display:flex;flex-direction:column;align-items:center;gap:7px;min-height:68px;padding:10px 6px}
@@ -34,20 +18,6 @@
 .select-handle[data-end=from]::after{top:-11px}.select-handle[data-end=to]::after{bottom:-11px}
 .review-select-menu{position:fixed;z-index:19;transform:translateX(-50%);font-family:var(--sans);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 .review-select-menu button{height:40px;padding:0 18px;border:0;border-radius:20px;background:var(--primary);color:#fff;font:500 15px/1 var(--sans);white-space:nowrap;box-shadow:0 4px 16px rgb(0 0 0/.25);cursor:pointer}
-/* On phones the notes are a card under the review's toolbar, like a
-   compose screen: the keyboard rises from below and never covers it, so
-   Safari has no need to scroll the page. The change's decisions wait meanwhile. */
-:root[data-papilot-phone]{
-  .review-notes-panel{left:0;right:0;top:var(--papilot-review-bar-height,48px);bottom:auto;width:auto;max-height:calc(100% - var(--papilot-review-bar-height,48px) - var(--keyboard,0px));padding:12px 14px 14px;border-width:0 0 1px;border-radius:0 0 16px 16px}
-  body:has(.review-notes-panel) .change-head .dock{display:none}
-  .review-notes-panel header{margin-bottom:6px}
-  .review-notes-panel form small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .review-notes-panel form blockquote{max-height:none;margin:6px 0 8px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-  .review-notes-panel textarea{font-size:16px;min-height:76px;resize:none}
-  .review-notes-panel button{min-height:40px}
-  .review-notes-panel footer button{padding:0 16px}
-}
-
 /* The review shares the manuscript's marking tools and keeps their geometry
    anchored to the displayed round and strip. */
 .review-note-mark[data-kind=delete]{background:linear-gradient(to bottom,transparent calc(54% - .75px),var(--red) calc(54% - .75px),var(--red) calc(54% + .75px),transparent calc(54% + .75px))}

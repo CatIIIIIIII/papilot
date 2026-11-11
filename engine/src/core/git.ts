@@ -584,7 +584,7 @@ export class Repo {
     }
   }
 }
-/** `merge3` for servers, which keep answering requests meanwhile. */
+/** A three-way merge of file contents; [merged, conflicted]. */
 export async function merge3Async(
   ours: Buffer | null,
   base: Buffer | null,
@@ -607,34 +607,4 @@ export async function merge3Async(
   } finally {
     await fs.promises.rm(folder, { recursive: true, force: true });
   }
-}
-export function merge3(
-  ours: Buffer | null,
-  base: Buffer | null,
-  theirs: Buffer | null,
-  favorCurrent = false,
-): [Buffer | null, boolean] {
-  if (same(ours, base) || same(ours, theirs)) return [theirs, false];
-  if (same(theirs, base)) return [ours, false];
-  if (
-    ours === null ||
-    base === null ||
-    theirs === null ||
-    [ours, base, theirs].some((b) => b.includes(0))
-  )
-    return [null, true];
-  return temporary("latex-review-merge-", (folder) => {
-    const files = ["ours", "base", "theirs"].map((name) =>
-      path.join(folder, name),
-    );
-    [ours, base, theirs].forEach((data, i) => fs.writeFileSync(files[i], data));
-    const result = run(gitBinary(), ["merge-file", "-p", ...(favorCurrent ? ["--ours"] : []), ...files], {
-      check: false,
-    });
-    if (result.status > 0 && !favorCurrent) {
-      const merged = mergeText(ours, base, theirs);
-      if (merged !== null) return [merged, false];
-    }
-    return [result.stdout, result.status !== 0];
-  });
 }

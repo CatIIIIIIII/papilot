@@ -60,9 +60,7 @@ const close = () => dialog.getByRole('button', { name: 'Close', exact: true }).c
 const globalFile = path.join(roots.user, 'house-style', 'SKILL.md');
 try {
   await page.goto(origin); await open();
-  await expect(page.locator('.sidebar .skills-link')).toHaveCount(0);
   await expect(page.locator('dialog[open]')).toHaveCount(1);
-  await expect(dialog.locator('.skill-library-storage, .skill-library-file')).toHaveCount(0);
   await expect(dialog).not.toContainText(roots.user);
   await expect(dialog.locator('.skill-library-item')).toHaveCount(8);
   await expect(dialog.locator('.skill-library-browse')).toBeVisible();

@@ -272,7 +272,6 @@ try {
   await paper.evaluate(el => { el.scrollTop = 0; });
   console.log('PASS: Pointer-based review scrolling after accept/reject, independent Chat, nested editors, and native zoom');
   await expect(viewer().getByRole('button', { name: 'Keyboard shortcuts', exact: true })).toBeHidden();
-  assert.equal(await page.locator('.review-notes-toggle').count(), 0);
   // Shortcut settings update the running review, survive reload, and retain
   // the browser's editing keys. The old key must stop making decisions.
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -527,7 +526,6 @@ try {
     await expect(commitButton()).toBeInViewport();
     await expect.poll(lifted).toBe(true);
     assert.ok(await card.evaluate(el => Math.abs(el.getBoundingClientRect().top - document.getElementById('paper').getBoundingClientRect().top) < 30), 'The card stays at the top of the review');
-    assert.equal(await viewer().locator('.review-complete-jump').count(), 0);
     await page.screenshot({ path: `test-results/review-commit-floating-${width}.png`, animations: 'disabled' });
     await viewer().locator('#paper').evaluate(el => el.scrollTo(0, 0));
     await expect.poll(lifted).toBe(false);

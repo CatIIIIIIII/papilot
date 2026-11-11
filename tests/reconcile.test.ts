@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Fixture, METHOD, fakeRound } from '../engine/tests/ts/helpers.ts';
-import { scopeViolations } from '../engine/src/core/changes.ts';
+import { scopeViolationsAsync } from '../engine/src/core/changes.ts';
 
 const decide = async (app: ReturnType<Fixture['app']>, name: string, action: 'accept' | 'reject' = 'accept') => {
   const round = fakeRound(app, name);
@@ -65,7 +65,7 @@ test('conflicts become a review of only overlapping passages, preserving clean e
     assert.match(round.units.map(unit => unit.old_text).join(' '), /Latest/);
     assert.doesNotMatch(round.units.map(unit => unit.new_text).join(' '), /Accepted independent detail|Accepted introduction/);
     const refreshed = app.tasks.get(task.name);
-    assert.deepEqual(scopeViolations(app.repo, refreshed.base, app.tasks.snapshot(refreshed), refreshed.scope), []);
+    assert.deepEqual(await scopeViolationsAsync(app.repo, refreshed.base, app.tasks.snapshot(refreshed), refreshed.scope), []);
     await assert.rejects(async () => app.delivery.apply(task.name), /Finish reviewing/);
     await app.review.decide(task.name, { id: crypto.randomUUID(), round: round.number, action: 'accept', changes: round.units.map(unit => unit.id) });
     assert.equal(disk.read(METHOD), manuscript, 'acceptance is still isolated');

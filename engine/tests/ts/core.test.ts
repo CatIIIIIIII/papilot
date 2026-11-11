@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { beforeEach, afterEach, describe, it, expect } from "vitest";
 import { Fixture, METHOD, BODY, MAIN } from "./helpers.ts";
-import { cleanPath, merge3, within } from "../../src/core/git.ts";
+import { cleanPath, merge3Async, within } from "../../src/core/git.ts";
 import { loadProject, detectMain } from "../../src/core/config.ts";
 import {
   buildOutline,
@@ -14,7 +14,7 @@ import {
   diffUnits,
   applyUnits,
   revertUnits,
-  scopeViolations,
+  scopeViolationsAsync,
 } from "../../src/core/changes.ts";
 import {
   affectedTargets,
@@ -83,13 +83,13 @@ describe("Git snapshots", () => {
     "rejects unsafe path %s",
     (value) => expect(() => cleanPath(value)).toThrow(),
   );
-  it("merges independent edits and reports overlaps", () => {
+  it("merges independent edits and reports overlaps", async () => {
     const b = (s: string) => Buffer.from(s);
     expect(
-      merge3(b("A\nb\nc\nd\ne\n"), b("a\nb\nc\nd\ne\n"), b("a\nb\nc\nd\nE\n")),
+      await merge3Async(b("A\nb\nc\nd\ne\n"), b("a\nb\nc\nd\ne\n"), b("a\nb\nc\nd\nE\n")),
     ).toEqual([b("A\nb\nc\nd\nE\n"), false]);
-    expect(merge3(b("x\n"), b("a\n"), b("y\n"))[1]).toBe(true);
-    expect(merge3(null, b("a"), null)).toEqual([null, false]);
+    expect((await merge3Async(b("x\n"), b("a\n"), b("y\n")))[1]).toBe(true);
+    expect(await merge3Async(null, b("a"), null)).toEqual([null, false]);
     expect(within("paper-old/a", ["paper"])).toBe(false);
     expect(cleanPath("./paper/")).toBe("paper");
   });
@@ -221,7 +221,7 @@ Background.
       )?.toString(),
     ).toBe(BODY + "Appended");
   });
-  it("enforces line and file scope", () => {
+  it("enforces line and file scope", async () => {
     const head = f.repo.rev("HEAD"),
       scope = {
         ranges: { [METHOD]: [[4, 10] as [number, number]] },
@@ -230,11 +230,11 @@ Background.
       };
     f.write(METHOD, BODY.replace("Method sentence 5.", "Inside."));
     expect(
-      scopeViolations(f.repo, head, f.repo.snapshot(["paper"]), scope),
+      await scopeViolationsAsync(f.repo, head, f.repo.snapshot(["paper"]), scope),
     ).toEqual([]);
     f.write(METHOD, BODY.replace("Method sentence 15.", "Outside."));
     expect(
-      scopeViolations(f.repo, head, f.repo.snapshot(["paper"]), scope),
+      await scopeViolationsAsync(f.repo, head, f.repo.snapshot(["paper"]), scope),
     ).toEqual([METHOD + ":18"]);
   });
 });

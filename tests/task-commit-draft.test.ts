@@ -51,11 +51,3 @@ test('generation and commit errors keep manual editing and retry available', asy
   await draft.submit('commit', async () => 'Committed');
   assert.equal(draft.getSnapshot().result, 'Committed');
 });
-
-test('applying does not depend on a commit message and blocks a concurrent commit', async () => {
-  const draft = new TaskCommitDraft(), gate = deferred<string>();
-  const applying = draft.submit('apply', () => gate.promise);
-  await draft.submit('commit', async () => { assert.fail('must not commit while applying'); });
-  gate.resolve('Applied'); await applying;
-  assert.equal(draft.getSnapshot().result, 'Applied');
-});

@@ -6,9 +6,8 @@ import './task-commit.css';
 
 // The same form lives in the review iframe or chat. Its draft belongs to the
 // workspace so moving between those views does not lose an edited message.
-export function TaskCommit({ draft, branch, isolated, remote, apply, disabled, agent, generate, commit }: {
-  draft: TaskCommitDraft; branch: string | null; isolated: boolean; remote: boolean;
-  apply?: () => Promise<string>; disabled: boolean; agent: string;
+export function TaskCommit({ draft, branch, remote, disabled, agent, generate, commit }: {
+  draft: TaskCommitDraft; branch: string | null; remote: boolean; disabled: boolean; agent: string;
   generate?: (fresh: boolean) => Promise<string>;
   commit: (message: string, push: boolean) => Promise<string>;
 }) {
@@ -43,10 +42,9 @@ export function TaskCommit({ draft, branch, isolated, remote, apply, disabled, a
           {state.writing ? <span className="task-commit-spinner" aria-hidden="true"/> : <Icon name="spark" size={15}/>}
         </button>}
         <div className="task-commit-actions">
-          {apply && <button type="button" className="task-commit-alternative" disabled={busy} onClick={() => void draft.submit('apply', apply)}>{state.busy === 'apply' ? t('Applying…') : t('Apply to working directory')}</button>}
           {generate && <>
             {remote && <button type="button" className="task-commit-alternative" disabled={busy || !state.message.trim()} onClick={() => submit(true)}>{state.busy === 'push' ? t('Committing and pushing…') : t('Commit and push')}</button>}
-            <button className="task-commit-primary" aria-label={isolated ? t('Commit to task branch') : undefined} disabled={busy || !state.message.trim()}>{state.busy === 'commit' ? t('Committing…') : t('Commit')}<Icon name="arrowRight" size={14}/></button>
+            <button className="task-commit-primary" disabled={busy || !state.message.trim()}>{state.busy === 'commit' ? t('Committing…') : t('Commit')}<Icon name="arrowRight" size={14}/></button>
           </>}
         </div>
       </div>

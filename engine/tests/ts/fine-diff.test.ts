@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { Fixture, METHOD, fakeRound } from "./helpers.ts";
 import { applyUnits, diffUnits, revertUnits } from "../../src/core/changes.ts";
-import { merge3, merge3Async } from "../../src/core/git.ts";
+import { merge3Async } from "../../src/core/git.ts";
 import { textEdits, textTokens } from "../../src/core/text-edits.ts";
 let f: Fixture;
 beforeEach(() => {
@@ -260,28 +260,26 @@ it("accepts, rejects and undoes same-line edits without losing other decisions o
 
 it("merges disjoint same-line edits but preserves real overlap conflicts", async () => {
   const b = Buffer.from;
-  for (const merge of [merge3, merge3Async]) {
-    expect(
-      await merge(
-        b("fast and useful"),
-        b("slow and useful"),
-        b("slow and practical"),
-      ),
-    ).toEqual([b("fast and practical"), false]);
-    expect(
-      (await merge(b("fast result"), b("slow result"), b("quick result")))[1],
-    ).toBe(true);
-    expect(
-      (await merge(b("a new result"), b("a result"), b("a better result")))[1],
-    ).toBe(true);
-    expect(
-      (
-        await merge(
-          b(String.raw`\textbf{fast stable}`),
-          b(String.raw`\textbf{slow stable}`),
-          b(String.raw`\textbf{slow robust}`),
-        )
-      )[1],
-    ).toBe(true);
-  }
+  expect(
+    await merge3Async(
+      b("fast and useful"),
+      b("slow and useful"),
+      b("slow and practical"),
+    ),
+  ).toEqual([b("fast and practical"), false]);
+  expect(
+    (await merge3Async(b("fast result"), b("slow result"), b("quick result")))[1],
+  ).toBe(true);
+  expect(
+    (await merge3Async(b("a new result"), b("a result"), b("a better result")))[1],
+  ).toBe(true);
+  expect(
+    (
+      await merge3Async(
+        b(String.raw`\textbf{fast stable}`),
+        b(String.raw`\textbf{slow stable}`),
+        b(String.raw`\textbf{slow robust}`),
+      )
+    )[1],
+  ).toBe(true);
 });

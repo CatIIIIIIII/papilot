@@ -4,9 +4,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { anchor, annotationTask, commitChanges, followLines, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStamp, gitStatus, mergeConflicts, parseStatus, parseSynctex, pdfWords, settleLines, sourceExcerpt, workingTree } from '../src/server/manuscript.ts';
+import { anchor, commitChanges, followLines, gitAbortMerge, gitCommit, gitDiff, gitFinishMerge, gitIgnore, gitRemote, gitStamp, gitStatus, mergeConflicts, parseStatus, parseSynctex, pdfWords, settleLines, sourceExcerpt, workingTree } from '../src/server/manuscript.ts';
 import { opcodes } from '../engine/src/core/diff.ts';
-import { readNotesInstructions } from '../src/notes.ts';
+import { notesInstructions, readNotesInstructions } from '../src/notes.ts';
 import type { Annotation } from '../src/shared.ts';
 
 test('Git status parsing keeps branch counts, renames, untracked files and line counts', () => {
@@ -69,28 +69,26 @@ test('SyncTeX output resolves to a normalized source path and line', () => {
   assert.equal(parseSynctex('SyncTeX result begin\nSyncTeX result end\n'), null);
 });
 
-test('PDF notes become one task that quotes each marked region and its source', () => {
+test('PDF notes reach the agent quoting each marked region and its source', () => {
   const note = (comment: string, extra: Partial<Annotation> = {}): Annotation => ({ id: comment, projectId: 'p', key: 'k', page: 1, rect: [0, 0, 1, 1], comment, quote: 'The operator applies a compatible revision.', source: { file: 'main.tex', lines: [31, 33] }, createdAt: 1, ...extra });
-  const single = annotationTask([note('Define "compatible" here.')]);
-  assert.equal(single.title, 'Define "compatible" here.');
-  assert.match(single.instructions, /1\. Page 2 · main\.tex lines 31–33\n   PDF text: "The operator applies a compatible revision\."\n   Note: Define "compatible" here\./);
-  const withSource = annotationTask([note('Explain the operator.', { source: { file: 'main.tex', lines: [30, 32], excerpt: '\\begin{equation}\n  D_{t+1} = D_t \\oplus \\Delta_t\n\\end{equation}' } })]);
-  assert.match(withSource.instructions, /main\.tex lines 30–32\n   LaTeX source of the marked region:\n   ```latex\n   \\begin\{equation\}\n     D_\{t\+1\} = D_t \\oplus \\Delta_t\n   \\end\{equation\}\n   ```\n   PDF text:/);
-  const many = annotationTask([note('Shorten.'), note('Redraw this figure.', { quote: '', source: { file: 'figures.tex', lines: [5, 5] }, page: 3 })]);
-  assert.equal(many.title, 'Address 2 PDF notes');
-  assert.match(many.instructions, /2\. Page 4 · figures\.tex line 5\n   Marked region: a figure, equation or other non-text area\n   Note: Redraw this figure\./);
+  const single = notesInstructions([note('Define "compatible" here.')]);
+  assert.match(single, /1\. Page 2 · main\.tex lines 31–33\n   PDF text: "The operator applies a compatible revision\."\n   Note: Define "compatible" here\./);
+  const withSource = notesInstructions([note('Explain the operator.', { source: { file: 'main.tex', lines: [30, 32], excerpt: '\\begin{equation}\n  D_{t+1} = D_t \\oplus \\Delta_t\n\\end{equation}' } })]);
+  assert.match(withSource, /main\.tex lines 30–32\n   LaTeX source of the marked region:\n   ```latex\n   \\begin\{equation\}\n     D_\{t\+1\} = D_t \\oplus \\Delta_t\n   \\end\{equation\}\n   ```\n   PDF text:/);
+  const many = notesInstructions([note('Shorten.'), note('Redraw this figure.', { quote: '', source: { file: 'figures.tex', lines: [5, 5] }, page: 3 })]);
+  assert.match(many, /2\. Page 4 · figures\.tex line 5\n   Marked region: a figure, equation or other non-text area\n   Note: Redraw this figure\./);
 });
 
 test('the chat reads PDF notes back from the message that carried them', () => {
   const note = (comment: string, extra: Partial<Annotation> = {}): Annotation => ({ id: comment, projectId: 'p', key: 'k', page: 0, rect: [0, 0, 1, 1], comment, quote: 'Small Steps, Clearer Papers', source: { file: 'main.tex', lines: [10, 10], excerpt: '\\title{Small Steps}\n```' }, createdAt: 1, ...extra });
   const notes = [note('标题改一下'), note('Redraw this.\n\n2. Keep the axes.\n   Note: the legend too.', { quote: '', source: null, page: 2 }), note('Say "why".', { quote: 'two\nlines', source: { file: 'intro.tex', lines: [3, 5] } })];
-  assert.deepEqual(readNotesInstructions(annotationTask(notes).instructions), [
+  assert.deepEqual(readNotesInstructions(notesInstructions(notes)), [
     { where: 'Page 1 · main.tex line 10', quote: 'Small Steps, Clearer Papers', comment: '标题改一下' },
     { where: 'Page 3', quote: '', comment: 'Redraw this.\n\n2. Keep the axes.\n   Note: the legend too.' },
     { where: 'Page 1 · intro.tex lines 3–5', quote: 'two\nlines', comment: 'Say "why".' },
   ]);
   assert.equal(readNotesInstructions('Explain the operator more precisely.'), null);
-  assert.equal(readNotesInstructions(annotationTask([note('x')]).instructions.replace('   Note: ', '   Comment: ')), null);
+  assert.equal(readNotesInstructions(notesInstructions([note('x')]).replace('   Note: ', '   Comment: ')), null);
 });
 
 test('deletions, points and quick notes reach the agent as plain instructions and read back', () => {
@@ -101,20 +99,18 @@ test('deletions, points and quick notes reach the agent as plain instructions an
     note('Break the line here.', { kind: 'point', quote: 'first part ‸ second part', stamp: 'Line break' }),
     note('Say this more concisely.', { stamp: 'Tighten' }),
   ];
-  const task = annotationTask(notes);
-  assert.match(task.instructions, /A note headed "Delete" or "Replace" asks you to remove exactly the marked text/);
-  assert.match(task.instructions, /1\. Page 1 · main\.tex line 4 · Delete\n   PDF text: "a very simple idea"\n   Note: Delete the marked text\./);
-  assert.match(task.instructions, /2\. Page 1 · main\.tex line 4 · Color group: Red · Replace\n   PDF text: "a very simple idea"\n   Note: Replace the marked text with: a plain idea/);
-  assert.match(task.instructions, /3\. Page 1 · main\.tex line 4 · Quick note: Line break\n   Marked point \(‸\) in this PDF line: "first part ‸ second part"\n   Note: Break the line here\./);
-  assert.deepEqual(readNotesInstructions(task.instructions), [
+  const instructions = notesInstructions(notes);
+  assert.match(instructions, /A note headed "Delete" or "Replace" asks you to remove exactly the marked text/);
+  assert.match(instructions, /1\. Page 1 · main\.tex line 4 · Delete\n   PDF text: "a very simple idea"\n   Note: Delete the marked text\./);
+  assert.match(instructions, /2\. Page 1 · main\.tex line 4 · Color group: Red · Replace\n   PDF text: "a very simple idea"\n   Note: Replace the marked text with: a plain idea/);
+  assert.match(instructions, /3\. Page 1 · main\.tex line 4 · Quick note: Line break\n   Marked point \(‸\) in this PDF line: "first part ‸ second part"\n   Note: Break the line here\./);
+  assert.deepEqual(readNotesInstructions(instructions), [
     { kind: 'delete', where: 'Page 1 · main.tex line 4', quote: 'a very simple idea', comment: '' },
     { group: 'red', kind: 'delete', where: 'Page 1 · main.tex line 4', quote: 'a very simple idea', comment: 'a plain idea' },
     { kind: 'point', stamp: 'Line break', where: 'Page 1 · main.tex line 4', quote: 'first part ‸ second part', comment: 'Break the line here.' },
     { stamp: 'Tighten', where: 'Page 1 · main.tex line 4', quote: 'a very simple idea', comment: 'Say this more concisely.' },
   ]);
-  assert.equal(annotationTask([notes[0]]).title, 'Delete marked text');
-  assert.equal(annotationTask([notes[1]]).title, 'Replace marked text');
-  assert.doesNotMatch(annotationTask([note('Plain.')]).instructions, /headed "Delete"/, 'The explanation appears only with such marks');
+  assert.doesNotMatch(notesInstructions([note('Plain.')]), /headed "Delete"/, 'The explanation appears only with such marks');
 });
 
 test('source excerpts keep the marked lines and shorten long ranges', () => {

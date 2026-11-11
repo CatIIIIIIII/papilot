@@ -67,16 +67,14 @@
 .notes-panel .group-location .note-number:hover:not(:disabled){background:var(--bg-active);color:var(--text)}
 .notes-panel .group-location-target blockquote{margin:0 0 3px;color:var(--text);font-size:13px;line-height:1.5;-webkit-line-clamp:2}
 .notes-panel .group-location-target>span{display:block;color:var(--text-2);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
-.group-location-selected{display:flex;align-items:center;justify-content:center;flex:none;width:18px;height:18px;margin-top:2px;border-radius:50%;background:var(--note-color);color:var(--note-ink);opacity:0;transition:opacity .15s}
-.group-location[data-selected=true]>.group-location-selected{opacity:1}
 .notes-panel .group-location-remove{width:22px;height:22px;color:var(--text-3);opacity:0;transition:opacity .15s}
 .group-location:hover>.group-location-remove,.group-location:focus-within>.group-location-remove{opacity:1}
-@media(pointer:coarse){.notes-panel .group-disclosure{width:44px;height:44px}.notes-panel .group-location-remove{width:36px;height:36px;opacity:1}.notes-panel .group-location .note-number{min-width:32px;height:36px}.group-location-selected{margin-top:9px}}
+@media(pointer:coarse){.notes-panel .group-disclosure{width:44px;height:44px}.notes-panel .group-location-remove{width:36px;height:36px;opacity:1}.notes-panel .group-location .note-number{min-width:32px;height:36px}}
 .note-mark[data-group]{background:color-mix(in srgb,var(--note-color) 26%,transparent)}
 .note-mark[data-group].active{background:color-mix(in srgb,var(--note-color) 42%,transparent)}
 .note-box[data-group]{border-color:var(--note-color);background:color-mix(in srgb,var(--note-color) 12%,transparent)}
 .note-tag[data-group]{background:var(--note-color);color:var(--note-ink)}
-.review-add-note,.review-select-menu>button{display:inline-flex;align-items:center;gap:6px}
+.review-select-menu>button{display:inline-flex;align-items:center;gap:6px}
 @media(max-width:680px){.group-location>button{min-height:36px}.group-swatch{width:44px;height:44px}.group-individual{min-height:44px}}
 
 .review-note-mark[data-group]{background:color-mix(in srgb,var(--note-color) 26%,transparent)}

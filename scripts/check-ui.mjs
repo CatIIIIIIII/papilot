@@ -305,7 +305,6 @@ try {
   assert.deepEqual(await runtimeGroup.getByRole('button').allTextContents(), ['Git', 'Agents', 'LaTeX']);
   await runtimeGroup.getByRole('button', { name: 'Agents', exact: true }).click();
   const diagnostics = settingsDialog;
-  assert.equal(await diagnostics.locator('.runtime-advanced').count(), 0);
   assert.equal(await diagnostics.getByRole('button', { name: 'Copy diagnostic summary' }).count(), 0);
   await diagnostics.getByRole('button', { name: 'Codex details', exact: true }).click();
   await diagnostics.locator('.runtime-agent-detection').getByText('Installation & setup', { exact: true }).click();
@@ -315,7 +314,6 @@ try {
   await diagnostics.getByText('No installation details were returned. Run the checks again to refresh.', { exact: true }).waitFor();
   await diagnostics.getByRole('button', { name: 'Close agent details' }).click();
   assert.deepEqual(diagnosticRequests, [{ projectId: task.projectId }, { projectId: task.projectId }]);
-  assert.equal(await diagnostics.locator('.diagnostic-checks').count(), 0, 'Agent checks belong in their card details, without a second list');
   assert.equal(await diagnostics.getByRole('heading', { name: 'Agent configuration', exact: true }).count(), 0);
   assert.equal(await diagnostics.getByRole('button', { name: 'Check again', exact: true }).count(), 0);
   const agentCards = diagnostics.locator('.diagnostic-agent-card[data-agent]');
@@ -443,7 +441,6 @@ try {
   const installation = diagnostics.getByRole('region', { name: 'LaTeX installation' });
   await installation.getByText('2025', { exact: true }).waitFor();
   await installation.getByText('/usr/local/texlive/2025', { exact: true }).waitFor();
-  assert.equal(await diagnostics.locator('.runtime-advanced').count(), 0);
   assert.equal(await diagnostics.getByRole('button', { name: 'Copy diagnostic summary' }).count(), 0);
   assert.equal(diagnosticRequests.length, checksBeforeLatex, 'LaTeX only reads installation information');
   await diagnostics.locator('.settings-content').evaluate(el => { el.scrollTop = 0; });
@@ -1457,7 +1454,6 @@ try {
   // An agent that cannot be used says why, with Reconnect, inside the same menu.
   await choose('Default model · Antigravity');
   await agentSettings.getByRole('status').getByText('spawn agy ENOENT', { exact: true }).waitFor();
-  assert.equal(await page.locator('.runtime-banner').count(), 0);
   assert.equal(await page.locator('.new-task-panel > .inline-error[role=status]').count(), 0);
   const reconnectsBeforePicker = reconnects;
   await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/state')), agentSettings.getByRole('button', { name: 'Reconnect', exact: true }).click()]);
