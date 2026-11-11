@@ -28,7 +28,7 @@ author:                             review page: Accept · Reject · Comment, pe
 
 ## Configuration
 
-Usually none. The root document comes from `@default_files` in a `latexmkrc`, or is the only `.tex` file with `\documentclass`. The engine comes from a `% !TEX program` line, `$pdf_mode` in the latexmkrc, or the packages used (`fontspec` means XeLaTeX). To override, add `.latex-review.json` at the repository root:
+Usually none. The root document comes from `@default_files` in a `latexmkrc`, or is the only `.tex` file with `\documentclass`. The engine comes from a `% !TEX program` line, `$pdf_mode` in the latexmkrc, or the packages used (`fontspec` means XeLaTeX). Papilot saves the author's choices, and other overrides, in `.git/papilot/settings.json`.:
 
 | Setting | Meaning |
 | --- | --- |
@@ -56,7 +56,7 @@ builds finish before restarting.
 - Section scopes understand `\part` … `\subsubsection`, literal `\input`/`\include`/`\subfile`, and `\label`s.
 - A task's first publish compiles the whole document once; later rounds reuse it.
 - The user's branch, `HEAD` and staging area are never touched; snapshots use a private index. Writes are journaled, so an interrupted accept or undo completes when the server restarts.
-- State lives in `.git/latex-review/` and `refs/latex-review/`. Deleting a task removes its worktree, rounds and refs.
+- State lives in `.git/papilot/` and `refs/papilot/`. Deleting a task removes its worktree, rounds and refs.
 - One local server per repository. It listens on 127.0.0.1 only, rejects cross-origin requests, restarts itself when Papilot is updated, and exits after 12 idle hours.
 
 ## The example

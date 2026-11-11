@@ -50,9 +50,10 @@ try {
     fs.copyFileSync(path.join(brand, input), path.join(assets, output));
   }
   fs.writeFileSync(path.join(temp, 'main.tex'), original);
-  fs.writeFileSync(path.join(temp, '.latex-review.json'), JSON.stringify({ main: 'main.tex', partial_builds: false }));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: temp, stdio: 'pipe' });
   git('init', '-q'); git('add', '.');
+  fs.mkdirSync(path.join(temp, '.git/papilot'), { recursive: true });
+  fs.writeFileSync(path.join(temp, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', partial_builds: false }));
   git('-c', 'user.name=Playground', '-c', 'user.email=playground@localhost', 'commit', '-qm', 'Example baseline');
   app = new App(temp); await app.ready;
   fs.mkdirSync(output, { recursive: true });

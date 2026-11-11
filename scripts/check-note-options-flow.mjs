@@ -90,7 +90,7 @@ try {
       const current = document.querySelector('.review-frame');
       const doc = current?.contentDocument, view = current?.contentWindow;
       if (!view || !doc?.querySelector('#paper') || !doc.querySelector('#papilot-embed-style')) return false;
-      view.dispatchEvent(new view.Event('latex-review:decided'));
+      view.dispatchEvent(new view.Event('papilot:review:decided'));
       return true;
     }), { timeout: 15000 }).toBe(true);
     const tab = name => drawer.getByRole('tab', { name, exact: true });

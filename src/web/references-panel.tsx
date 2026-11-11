@@ -14,7 +14,7 @@ import './references-panel.css';
 // as a new task that finds out what happened; the author decides the edits.
 
 type Load = <T>(route: string, body?: unknown) => Promise<T>;
-const online = () => browserStorage.getItem('latex-review:references') !== 'off';
+const online = () => browserStorage.getItem('papilot:review:references') !== 'off';
 const SOURCE: Record<string, string> = { doi: 'doi.org', crossref: 'Crossref', dblp: 'DBLP', arxiv: 'arXiv' };
 const fieldName = (field: string) => ({ title: t('Title'), author: t('Authors'), year: t('Year'), doi: 'DOI', arxiv: 'arXiv' } as Record<string, string>)[field] || field;
 const gap = () => (language().startsWith('zh') ? '' : ' ');

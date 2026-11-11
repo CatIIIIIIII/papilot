@@ -47,7 +47,7 @@ node bin/papilot.mjs doctor
 node bin/papilot.mjs --data "$env:USERPROFILE\Papilot data"
 ```
 
-Desktop data is under `%APPDATA%\Papilot`; CLI data defaults to `%USERPROFILE%\.papilot`. Use the desktop folder picker for local drive paths and UNC shares. Chinese characters and spaces in paths are supported. Paths inside `.latex-review.json` are relative to the repository; either separator is accepted and stored paths use `/`. Do not put an absolute drive path in its `main` field.
+Desktop data is under `%APPDATA%\Papilot`; CLI data defaults to `%USERPROFILE%\.papilot`. Use the desktop folder picker for local drive paths and UNC shares. Chinese characters and spaces in paths are supported. Paths in a paper's `.git/papilot/settings.json` are relative to the repository; either separator is accepted and stored paths use `/`. Do not put an absolute drive path in its `main` field.
 
 Papilot discovers the usual npm, Git for Windows, TeX Live and MiKTeX locations in addition to PATH. Restart Papilot after installing host tools. Commands installed by npm are launched through their Node entry points so multiline prompts and shell characters remain literal arguments. Stopping a build terminates its process tree. Windows runs background builds without the Unix-only pause/resume optimization.
 

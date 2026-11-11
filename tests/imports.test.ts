@@ -84,12 +84,13 @@ test('ambiguous mains need a choice; engine hints and existing configuration are
   try {
     fs.writeFileSync(path.join(f.root, 'a.tex'), source); fs.writeFileSync(path.join(f.root, 'b.tex'), source);
     let value = await inspectPaper(f.root); assert.equal(value.main, ''); assert.equal(value.candidates.length, 2);
-    fs.writeFileSync(path.join(f.root, '.latex-review.json'), JSON.stringify({ main: 'b.tex', engine: 'lualatex', partial_builds: false }));
+    git(f.root, 'init', '-q');
+    fs.mkdirSync(path.join(f.root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(f.root, '.git/papilot/settings.json'), JSON.stringify({ main: 'b.tex', engine: 'lualatex', partial_builds: false }));
     value = await inspectPaper(f.root); assert.equal(value.main, 'b.tex'); assert.equal(value.engine, 'lualatex');
     const imported = await f.imports.create({ path: f.root });
     await assert.rejects(f.imports.build(imported.id, { main: '../outside.tex' }), /existing/);
     await f.imports.build(imported.id, {}); await settled(f.imports, imported.id);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8')).partial_builds, false);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, '.git/papilot/settings.json'), 'utf8')).partial_builds, false);
   } finally { t.after(f.close); }
 });
 
@@ -130,6 +131,7 @@ test('main files deeper than twenty folders are discoverable without following s
 test('configured and nearby main files open without scanning unrelated subtrees', async t => {
   const f = fixture();
   try {
+    git(f.root, 'init', '-q');
     const main = 'main/Thesis.tex'; fs.mkdirSync(path.join(f.root, 'main'));
     fs.writeFileSync(path.join(f.root, main), '% !TEX program = xelatex\n' + source);
     const unrelated = path.join(f.root, 'materials/archive'); fs.mkdirSync(unrelated, { recursive: true });
@@ -143,7 +145,7 @@ test('configured and nearby main files open without scanning unrelated subtrees'
     });
     const detected = await inspectPaper(f.root);
     assert.equal(detected.main, main); assert.equal(detected.engine, 'xelatex'); assert.deepEqual(detected.candidates, [main]);
-    fs.writeFileSync(path.join(f.root, '.latex-review.json'), JSON.stringify({ main, engine: 'lualatex' }));
+    fs.mkdirSync(path.join(f.root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(f.root, '.git/papilot/settings.json'), JSON.stringify({ main, engine: 'lualatex' }));
     reads.length = 0;
     const configured = await inspectPaper(f.root);
     assert.equal(configured.main, main); assert.equal(configured.engine, 'lualatex'); assert.deepEqual(reads, []);
@@ -167,18 +169,33 @@ test('an alternative main file can be chosen without scanning or following links
   } finally { t.after(f.close); }
 });
 
+test('settings an earlier version kept in .latex-review.json are honored and move into the Git directory', async t => {
+  const f = fixture();
+  try {
+    fs.writeFileSync(path.join(f.root, 'a.tex'), source); fs.writeFileSync(path.join(f.root, 'b.tex'), source);
+    const legacy = JSON.stringify({ main: 'b.tex', engine: 'lualatex', partial_builds: false });
+    fs.writeFileSync(path.join(f.root, '.latex-review.json'), legacy);
+    const value = await f.imports.create({ path: f.root });
+    assert.equal(value.main, 'b.tex'); assert.equal(value.engine, 'lualatex');
+    f.ready(); await f.imports.build(value.id, {}); assert.equal((await settled(f.imports, value.id)).phase, 'ready');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.git/papilot/settings.json'), 'utf8')), { main: 'b.tex', engine: 'lualatex', partial_builds: false, source_dir: '' });
+    assert.equal(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8'), legacy, 'The author\'s file is left as it is');
+  } finally { t.after(f.close); }
+});
+
 test('an existing configuration stays byte-for-byte unchanged, keeps its source folder, and is updated only for a new main file', async t => {
   const f = fixture();
   try {
     fs.mkdirSync(path.join(f.root, 'paper')); fs.writeFileSync(path.join(f.root, 'paper/main.tex'), source); fs.writeFileSync(path.join(f.root, 'other.tex'), source);
-    // The author's own formatting and key order, as committed in their repository.
+    // The author's own formatting and key order.
+    git(f.root, 'init', '-q');
     const original = '{\n  "main": "paper/main.tex",\n  "engine": "pdflatex",\n  "source_dir": "paper"\n}\n';
-    fs.writeFileSync(path.join(f.root, '.latex-review.json'), original);
+    fs.mkdirSync(path.join(f.root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(f.root, '.git/papilot/settings.json'), original);
     let value = await f.imports.create({ path: f.root }); f.ready(); await f.imports.build(value.id, {}); await settled(f.imports, value.id);
-    assert.equal(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8'), original);
+    assert.equal(fs.readFileSync(path.join(f.root, '.git/papilot/settings.json'), 'utf8'), original);
     // A main file outside the configured source folder compiles from the whole folder.
     value = await f.imports.create({ path: f.root }); await f.imports.build(value.id, { main: 'other.tex' }); await settled(f.imports, value.id);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8')), { main: 'other.tex', engine: 'pdflatex', source_dir: '' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.git/papilot/settings.json'), 'utf8')), { main: 'other.tex', engine: 'pdflatex', source_dir: '' });
   } finally { t.after(f.close); }
 });
 
@@ -200,7 +217,7 @@ test('parent repositories are refused before changing source and empty Git repos
   try {
     git(f.root, 'init'); const nested = path.join(f.root, 'nested'); fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'main.tex'), source);
     const value = await f.imports.create({ path: nested }); await f.imports.build(value.id, {});
-    assert.match((await settled(f.imports, value.id)).error!, /parent Git/); assert.equal(fs.existsSync(path.join(nested, '.latex-review.json')), false);
+    assert.match((await settled(f.imports, value.id)).error!, /parent Git/); assert.deepEqual(fs.readdirSync(nested), ['main.tex']);
     fs.writeFileSync(path.join(f.root, 'main.tex'), source); await prepareRepository(f.root); assert.ok(git(f.root, 'rev-parse', 'HEAD'));
   } finally { t.after(f.close); }
 });
@@ -236,7 +253,7 @@ test('the desktop opens a folder as a paper at once and asks only which of sever
     fs.writeFileSync(path.join(clear, 'main.tex'), source.replace('\\begin{document}', '\\usepackage{fontspec}\n\\begin{document}'));
     const opened = await openFolder({ path: clear }, known, register);
     assert.ok('project' in opened); assert.equal(opened.project.name, 'thesis'); assert.equal(opened.project.path, clear);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(clear, '.latex-review.json'), 'utf8')), { main: 'main.tex', engine: 'xelatex', source_dir: '' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(clear, '.git/papilot/settings.json'), 'utf8')), { main: 'main.tex', engine: 'xelatex', source_dir: '' });
     assert.ok(git(clear, 'rev-parse', 'HEAD'));
     const again = await openFolder({ path: clear + '/' }, known, register);
     assert.ok('project' in again); assert.equal(again.project, opened.project, 'A paper already in Papilot opens again');
@@ -247,7 +264,7 @@ test('the desktop opens a folder as a paper at once and asks only which of sever
     await assert.rejects(openFolder({ path: f.root, main: '../thesis/main.tex' }, known, register), /existing TeX main file/);
     const chosen = await openFolder({ path: f.root, main: 'b.tex' }, known, register);
     assert.ok('project' in chosen);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8')), { main: 'b.tex', engine: 'lualatex', source_dir: '' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, '.git/papilot/settings.json'), 'utf8')), { main: 'b.tex', engine: 'lualatex', source_dir: '' });
     // A folder inside another repository is refused before anything is written.
     const nested = path.join(f.root, 'chapter'); fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'main.tex'), source);
     await assert.rejects(openFolder({ path: nested }, known, register), /parent Git/);
@@ -279,7 +296,7 @@ test('a real imported paper compiles with the manuscript builder', { timeout: 60
     // A real TeX build needs extra time on busy CI or during desktop packaging.
     await imports.build(value.id, {}); const ready = await settled(imports, value.id, 45000); assert.equal(ready.phase, 'ready', ready.error);
     // Opening the paper reuses the import's PDF instead of compiling it again.
-    const builds = path.join(ready.path, '.git/latex-review/cache/builds'), count = () => fs.readdirSync(builds).filter(name => /^[0-9a-f]{32}$/.test(name)).length;
+    const builds = path.join(ready.path, '.git/papilot/cache/builds'), count = () => fs.readdirSync(builds).filter(name => /^[0-9a-f]{32}$/.test(name)).length;
     const before = count(), opened = f.trackManuscripts(new Manuscripts());
     let state = await opened.state('paper', ready.path);
     for (let attempt = 0; state.build.status === 'building' && attempt < 400; attempt++) { await new Promise(resolve => setTimeout(resolve, 25)); state = await opened.state('paper', ready.path); }

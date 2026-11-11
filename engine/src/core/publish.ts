@@ -7,6 +7,7 @@ import { diffUnitsAsync, scopeViolationsAsync, withHashesAsync, withUnits } from
 import { provisional, roundFolder, writeProvisional } from "./carry.ts";
 import { acceptNoteOption, noteOptionUnits } from "./note-options.ts";
 import { isFigure } from "./config.ts";
+import { REFS } from "./git.ts";
 import { now, readJson, writeJson } from "./files.ts";
 import { Cancelled, runAsync } from "./process.ts";
 import { Lease } from "./pool.ts";
@@ -697,7 +698,7 @@ export class Publisher {
     const insert = async (units: Unit[], summary: Round["summary"], visuals: Round["visuals"]) => {
       // The ref comes first: a round in the store always keeps its version
       // across Git's garbage collection.
-      await app.repo.updateRefAsync(`refs/latex-review/${name}/round-${number}`, after);
+      await app.repo.updateRefAsync(`${REFS}${name}/round-${number}`, after);
       app.store.execute(
         "INSERT INTO rounds(task,number,before,after,units,summary,created,visuals) VALUES(?,?,?,?,?,?,?,?)",
         name,
@@ -924,13 +925,13 @@ export class Publisher {
     for (const task of app.tasks.list()) {
       const rounds = app.store.all<Pick<Round, "number" | "after">>("SELECT number,after FROM rounds WHERE task=?", task.name),
         refs = new Map(
-          (await app.repo.textAsync(["for-each-ref", "--format=%(refname) %(objectname)", `refs/latex-review/${task.name}/`]))
+          (await app.repo.textAsync(["for-each-ref", "--format=%(refname) %(objectname)", `${REFS}${task.name}/`]))
             .split("\n")
             .filter(Boolean)
             .map((line) => line.split(" ") as [string, string]),
         );
       for (const round of rounds) {
-        const ref = `refs/latex-review/${task.name}/round-${round.number}`;
+        const ref = `${REFS}${task.name}/round-${round.number}`;
         if (refs.get(ref) !== round.after) await app.repo.updateRefAsync(ref, round.after);
       }
       const latest = app.review.latestRound(task.name);

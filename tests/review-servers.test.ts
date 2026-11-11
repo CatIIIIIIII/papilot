@@ -26,7 +26,7 @@ async function withPaper(work: (root: string, clients: ChildProcess[]) => Promis
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@localhost', ...args], { cwd: root });
   git('init', '-q');
   fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\n\\begin{document}\nPaper.\n\\end{document}\n');
-  fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex', source_dir: '' }));
+  fs.mkdirSync(path.join(root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex', source_dir: '' }));
   git('add', '.'); git('commit', '-qm', 'Paper');
   const clients: ChildProcess[] = [];
   try { await work(root, clients); } finally {
@@ -78,7 +78,7 @@ for (;;) {
   if (pid) {
     console.log(pid);
     // Exit code 3 would mean the server was already listening.
-    process.exit(fs.existsSync(root + '/.git/latex-review/server/connection.json') ? 3 : 0);
+    process.exit(fs.existsSync(root + '/.git/papilot/server/connection.json') ? 3 : 0);
   }
   await new Promise(resolve => setTimeout(resolve, 10));
 }`, { exit: true });
@@ -91,7 +91,7 @@ test('a review server started by the CLI outlives the desktop app that reused it
   const started = await client(root, clients, `${cli}\n${printServer}`, { exit: true });
   if (started.child.exitCode === null) await once(started.child, 'exit');
   assert.ok(running(started.pid), 'A CLI command leaves its review server running');
-  assert.match(ps('command', started.pid), /^latex-review server /);
+  assert.match(ps('command', started.pid), /^Papilot review server /);
   const { child, pid: server } = await client(root, clients, `${desktop}\n${printServer}`, { desktop: true });
   assert.equal(server, started.pid, 'The app reuses the running server');
   child.kill('SIGKILL'); await once(child, 'exit');

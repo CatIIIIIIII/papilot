@@ -3,7 +3,7 @@ import { browserStorage } from './storage.ts';
 import { SHORTCUT_STORAGE, parseShortcuts, type Shortcuts } from '../../engine/src/web/shortcuts.ts';
 
 export * from '../../engine/src/web/shortcuts.ts';
-const BINDINGS_STORAGE = 'latex-review:shortcut-bindings';
+const BINDINGS_STORAGE = 'papilot:review:shortcut-bindings';
 let bindings = parseShortcuts(browserStorage.getItem(BINDINGS_STORAGE));
 let state = parseShortcuts(browserStorage.getItem(SHORTCUT_STORAGE));
 const listeners = new Set<() => void>();

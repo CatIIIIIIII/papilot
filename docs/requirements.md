@@ -9,7 +9,7 @@ Your paper agents, anywhere.
 - The agents are official Codex, not a custom LLM/tool execution loop.
 - Create tasks, monitor work, review PDF differences, accept/reject/comment, and continue from a phone, tablet, or computer.
 - Browser closure must not stop work. Instructions and review history persist.
-- Reuse latex-review-skill for isolated worktrees, rendering, review decisions and merging.
+- Use Papilot's review engine (`engine/`) for isolated worktrees, rendering, review decisions and merging.
 
 ## First usable version
 
@@ -48,4 +48,4 @@ Your paper agents, anywhere.
 
 ## Implementation choices
 
-React/Vite frontend, Fastify backend, SQLite state, official Codex app-server over stdio, Papilot's own review engine in `engine/` (started from latex-review-skill), and launchd for the macOS service. The initial supported use is a single owner over Tailscale.
+React/Vite frontend, Fastify backend, SQLite state, official Codex app-server over stdio, Papilot's own review engine in `engine/`, and launchd for the macOS service. The initial supported use is a single owner over Tailscale.

@@ -14,7 +14,7 @@ test('stopping ends every compiler, also a background build paused for another',
     fs.mkdirSync(root); fs.mkdirSync(bin);
     const repo = new Repo(root);
     repo.run(['init', '-q']);
-    fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+    fs.mkdirSync(path.join(root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
     fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\\begin{document}A\\end{document}\n');
     repo.run(['add', '-A']); repo.run(['-c', 'user.name=T', '-c', 'user.email=t@t', 'commit', '-qm', 'A']);
     const first = repo.rev('HEAD');

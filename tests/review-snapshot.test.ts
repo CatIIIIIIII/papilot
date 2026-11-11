@@ -170,7 +170,7 @@ test('async PDF preservation retains originals and publishes explicit replacemen
   const gate = new Promise<void>(resolve => { release = resolve; }), copying = new Promise<void>(resolve => { started = resolve; });
   try {
     execFileSync('git', ['init', '-q', root]);
-    fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+    fs.mkdirSync(path.join(root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
     fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\\begin{document}Test\\end{document}');
     const first = path.join(root, 'first.pdf'), replacement = path.join(root, 'replacement.pdf');
     fs.copyFileSync(fixture, first);

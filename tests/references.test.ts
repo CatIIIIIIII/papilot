@@ -46,7 +46,7 @@ test('the References panel reports the bibliography on disk and keeps confirmati
 
     const confirmed = await confirmEntry(root, 'refs.bib#knuth', true);
     assert.ok(confirmed.confirmed['refs.bib#knuth'] > 0);
-    const file = path.join(root, '.git/latex-review/references-confirmed.json');
+    const file = path.join(root, '.git/papilot/references-confirmed.json');
     assert.ok(fs.existsSync(file));
     // Editing the entry's looked-up fields asks again.
     fs.writeFileSync(path.join(root, 'refs.bib'), fs.readFileSync(path.join(root, 'refs.bib'), 'utf8').replace('year = 1984', 'year = 1986'));

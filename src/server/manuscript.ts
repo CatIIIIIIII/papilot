@@ -9,6 +9,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { ENGINE, ROOT } from './paths.ts';
+import { stateDir } from './state.ts';
 import type { Annotation, BuildProblem, BuildProgress, GitDiffScope, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
 import { ignorePattern } from '../commit.ts';
 import { PdfReader } from './pdf-reader.ts';
@@ -314,7 +315,7 @@ async function gitAction(root: string, args: string[], timeout = 60_000) {
 // previous snapshot's index, or the repository's, so Git rehashes only files
 // whose size or modification time changed.
 export async function workingTree(root: string) {
-  const dir = gitDir(root), saved = dir && path.join(dir, 'latex-review', 'working-index');
+  const dir = gitDir(root), saved = dir && path.join(await stateDir(dir), 'working-index');
   const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'papilot-index-')), index = path.join(folder, 'index'), env = { GIT_INDEX_FILE: index };
   const snapshot = async (seed: string | null | undefined) => {
     if (!seed || !await copyIndex(seed, index)) { await fs.promises.rm(index, { force: true }); await git(root, ['read-tree', 'HEAD'], env).catch(() => git(root, ['read-tree', '--empty'], env)); }
@@ -825,8 +826,12 @@ export class Manuscripts extends EventEmitter {
         if (!entry.isDirectory() || entry.name.endsWith('.lock')) return;
         try {
           const folder = path.join(cache, entry.name), saved = JSON.parse(await fs.promises.readFile(path.join(folder, 'result.json'), 'utf8'));
-          if (typeof saved.pdf !== 'string' || !path.resolve(saved.pdf).startsWith(path.resolve(folder) + path.sep)) return;
-          if (createHash('sha256').update(saved.key + saved.pdf).digest('hex').slice(0, 16) === key && fs.existsSync(saved.pdf)) found = saved.pdf;
+          if (typeof saved.pdf !== 'string' || createHash('sha256').update(saved.key + saved.pdf).digest('hex').slice(0, 16) !== key) return;
+          // A build from before the state folder moved names its PDF by the
+          // former path, which the link left there keeps valid.
+          const inside = (file: string, base: string) => path.resolve(file).startsWith(path.resolve(base) + path.sep);
+          if (!inside(saved.pdf, folder) && !inside(await fs.promises.realpath(saved.pdf).catch(() => ''), await fs.promises.realpath(folder))) return;
+          if (fs.existsSync(saved.pdf)) found = saved.pdf;
         } catch { /* Incomplete builds have no usable PDF. */ }
       }));
     this.oldPdfs.set(lookup, found); return found;

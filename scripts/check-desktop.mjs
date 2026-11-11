@@ -171,7 +171,7 @@ try {
   await openFromSidebar();
   await opened('local-paper');
   assert.deepEqual(openRequests, [{ route: '/api/projects/open', body: { path: localPaper } }]);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(localPaper, '.latex-review.json'), 'utf8')), { main: 'main.tex', engine: 'pdflatex', source_dir: '' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(localPaper, '.git/papilot/settings.json'), 'utf8')), { main: 'main.tex', engine: 'pdflatex', source_dir: '' });
   assert.ok(fs.existsSync(path.join(localPaper, '.git')), 'The opened folder gets its version history in place');
   // File › Open Folder… asks for the main file only when several could be it.
   const twoMains = path.join(data, 'two-mains'); fs.mkdirSync(twoMains);
@@ -187,7 +187,7 @@ try {
   await opened('two-mains');
   await expect(mainDialog).toBeHidden();
   assert.deepEqual(openRequests.slice(1), [{ route: '/api/projects/open', body: { path: twoMains } }, { route: '/api/projects/open', body: { path: twoMains, main: 'b.tex' } }]);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(twoMains, '.latex-review.json'), 'utf8')).main, 'b.tex');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(twoMains, '.git/papilot/settings.json'), 'utf8')).main, 'b.tex');
   // A folder already in Papilot opens again instead of being added twice.
   await pick(localPaper);
   await openFromFileMenu();

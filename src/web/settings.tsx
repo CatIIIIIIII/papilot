@@ -30,7 +30,7 @@ export type SettingsInitialPage = 'general' | 'shortcuts' | 'quickNotes' | 'git'
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.
-const REFERENCE_CHECKS = 'latex-review:references';
+const REFERENCE_CHECKS = 'papilot:review:references';
 
 export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; initialPage?: SettingsInitialPage }) {
   const dialog = useRef<HTMLDialogElement>(null);

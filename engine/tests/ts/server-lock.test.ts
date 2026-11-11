@@ -8,7 +8,7 @@ import { Fixture } from "./helpers.ts";
 // past the lock's stale time, or removed its lock. Two engines must not both
 // write the paper's review state: the one that lost the lock stops serving.
 it("an engine that loses its server lock stops serving", async () => {
-  const f = new Fixture(), home = path.join(f.root, ".git/latex-review/server");
+  const f = new Fixture(), home = path.join(f.root, ".git/papilot/server");
   const engine = spawn(process.execPath, ["--import", "tsx", path.join(import.meta.dirname, "../../src/cli.ts"), "serve", "--root", f.root, "--port", "0"], { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = ""; engine.stderr!.on("data", chunk => { stderr += chunk; });
   const exited = new Promise<number | null>(resolve => engine.once("exit", resolve));

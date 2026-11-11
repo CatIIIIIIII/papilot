@@ -170,7 +170,7 @@ try {
   for (const [index, block] of detail.sections[0].blocks.entries()) {
     for (const strip of [...block.before, ...block.after]) Object.assign(strip, { page: 1, label: '1', top: 100 + index * 55, left: 0, width: 612, height: 35, text: [{ chars: [{ text: 'A paragraph in the review PDF.', rect: [60, 12, 250, 26] }] }] });
   }
-  await page.evaluate(() => { localStorage.setItem('latex-review:default-view', 'paper'); localStorage.removeItem('papilot:pdf-zoom'); });
+  await page.evaluate(() => { localStorage.setItem('papilot:review:default-view', 'paper'); localStorage.removeItem('papilot:pdf-zoom'); });
   await page.reload();
   const full = page.frameLocator('.review-frame');
   await expect(full.locator('.paper-page')).toHaveCount(2);
@@ -313,7 +313,7 @@ try {
   await pageNumber.fill('2'); await pageNumber.press('Enter');
   await expect.poll(secondPageOffset).toBeLessThan(2);
   await nextRound(2, async () => {
-    assert.equal(await full.locator('body').evaluate(() => localStorage.getItem('latex-review:/review/paper/:places:pdf:2')), null);
+    assert.equal(await full.locator('body').evaluate(() => localStorage.getItem('papilot:review:/review/paper/:places:pdf:2')), null);
   });
   await expect(full.locator('.change.current')).toHaveAttribute('data-stop', '0');
   await expect(full.locator('[data-stop="0"] .change-head')).toBeInViewport();

@@ -180,8 +180,6 @@
   "The option save could not be confirmed. Check task status before retrying.": "L’enregistrement de l’option n’a pas pu être confirmé. Vérifiez l’état de la tâche avant de réessayer.",
   "The option source is missing or ambiguous.": "La source de cette option est introuvable ou ambiguë.",
   "The option targets an unrelated source file.": "Cette option vise un fichier source sans rapport.",
-  "The paper configuration must contain a JSON object.": "La configuration de l’article doit contenir un objet JSON.",
-  "The paper configuration must not be a symbolic link.": "La configuration de l’article ne doit pas être un lien symbolique.",
   "The review action could not be confirmed. Check task status before retrying.": "L’action de révision n’a pas pu être confirmée. Vérifiez l’état de la tâche avant de réessayer.",
   "The review action is still being checked. Wait for it to finish.": "L’action de révision est toujours en cours de vérification. Attendez qu’elle se termine.",
   "The review changed. Reload the options.": "La révision a changé. Rechargez les options.",

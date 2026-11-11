@@ -132,7 +132,7 @@ it("validates action schemas and serves immutable compressed vectors", async () 
   ).toBe(404);
 });
 it("schedules distinct tasks concurrently but serializes the same task", async () => {
-  f.write(".latex-review.json", JSON.stringify({ build_workers: 2 }));
+  f.write(".git/papilot/settings.json", JSON.stringify({ build_workers: 2 }));
   for (const name of ["a", "b", "c"]) app.tasks.create(name);
   const active = new Set<string>(),
     calls: string[] = [],

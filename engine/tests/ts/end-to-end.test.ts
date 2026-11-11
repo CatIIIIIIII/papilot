@@ -157,7 +157,7 @@ it.skipIf(!tex)(
 it.skipIf(!tex)(
   "compiles the bundled paper, renders every planned edit and completes review",
   async () => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-e2e-")),
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "papilot-e2e-")),
       { root, plan } = prepareDemo(base),
       app = new App(root);
     try {
@@ -392,7 +392,7 @@ This uses the \sharedmacro{} from Chapter~\ref{one}.
 `,
     );
     f.write(
-      ".latex-review.json",
+      ".git/papilot/settings.json",
       JSON.stringify({ preload: { "sections/one": "macros/one.tex" } }),
     );
     f.repo.run(["add", "."]);

@@ -30,8 +30,8 @@ export async function readOutline(document: PDFDocumentProxy) {
 
 // The embedded review supplies a reader adapter; Papilot renders exactly the
 // same controls as for the manuscript. No PDF or review data crosses origins.
-export const PDF_READER_STATE = 'latex-review:pdf-reader-state';
-export const PDF_READER_COMMAND = 'latex-review:pdf-reader-command';
+export const PDF_READER_STATE = 'papilot:review:pdf-reader-state';
+export const PDF_READER_COMMAND = 'papilot:review:pdf-reader-command';
 export interface PdfReaderState {
   pages: number; page: number; zoom: { value: string; scale: number };
   outline: OutlineItem[]; section: number;

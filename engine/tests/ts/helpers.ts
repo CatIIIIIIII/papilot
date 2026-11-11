@@ -27,7 +27,7 @@ ${lines("Method")}
 ${lines("Detail")}
 `;
 export class Fixture {
-  base = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-ts-"));
+  base = fs.mkdtempSync(path.join(os.tmpdir(), "papilot-ts-"));
   root = path.join(this.base, "repo");
   repo: Repo;
   apps: App[] = [];

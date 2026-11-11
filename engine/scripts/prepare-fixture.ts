@@ -57,13 +57,13 @@ export async function prepareFixture() {
         path.join(target, match[2]),
       ]);
   }
-  writeJson(path.join(target, ".latex-review.json"), {
+  run("git", ["init", "-q"], { cwd: target });
+  writeJson(path.join(target, ".git/papilot/settings.json"), {
     main: "main.tex",
     source_dir: "",
     partial_builds: false,
     figures: [],
   });
-  run("git", ["init", "-q"], { cwd: target });
   run("git", ["config", "user.name", "LaTeX review corpus"], { cwd: target });
   run("git", ["config", "user.email", "corpus@localhost"], { cwd: target });
   run("git", ["add", "--force", "."], { cwd: target });

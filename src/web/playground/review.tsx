@@ -1,3 +1,4 @@
+import '../../../engine/src/web/legacy-storage.ts';
 import { createRoot } from 'react-dom/client';
 import { ReviewApp } from '../../../engine/src/web/review.tsx';
 import { playgroundApi } from './api.ts';

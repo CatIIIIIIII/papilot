@@ -180,8 +180,6 @@
   "The option save could not be confirmed. Check task status before retrying.": "无法确认方案是否已保存。重试前请检查任务状态。",
   "The option source is missing or ambiguous.": "无法唯一定位该方案的源码。",
   "The option targets an unrelated source file.": "该方案涉及无关的源文件。",
-  "The paper configuration must contain a JSON object.": "论文配置必须包含 JSON 对象。",
-  "The paper configuration must not be a symbolic link.": "论文配置不能是符号链接。",
   "The review action could not be confirmed. Check task status before retrying.": "无法确认审阅操作是否完成。重试前请检查任务状态。",
   "The review action is still being checked. Wait for it to finish.": "正在检查该审阅操作，请等待其完成。",
   "The review changed. Reload the options.": "审阅已更新，请重新加载方案。",

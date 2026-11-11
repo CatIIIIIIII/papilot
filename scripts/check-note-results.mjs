@@ -110,7 +110,7 @@ const controls = () => page.locator('#review-panel .review-note-controls');
 const decided = () => expect.poll(() => page.evaluate(() => {
   const view = document.querySelector('.review-frame')?.contentWindow;
   if (!view || view.document.readyState !== 'complete') return false;
-  view.dispatchEvent(new view.Event('latex-review:decided'));
+  view.dispatchEvent(new view.Event('papilot:review:decided'));
   return true;
 })).toBe(true);
 try {

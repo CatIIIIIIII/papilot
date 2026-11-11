@@ -36,7 +36,7 @@ function fixture() {
   fs.mkdirSync(path.join(root, 'materials'), { recursive: true });
   const repo = new Repo(root);
   repo.run(['init', '-q']);
-  fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+  fs.mkdirSync(path.join(root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
   return { base, root, repo, close: () => fs.rmSync(base, { recursive: true, force: true }) };
 }
 
@@ -48,7 +48,7 @@ test('working tree snapshots reuse index state and match a fresh snapshot withou
     f.repo.run(['add', '.']); f.repo.run(['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-qm', 'Fixture']);
     const index = fs.readFileSync(path.join(f.root, '.git/index'));
     const first = await workingTree(f.root);
-    assert.ok(fs.existsSync(path.join(f.root, '.git/latex-review/working-index')));
+    assert.ok(fs.existsSync(path.join(f.root, '.git/papilot/working-index')));
     fs.writeFileSync(path.join(f.root, 'main.tex'), 'Edited after the snapshot.\n');
     fs.writeFileSync(path.join(f.root, 'added.tex'), 'Untracked.\n');
     fs.rmSync(path.join(f.root, 'materials/big.bin'));
@@ -57,9 +57,9 @@ test('working tree snapshots reuse index state and match a fresh snapshot withou
     assert.equal(f.repo.blob(second, 'main.tex')?.toString(), 'Edited after the snapshot.\n');
     assert.equal(f.repo.blob(second, 'added.tex')?.toString(), 'Untracked.\n');
     assert.equal(f.repo.blob(second, 'materials/big.bin'), null);
-    fs.rmSync(path.join(f.root, '.git/latex-review/working-index'));
+    fs.rmSync(path.join(f.root, '.git/papilot/working-index'));
     assert.equal(await workingTree(f.root), second, 'A saved index gives the same tree as a fresh one');
-    fs.writeFileSync(path.join(f.root, '.git/latex-review/working-index'), 'corrupt');
+    fs.writeFileSync(path.join(f.root, '.git/papilot/working-index'), 'corrupt');
     assert.equal(await workingTree(f.root), second, 'An unreadable saved index falls back to a fresh snapshot');
     assert.deepEqual(fs.readFileSync(path.join(f.root, '.git/index')), index);
   } finally { f.close(); }

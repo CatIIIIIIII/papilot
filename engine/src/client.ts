@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { ROOT, codeVersion, environmentVersion } from "./runtime.ts";
-import { gitDirOf } from "./core/git.ts";
+import { stateOf } from "./core/git.ts";
 import { readJson, realPath, sleep, withLock } from "./core/files.ts";
 export interface Connection {
   url: string;
@@ -55,7 +55,7 @@ export class Client {
 }
 // Every request an app forwards connects first, so the Git directory is
 // looked up once per repository rather than with a Git command each time.
-export const serverHome = (root: string) => path.join(gitDirOf(root), "latex-review/server");
+export const serverHome = (root: string) => path.join(stateOf(root), "server");
 export async function probe(root: string, info: Partial<Connection> | null) {
   if (!info?.url) return null;
   const address = new URL(info.url);
@@ -122,7 +122,7 @@ async function launch(root: string, port: number, owned: boolean): Promise<Clien
       {
         // Process lists show this name instead of node. (process.title would
         // register the server with macOS as a background app.)
-        argv0: owned ? "Papilot review server" : "latex-review server",
+        argv0: "Papilot review server",
         cwd: ROOT,
         detached: process.platform !== "win32" || !owned,
         windowsHide: true,
@@ -227,6 +227,20 @@ export async function connect(
     }
     return launch(root, info?.port ?? last?.port ?? 0, owned);
   });
+}
+/** Stops the review server recorded in `home` if it still serves `root`,
+ *  also in the middle of a build: before a paper's state moves on Windows,
+ *  where its open files keep the folder from moving. */
+export async function stopServerIn(home: string, root: string) {
+  const info = readJson<Connection | null>(path.join(home, "connection.json"), null),
+    answer = await probe(root, info);
+  if (!answer || !info) return;
+  await call(info.url, "/api/shutdown", { force: true }, answer.csrf, 5000);
+  await waitForExit(info.url, answer.pid);
+  // It stops answering before it closes its database and exits.
+  for (const deadline = Date.now() + 15000; Date.now() < deadline; await sleep(100))
+    try { process.kill(answer.pid, 0); } catch { return; }
+  throw new ServerError("The earlier review server has not exited yet.");
 }
 export async function stop(root: string, force = false) {
   const client = await connect(root, false);

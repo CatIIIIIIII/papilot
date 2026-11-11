@@ -122,11 +122,11 @@ describe("configuration", () => {
     { dependencies: [] },
     { partial_builds: "false" },
   ])("rejects invalid settings %j", (settings) => {
-    f.write(".latex-review.json", JSON.stringify(settings));
+    f.write(".git/papilot/settings.json", JSON.stringify(settings));
     expect(() => loadProject(f.root)).toThrow();
   });
   it("does not silently ignore malformed JSON", () => {
-    f.write(".latex-review.json", "{broken");
+    f.write(".git/papilot/settings.json", "{broken");
     expect(() => loadProject(f.root)).toThrow("not valid JSON");
   });
 });

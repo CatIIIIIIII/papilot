@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Repo, cleanPath, gitDirOf, within } from "./git.ts";
-import { realPath } from "./files.ts";
-export const CONFIG_NAME = ".latex-review.json";
+import { Repo, STATE, cleanPath, gitDirOf, stateOf, within } from "./git.ts";
+import { realPath, writeJson } from "./files.ts";
+import { legacySettings } from "./legacy-state.ts";
 export const ENGINES = ["pdflatex", "xelatex", "lualatex"] as const;
 type Engine = (typeof ENGINES)[number];
 interface Settings {
@@ -46,6 +46,67 @@ const PREFERRED = [
 ];
 const read = (root: string, file: string) =>
   fs.readFileSync(path.join(root, file), "utf8");
+/** A paper's settings, in its Git directory. Usually there are none: the
+ *  root document and engine are detected, and Papilot saves what the author
+ *  chooses instead. */
+export const settingsFile = (root: string) => path.join(stateOf(root), "settings.json");
+// The settings file as the author finds it, for messages: relative to the
+// paper, unless the paper is a linked worktree whose Git directory lies
+// elsewhere. Naming it moves nothing.
+function settingsName(root: string) {
+  try {
+    const file = path.join(gitDirOf(root), STATE, "settings.json"), relative = path.relative(realPath(root), file);
+    return relative.startsWith("..") || path.isAbsolute(relative) ? file : relative.split(path.sep).join("/");
+  } catch {
+    return ".git/papilot/settings.json";
+  }
+}
+export function readSettings(root: string): Record<string, unknown> {
+  const file = settingsFile(root);
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      throw new Error(`${settingsName(root)} cannot be read (${(error as Error).message}).`);
+    // Settings an earlier version kept in the working tree move here once.
+    const legacy = legacySettings(root);
+    if (legacy) createOnce(file, JSON.stringify(legacy, null, 2) + "\n");
+    return legacy ?? {};
+  }
+  let settings: unknown;
+  try {
+    settings = JSON.parse(text);
+  } catch {
+    throw new Error(`${settingsName(root)} is not valid JSON.`);
+  }
+  if (!settings || typeof settings !== "object" || Array.isArray(settings))
+    throw new Error(`${settingsName(root)} must contain an object.`);
+  return settings as Record<string, unknown>;
+}
+// Creates `file` with `text` unless another process did, never showing a
+// reader a partly written file.
+function createOnce(file: string, text: string) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(temporary, text);
+  try {
+    fs.linkSync(temporary, file);
+  } catch (error) {
+    // Some file systems have no hard links.
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST")
+      try {
+        fs.writeFileSync(file, text, { flag: "wx" });
+      } catch (again) {
+        if ((again as NodeJS.ErrnoException).code !== "EEXIST") throw again;
+      }
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
+export function writeSettings(root: string, settings: Record<string, unknown>) {
+  writeJson(settingsFile(root), settings);
+}
 export function detectMain(root: string) {
   const directories = [
     "",
@@ -85,7 +146,7 @@ export function detectMain(root: string) {
   if (found.length === 1) return found[0];
   if (!found.length)
     throw new Error(
-      `No root document found. Create ${CONFIG_NAME} with {"main":"path/to/main.tex"}.`,
+      `No root document found. Set "main" in ${settingsName(root)}, e.g. {"main":"path/to/main.tex"}.`,
     );
   const rank = (file: string) => [
     file.split("/").length,
@@ -100,20 +161,12 @@ export function detectMain(root: string) {
   )
     return found[0];
   throw new Error(
-    `Several root documents were found (${found.slice(0, 6).join(", ")}). Set "main" in ${CONFIG_NAME}.`,
+    `Several root documents were found (${found.slice(0, 6).join(", ")}). Set "main" in ${settingsName(root)}.`,
   );
 }
 export function loadProject(root: string): Project {
   root = realPath(root);
-  const file = path.join(root, CONFIG_NAME);
-  let settings: Settings = {};
-  if (fs.existsSync(file)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
-      throw new Error(`${CONFIG_NAME} is not valid JSON.`);
-    }
-  }
+  const settings = readSettings(root) as Settings;
   const allowed = new Set([
     "main",
     "engine",
@@ -126,8 +179,6 @@ export function loadProject(root: string): Project {
     "worktrees",
     "build_workers",
   ]);
-  if (!settings || typeof settings !== "object" || Array.isArray(settings))
-    throw new Error(`${CONFIG_NAME} must contain an object.`);
   const unknown = Object.keys(settings).filter((k) => !allowed.has(k));
   if (unknown.length)
     throw new Error(`Unknown settings: ${unknown.join(", ")}`);
@@ -245,7 +296,7 @@ export function loadProject(root: string): Project {
     throw new Error('"build_workers" must be an integer between 1 and 8.');
   return {
     root,
-    state: path.join(gitDirOf(root), "latex-review"),
+    state: stateOf(root),
     main,
     doc_dir,
     engine: engine as Engine,

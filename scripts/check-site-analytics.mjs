@@ -39,7 +39,7 @@ let browser;
 try {
   for (const entry of [
     'site', 'docs/assets', 'src', 'public', 'i18n/config.json', 'i18n/languages.json',
-    'package.json', 'index.html', 'vite.config.ts', 'LICENSE', 'engine/src', 'engine/package.json', 'engine/LICENSE',
+    'package.json', 'index.html', 'vite.config.ts', 'LICENSE', 'engine/src', 'engine/package.json',
     'examples/playground-paper', 'scripts/playground-assets.ts', 'scripts/licenses.ts',
     'scripts/build-site.mjs', 'scripts/site-i18n.mjs', 'scripts/site-analytics.mjs', 'scripts/site-blog.mjs',
   ]) {

@@ -180,8 +180,6 @@
   "The option save could not be confirmed. Check task status before retrying.": "案の保存を確認できませんでした。再試行する前にタスクの状態を確認してください。",
   "The option source is missing or ambiguous.": "この案のソースが見つからないか、一意に特定できません。",
   "The option targets an unrelated source file.": "この案は関係のないソースファイルを対象としています。",
-  "The paper configuration must contain a JSON object.": "論文の設定には JSON オブジェクトが含まれている必要があります。",
-  "The paper configuration must not be a symbolic link.": "論文の設定にシンボリックリンクは使用できません。",
   "The review action could not be confirmed. Check task status before retrying.": "レビュー操作の完了を確認できませんでした。再試行する前にタスクの状態を確認してください。",
   "The review action is still being checked. Wait for it to finish.": "レビュー操作をまだ確認中です。完了するまでお待ちください。",
   "The review changed. Reload the options.": "レビューが更新されました。案を再読み込みしてください。",

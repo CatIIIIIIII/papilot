@@ -40,7 +40,7 @@ await page.route('**/api/**', async route => {
   }
   throw new Error(`Unexpected request: ${url.pathname}`);
 });
-await page.route('**/review/**', route => route.fulfill({ contentType: 'text/html', body: brokenReview ? '<html><body>Unavailable</body></html>' : '<html><body><div id="root"><main id="paper"><div class="waiting">Building</div></main></div><script>window.addEventListener("latex-review:view-changed", event => { document.documentElement.dataset.view = event.detail; });</script></body></html>' }));
+await page.route('**/review/**', route => route.fulfill({ contentType: 'text/html', body: brokenReview ? '<html><body>Unavailable</body></html>' : '<html><body><div id="root"><main id="paper"><div class="waiting">Building</div></main></div><script>window.addEventListener("papilot:review:view-changed", event => { document.documentElement.dataset.view = event.detail; });</script></body></html>' }));
 const preview = page.locator('.task-document-preview');
 const canvas = preview.locator('.pdfViewer canvas').first();
 const views = page.getByRole('group', { name: 'Workspace view' });

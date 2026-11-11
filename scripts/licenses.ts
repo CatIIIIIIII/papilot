@@ -63,8 +63,6 @@ export function collectLicenses(root = projectRoot): LicenseNotice[] {
   const reviewRoot = path.join(root, 'engine');
   for (const directory of [root, reviewRoot]) for (const name of Object.keys(readPackage(directory).dependencies)) visit(name, directory);
   for (const name of browserPackages) visit(name, root);
-  const review = readPackage(reviewRoot);
-  packages.set('latex-review', { name: 'latex-review', version: review.version, license: 'MIT', url: `${appInfo(root).repository}/tree/main/engine`, notices: [{ name: 'LICENSE', text: readText(path.join(reviewRoot, 'LICENSE')) }] });
   const fontNotice = (name: string, file: string) => ({ name, text: readText(path.join(root, file)) });
   packages.set('pagella', { name: 'TeX Gyre Pagella X / newpx', version: '', license: 'GUST Font License / LPPL-1.3c', url: 'https://ctan.org/pkg/newpx', notices: [
     fontNotice('GUST Font License', 'src/web/fonts/GUST-FONT-LICENSE.txt'),

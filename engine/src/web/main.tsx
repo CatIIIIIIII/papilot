@@ -1,3 +1,4 @@
+import "./legacy-storage.ts";
 import { createRoot } from "react-dom/client";
 import { ReviewApp } from "./review.tsx";
 import { language } from "./i18n.ts";

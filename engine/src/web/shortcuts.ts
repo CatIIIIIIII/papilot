@@ -1,6 +1,6 @@
 // Shared by the standalone review and its host's shortcut settings.
-export const SHORTCUT_STORAGE = 'latex-review:shortcuts';
-export const SHORTCUT_EVENT = 'latex-review:shortcuts-changed';
+export const SHORTCUT_STORAGE = 'papilot:review:shortcuts';
+export const SHORTCUT_EVENT = 'papilot:review:shortcuts-changed';
 export const defaults = {
   accept: ['a'], reject: ['r'], comment: ['c'], next: ['j', 'ArrowRight'],
   previous: ['k', 'ArrowLeft'], pending: ['n'], source: ['s'], undo: ['u'], help: ['?'],

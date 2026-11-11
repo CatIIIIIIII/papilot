@@ -11,7 +11,7 @@ export function SourceEditor({ task, round, change, locked, building, editable, 
   api: <T>(route: string, body?: unknown) => Promise<T>;
   onSaving: (saving: boolean) => void; onSaved: (state: PageState) => void;
 }) {
-  const key = `latex-review:source:${location.pathname}:${task}:${round}:${change}`;
+  const key = `papilot:review:source:${location.pathname}:${task}:${round}:${change}`;
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(false), [saving, setSaving] = useState(false);
   const [error, setError] = useState(""), [saved, setSaved] = useState(false);

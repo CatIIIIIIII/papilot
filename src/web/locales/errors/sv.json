@@ -180,8 +180,6 @@
   "The option save could not be confirmed. Check task status before retrying.": "Det gick inte att bekräfta att alternativet sparades. Kontrollera uppgiftens status innan du försöker igen.",
   "The option source is missing or ambiguous.": "Alternativets källtext saknas eller är tvetydig.",
   "The option targets an unrelated source file.": "Alternativet berör en orelaterad källfil.",
-  "The paper configuration must contain a JSON object.": "Artikelkonfigurationen måste innehålla ett JSON-objekt.",
-  "The paper configuration must not be a symbolic link.": "Artikelkonfigurationen får inte vara en symbolisk länk.",
   "The review action could not be confirmed. Check task status before retrying.": "Granskningsåtgärden kunde inte bekräftas. Kontrollera uppgiftens status innan du försöker igen.",
   "The review action is still being checked. Wait for it to finish.": "Granskningsåtgärden kontrolleras fortfarande. Vänta tills den är klar.",
   "The review changed. Reload the options.": "Granskningen har ändrats. Läs in alternativen igen.",

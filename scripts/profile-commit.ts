@@ -88,7 +88,7 @@ mark('pdf');
 const commitLag = lag.max;
 pinging = false; await pinger;
 
-const cache = path.join(root, '.git/latex-review/cache/builds');
+const cache = path.join(root, '.git/papilot/cache/builds');
 const newest = fs.readdirSync(cache).filter(name => /^[0-9a-f]{32}$/.test(name) && fs.existsSync(path.join(cache, name, 'result.json')))
   .map(name => ({ name, at: fs.statSync(path.join(cache, name, 'result.json')).mtimeMs, result: JSON.parse(fs.readFileSync(path.join(cache, name, 'result.json'), 'utf8')) }))
   .filter(build => build.result.targets[0] === 'full').sort((a, b) => b.at - a.at)[0];

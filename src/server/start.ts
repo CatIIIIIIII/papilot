@@ -10,11 +10,13 @@ import { buildApp, gitQueue } from './app.ts';
 import { Updates } from './updates.ts';
 import { readJson } from '../../bin/installation.mjs';
 import { desktopDemo } from './desktop-demo.ts';
+import { moveLegacyStates } from './state.ts';
 
 // One TeX pool for this installation: the review engines this server starts
 // inherit the folder, so their builds and the manuscript's share two slots.
 process.env.PAPILOT_TEX_POOL ||= path.join(DATA, 'tex-pool');
 const store = new Store(path.join(DATA, 'papilot.sqlite'));
+await moveLegacyStates(store.projects().map(project => project.path));
 const workspace = new Workspace(store);
 const manuscripts = new Manuscripts(), changes = new Changes();
 const desktop = process.env.PAPILOT_DESKTOP === '1';

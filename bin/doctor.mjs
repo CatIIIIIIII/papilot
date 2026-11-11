@@ -257,17 +257,18 @@ export async function doctor(args) {
       if (atRoot) {
         const head = await command(git, ['-C', repo, 'rev-parse', '--verify', 'HEAD']);
         check('project.head', head.ok, 'error', head.ok ? 'The repository has an initial commit.' : 'The repository has no initial commit.', 'Create the first Git commit before adding this paper to Papilot.');
+        let settings = 'the settings.json in the papilot folder of its Git directory';
         try {
           const { register } = await import('tsx/esm/api');
           const unregister = register();
-          let project;
-          try { project = (await import(pathToFileURL(path.join(engine, 'src/core/config.ts')).href)).loadProject(repo); }
+          let project, config;
+          try { config = await import(pathToFileURL(path.join(engine, 'src/core/config.ts')).href); settings = config.settingsFile(repo); project = config.loadProject(repo); }
           finally { unregister(); }
           check('project.main', true, 'error', `${project.main} (${project.engine}); configuration loaded without compiling.`);
           await tool(project.engine, ['--version'], `Install ${project.engine} through your TeX distribution.`, 'project.engine');
-          check('project.worktrees', writableDirectory(project.worktrees), 'error', `Task worktrees: ${project.worktrees}`, 'Choose a writable worktrees directory outside the repository in .latex-review.json.');
+          check('project.worktrees', writableDirectory(project.worktrees), 'error', `Task worktrees: ${project.worktrees}`, `Choose a writable worktrees directory outside the repository in ${settings}.`);
         } catch (error) {
-          check('project.main', false, 'error', `Could not load the paper configuration: ${error.message}`, 'Check .latex-review.json, its main/source_dir settings, and the review-engine/dependencies checks above.');
+          check('project.main', false, 'error', `Could not load the paper configuration: ${error.message}`, `Check ${settings}, its main/source_dir settings, and the review-engine/dependencies checks above.`);
         }
       }
     }

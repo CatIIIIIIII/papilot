@@ -5,11 +5,12 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { capture, run, startTracked, which } from "./process.ts";
 import { realPath, same } from "./files.ts";
+import { moveLegacyState } from "./legacy-state.ts";
 const IDENTITY = {
-  GIT_AUTHOR_NAME: "latex-review",
-  GIT_AUTHOR_EMAIL: "latex-review@localhost",
-  GIT_COMMITTER_NAME: "latex-review",
-  GIT_COMMITTER_EMAIL: "latex-review@localhost",
+  GIT_AUTHOR_NAME: "Papilot",
+  GIT_AUTHOR_EMAIL: "papilot@localhost",
+  GIT_COMMITTER_NAME: "Papilot",
+  GIT_COMMITTER_EMAIL: "papilot@localhost",
 };
 export class GitError extends Error {}
 let binary: string | undefined;
@@ -41,6 +42,22 @@ export function gitDirOf(root: string) {
   }
   return dir;
 }
+/** Papilot keeps a paper's review state in this folder of its Git directory,
+ *  and the commits of its tasks in refs below REFS. */
+export const STATE = "papilot";
+export const REFS = "refs/papilot/";
+const moved = new Set<string>();
+/** The state folder of a Git directory. Every path into it comes from here,
+ *  so a paper's earlier state has moved before anything in it is read or
+ *  created. */
+export function stateDir(gitDir: string) {
+  if (!moved.has(gitDir)) {
+    moveLegacyState(gitDir, (args, input) => run(gitBinary(), ["--git-dir", gitDir, ...args], { input }).stdout.toString(), STATE, REFS);
+    moved.add(gitDir);
+  }
+  return path.join(gitDir, STATE);
+}
+export const stateOf = (root: string) => stateDir(gitDirOf(root));
 export const within = (file: string, scopes: readonly string[]) =>
   scopes.some(
     (scope) =>
@@ -292,9 +309,8 @@ export class Repo {
   private indexFiles() {
     let found = indexes.get(this.root);
     if (!found) {
-      const [saved, own] = this.text(["rev-parse", "--git-path", "latex-review/snapshot-index", "--git-path", "index"])
-        .split("\n").map((file) => path.resolve(this.root, file));
-      indexes.set(this.root, found = { saved, own });
+      const own = path.resolve(this.root, this.text(["rev-parse", "--git-path", "index"]));
+      indexes.set(this.root, found = { saved: path.join(stateDir(this.gitDir()), "snapshot-index"), own });
     }
     return found;
   }
@@ -314,7 +330,7 @@ export class Repo {
     const staged = this.run(["diff", "--cached", "--name-only", "--diff-filter=A", "-z"])
       .toString().split("\0").filter(Boolean);
     const { saved, own } = this.indexFiles();
-    const tree = temporary("latex-review-index-", (folder) => {
+    const tree = temporary("papilot-index-", (folder) => {
       const index = path.join(folder, "index"), env = { ...process.env, GIT_INDEX_FILE: index };
       // read-tree -m keeps the stat data of entries that match HEAD.
       const capture = () => {
@@ -340,7 +356,7 @@ export class Repo {
       this.keepIndex(index);
       return first;
     });
-    return this.commitTree(tree, head, "latex-review snapshot");
+    return this.commitTree(tree, head, "Papilot snapshot");
   }
   /** `snapshot` for servers, which keep answering requests meanwhile. */
   async snapshotAsync(include: string[] = [], exclude: readonly string[] = []) {
@@ -348,7 +364,7 @@ export class Repo {
     const staged = (await this.runAsync(["diff", "--cached", "--name-only", "--diff-filter=A", "-z"]))
       .toString().split("\0").filter(Boolean);
     const { saved, own } = this.indexFiles();
-    const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "latex-review-index-"));
+    const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "papilot-index-"));
     try {
       const index = path.join(folder, "index"), env = { ...process.env, GIT_INDEX_FILE: index };
       const capture = async () => {
@@ -371,7 +387,7 @@ export class Repo {
       if (first !== await capture() || head !== await this.textAsync(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]))
         throw new GitError("Files changed while the snapshot was taken. Wait for saves to finish and retry.");
       this.keepIndex(index);
-      return await this.textAsync(["commit-tree", "--no-gpg-sign", first, "-p", head, "-m", "latex-review snapshot"], { env: { ...process.env, ...IDENTITY } });
+      return await this.textAsync(["commit-tree", "--no-gpg-sign", first, "-p", head, "-m", "Papilot snapshot"], { env: { ...process.env, ...IDENTITY } });
     } finally {
       await fs.promises.rm(folder, { recursive: true, force: true });
     }
@@ -393,7 +409,7 @@ export class Repo {
   }
   // The tree of `base`, a commit or a tree, with these files replaced.
   treeWith(parent: string, contents: Record<string, Buffer | null>) {
-    return temporary("latex-review-index-", (folder) => {
+    return temporary("papilot-index-", (folder) => {
       const env = {
         ...process.env,
         GIT_INDEX_FILE: path.join(folder, "index"),
@@ -419,7 +435,7 @@ export class Repo {
   /** `treeWith` for servers: one index update for every file. */
   async treeWithAsync(parent: string, contents: Record<string, Buffer | null>) {
     const files = Object.keys(contents).sort();
-    const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "latex-review-index-"));
+    const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "papilot-index-"));
     try {
       const env = { ...process.env, GIT_INDEX_FILE: path.join(folder, "index") };
       await this.runAsync(["read-tree", parent], { env });
@@ -594,7 +610,7 @@ export async function merge3Async(
   if (same(ours, base) || same(ours, theirs)) return [theirs, false];
   if (same(theirs, base)) return [ours, false];
   if (ours === null || base === null || theirs === null || [ours, base, theirs].some((b) => b.includes(0))) return [null, true];
-  const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "latex-review-merge-"));
+  const folder = await fs.promises.mkdtemp(path.join(os.tmpdir(), "papilot-merge-"));
   try {
     const files = ["ours", "base", "theirs"].map((name) => path.join(folder, name));
     await Promise.all([ours, base, theirs].map((data, i) => fs.promises.writeFile(files[i], data)));

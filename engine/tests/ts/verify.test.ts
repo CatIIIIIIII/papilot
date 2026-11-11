@@ -217,7 +217,7 @@ describe("The checker", () => {
     expect(seen.length).toBeGreaterThan(requests);
   });
   it("discards cached verdicts written before entry types were part of the key", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-cache-version-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "papilot-cache-version-"));
     try {
       const file = path.join(dir, "references.json"), input = entry(knuth);
       fs.writeFileSync(file, JSON.stringify({ version: 1, checks: {
@@ -227,7 +227,7 @@ describe("The checker", () => {
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
   it("checks in the background, keeps results in a file and redoes unverified entries on request", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-verify-")),
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "papilot-verify-")),
       file = path.join(dir, "references.json"),
       { fetcher, seen } = server([[/doi\.org/, { body: KNUTH_CSL }], [/crossref/, { body: { message: { items: [] } } }], [/dblp/, { body: { result: { hits: {} } } }], [/arxiv/, { body: EMPTY_ATOM }]]),
       inputs = [entry({ ...knuth, doi: "10.1002/spe.4380111102" }, "a"), entry({ title: "Unknown work" }, "b")];
@@ -268,8 +268,8 @@ describe("The checker", () => {
 
 describe("Confirmations", () => {
   it("hold for an entry's looked-up fields, wherever the entry is, until they change or are taken back", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-confirm-")),
-      file = path.join(dir, "latex-review", "references-confirmed.json");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "papilot-confirm-")),
+      file = path.join(dir, "papilot", "references-confirmed.json");
     try {
       const book = entry({ author: "Donald E. Knuth", title: "The TeXbook", year: "1984" }, "refs.bib#knuth");
       new Confirmations(file).set(book, true, 5000);

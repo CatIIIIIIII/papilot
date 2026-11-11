@@ -5,8 +5,9 @@ import Fastify from "fastify";
 import staticFiles from "@fastify/static";
 import compress from "@fastify/compress";
 import { WEB, codeVersion, environmentVersion } from "./runtime.ts";
-import { Repo } from "./core/git.ts";
-import { CONFIG_NAME, loadProject, type Project } from "./core/config.ts";
+import { Repo, stateDir } from "./core/git.ts";
+import { serverHome } from "./client.ts";
+import { loadProject, settingsFile, type Project } from "./core/config.ts";
 import { Store } from "./core/store.ts";
 import { Tasks } from "./core/tasks.ts";
 import { Review } from "./core/review.ts";
@@ -45,7 +46,7 @@ export class App {
   constructor(root: string) {
     this.root = realPath(root);
     this.repo = new Repo(this.root);
-    this.state = path.join(this.repo.gitDir(), "latex-review");
+    this.state = stateDir(this.repo.gitDir());
     this.store = new Store(path.join(this.state, "state.sqlite3"));
     this.tasks = new Tasks(this);
     this.review = new Review(this);
@@ -82,7 +83,7 @@ export class App {
     return result;
   }
   get project() {
-    const config = path.join(this.root, CONFIG_NAME),
+    const config = settingsFile(this.root),
       stamp = fs.existsSync(config) ? fs.statSync(config).mtimeMs : 0;
     if (!this.cachedProject || this.stamp !== stamp) {
       this.cachedProject = loadProject(this.root);
@@ -586,7 +587,7 @@ async function run(root: string, port: number, idle: number, owner?: Owner) {
   // closing open requests, rather than write its review state beside it;
   // Papilot's next request connects to that engine.
   let lost = false, stop = () => {};
-  const home = path.join(new Repo(root).gitDir(), "latex-review/server"),
+  const home = serverHome(root),
     release = await acquireLock(path.join(home, "server.lock"), false, { onLost: () => { lost = true; stop(); } }),
     app = new App(root),
     server = createServer(app);

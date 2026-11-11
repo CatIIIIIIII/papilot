@@ -1473,7 +1473,7 @@ test('the review page shows each TeX pass of a round\'s new version in the full 
     fs.mkdirSync(root);
     const git = (...args: string[]) => execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@localhost', ...args], { encoding: 'utf8' }).trim();
     git('init', '-q');
-    fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+    fs.mkdirSync(path.join(root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
     fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\n\\begin{document}\n\\tableofcontents\n\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n\\end{document}\n');
     git('add', '-A'); git('commit', '-qm', 'Paper');
     revision = git('rev-parse', 'HEAD');
@@ -1512,10 +1512,10 @@ test('retained task PDF previews reuse compiled chapter PDFs without forcing a f
   try {
     fs.mkdirSync(root);
     execFileSync('git', ['-C', root, 'init', '-q']);
-    fs.writeFileSync(path.join(root, '.latex-review.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
+    fs.mkdirSync(path.join(root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/papilot/settings.json'), JSON.stringify({ main: 'main.tex', engine: 'pdflatex' }));
     fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\\begin{document}\\undefinedmacro\\end{document}\n');
     const buildKey = '0123456789abcdef0123456789abcdef';
-    const cacheDir = path.join(root, '.git/latex-review/cache/builds', buildKey);
+    const cacheDir = path.join(root, '.git/papilot/cache/builds', buildKey);
     const chaptersPdfPath = path.join(cacheDir, 'chapters.pdf');
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(chaptersPdfPath, '%PDF-1.4\nchapters\n');

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DATA, ENGINE } from './paths.ts';
+import { stateDir } from './state.ts';
 import type { BibliographyReport, ReferenceCheck } from '../shared.ts';
 
 // The paper's bibliography as it is on disk: every entry, where it is cited,
@@ -48,7 +49,7 @@ export async function confirmations(root: string) {
     found.catch(() => gitDirs.delete(root));
     gitDirs.set(root, dir = found);
   }
-  return new Confirmations(path.join(await dir, 'latex-review', 'references-confirmed.json'));
+  return new Confirmations(path.join(await stateDir(await dir), 'references-confirmed.json'));
 }
 
 // A file of the paper, read only from inside its folder.

@@ -305,7 +305,7 @@ it("inserts the round of an undo that a restart interrupted before the insert", 
   await app.publisher.join();
   // As if the server stopped after the undo, before its round.
   app.store.execute("DELETE FROM rounds WHERE task=? AND number=3", later.name);
-  app.repo.run(["update-ref", "-d", `refs/latex-review/${later.name}/round-3`]);
+  app.repo.run(["update-ref", "-d", `refs/papilot/${later.name}/round-3`]);
   await app.close(); f.apps.splice(f.apps.indexOf(app), 1);
   const restarted = f.app();
   vi.spyOn(restarted.publisher, "publish").mockImplementation(async (job) => {
@@ -362,7 +362,7 @@ it("reattaches matching scopes and requires explicit force before discarding", a
   await app.tasks.finish(task.name, true);
   expect(app.tasks.list()).toEqual([]);
   expect(fs.existsSync(task.worktree)).toBe(false);
-  expect(app.repo.text(["for-each-ref", "refs/latex-review/polish/"])).toBe("");
+  expect(app.repo.text(["for-each-ref", "refs/papilot/polish/"])).toBe("");
 });
 it("recreating a finished task clears its old write journal", async () => {
   two();

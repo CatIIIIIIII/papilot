@@ -15,7 +15,6 @@ import type { Manuscripts } from './manuscript.ts';
 const execute = promisify(execFile);
 // These limits apply to uploads, not folders already on this computer.
 const MAX_BYTES = 64 * 1024 * 1024, MAX_FILES = 5000;
-const CONFIG = '.latex-review.json';
 const skip = (name: string) => ['.git', '__macosx', '.ds_store', 'node_modules', '.papilot'].includes(name.toLowerCase()) || name.startsWith('._');
 const git = async (root: string, ...args: string[]) => (await execute('git', ['-C', root, ...args], { timeout: 30000, maxBuffer: 8 * 1024 * 1024 })).stdout.trim();
 function safeName(name: unknown): string {
@@ -26,13 +25,18 @@ function bytes(value: unknown) {
   if (typeof value !== 'string' || value.length > Math.ceil(MAX_BYTES / 3) * 4 || value.length % 4 || /[^A-Za-z0-9+/=]/.test(value) || /=/.test(value.slice(0, -2)) || /=[^=]$/.test(value)) throw new Error('Invalid upload data.');
   return Buffer.from(value, 'base64');
 }
-function config(root: string): Record<string, unknown> {
-  const file = path.join(root, CONFIG);
-  if (!fs.existsSync(file)) return {};
-  if (fs.lstatSync(file).isSymbolicLink()) throw new Error('The paper configuration must not be a symbolic link.');
-  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('The paper configuration must contain a JSON object.');
-  return data;
+type Config = typeof import('../../engine/src/core/config.ts');
+type LegacyState = typeof import('../../engine/src/core/legacy-state.ts');
+const configModule = (): Promise<Config> => import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href);
+// The settings Papilot saved for a paper in its Git directory. A folder that
+// is not its own repository yet has only those an earlier version kept in
+// the folder itself.
+async function config(root: string): Promise<Record<string, unknown>> {
+  let top: string | undefined;
+  try { top = await git(root, 'rev-parse', '--show-toplevel'); } catch { /* Not a repository yet. */ }
+  if (top && realPath(top) === realPath(root)) return (await configModule()).readSettings(root);
+  const { legacySettings } = await import(pathToFileURL(path.join(ENGINE, 'src/core/legacy-state.ts')).href) as LegacyState;
+  return legacySettings(root) ?? {};
 }
 export function texFiles(root: string) {
   const files: string[] = [], folders = [''];
@@ -68,14 +72,13 @@ function sourceHead(file: string) {
 }
 export async function inspectPaper(root: string) {
   let settings: Record<string, unknown> = {}, error: string | undefined;
-  try { settings = config(root); } catch (failure) { error = (failure as Error).message; }
+  try { settings = await config(root); } catch (failure) { error = (failure as Error).message; }
   let main = existingTex(root, settings.main) ? settings.main : '', engine = '';
   // Most papers already declare their main file or keep it near the root.
   // Do not enumerate caches, assets and supporting papers just to open them.
   if (!main) {
     try {
-      const module = await import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href);
-      const detected = module.detectMain(root);
+      const detected = (await configModule()).detectMain(root);
       if (existingTex(root, detected)) main = detected;
     } catch { /* Unusual layouts fall back to a deeper search. */ }
   }
@@ -102,11 +105,12 @@ function engineFor(root: string, main: string, settings: Record<string, unknown>
 }
 // Keep the author's settings, including a source folder that still contains
 // the main file; without one, the whole folder compiles.
-function rememberMain(root: string, main: string, engine: string) {
-  const settings = config(root), folder = typeof settings.source_dir === 'string' ? settings.source_dir.replace(/\/+$/, '') : null;
+async function rememberMain(root: string, main: string, engine: string) {
+  const { readSettings, writeSettings } = await configModule();
+  const settings = readSettings(root), folder = typeof settings.source_dir === 'string' ? settings.source_dir.replace(/\/+$/, '') : null;
   const contains = folder === '' || (folder !== null && main.startsWith(folder + '/'));
   const next = { ...settings, main, engine, ...(contains ? {} : { source_dir: '' }) };
-  if (JSON.stringify(next) !== JSON.stringify(settings)) fs.writeFileSync(path.join(root, CONFIG), JSON.stringify(next, null, 2) + '\n');
+  if (JSON.stringify(next) !== JSON.stringify(settings)) writeSettings(root, next);
 }
 async function repositoryRoot(root: string) {
   let top: string | undefined;
@@ -142,7 +146,8 @@ export async function openFolder(input: { path?: unknown; main?: unknown }, know
   }
   const main = input.main ?? detected.main;
   if (!existingTex(root, main)) throw new Error('Choose an existing TeX main file.');
-  rememberMain(root, main, engineFor(root, main, config(root)));
+  await prepareRepository(root);
+  await rememberMain(root, main, engineFor(root, main, (await configModule()).readSettings(root)));
   return { project: await register(root, path.basename(root)) };
 }
 export async function extractZip(buffer: Buffer, root: string) {
@@ -244,8 +249,8 @@ export class PaperImports {
     void (async () => {
       try {
         await repositoryRoot(value.path);
-        if (!repair) rememberMain(value.path, main as string, engine as string);
         await prepareRepository(value.path); value.versioned = true;
+        if (!repair) await rememberMain(value.path, main as string, engine as string);
         if (repair) { value.summary = await repair(value.path, previousError); Object.assign(value, await inspectPaper(value.path)); }
         value.phase = 'building'; this.save(value);
         // A retry starts a new build without forcing a clean one, so the

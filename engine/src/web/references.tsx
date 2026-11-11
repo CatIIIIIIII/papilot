@@ -17,7 +17,7 @@ import { language, t, tn } from "./i18n.ts";
 
 /** The host can turn online checks off; a page that cannot read the
  * setting checks online. */
-export const REFERENCE_STORAGE = "latex-review:references";
+export const REFERENCE_STORAGE = "papilot:review:references";
 export function onlineChecks() {
   try {
     return localStorage.getItem(REFERENCE_STORAGE) !== "off";

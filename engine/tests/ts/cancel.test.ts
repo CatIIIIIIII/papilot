@@ -28,12 +28,12 @@ const started = () => fs.readdirSync(gates).filter((name) => name.startsWith("pi
 const pidOf = (key: string, kind = "pid") => Number(fs.readFileSync(path.join(gates, `${kind}-${key}`), "utf8"));
 const go = (key: string) => fs.writeFileSync(path.join(gates, `go-${key}`), "");
 const runs = () => (fs.existsSync(path.join(gates, "runs")) ? fs.readFileSync(path.join(gates, "runs"), "utf8").trim().split("\n").filter(Boolean).length : 0);
-const cache = () => path.join(f.root, ".git/latex-review/cache/builds");
+const cache = () => path.join(f.root, ".git/papilot/cache/builds");
 // Nothing of a cancelled build remains to be continued from or shown. The
 // request is cancelled at once; its folder goes once the compiler has ended.
 async function leftNothing(key: string) {
   await until(() => !fs.existsSync(path.join(cache(), key)));
-  expect(fs.existsSync(path.join(f.root, ".git/latex-review/logs", key + ".log"))).toBe(false);
+  expect(fs.existsSync(path.join(f.root, ".git/papilot/logs", key + ".log"))).toBe(false);
   for (const name of fs.existsSync(cache()) ? fs.readdirSync(cache()) : [])
     if (/^(?:latest|recent)/.test(name)) expect(fs.readFileSync(path.join(cache(), name), "utf8")).not.toContain(key);
 }

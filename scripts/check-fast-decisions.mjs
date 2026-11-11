@@ -219,7 +219,7 @@ try {
   await again.goto(`${origin}/?task=flow`);
   await expect.poll(() => [decisions.c1, decisions.c2, decisions.c3].join()).toBe('accepted,accepted,accepted');
   assert.equal(actions.length, 3, 'Each decision applied once');
-  await expect.poll(() => again.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('latex-review:queue:')).length)).toBe(0);
+  await expect.poll(() => again.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('papilot:review:queue:')).length)).toBe(0);
   await profile.close();
   console.log('PASS: decisions a page left unconfirmed are sent by the next page, once each');
 

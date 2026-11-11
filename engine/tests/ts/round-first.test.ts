@@ -99,12 +99,12 @@ it.skipIf(!tex)("recovers an inserted pending round and restores its missing Git
     app.publisher.stop();
     await app.exclusive(() => app.publisher.insertNow(job));
     expect(app.review.latestRound(task.name)?.visuals).toBe("pending");
-    app.repo.run(["update-ref", "-d", `refs/latex-review/${task.name}/round-1`]);
+    app.repo.run(["update-ref", "-d", `refs/papilot/${task.name}/round-1`]);
     await app.close(); f.apps.splice(f.apps.indexOf(app), 1);
     const restarted = f.app(); await restarted.ready; await restarted.publisher.join();
     const round = restarted.review.latestRound(task.name)!;
     expect(round.visuals).toBe("ready");
-    expect(restarted.repo.rev(`refs/latex-review/${task.name}/round-1`)).toBe(round.after);
+    expect(restarted.repo.rev(`refs/papilot/${task.name}/round-1`)).toBe(round.after);
     expect(restarted.publisher.job(job.id).status).toBe("done");
   } finally { await f.close(); }
 }, 120000);

@@ -16,8 +16,8 @@ papilot
 and then opened at \texttt{http://127.0.0.1:7274}. \emph{Add paper} registers a
 \LaTeX{} Git repository on the host; later papers are added and switched from
 the paper menu at the top of the sidebar. A repository must have at least one
-commit and compile with \texttt{latexmk}; a custom root document is named in a
-\texttt{.latex-review.json} file. To try a sample first, \texttt{papilot demo}
+commit and compile with \texttt{latexmk}; when several files could be the root
+document, Papilot asks which one to compile. To try a sample first, \texttt{papilot demo}
 copies this paper into a separate repository and registers it as
 \emph{Papilot paper}, without touching any existing manuscript.
 

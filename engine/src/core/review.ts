@@ -5,7 +5,7 @@ import { applyUnits, revertUnits, withHashesAsync } from "./changes.ts";
 import { comparable, fingerprint, origin, rendered } from "./carry.ts";
 import { groupFormattingChanges } from "./formatting-changes.ts";
 import { now, readBytes, readJson, same, writeOrDelete } from "./files.ts";
-import { cleanPath, merge3Async } from "./git.ts";
+import { REFS, cleanPath, merge3Async } from "./git.ts";
 import type { App } from "../server.ts";
 import type {
   Action,
@@ -665,7 +665,7 @@ export class Review {
     const afterCommit = await app.repo.commitWithAsync(
       task.accepted,
       accepted,
-      "latex-review: accept " + units.map((u) => u.id).join(", "),
+      "Papilot: accept " + units.map((u) => u.id).join(", "),
     );
     this.record(
       identity,
@@ -893,7 +893,7 @@ export class Review {
     });
     if (action.kind === "accept") {
       await app.repo.updateRefAsync(
-        `refs/latex-review/${action.task}/accepted`,
+        `${REFS}${action.task}/accepted`,
         accepted!,
       );
       // The paper as decided compiles at once, replacing the compilation

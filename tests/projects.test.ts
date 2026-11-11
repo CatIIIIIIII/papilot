@@ -75,7 +75,7 @@ test('Windows repository aliases reuse existing papers before inspecting their c
   try {
     const alias = f.root[0].toLowerCase() + f.root.slice(1), previous = f.store.project('paper');
     f.store.saveProject({ ...previous, path: alias });
-    fs.writeFileSync(path.join(f.root, '.latex-review.json'), 'invalid configuration must remain untouched');
+    fs.mkdirSync(path.join(f.root, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(f.root, '.git/papilot/settings.json'), 'invalid configuration must remain untouched');
     const existing = await f.workspace.addProject(f.root.toUpperCase());
     assert.equal(existing.id, 'paper'); assert.equal(f.store.projects().length, 2);
     const opened = await openFolder({ path: f.root }, root => f.workspace.projectByPath(root), () => { throw new Error('A known paper must not be imported again'); });
@@ -84,7 +84,7 @@ test('Windows repository aliases reuse existing papers before inspecting their c
     await assert.rejects(f.workspace.changeProjectPath('other', f.root.toUpperCase()), /already added/);
     fs.mkdirSync(path.join(f.root, 'nested'));
     await assert.rejects(f.workspace.changeProjectPath('paper', path.join(alias, 'nested')), /root directory/);
-    assert.equal(fs.readFileSync(path.join(f.root, '.latex-review.json'), 'utf8'), 'invalid configuration must remain untouched');
+    assert.equal(fs.readFileSync(path.join(f.root, '.git/papilot/settings.json'), 'utf8'), 'invalid configuration must remain untouched');
   } finally { f.close(); }
 });
 

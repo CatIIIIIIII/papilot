@@ -51,8 +51,7 @@
     "engine/src",
     "engine/dist",
     "engine/package.json",
-    "engine/package-lock.json",
-    "engine/LICENSE"
+    "engine/package-lock.json"
   ],
   "engines": {
     "node": ">=22.22.0"

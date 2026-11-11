@@ -3,9 +3,9 @@
 // whole paper was chosen in Papilot's settings. Switching views lasts for the
 // open review only. A host such as Papilot shows its own switch and tells this
 // frame; storage events bring a new default to reviews already open.
-export const VIEW_STORAGE = "latex-review:default-view";
-export const VIEW_EVENT = "latex-review:view-changed";
-export const VIEW_CHOSEN_EVENT = "latex-review:view-chosen";
+export const VIEW_STORAGE = "papilot:review:default-view";
+export const VIEW_EVENT = "papilot:review:view-changed";
+export const VIEW_CHOSEN_EVENT = "papilot:review:view-chosen";
 export type ReviewView = "paper" | "changes";
 export function readView(): ReviewView {
   try {

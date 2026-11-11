@@ -82,7 +82,7 @@ it.skipIf(!posix)("compiles the accepted text at once after each accept, and a n
   await app.applied.join();
   const state = await app.applied.state(task.name);
   expect(state).toMatchObject({ accepted: app.tasks.get(task.name).accepted, building: false, shown: { key: second.key, current: true } });
-  expect(fs.existsSync(path.join(f.root, ".git/latex-review/cache/builds", first.key))).toBe(false);
+  expect(fs.existsSync(path.join(f.root, ".git/papilot/cache/builds", first.key))).toBe(false);
 }, 30000);
 
 it.skipIf(!posix)("shows the latest compiled decisions while newer ones compile, and an undo reuses the earlier build", async () => {

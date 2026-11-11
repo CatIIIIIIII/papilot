@@ -724,16 +724,6 @@
     "textHash": "b5f587d21fdeb4767669f8cf64df5f707be594b815e4d371d67e1cdd7ab3e7ad",
     "model": "gemini-4-argon-medium"
   },
-  "The paper configuration must contain a JSON object.": {
-    "revision": "a62110c9ea9cb48919a9686146a7be4a7d7172bd8b2efe47bd0cd6377e913fe2",
-    "textHash": "93a24dc59b86a9508588b60e6c0d74a35e1609e541e38dd447949a5d2011d2a5",
-    "model": "gemini-4-argon-medium"
-  },
-  "The paper configuration must not be a symbolic link.": {
-    "revision": "b0b246a0359553dc3b24dcc99af49289b21afcbc4cfa86dd1dc1309555135768",
-    "textHash": "63e3e9793e86b4534a8235817bb01af282e62bdc8daa91fa9008f712c5ee56f7",
-    "model": "gemini-4-argon-medium"
-  },
   "The review action is still being checked. Wait for it to finish.": {
     "revision": "d6b31a6e1645f1be8b717fcc49f05604019ca0a357066caa301457b13c733a36",
     "textHash": "1543b43d6100f0be2a7c887e8b9d64803d384a35d8e575fc09c87f4e7230da18",

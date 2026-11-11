@@ -276,8 +276,8 @@ export function ReviewNotes({ doc, task, onComment, railSlot }: { railSlot: HTML
       store.add(reviewCommentMark(base, detail, Array.from(change.querySelectorAll('.after .pdf-text')).map(el => el.textContent).join(' ').trim()));
       onComment();
     };
-    view.addEventListener('latex-review:comment', comment);
-    return () => view.removeEventListener('latex-review:comment', comment);
+    view.addEventListener('papilot:review:comment', comment);
+    return () => view.removeEventListener('papilot:review:comment', comment);
   }, [doc, layers, store, onComment]);
   const jumped = useRef<unknown>(null);
   useEffect(() => {

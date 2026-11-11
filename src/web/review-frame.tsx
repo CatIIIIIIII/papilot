@@ -434,8 +434,8 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
     const view = document?.defaultView;
     if (!view) return;
     const open = (event: Event) => { event.preventDefault(); window.dispatchEvent(new Event('papilot:open-shortcuts')); };
-    view.addEventListener('latex-review:help', open);
-    return () => view.removeEventListener('latex-review:help', open);
+    view.addEventListener('papilot:review:help', open);
+    return () => view.removeEventListener('papilot:review:help', open);
   }, [document]);
   const taskBuilding = Boolean(task && (task.status === 'building' || task.pendingBuild || task.review?.state === 'building'));
   useEffect(() => {
@@ -513,7 +513,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
       if (!doc || (!doc.getElementById('root') && !doc.getElementById('paper'))) { setPhase('error'); return; }
       compactReviewFrame(doc, reserve, leadWidth, Boolean(changesOf));
       setDocument(doc);
-      frame.current?.contentWindow?.addEventListener('latex-review:decided', () => { decided.current?.(); linksRef.current?.reload(); });
+      frame.current?.contentWindow?.addEventListener('papilot:review:decided', () => { decided.current?.(); linksRef.current?.reload(); });
       // The viewer scrolls only its paper. Revealing or focusing something can
       // scroll its document or #root too, overflow hidden or not, which slides
       // the viewer's bar out from under our tools and the paper in; put them back.

@@ -180,8 +180,6 @@
   "The option save could not be confirmed. Check task status before retrying.": "Das Speichern der Option konnte nicht bestätigt werden. Prüfen Sie den Aufgabenstatus, bevor Sie es erneut versuchen.",
   "The option source is missing or ambiguous.": "Die Quelle der Option fehlt oder ist nicht eindeutig.",
   "The option targets an unrelated source file.": "Die Option betrifft eine nicht zugehörige Quelldatei.",
-  "The paper configuration must contain a JSON object.": "Die Artikelkonfiguration muss ein JSON-Objekt enthalten.",
-  "The paper configuration must not be a symbolic link.": "Die Artikelkonfiguration darf kein symbolischer Link sein.",
   "The review action could not be confirmed. Check task status before retrying.": "Die Überprüfungsaktion konnte nicht bestätigt werden. Prüfen Sie den Aufgabenstatus, bevor Sie es erneut versuchen.",
   "The review action is still being checked. Wait for it to finish.": "Die Überprüfungsaktion wird noch geprüft. Warten Sie, bis der Vorgang abgeschlossen ist.",
   "The review changed. Reload the options.": "Die Überprüfung hat sich geändert. Laden Sie die Optionen neu.",

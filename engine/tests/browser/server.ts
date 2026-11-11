@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { App, createServer } from "../../src/server.ts";
 import { prepareDemo, applyDemo } from "../../examples/demo.ts";
-const base = fs.mkdtempSync(path.join(os.tmpdir(), "latex-review-browser-")),
+const base = fs.mkdtempSync(path.join(os.tmpdir(), "papilot-browser-")),
   { root, plan } = prepareDemo(base),
   app = new App(root),
   server = createServer(app);

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { Repo, cleanPath } from "./git.ts";
+import { REFS, Repo, cleanPath } from "./git.ts";
 import { now } from "./files.ts";
 import { buildOutline, resolveSections, selectedRanges } from "./outline.ts";
 import type { Task, Scope } from "../types.ts";
@@ -156,7 +156,7 @@ export class Tasks {
         "The repository needs at least one commit before a review can start.",
       );
     if (
-      app.repo.text(["for-each-ref", "--count=1", `refs/latex-review/${name}/`])
+      app.repo.text(["for-each-ref", "--count=1", `${REFS}${name}/`])
     )
       throw new Error(
         `Task name ${JSON.stringify(name)} is still used by another working tree.`,
@@ -187,7 +187,7 @@ export class Tasks {
   private record({ name, title, worktree }: { name: string; title: string; worktree: string }, base: string, scope: Scope, deferred: boolean) {
     const { app } = this;
     try {
-      app.repo.updateRef(`refs/latex-review/${name}/base`, base);
+      app.repo.updateRef(`${REFS}${name}/base`, base);
       app.store.transaction(() => {
         app.store.execute(
           "DELETE FROM writes WHERE action IN (SELECT id FROM actions WHERE task=?)",
@@ -212,7 +212,7 @@ export class Tasks {
       app.repo.run(["worktree", "remove", "--force", worktree], {
         check: false,
       });
-      app.repo.deleteRefs(`refs/latex-review/${name}/`);
+      app.repo.deleteRefs(`${REFS}${name}/`);
       throw error;
     }
     return this.get(name);
@@ -271,7 +271,7 @@ export class Tasks {
     if (fs.existsSync(task.worktree))
       await app.repo.runAsync(["worktree", "remove", "--force", task.worktree]);
     await app.repo.runAsync(["worktree", "prune"], { check: false });
-    await app.repo.deleteRefsAsync(`refs/latex-review/${name}/`);
+    await app.repo.deleteRefsAsync(`${REFS}${name}/`);
     await fs.promises.rm(path.join(app.state, "rounds", name), {
       recursive: true,
       force: true,

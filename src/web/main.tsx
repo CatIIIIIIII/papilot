@@ -1,3 +1,4 @@
+import '../../engine/src/web/legacy-storage.ts';
 import { TaskDocument } from './task-document.tsx';
 import { requestApi, requestState } from './api.ts';
 import { agentsSettled, chosenAgent, noAgent, offeredAgents } from './agent-choice.ts';

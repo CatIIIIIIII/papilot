@@ -234,7 +234,7 @@ export function ReviewApp({
   // Uncommitted changes have no action journal to make a retry safe.
   // Unconfirmed decisions are kept in the browser, so that a reload, a closed
   // tab or a locked phone sends them later rather than losing them.
-  const queueKey = changes ? null : `latex-review:queue:${location.pathname}:${task}`;
+  const queueKey = changes ? null : `papilot:review:queue:${location.pathname}:${task}`;
   queue.current ??= new DecisionQueue<Queued, PageState>({
     send: entry => settle.current!.send(entry),
     confirmed: (entry, next, remaining) => settle.current!.confirmed(entry, next, remaining),
@@ -273,7 +273,7 @@ export function ReviewApp({
     return () => { document.removeEventListener("visibilitychange", listener); window.removeEventListener("pagehide", listener); };
   }, []);
   // Where each review was left; a host's uncommitted changes are kept per paper.
-  const placeKey = `latex-review:${location.pathname}:${changes ? 'changes' : task}`;
+  const placeKey = `papilot:review:${location.pathname}:${changes ? 'changes' : task}`;
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   // The whole paper with the changes in place, or the changed sections only.
   // A host may fix the view in the address (Papilot's manuscript chooses its
@@ -329,7 +329,7 @@ export function ReviewApp({
   const focused = noteFocus?.round === detail?.round ? noteFocus?.units ?? undefined : undefined;
   const inFocus = (id: string) => !focused || focused.includes(id);
   function showHelp() {
-    if (window.dispatchEvent(new Event('latex-review:help', { cancelable: true }))) setHelp(true);
+    if (window.dispatchEvent(new Event('papilot:review:help', { cancelable: true }))) setHelp(true);
   }
   snapshot.current = { state, detail: publishedDetail, busy, composer, current, open: openSource };
   const units = useMemo(
@@ -749,12 +749,12 @@ export function ReviewApp({
     )
       return;
     const scoped = focused !== undefined || changes.length !== stops[current]?.units.length;
-    const event = new CustomEvent('latex-review:comment', { cancelable: true, detail: {
+    const event = new CustomEvent('papilot:review:comment', { cancelable: true, detail: {
       round: detail?.round, stop: current, changes,
       ...(scoped ? { scope: commentScope(changes.map(id => units.get(id)!).filter(Boolean)) } : {}),
     } });
     if (!window.dispatchEvent(event)) return;
-    const key = `latex-review:${task}:draft:${detail?.round}:${changes.join(",")}`;
+    const key = `papilot:review:${task}:draft:${detail?.round}:${changes.join(",")}`;
     setDraft(readStorage(key, ""));
     setComposer({ changes, stop: current, key });
   }
@@ -822,7 +822,7 @@ export function ReviewApp({
       setState(next);
       setQueued(remaining);
       // The host refreshes what depends on the decision, such as Git status.
-      window.dispatchEvent(new CustomEvent("latex-review:decided"));
+      window.dispatchEvent(new CustomEvent("papilot:review:decided"));
       if (entry.draft) store(entry.draft, "");
       if (!remaining.length) {
         if (entry.done) setToast(entry.done);
@@ -874,7 +874,7 @@ export function ReviewApp({
         id: last.id,
       });
       setState(next);
-      window.dispatchEvent(new CustomEvent("latex-review:decided"));
+      window.dispatchEvent(new CustomEvent("papilot:review:decided"));
       // An undo of an earlier round's accept inserted the next round.
       if (next.latest !== snapshot.current.detail?.round) pollNow.current();
       const target = stops.findIndex((s) =>

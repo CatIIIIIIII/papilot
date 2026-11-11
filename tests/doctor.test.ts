@@ -336,7 +336,7 @@ test('doctor checks real repository configuration without changing files or maki
     const git = (...args: string[]) => execFileSync(realGit, ['-C', repo, ...args], { encoding: 'utf8' });
     git('init', '-q');
     fs.writeFileSync(path.join(repo, 'main.tex'), '\\documentclass{article}\n\\begin{document}Hello\\end{document}\n');
-    fs.writeFileSync(path.join(repo, '.latex-review.json'), '{"main":"main.tex","engine":"xelatex"}');
+    fs.mkdirSync(path.join(repo, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(repo, '.git/papilot/settings.json'), '{"main":"main.tex","engine":"xelatex"}');
     const noCommit = await f.run(['--json', '--repo', repo]);
     assert.equal(item(noCommit.report, 'project.head').ok, false);
     git('add', '.'); git('-c', 'user.name=Test', '-c', 'user.email=test@example.org', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Initial paper');
@@ -346,9 +346,9 @@ test('doctor checks real repository configuration without changing files or maki
     assert.match(item(result.report, 'project.main').detail, /main.tex \(xelatex\)/);
     assert.equal(item(result.report, 'project.engine').ok, true);
     assert.equal(git('status', '--porcelain'), before);
-    assert.equal(fs.existsSync(path.join(repo, '.git/latex-review')), false);
+    assert.deepEqual(fs.readdirSync(path.join(repo, '.git/papilot')), ['settings.json']);
     assert.equal(fs.existsSync(repo + '-tasks'), false);
-    fs.writeFileSync(path.join(repo, '.latex-review.json'), '{"main":"missing.tex"}');
+    fs.mkdirSync(path.join(repo, '.git/papilot'), { recursive: true }); fs.writeFileSync(path.join(repo, '.git/papilot/settings.json'), '{"main":"missing.tex"}');
     const invalid = await f.run(['--json', '--repo', repo]);
     assert.equal(invalid.code, 1); assert.equal(item(invalid.report, 'project.main').ok, false);
     assert.match(item(invalid.report, 'project.main').detail, /Root document not found/);

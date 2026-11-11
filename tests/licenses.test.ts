@@ -12,11 +12,11 @@ test('the About page uses the release metadata and the unabridged project licens
   assert.equal(info.licenseText, fs.readFileSync('LICENSE', 'utf8').trim());
 });
 
-test('notices cover runtime and browser dependencies, nested notices, the review engine and bundled fonts', () => {
+test('notices cover runtime and browser dependencies, nested notices and bundled fonts', () => {
   const notices = collectLicenses();
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
   const names = new Set(notices.map(item => item.name));
-  for (const name of [...Object.keys(pkg.dependencies), ...browserPackages, 'latex-review', 'TeX Gyre Pagella X / newpx', 'Inconsolata zi4', 'scheduler', 'hast-util-to-jsx-runtime']) assert.ok(names.has(name), name);
+  for (const name of [...Object.keys(pkg.dependencies), ...browserPackages, 'TeX Gyre Pagella X / newpx', 'Inconsolata zi4', 'scheduler', 'hast-util-to-jsx-runtime']) assert.ok(names.has(name), name);
   assert.equal(new Set(notices.map(item => `${item.name}@${item.version}`)).size, notices.length);
   assert.ok(!names.has('typescript'), 'build-only tools are outside the runtime notices');
   const mupdf = notices.find(item => item.name === 'mupdf')!;
