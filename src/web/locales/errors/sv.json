@@ -201,6 +201,7 @@
   "The server restarted before a review action was confirmed. Select Check status before continuing.": "Servern startades om innan en granskningsåtgärd bekräftades. Välj Kontrollera status innan du fortsätter.",
   "The server restarted during deletion. Retry deletion to confirm cleanup.": "Servern startades om under borttagningen. Försök ta bort igen för att bekräfta rensningen.",
   "The server restarted during the PDF build. Check the review and rebuild it if needed.": "Servern startades om under PDF-bygget. Kontrollera granskningen och bygg om den vid behov.",
+  "The source edit could not be confirmed. Check task status before retrying.": "Källredigeringen kunde inte bekräftas. Kontrollera uppgiftens status innan du försöker igen.",
   "The task was paused before these instructions were queued. Your draft has been kept.": "Uppgiften pausades innan dessa instruktioner lades i kö. Ditt utkast har sparats.",
   "The update download timed out.": "Tidsgränsen för nedladdning av uppdateringen överskreds.",
   "The update restart helper did not start.": "Omstartsverktyget för uppdateringen startade inte.",

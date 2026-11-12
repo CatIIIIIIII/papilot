@@ -1006,6 +1006,7 @@
   "Task errors": "タスクのエラー",
   "Task finished": "タスクの完了",
   "Task list": "タスク一覧",
+  "Task panels": "タスクパネル",
   "Task saved. Waiting for an available {agent} session.": "タスクを保存しました。利用可能な {agent} セッションを待機しています。",
   "Tasks": "タスク",
   "The PDF could not be opened: {error}": "PDF を開けませんでした: {error}",

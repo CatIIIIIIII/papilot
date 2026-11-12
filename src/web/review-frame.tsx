@@ -21,7 +21,7 @@ import { ModeSwitch } from './mode-switch.tsx';
 import { PdfContents, PdfPageControls, PdfFind, PdfFindButton } from './pdf-controls.tsx';
 import { PDF_READER_COMMAND, PDF_READER_STATE, type PdfReaderCommand, type PdfReaderState } from '../../engine/src/web/pdf-reader.ts';
 import { VIEW_CHOSEN_EVENT } from '../../engine/src/web/view-preferences.ts';
-import { CURRENT_CHANGE_EVENT, SELECT_SOURCE_EVENT, type CurrentChange } from '../../engine/src/web/review-events.ts';
+import { CURRENT_CHANGE_EVENT, DECIDE_EVENT, OPEN_SOURCE_EVENT, REVIEW_CHANGES_EVENT, SELECT_SOURCE_EVENT, SOURCE_SAVED_EVENT, type CurrentChange, type DecideChange, type OpenSource, type ReviewChanges, type SourceSaved } from '../../engine/src/web/review-events.ts';
 
 // The viewer reads the interface language from its address.
 export const reviewUrl = (task: Pick<Task, 'projectId' | 'name'>, round?: number, change?: number) => `${isPlayground ? import.meta.env.BASE_URL + 'src/web/playground/review.html' : `/review/${task.projectId}/`}?task=${task.name}${round ? `&round=${round}${change === undefined ? '&history=1' : `&change=${change}`}` : ''}${language() === 'en' ? '' : `&lang=${language()}`}`;
@@ -350,9 +350,13 @@ function useDragHoles(host: RefObject<HTMLElement | null>, frame: RefObject<HTML
 // and the viewer's own waiting message shows while they are compared.
 // onCurrentChange follows the viewer's current change; sources asks the
 // viewer for the change at a line of a file.
-export interface ReviewSources { select: (file: string, line: number) => void }
-export function ReviewFrame({ task, changesOf, tools, lead, completion, onComment, onDecided, onReadyChange, onFullPaperChange, view: controlledView, onViewChange, keepPdf, onCurrentChange, sources }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onComment?: () => void; onDecided?: () => void; onReadyChange?: (ready: boolean, round?: number) => void; onFullPaperChange?: (available: boolean) => void; view?: ReviewView; onViewChange?: (value: ReviewView) => void; keepPdf?: boolean;
-  onCurrentChange?: (change: CurrentChange) => void; sources?: Ref<ReviewSources> }) {
+export interface ReviewSources { select: (file: string, line: number) => void; saved: (state: unknown, file: string, line: number) => void; decide: (round: number, changes: string[], action: string) => void }
+export function ReviewFrame({ task, changesOf, tools, lead, completion, onComment, onDecided, onReadyChange, onFullPaperChange, view: controlledView, onViewChange, keepPdf, onCurrentChange, sources, onOpenSource, onChanges }: { task?: Task; changesOf?: string; tools?: ReactNode; lead?: ReactNode; completion?: ReactNode; onComment?: () => void; onDecided?: () => void; onReadyChange?: (ready: boolean, round?: number) => void; onFullPaperChange?: (available: boolean) => void; view?: ReviewView; onViewChange?: (value: ReviewView) => void; keepPdf?: boolean;
+  onCurrentChange?: (change: CurrentChange) => void; sources?: Ref<ReviewSources>;
+  /** Opens a change's source in the workspace's editor; false leaves it to the viewer's own. */
+  onOpenSource?: (request: OpenSource) => boolean;
+  /** The changes the viewer reviews, and their decisions, whenever they change. */
+  onChanges?: (changes: ReviewChanges) => void }) {
   const draft = useReviewDraft(task?.id || '');
   const quoteFocus = draft.reveal;
   const shortcuts = useShortcuts();
@@ -413,14 +417,25 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   const [railSlot, setRailSlot] = useState<HTMLDivElement | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const following = useRef(onCurrentChange); following.current = onCurrentChange;
+  const opening = useRef(onOpenSource); opening.current = onOpenSource;
+  const changing = useRef(onChanges); changing.current = onChanges;
   useEffect(() => {
     const view = document?.defaultView;
     if (!view) return;
     const current = (event: Event) => following.current?.((event as CustomEvent<CurrentChange>).detail);
+    // Cancelling the viewer's request keeps it from editing the lines itself.
+    const open = (event: Event) => { if (opening.current?.((event as CustomEvent<OpenSource>).detail)) event.preventDefault(); };
+    const changed = (event: Event) => changing.current?.((event as CustomEvent<ReviewChanges>).detail);
     view.addEventListener(CURRENT_CHANGE_EVENT, current);
-    return () => view.removeEventListener(CURRENT_CHANGE_EVENT, current);
+    view.addEventListener(OPEN_SOURCE_EVENT, open);
+    view.addEventListener(REVIEW_CHANGES_EVENT, changed);
+    return () => { view.removeEventListener(CURRENT_CHANGE_EVENT, current); view.removeEventListener(OPEN_SOURCE_EVENT, open); view.removeEventListener(REVIEW_CHANGES_EVENT, changed); };
   }, [document]);
-  useImperativeHandle(sources, () => ({ select: (file, line) => document?.defaultView?.dispatchEvent(new CustomEvent(SELECT_SOURCE_EVENT, { detail: { file, line } })) }), [document]);
+  useImperativeHandle(sources, () => ({
+    select: (file, line) => document?.defaultView?.dispatchEvent(new CustomEvent(SELECT_SOURCE_EVENT, { detail: { file, line } })),
+    saved: (state, file, line) => document?.defaultView?.dispatchEvent(new CustomEvent<SourceSaved>(SOURCE_SAVED_EVENT, { detail: { state: state as SourceSaved['state'], file, line } })),
+    decide: (round, changes, action) => document?.defaultView?.dispatchEvent(new CustomEvent<DecideChange>(DECIDE_EVENT, { detail: { round, changes, action } })),
+  }), [document]);
   const toolbar = useRef<HTMLDivElement>(null), leading = useRef<HTMLDivElement>(null), hostBar = useRef<HTMLDivElement>(null);
   const [reserve, setReserve] = useState(0), [leadWidth, setLeadWidth] = useState(0);
   const decided = useRef(onDecided); decided.current = onDecided;

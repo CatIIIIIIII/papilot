@@ -709,4 +709,5 @@ export const zhCN: Record<string, string> = {
   'Show {n} other problem': '查看其他 {n} 个问题', 'Show {n} other problems': '查看其他 {n} 个问题',
   'This passage changed after the PDF was compiled. It is shown as it is now.': 'PDF 生成后这段又改过，这里显示的是当前版本。',
   'Load the current source': '载入当前源码',
+  'Task panels': '任务面板',
 };

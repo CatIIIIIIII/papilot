@@ -43,7 +43,8 @@ import { PaperDialog } from './paper-dialog.tsx';
 import { ImportDialog } from './import-dialog.tsx';
 import { CompileButton } from './compile-button.tsx';
 import { ProblemsButton, fixRequest, type ProblemsHandle } from './build-problems.tsx';
-import { useSourceEdit } from './source-panel.tsx';
+import { SourceTab, useSourceEdit } from './source-panel.tsx';
+import type { OpenSource, ReviewChanges } from '../../engine/src/web/review-events.ts';
 import { useTheme } from './theme.tsx';
 import { SettingsDialog, type SettingsInitialPage } from './settings.tsx';
 import { WorkspaceSwitcher } from './workspace-switcher.tsx';
@@ -319,7 +320,7 @@ function timelineEntries(items: TimelineItem[]) {
   return entries;
 }
 
-function Activity({ onRevealQuote, task, runtime, reconnecting, onReconnect, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, onTaskSaved, reportError, pause, pausing, openReview, feedback, connection, tools, lead, errorActions }: { errorActions?: React.ReactNode; tools?: React.ReactNode; lead?: React.ReactNode; onRevealQuote: () => void; task: Task; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; onTaskSaved: (task: Task) => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
+function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconnect, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, onTaskSaved, reportError, pause, pausing, openReview, feedback, connection, tools, lead, errorActions }: { source?: { tabs: React.ReactNode; panel: React.ReactNode; selected: boolean }; errorActions?: React.ReactNode; tools?: React.ReactNode; lead?: React.ReactNode; onRevealQuote: () => void; task: Task; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; onTaskSaved: (task: Task) => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
   const input = useRef<HTMLTextAreaElement>(null);
   const reviewNotes = reviewDraft(task.id), notes = useReviewDraft(task.id);
   const [savingModel, setSavingModel] = useState(false);
@@ -379,7 +380,9 @@ function Activity({ onRevealQuote, task, runtime, reconnecting, onReconnect, ski
     .map(entry => entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agent} root={root}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agent} root={root}/>), [items, review, agent, root]);
   const hint = task.status === 'deleting' ? t('This task is being deleted') : task.status === 'uncertain' ? t('Check task status before sending') : task.preparation ? t('Send more instructions once the task has started.') : sending ? t('Sending…')
     : emptyNotes ? canSend ? tn(emptyNotes, '{n} empty comment will stay in drafts', '{n} empty comments will stay in drafts') : t('Write a comment or message to send.') : active ? t('{agent} is working · new instructions run next', { agent: agentName(task) }) : '';
-  return <section id="conversation-panel" className="activity-panel" aria-label={t('{agent} conversation', { agent: agentName(task) })}><div className="panel-heading">{lead}{tools && <div className="panel-tools">{tools}</div>}</div>
+  // A source tab beside the chat hides the chat while it is selected; both stay as they were.
+  return <section id="conversation-panel" className="activity-panel" data-side={source?.selected ? 'source' : undefined} aria-label={t('{agent} conversation', { agent: agentName(task) })}><div className="panel-heading">{lead}{source?.tabs}{tools && <div className="panel-tools">{tools}</div>}</div>
+    {source && <div className="side-pane" hidden={!source.selected}>{source.panel}</div>}
     <div className="conversation-history"><div className="messages" ref={scroller} onScroll={() => { if (scroller.current && back.current === undefined) { const el = scroller.current; shouldFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; setFollowing(shouldFollow.current); savePlace(place, shouldFollow.current ? undefined : Math.round(el.scrollTop)); } }}><div className="thread">
       {loading && <p className="muted" role="status">{t('Loading conversation…')}</p>}
       {loadError && <div className="conversation-error" role="alert"><p>{loadError}</p><button className="button secondary compact" onClick={retry}>{t('Retry conversation')}</button></div>}
@@ -1042,12 +1045,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
         {!hidden && togglePanel}
         <div className="side-tabs" role="tablist" aria-label={t('Manuscript panels')}>
           <button role="tab" data-task-home aria-selected={side === 'task'} title={t('New task')} onClick={() => setView('task')}><Icon name="compose" size={14}/><span className="tab-label">{t('New task')}</span>{actions.selection.selected.length > 0 && <span className="count" aria-hidden="true">{actions.selection.selected.length}</span>}</button>
-          {/* The source tab closes itself, like an editor's: a dot while unsaved, a cross under the pointer. */}
-          {source.tab && <span className="side-tab-closable" role="presentation" data-selected={side === 'source'}>
-            <button role="tab" aria-selected={side === 'source'} title={source.tab.file || t('Edit source')} onClick={() => setView('source')}><Icon name="toolSource" size={14}/><span className="tab-label">{source.tab.name}</span></button>
-            <button type="button" className="side-tab-close" data-dirty={source.tab.dirty || source.tab.saving || undefined}
-              aria-label={source.tab.dirty ? `${t('Unsaved')} · ${t('Close (the draft is kept)')}` : t('Close')} title={source.tab.dirty ? `${t('Unsaved')} · ${t('Close (the draft is kept)')}` : t('Close')} onClick={source.close}><Icon name="close" size={12}/></button>
-          </span>}
+          {source.tab && <SourceTab tab={source.tab} selected={side === 'source'} onSelect={() => setView('source')} onClose={source.close}/>}
         </div>
         {!hidden && sideBySide && share}
       </div>
@@ -1808,6 +1806,36 @@ function App() {
   const active = Boolean(task && ACTIVE.includes(task.status));
   const taskLayout = layout, taskTab = mobileTab;
   const conversationVisible = mobile ? taskTab === 'conversation' : taskLayout !== 'review';
+  // On a computer, a change's source opens beside the conversation, in the
+  // editor the manuscript uses, with the round's changes in the text and
+  // Accept and Reject on each; the editor and the review follow each other.
+  // A save there is reviewed like an edit in the review, which keeps its place.
+  const [taskSide, setTaskSide] = useState<'chat' | 'source'>('chat');
+  const taskReview = useRef<ReviewSources>(null);
+  const [taskChanges, setTaskChanges] = useState<ReviewChanges | null>(null);
+  useEffect(() => setTaskChanges(null), [task?.id]);
+  // The viewer sees a new round first, and a reject that returned text.
+  const taskVersion = `${task?.review?.round}:${taskChanges?.round}:${taskChanges?.changes.filter(change => change.confirmed === 'rejected').map(change => change.id).join(',')}`;
+  const taskSource = useSourceEdit({ api, projectId: task?.projectId ?? '', taskId: task?.id, version: taskVersion,
+    onTaskSaved: (next, file, line) => taskReview.current?.saved(next, file, line),
+    onLine: (file, line) => taskReview.current?.select(file, line),
+    review: { changes: taskChanges, decide: (changes, action) => { if (taskChanges) taskReview.current?.decide(taskChanges.round, changes, action); } } });
+  useEffect(() => { if (!taskSource.editing) setTaskSide('chat'); }, [taskSource.editing]);
+  // Phones and the static demo, which has no files to edit, keep the review's
+  // own inline LaTeX.
+  const openTaskSource = mobile || isPlayground ? undefined : (request: OpenSource) => {
+    taskSource.reveal(request.file, request.lines, request.marks);
+    setTaskSide('source');
+    setLayout(current => current === 'review' ? 'split' : current);
+    return true;
+  };
+  const taskSourceSide = taskSource.tab && taskSource.panel ? {
+    selected: taskSide === 'source', panel: taskSource.panel,
+    tabs: <div className="side-tabs panel-tabs" role="tablist" aria-label={t('Task panels')}>
+      <button role="tab" aria-selected={taskSide === 'chat'} onClick={() => setTaskSide('chat')}><Icon name="chat" size={14}/><span className="tab-label">{t('Chat')}</span></button>
+      <SourceTab tab={taskSource.tab} selected={taskSide === 'source'} onSelect={() => setTaskSide('source')} onClose={taskSource.close}/>
+    </div>,
+  } : undefined;
   const pause = () => { if (task) void action('/tasks/' + task.id + '/interrupt'); };
   // With only the chat in view, the feedback bar moves to the end of the conversation.
   const chatOnly = mobile ? taskTab === 'conversation' : taskLayout === 'conversation';
@@ -2010,8 +2038,8 @@ function App() {
           <section id="review-panel" className="review-panel" aria-label={t('PDF review')}>
           {!mobile && !chatOnly && task.status === 'deleting' && (sidebarToggle || !conversationVisible) && <div className="review-placeholder-toolbar">{sidebarToggle}{!conversationVisible && workspaceViews}<div className="panel-tools">{!conversationVisible && taskStateActions}</div></div>}
           {(task.review?.state === 'build_failed' || task.status === 'failed' && task.review?.job?.status === 'failed') && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
-          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : !task.preparation && task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : <TaskDocument key={task.id} projectId={task.projectId} manuscript={manuscriptData.data} placeholder={task.preparation ? <PreparingTask task={task}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>} task={task} onDecided={() => void refresh(true)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}/>}
-        </section><Activity key={task.id} onRevealQuote={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} errorActions={task.preparation && task.status === 'failed' ? <div className="task-error-actions">
+          {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : !task.preparation && task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : <TaskDocument key={task.id} projectId={task.projectId} manuscript={manuscriptData.data} placeholder={task.preparation ? <PreparingTask task={task}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>} task={task} sources={taskReview} onOpenSource={openTaskSource} onChanges={next => setTaskChanges(current => JSON.stringify(current) === JSON.stringify(next) ? current : next)} onCurrentChange={change => { if (taskSource.editing && taskSide === 'source') void taskSource.follow(change, () => undefined); }} onDecided={() => void refresh(true)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setTaskSide('chat'); setLayout(current => current === 'review' ? 'split' : current); }}/>}
+        </section><Activity key={task.id} source={taskSourceSide} onRevealQuote={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} errorActions={task.preparation && task.status === 'failed' ? <div className="task-error-actions">
             <button type="button" className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/prepare')}><Icon name="refresh" size={14}/>{t('Retry')}</button>
             <button type="button" className="button secondary compact" onClick={() => setDeleteTarget(task)}><Icon name="trash" size={14}/>{t('Delete task…')}</button>
           </div> : chatOnly && task.mode !== 'review' && ['failed', 'interrupted'].includes(task.status) ? <div className="task-error-actions">

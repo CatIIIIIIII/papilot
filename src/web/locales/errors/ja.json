@@ -201,6 +201,7 @@
   "The server restarted before a review action was confirmed. Select Check status before continuing.": "レビュー操作の確認前にサーバーが再起動しました。続行する前に「ステータスを確認」を選択してください。",
   "The server restarted during deletion. Retry deletion to confirm cleanup.": "削除中にサーバーが再起動しました。クリーンアップを完了するため、削除を再試行してください。",
   "The server restarted during the PDF build. Check the review and rebuild it if needed.": "PDF のビルド中にサーバーが再起動しました。レビューを確認し、必要に応じて再ビルドしてください。",
+  "The source edit could not be confirmed. Check task status before retrying.": "ソースの編集を確認できませんでした。再試行する前にタスクのステータスを確認してください。",
   "The task was paused before these instructions were queued. Your draft has been kept.": "これらの指示がキューに追加される前にタスクが一時停止されました。下書きは保持されています。",
   "The update download timed out.": "アップデートのダウンロードがタイムアウトしました。",
   "The update restart helper did not start.": "更新の再起動ヘルパーが起動しませんでした。",

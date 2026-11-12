@@ -201,6 +201,7 @@
   "The server restarted before a review action was confirmed. Select Check status before continuing.": "El servidor se reinició antes de que se confirmara una acción de revisión. Selecciona Comprobar estado antes de continuar.",
   "The server restarted during deletion. Retry deletion to confirm cleanup.": "El servidor se reinició durante la eliminación. Vuelve a intentar la eliminación para confirmar la limpieza.",
   "The server restarted during the PDF build. Check the review and rebuild it if needed.": "El servidor se reinició durante la compilación del PDF. Comprueba la revisión y vuelve a compilarla si es necesario.",
+  "The source edit could not be confirmed. Check task status before retrying.": "No se pudo confirmar la edición de origen. Comprueba el estado de la tarea antes de volver a intentarlo.",
   "The task was paused before these instructions were queued. Your draft has been kept.": "La tarea se pausó antes de poner estas instrucciones en cola. Se ha conservado tu borrador.",
   "The update download timed out.": "Se agotó el tiempo de espera para descargar la actualización.",
   "The update restart helper did not start.": "El asistente de reinicio de la actualización no se inició.",

@@ -804,6 +804,11 @@
     "textHash": "9624616401669c52bdb0b0ff64cd4c9449fa6b8843fbbf20790bf67b57402032",
     "model": "gemini-4-argon-medium"
   },
+  "The source edit could not be confirmed. Check task status before retrying.": {
+    "revision": "19b287d0f672c8dc58aab6c7e7145c95e3d922b91e5abe82103fd9535b2ec796",
+    "textHash": "e81350846f38125445a0866e0d1672cf24c532be202f26184afe50af69b10521",
+    "model": "gemini-4-argon-medium"
+  },
   "The task was paused before these instructions were queued. Your draft has been kept.": {
     "revision": "5051cde4ef286b1042ccfae9cc625eb43ab78d544c3ddbb97e462b525f426c8c",
     "textHash": "8c3ee7fdf9a3c5a31f3c7f768bdd6b532343a648a39c6091cf45ca05a56abe21",

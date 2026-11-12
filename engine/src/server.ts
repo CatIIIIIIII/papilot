@@ -22,7 +22,7 @@ import { view, type ViewRequest } from "./core/view.ts";
 import { acquireLock, now, readJson, realPath, writeJson } from "./core/files.ts";
 import { stopAll } from "./core/process.ts";
 import { checkInputs, Confirmations, ReferenceChecker } from "./core/verify.ts";
-import type { ActionKind, SourceEditRequest } from "./types.ts";
+import type { ActionKind, SourceEditRequest, SourceFileSave } from "./types.ts";
 export class App {
   root: string;
   repo: Repo;
@@ -247,6 +247,19 @@ export function createServer(app: App) {
         id: { type: "string", pattern: "^[A-Za-z0-9-]{1,80}$" }, round: { type: "integer", minimum: 1 }, change: { type: "string", pattern: "^c[0-9]+$" }, revision: { type: "string", pattern: "^[a-f0-9]{64}$" }, text: { type: "string", maxLength: 200000 },
       } } } },
       request => app.sourceEdits.save(request.params.name, request.body),
+    );
+    // A whole file of the task, for an editor beside the review.
+    server.get<{ Params: { name: string }; Querystring: { file: string } }>(
+      "/api/tasks/:name/source/file",
+      { schema: { querystring: { type: "object", required: ["file"], properties: { file: { type: "string", minLength: 1, maxLength: 1024 } } } } },
+      request => app.sourceEdits.readFile(request.params.name, request.query.file),
+    );
+    server.post<{ Params: { name: string }; Body: SourceFileSave }>(
+      "/api/tasks/:name/source/file",
+      { bodyLimit: 8 * 1024 * 1024, schema: { body: { type: "object", additionalProperties: false, required: ["id", "round", "file", "revision", "text"], properties: {
+        id: { type: "string", pattern: "^[A-Za-z0-9-]{1,80}$" }, round: { type: "integer", minimum: 1 }, file: { type: "string", minLength: 1, maxLength: 1024 }, revision: { type: "string", pattern: "^[a-f0-9]{64}$" }, text: { type: "string", maxLength: 2000000 },
+      } } } },
+      request => app.sourceEdits.saveFile(request.params.name, request.body),
     );
     server.get<{ Params: { name: string }; Querystring: { after?: string } }>(
       "/api/tasks/:name/feedback",

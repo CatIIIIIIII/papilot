@@ -174,6 +174,10 @@ export async function saveSource(projectId: string, root: string, input: unknown
   const { splitLines, atomicWrite, opcodesWithin } = await engine();
   const lines = splitLines(text.replace(/\r\n/g, '\n').replace(/\n/g, eol));
   const data = Buffer.concat([source.bom ? BOM : Buffer.alloc(0), Buffer.from(lines.join(''), 'utf8')]);
+  // The text's length counts characters; the file is the encoded bytes, which
+  // multi-byte characters and CRLF line endings make longer. Refuse before
+  // writing a file the editor could not read back.
+  if (data.length > MAX_FILE) throw new Error('This source file is too large to edit here.');
   atomicWrite(source.target, data);
   const ops = opcodesWithin(source.lines, lines, 1000)?.filter(([kind]) => kind !== 'equal');
   const changed: [number, number] = !ops ? [0, lines.length] : ops.length ? [Math.min(...ops.map(op => op[3])), Math.max(...ops.map(op => op[4]))] : [0, 0];

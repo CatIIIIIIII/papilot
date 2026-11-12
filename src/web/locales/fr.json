@@ -1006,6 +1006,7 @@
   "Task errors": "Erreurs de tâche",
   "Task finished": "Tâche terminée",
   "Task list": "Liste des tâches",
+  "Task panels": "Panneaux de tâches",
   "Task saved. Waiting for an available {agent} session.": "Tâche enregistrée. En attente d’une session {agent} disponible.",
   "Tasks": "Tâches",
   "The PDF could not be opened: {error}": "Impossible d’ouvrir le PDF : {error}",

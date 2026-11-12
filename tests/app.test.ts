@@ -1041,6 +1041,47 @@ test('inline source writes use the review token and track rebuilding without a r
   } finally { finish({ status: 'done' }); engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); await f.close(); }
 });
 
+test('a task file in the workspace editor is read and saved through the review engine, with its write lock', async () => {
+  const f = await fixture(), calls: { route: string; token: string; body: any }[] = [];
+  const engine = http.createServer(async (request, response) => {
+    let text = '';
+    for await (const chunk of request) text += chunk;
+    calls.push({ route: request.url!, token: String(request.headers['x-review-token']), body: JSON.parse(text) });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ task: 'p-thesis-task', csrf: 'review-token', closed: false, decisions: {}, job: { id: 'source-job', status: 'running' },
+      source: { round: 2, file: 'sections/intro.tex', revision: 'b'.repeat(64), text: 'Typed.\n', base: 'Before.\n' } }));
+  });
+  await new Promise<void>(resolve => engine.listen(0, '127.0.0.1', resolve));
+  f.review.url = `http://127.0.0.1:${(engine.address() as { port: number }).port}`;
+  const reads: string[] = [];
+  let finish!: (value: any) => void;
+  const job = new Promise(resolve => { finish = resolve; });
+  f.review.get = async route => { reads.push(route); return (route.includes('/source/file') ? { round: 1, file: 'sections/intro.tex', revision: 'a'.repeat(64), text: 'Agent.\n', base: 'Before.\n', before: 'Before.\n', reviewed: true, reverted: [] } : route.includes('/jobs/') ? await job : {}) as any; };
+  const url = '/api/tasks/thesis-task/source', edit = { id: 'tab-edit', round: 1, file: 'sections/intro.tex', revision: 'a'.repeat(64), text: 'Typed.\n' };
+  try {
+    const read = await f.local.inject({ url: `${url}?file=sections%2Fintro.tex`, headers: f.as });
+    assert.equal(read.statusCode, 200, read.body);
+    assert.deepEqual(read.json(), { file: 'sections/intro.tex', revision: 'a'.repeat(64), text: 'Agent.\n', base: 'Before.\n', round: 1, before: 'Before.\n', reviewed: true, reverted: [], passage: [0, 0], focus: [0, 0], drifted: false });
+    assert.equal(reads[0], '/api/tasks/p-thesis-task/source/file?file=sections%2Fintro.tex');
+    assert.equal((await f.local.inject({ method: 'POST', url, headers: LOCAL, payload: edit })).statusCode, 403);
+    f.store.updateTask('thesis-task', { status: 'running' });
+    assert.equal((await f.local.inject({ method: 'POST', url, headers: f.as, payload: edit })).statusCode, 400, 'the agent is editing the task');
+    assert.equal(calls.length, 0);
+    f.store.updateTask('thesis-task', { status: 'reviewing' });
+    const saved = await f.local.inject({ method: 'POST', url, headers: f.as, payload: edit });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.deepEqual(calls, [{ route: '/api/tasks/p-thesis-task/source/file', token: 'review-token', body: edit }]);
+    assert.equal(saved.json().source.round, 2, 'the next save continues the new round');
+    assert.equal(saved.json().source.text, 'Typed.\n');
+    assert.equal(saved.json().state.task, 'p-thesis-task');
+    assert.equal(saved.json().state.source, undefined, 'the review state is the page state alone');
+    assert.equal(f.store.task('thesis-task').status, 'building', 'the save is reviewed in a new round');
+    assert.equal(f.store.task('thesis-task').pendingBuild?.job, 'source-job');
+    finish({ status: 'done' });
+    for (let i = 0; i < 20 && f.store.task('thesis-task').status === 'building'; i++) await new Promise(resolve => setImmediate(resolve));
+  } finally { finish({ status: 'done' }); engine.closeAllConnections(); await new Promise<void>(resolve => engine.close(() => resolve())); await f.close(); }
+});
+
 // A review engine that answers decisions with a page state, and records them.
 async function decisionEngine(state: (route: string, body: any) => Record<string, unknown> = () => ({})) {
   const calls: { method: string; route: string; body: any }[] = [];

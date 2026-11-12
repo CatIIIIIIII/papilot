@@ -46,7 +46,7 @@ import {
 } from "./references.tsx";
 import { bindingLabel, readShortcuts, resolveShortcuts, shortcutAction, SHORTCUT_EVENT, SHORTCUT_STORAGE } from "./shortcuts.ts";
 import { sendsMessage } from "./send-key.ts";
-import { CURRENT_CHANGE_EVENT, SELECT_SOURCE_EVENT, type CurrentChange, type SelectSource } from "./review-events.ts";
+import { CURRENT_CHANGE_EVENT, DECIDE_EVENT, OPEN_SOURCE_EVENT, REVIEW_CHANGES_EVENT, SELECT_SOURCE_EVENT, SOURCE_SAVED_EVENT, type CurrentChange, type DecideChange, type OpenSource, type ReviewChanges, type SelectSource, type SourceSaved } from "./review-events.ts";
 import { DecisionQueue, Unreachable, withQueued, type QueuedDecision } from "./decision-queue.ts";
 import {
   STATE,
@@ -566,6 +566,57 @@ export function ReviewApp({
     window.dispatchEvent(new CustomEvent(CURRENT_CHANGE_EVENT, { detail }));
   }
   useEffect(() => { if (current >= 0) announce(current); }, [current, detail]);
+  // The workspace's editor shows the changes in their files, with Accept and
+  // Reject, which decide them here as the buttons on the page do.
+  function announceChanges() {
+    if (!detail) return;
+    const changes: ReviewChanges["changes"] = detail.units.filter((unit) => unit.kind === "text" && unit.status !== "deleted" && unit.text_ops?.length)
+      .map((unit) => ({ id: unit.id, file: unit.file, ops: unit.text_ops!, decision: decisions[unit.id] ?? "pending", confirmed: state?.decisions?.[unit.id] ?? "pending" }));
+    const cards: ReviewChanges["stops"] = stops.map((stop, index) => ({ title: t("Change {n}", { n: index + 1 }), units: stop.units,
+      actions: kinds(stop.units).map((kind) => ({ kind, label: label(kind), lock: actionLock(kind) ?? null })) }));
+    window.dispatchEvent(new CustomEvent<ReviewChanges>(REVIEW_CHANGES_EVENT, { detail: { round: detail.round, changes, stops: cards, labels: { before: t("Before"), after: t("After") } } }));
+  }
+  useEffect(announceChanges, [detail, decisions, state]);
+  useEffect(() => {
+    const chosen = (event: Event) => {
+      const request = (event as CustomEvent<DecideChange & { again?: boolean }>).detail, { round, changes: ids, action } = request;
+      if (detail?.round !== round || !["accept", "reject", "comment"].includes(action)) return;
+      const kind = action as Kind;
+      if (kind !== "comment") { void decide(kind, targets(ids, kind)); return; }
+      // A comment belongs to its card, which becomes current first.
+      const index = stops.findIndex((stop) => stop.units.some((id) => ids.includes(id)));
+      if (index >= 0 && index !== current && !request.again) {
+        select(index);
+        requestAnimationFrame(() => window.dispatchEvent(new CustomEvent(DECIDE_EVENT, { detail: { ...request, again: true } })));
+        return;
+      }
+      beginComposer(targets(ids, "comment"));
+    };
+    window.addEventListener(DECIDE_EVENT, chosen);
+    return () => window.removeEventListener(DECIDE_EVENT, chosen);
+  });
+  // A change's source, offered to the workspace's editor: true when it opened there.
+  function offerSource(chosen: Unit[]) {
+    // The editor shows the task's files as they are now, with the latest
+    // round's changes. An earlier round, a closed task or a previewed option
+    // keeps the inline LaTeX, and so do changes without character-level
+    // operations, such as a new file or a bibliography entry, which have no
+    // card in the editor.
+    if (!latest || !detail) return false;
+    const shown = chosen.filter((item) => item.kind === "text" && item.status !== "deleted");
+    if (!shown.length || shown.some((item) => !item.text_ops?.length)) return false;
+    // Nor can the editor place cards in a file with CRLF line endings, whose
+    // offsets count the carriage returns; its context shows them.
+    if (shown.some((item) => /\r/.test(item.old_text + item.new_text + (item.old_context?.text ?? "")))) return false;
+    const unit = shown[0];
+    const marks = chosen.filter((item) => item.file === unit.file && item.kind === "text").flatMap(unitLines);
+    if (!marks.length) return false;
+    const request: OpenSource = { round: detail.round, change: unit.id, file: unit.file, marks,
+      lines: [Math.min(...marks.map((range) => range[0])), Math.max(...marks.map((range) => Math.max(range[1], range[0] + 1)))] };
+    // The editor shows the changes of the round it opens in.
+    announceChanges();
+    return !window.dispatchEvent(new CustomEvent(OPEN_SOURCE_EVENT, { detail: request, cancelable: true }));
+  }
   useEffect(() => {
     const choose = (event: Event) => {
       const { file, line } = (event as CustomEvent<SelectSource>).detail;
@@ -585,6 +636,18 @@ export function ReviewApp({
     };
     window.addEventListener(SELECT_SOURCE_EVENT, choose);
     return () => window.removeEventListener(SELECT_SOURCE_EVENT, choose);
+  });
+  // A file saved in the workspace's editor shows as an edit made here: the
+  // review continues from the new state, at the edited place.
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const { state: next, file, line } = (event as CustomEvent<SourceSaved>).detail;
+      const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${current}"]`);
+      editedPlace.current = { file, line: line + 1, offset: article ? past(article) : 0, paper: paperView };
+      epoch.current++; setState(next);
+    };
+    window.addEventListener(SOURCE_SAVED_EVENT, saved);
+    return () => window.removeEventListener(SOURCE_SAVED_EVENT, saved);
   });
   useEffect(() => {
     let cancelled = false,
@@ -900,6 +963,8 @@ export function ReviewApp({
     await decide("comment", composer.changes, draft.trim());
   }
   function toggleSource(index: number) {
+    // A workspace with its own editor shows the source there, not on the page.
+    if (!openSource.has(index) && offerSource((stops[index]?.units ?? []).map((id) => units.get(id)!).filter(Boolean))) return;
     setOpenSource((previous) => {
       const next = new Set(previous);
       if (next.has(index)) next.delete(index);
@@ -1445,6 +1510,7 @@ export function ReviewApp({
                   building={Boolean(state?.job && ["queued", "running"].includes(state.job.status))}
                   locked={!latest ? t("A newer round is available. Reload the page.") : decisions[unit.id] === "rejected" ? t("This change was rejected. Undo that decision before editing it.") : actionLock("source") || (waiting.has(unit.id) && detail!.rendering !== "failed" ? t("PDF comparison in progress") : null)}
                   onSaving={saving => { snapshot.current.busy = saving; setBusy(saving); }}
+                  onOpen={() => offerSource([unit])}
                   onSaved={next => {
                     const article = paper.current?.querySelector<HTMLElement>(`[data-stop="${index}"]`);
                     editedPlace.current = { file: unit.file, line: unit.new_start, offset: article ? past(article) : 0, paper: paperView };

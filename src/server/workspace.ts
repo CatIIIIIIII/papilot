@@ -36,7 +36,7 @@ const execute = promisify(execFile);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Source saves start a build in the review engine, and so does undoing an
 // accept of an earlier round, which inserts the next round.
-const startsBuild = (route: string, value: unknown) => /\/source(?:\/options)?$/.test(route) || (route.endsWith('/undo') && (value as { republished?: unknown } | null)?.republished === true);
+const startsBuild = (route: string, value: unknown) => /\/source(?:\/options|\/file)?$/.test(route) || (route.endsWith('/undo') && (value as { republished?: unknown } | null)?.republished === true);
 const errorText = (e: unknown) => e instanceof Error ? e.message : String(e);
 // A Codex model/list entry with the reasoning efforts it supports.
 export const agentModel = (m: any): AgentModel => {

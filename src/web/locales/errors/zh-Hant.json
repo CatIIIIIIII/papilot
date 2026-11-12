@@ -201,6 +201,7 @@
   "The server restarted before a review action was confirmed. Select Check status before continuing.": "伺服器在審閱操作確認前重新啟動。繼續前請先選擇「檢查狀態」。",
   "The server restarted during deletion. Retry deletion to confirm cleanup.": "伺服器在刪除期間重新啟動。請重試刪除以確認清理完成。",
   "The server restarted during the PDF build. Check the review and rebuild it if needed.": "伺服器在建置 PDF 期間重新啟動。請檢查審閱，並視需要重新建置。",
+  "The source edit could not be confirmed. Check task status before retrying.": "無法確認原始碼編輯。請先檢查任務狀態再重試。",
   "The task was paused before these instructions were queued. Your draft has been kept.": "系統在這些指示加入佇列前已暫停任務。您的草稿已保留。",
   "The update download timed out.": "更新下載逾時。",
   "The update restart helper did not start.": "更新重啟輔助程式未能啟動。",

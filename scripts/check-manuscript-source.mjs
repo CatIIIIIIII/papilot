@@ -73,7 +73,8 @@ try {
   const panel = page.locator('.source-panel'), field = panel.getByRole('textbox', { name: 'Edit LaTeX source' });
   const tabs = page.getByRole('tablist', { name: 'Manuscript panels' }), close = tabs.locator('.side-tab-close'), unsaved = tabs.locator('.side-tab-close[data-dirty]');
   // A build of the working tree as it is now, finished and shown.
-  const compiled = async () => { const build = await settle(); assert.equal(build.status, 'ready', build.error); await expect(page.locator('.manuscript-note.error.brief')).toHaveCount(0); return build; };
+  // The page learns of the build at its next poll.
+  const compiled = async () => { const build = await settle(); assert.equal(build.status, 'ready', build.error); await expect(page.locator('.manuscript-note.error.brief')).toHaveCount(0, { timeout: 30000 }); return build; };
   const text = () => field.evaluate(content => [...content.querySelectorAll('.cm-line')].map(line => line.textContent).join('\n'));
   const setText = async value => { await field.click(); await page.keyboard.press('ControlOrMeta+a'); await page.keyboard.insertText(value); };
   // A flash lasts a moment: record every line that flashes from now on.
@@ -106,6 +107,8 @@ try {
   // What changed since the last commit, as bars beside the lines while editing.
   await page.keyboard.press('End');
   await page.keyboard.type(' Really.');
+  await expect(page.locator('.source-mark'), 'typing ends the highlight on the PDF, as in the editor').toHaveCount(0);
+  await expect(panel.locator('.cm-source-focus')).toHaveCount(0);
   await expect(panel.locator('.cm-change-modified')).toHaveCount(1);
   await expect(panel.locator('.cm-change-ruler .cm-ruler-modified'), 'the change shows along the scrollbar').toHaveCount(1);
   await expect(panel.getByText('1 change'), 'no count in the header').toHaveCount(0);
@@ -114,7 +117,7 @@ try {
   await expect(panel.getByRole('button', { name: 'Compare' }), 'comparing belongs to version management').toHaveCount(0);
   await shot('changed');
 
-  // Saving writes the file without an agent; the PDF marks the saved lines.
+  // Saving writes the file without an agent; the PDF flashes the saved lines.
   const herons = ORIGINAL.replace('A separate paragraph about pelicans.\nPelicans glide over the water.', 'A separate paragraph about herons.\nHerons wade in the shallows.');
   await setText(herons);
   await watchFlashes();
@@ -123,6 +126,8 @@ try {
   await expect(word('herons')).toBeVisible({ timeout: 60000 });
   await expect(page.locator('.problem-flash')).toBeVisible();
   await expect.poll(flashed, { message: 'the saved lines flash with the PDF' }).toContain('Herons wade in the shallows.');
+  await expect(page.locator('.source-mark'), 'the saved lines only flash; nothing stays highlighted').toHaveCount(0);
+  await expect(page.locator('.problem-flash'), 'the flash ends').toHaveCount(0, { timeout: 5000 });
   await expect(unsaved, 'a saved file has no dot').toHaveCount(0);
   await expect(panel.locator('.cm-change-modified')).toHaveCount(2);
   await shot('saved');
@@ -189,8 +194,11 @@ try {
   await field.press('Escape');
   await expect(panel).toHaveCount(0);
   await page.locator('.pdf-container').focus(); await page.keyboard.press('v');
-  await word('closing').dblclick();
-  await page.locator('.add-source').click();
+  // A newer PDF of the last build may still replace the pages, and the selection with them.
+  await expect(async () => {
+    await word('closing').dblclick();
+    await page.locator('.add-source').click({ timeout: 3000 });
+  }).toPass({ timeout: 30000 });
   await expect(panel.locator('.cm-source-focus')).toContainText('closing');
   await expect(panel.locator('.cm-source-word'), 'the selected word stands out').toHaveText('closing');
 

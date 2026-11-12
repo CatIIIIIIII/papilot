@@ -4,6 +4,14 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- **Review and edit a task's changes in the source editor.** In a task's review, LaTeX on a change opens its whole file in the source editor, in a tab beside the chat, at that change. The round's changes show in the text as the review's cards: each under a header with its title and Accept, Reject and Comment, the lines before, with struck words marked, over the lines after. They act through the review itself, and the editor and the review follow each other. ⌘S saves the file into the task and reviews it in a new round, where the review keeps its place. On phones and in the demo, LaTeX still shows inline in the review. ([#146](https://github.com/PapilotAI/papilot/pull/146))
+
+### Changed
+
+- **The PDF highlight gives way to your edit.** When the source editor opens from the PDF, the passage is highlighted on the PDF too, until you start typing. ([#146](https://github.com/PapilotAI/papilot/pull/146))
+
 ## [0.10.0] - 2026-11-12
 
 Open a passage's LaTeX straight from the PDF, review without waiting for compilation, and use Papilot comfortably on a phone.

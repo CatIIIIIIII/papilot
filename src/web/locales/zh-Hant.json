@@ -1006,6 +1006,7 @@
   "Task errors": "任務錯誤",
   "Task finished": "任務已完成",
   "Task list": "任務清單",
+  "Task panels": "任務面板",
   "Task saved. Waiting for an available {agent} session.": "任務已儲存。正在等待可用的 {agent} 工作階段。",
   "Tasks": "任務",
   "The PDF could not be opened: {error}": "無法開啟 PDF：{error}",

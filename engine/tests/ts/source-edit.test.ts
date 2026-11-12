@@ -98,3 +98,75 @@ it("protects source HTTP writes with CSRF, validates requests and ignores caller
     expect(f.read(METHOD)).toBe(BODY);
   } finally { await server.close(); }
 });
+
+// The workspace's editor beside the review edits whole files of the task.
+it("reads a whole file of the task beside the file before the task", () => {
+  const file = app.sourceEdits.readFile(task.name, METHOD);
+  expect(file.round).toBe(1);
+  expect(file.text).toBe(f.read(METHOD, task.worktree));
+  expect(file.base).toBe(BODY);
+  expect(() => app.sourceEdits.readFile(task.name, "missing.tex")).toThrow("no longer exists");
+});
+it("saves a whole file once, reviews it in a new round, and refuses stale drafts", async () => {
+  const file = app.sourceEdits.readFile(task.name, METHOD), text = file.text.replace("Agent wording.", "Typed in the editor.");
+  const edit = { id: "whole-file", round: 1, file: METHOD, revision: file.revision, text };
+  const state = await app.sourceEdits.saveFile(task.name, edit);
+  await app.publisher.join();
+  expect(state.job?.id).toBeTruthy();
+  expect(state.source.text).toBe(text);
+  expect(f.read(METHOD, task.worktree)).toBe(text);
+  expect(f.read(METHOD)).toBe(BODY);
+  await app.sourceEdits.saveFile(task.name, edit);
+  await app.publisher.join();
+  expect(app.publisher.publish).toHaveBeenCalledTimes(1);
+  await expect(app.sourceEdits.saveFile(task.name, { ...edit, id: "stale", text: "Old draft." })).rejects.toThrow("source changed");
+  // A newer round that left the file alone keeps the draft savable.
+  fakeRound(app, task.name);
+  const now = app.sourceEdits.readFile(task.name, METHOD);
+  await app.sourceEdits.saveFile(task.name, { ...edit, id: "late", revision: now.revision, text: "Saved after a newer round.\n" });
+  expect(f.read(METHOD, task.worktree)).toBe("Saved after a newer round.\n");
+});
+it("keeps a whole file's line endings and byte order mark", async () => {
+  const target = path.join(task.worktree, METHOD);
+  fs.writeFileSync(target, "﻿First line.\r\nSecond line.\r\n");
+  const round = fakeRound(app, task.name), file = app.sourceEdits.readFile(task.name, METHOD);
+  expect(file.text).toBe("First line.\r\nSecond line.\r\n");
+  await app.sourceEdits.saveFile(task.name, { id: "crlf", round: round.number, file: METHOD, revision: file.revision, text: "First line.\nEdited line.\n" });
+  expect(fs.readFileSync(target, "utf8")).toBe("﻿First line.\r\nEdited line.\r\n");
+});
+it("refuses a whole file too large in bytes before saving or reviewing it", async () => {
+  const file = app.sourceEdits.readFile(task.name, METHOD), before = f.read(METHOD, task.worktree);
+  // 700,000 characters pass the length check but are 2,100,000 bytes in UTF-8.
+  await expect(app.sourceEdits.saveFile(task.name, { id: "wide", round: file.round, file: METHOD, revision: file.revision, text: "中".repeat(700_000) })).rejects.toThrow("too large");
+  expect(f.read(METHOD, task.worktree)).toBe(before);
+  expect(app.sourceEdits.readFile(task.name, METHOD).text).toBe(before);
+});
+it("refuses whole files outside the task worktree, over HTTP with the review token", async () => {
+  const server = createServer(app), url = `/api/tasks/${task.name}/source/file`;
+  try {
+    const headers = { host: "127.0.0.1:9", "x-review-token": app.csrf };
+    const read = await server.inject({ url: `${url}?file=${encodeURIComponent(METHOD)}`, headers });
+    expect(read.statusCode, read.body).toBe(200);
+    const edit = { id: "http-edit", round: 1, file: METHOD, revision: read.json().revision, text: "Replaced.\n" };
+    expect((await server.inject({ method: "POST", url, headers: { host: headers.host }, payload: edit })).statusCode).toBe(403);
+    expect((await server.inject({ method: "POST", url, headers, payload: { ...edit, file: "../outside.tex" } })).statusCode).toBe(400);
+    expect((await server.inject({ url: `${url}?file=..%2Foutside.tex`, headers })).statusCode).toBe(400);
+    const saved = await server.inject({ method: "POST", url, headers, payload: edit });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().source.text).toBe("Replaced.\n");
+    expect(saved.json().csrf).toBe(app.csrf);
+    expect(f.read(METHOD)).toBe(BODY);
+  } finally { await server.close(); }
+});
+it("places the round's changes in a file whose rejected changes came back", async () => {
+  const round = app.review.latestRound(task.name)!;
+  expect(app.sourceEdits.readFile(task.name, METHOD)).toMatchObject({ reviewed: true, reverted: [] });
+  vi.mocked(app.publisher.publish).mockClear();
+  await app.review.decide(task.name, { action: "reject", changes: ["c001"], round: round.number });
+  const file = app.sourceEdits.readFile(task.name, METHOD);
+  expect(file.text).toContain("Method sentence 2.");
+  expect(file).toMatchObject({ round: round.number, reviewed: true, reverted: ["c001"] });
+  // Written by hand, the file is no longer the round's.
+  fs.appendFileSync(path.join(task.worktree, METHOD), "Typed.\n");
+  expect(app.sourceEdits.readFile(task.name, METHOD)).toMatchObject({ reviewed: false, reverted: [] });
+});

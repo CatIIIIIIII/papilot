@@ -5,11 +5,13 @@ import { EditorIcon } from "./editor-icons.tsx";
 import { LatexInput } from "./LatexInput.tsx";
 
 type Draft = { source: SourceExcerpt; text: string; id: string };
-export function SourceEditor({ task, round, change, locked, building, editable, title, actions, children, api, onSaving, onSaved }: {
+export function SourceEditor({ task, round, change, locked, building, editable, title, actions, children, api, onSaving, onSaved, onOpen }: {
   task: string; round: number; change: string; locked: string | null; building: boolean;
   editable: boolean; title: ReactNode; actions?: ReactNode; children: ReactNode;
   api: <T>(route: string, body?: unknown) => Promise<T>;
   onSaving: (saving: boolean) => void; onSaved: (state: PageState) => void;
+  /** Offers the source to an editor outside the viewer: true when one opened it. */
+  onOpen?: () => boolean;
 }) {
   const key = `papilot:review:source:${location.pathname}:${task}:${round}:${change}`;
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -23,6 +25,7 @@ export function SourceEditor({ task, round, change, locked, building, editable, 
   }
   async function open(fresh = false) {
     if (loading || saving) return;
+    if (!fresh && onOpen?.()) return;
     setLoading(true); setError(""); setSaved(false);
     try {
       if (!fresh) {

@@ -2,6 +2,12 @@
    passage marked on its page, and the button beside a selection. */
 .side-pane{display:contents}
 .side-pane[hidden]{display:none}
+/* On a task, the source tab sits beside the chat in its heading, and hides
+   the chat while selected. */
+.side-tabs.panel-tabs{padding:0}
+/* As tall as the heading's other controls, so their edges line up. */
+.side-tabs.panel-tabs>button[role=tab],.side-tabs.panel-tabs>.side-tab-closable>button[role=tab]{height:32px}
+.activity-panel[data-side=source]>.conversation-history,.activity-panel[data-side=source]>.composer-wrap{display:none}
 /* The source tab and its close button, as one tab: a dot while unsaved,
    a cross under the pointer or keyboard. */
 .side-tabs>.side-tab-closable{display:flex;flex-shrink:0;align-items:center;border-radius:var(--r);color:var(--text-2);transition:background-color .15s,color .15s}

@@ -201,6 +201,9 @@ jobs:
       - name: manuscript-source
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-manuscript-source.mjs
+      - name: task-source
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-task-source.mjs
       - name: note-groups
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-note-groups.mjs

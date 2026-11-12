@@ -745,12 +745,12 @@
     "model": "gemini-4-argon-medium"
   },
   "Close": {
-    "revision": "d8b2c5812b99636940ccc40df6d2dcdbdc3ee9b7f82660458ccd745698de1589",
+    "revision": "2c325cb78eb2c9751d6535f9a80bd6e12d3c6471d5ee053868f81ab5d7cb8321",
     "textHash": "9a2f627672396faecc143a367cd926da8c3de74f9f74430dd53e4d5491ac41d7",
     "model": "gemini-4-argon-medium"
   },
   "Close (the draft is kept)": {
-    "revision": "5b8378a864fcd499251fc6a2dd94d9a682e4ad96d8de477752f3e56cafcfdcf5",
+    "revision": "e9b3f34edda72ca1e29610a611f15406c7b8a5df079f9a9639e1250fdf273c6d",
     "textHash": "ba5a143cd959c0aaa1f49ff05e291af08b4994035b0fb77820fe236401545e42",
     "model": "gemini-4-argon-medium"
   },
@@ -1585,7 +1585,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Edit source": {
-    "revision": "9b29aa544c6959ca48f13b493c7fc8c70378ca182cf429703f181966e765d27e",
+    "revision": "d502f189917afea1a8f8ec41271431883598cabf2cd5d7cd38b9c818f87f59de",
     "textHash": "ac0df7b47e3501e4f7fad3989d4c2672cc02ebf46f76ad5ecd871efe6efa6976",
     "model": "gemini-4-argon-medium"
   },
@@ -4249,6 +4249,11 @@
     "textHash": "cbe738c4aac2defd393dff71f545fadada39f7caf94a7f3f66c6c59151c706de",
     "model": "gemini-4-argon-medium"
   },
+  "Task panels": {
+    "revision": "166e2c7fb47deb1f0e63dd9914863dc2d33f6c679207014543e0c56caacf0365",
+    "textHash": "7470ab8ec84ed9de5ab4999f1fa75e43a0d55d318cf83d176caea1e0ce4a5639",
+    "model": "gemini-4-argon-medium"
+  },
   "Task saved. Waiting for an available {agent} session.": {
     "revision": "a56ee2448551177c7cee9edd6e2360fea2d9c855bceb27f45c4c8f41ab07445f",
     "textHash": "1c39c6b39b797a63b6ae22f32f368e6151a007f0233f4801472ad5c5a0a26ec2",
@@ -4655,8 +4660,8 @@
     "model": "gemini-4-argon-medium"
   },
   "Unsaved": {
-    "revision": "38c249dc7356fd102f6c772c73f6309fa51554e47bf153c6a6e50ac578269c7e",
-    "textHash": "68bcb53a834848134756e6e92a90e3ace9766d32ed528fc5e3f25f06b9a770b5",
+    "revision": "ce491f60f07afb3e2820d9b9ccf74febfcd190cb7529570f5606d7e0f8356aee",
+    "textHash": "2eedbb0843267ca96d19b3d972b135389bcf666c73f953ccecaedc300e92d213",
     "model": "gemini-4-argon-medium"
   },
   "Unsaved changes": {

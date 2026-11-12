@@ -80,6 +80,10 @@ test('a save replaces the file, keeps line endings, reports the changed lines, a
     await assert.rejects(readFile(root, 'link.tex'), /cannot be edited/, 'a symbolic link is never followed out of the paper');
     fs.rmSync(outside, { recursive: true });
     await assert.rejects(readFile(root, 'missing.tex'), /no longer exists/);
+    // 700,000 characters pass the length check but are 2,100,000 bytes in UTF-8.
+    const unchanged = fs.readFileSync(path.join(root, 'main.tex'));
+    await assert.rejects(saveSource('paper', root, { id: 'wide', file: 'main.tex', revision: saved.source.revision, text: '中'.repeat(700_000) }), /too large/);
+    assert.deepEqual(fs.readFileSync(path.join(root, 'main.tex')), unchanged, 'a file too large to read back is never written');
     await assert.rejects(saveSource('paper', root, { id: 'bad id!', file: 'main.tex', revision: saved.source.revision, text: '' }), /Invalid source edit/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

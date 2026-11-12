@@ -197,8 +197,14 @@ export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotation
 // file at the last commit (null when it has none), to show what changed.
 // Lines are 0-based, end excluded: `passage` is the paragraph a click on the
 // PDF named and `focus` the lines it hit; `drifted` says the passage changed
-// after the PDF it was found in was compiled.
-export interface SourceFile { file: string; revision: string; text: string; base: string | null; passage: [number, number]; focus: [number, number]; drifted: boolean }
+// after the PDF it was found in was compiled. A task's file is in its
+// worktree, `base` is the file before the task, and `round` names the
+// review round that shows it, which a save continues; `reviewed` says that
+// round shows this very text, but for the rejected changes in `reverted`
+// whose text came back; its changes replaced parts of `before`.
+export interface SourceFile { file: string; revision: string; text: string; base: string | null; passage: [number, number]; focus: [number, number]; drifted: boolean; round?: number; before?: string | null; reviewed?: boolean; reverted?: string[] }
+// A task's saved file, and the review after the save.
+export interface TaskSourceSave { source: SourceFile; state: unknown }
 // A saved file, the lines that changed, the working tree whose build shows
 // it, and when it was written, by the server's clock (as builds' `builtAt`).
 export interface SourceSave { source: SourceFile; changed: [number, number]; tree: string; at: number }

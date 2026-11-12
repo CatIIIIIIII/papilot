@@ -21,7 +21,8 @@ import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
 import { type Listener, equals, guard } from './access.ts';
-import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote, type Task } from '../shared.ts';
+import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type NoteSummary, type QuickNote, type SourceFile, type Task } from '../shared.ts';
+import type { SourceFileRead } from '../../engine/src/types.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
 import { noteOptionContext, noteOptionsKey } from './note-options.ts';
 import { taskNoteResults } from './note-results.ts';
@@ -332,6 +333,33 @@ export async function buildApp(options: AppOptions) {
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
     const task = store.task(request.params.id), client = await connectReview(store.project(task.projectId).path);
     return { notes: await taskNoteResults(task, store.items(task.id), store.runs().filter(run => run.taskId === task.id), client) };
+  });
+  // A task's file in the editor beside its review. The review engine reads
+  // it from the task's worktree and reviews a save in a new round; a save
+  // waits like any review action that writes the task's files. The editor
+  // works on \n line breaks, so a CRLF file shows no changes in its text.
+  const taskSource = (read: SourceFileRead): SourceFile => ({ file: read.file, revision: read.revision, text: read.text, base: read.base, round: read.round, before: read.before, reviewed: read.reviewed && !read.text.includes('\r'), reverted: read.reverted, passage: [0, 0], focus: [0, 0], drifted: false });
+  app.get<{ Params: { id: string }; Querystring: { file?: string } }>('/api/tasks/:id/source', task, async request => {
+    const current = store.task(request.params.id), file = string(request.query.file, 'Source file', 1024);
+    return retryReviewRead(connectReview, store.project(current.projectId).path, async client =>
+      taskSource(await client.get<SourceFileRead>(`${taskRoute(current.name)}/source/file?file=${encodeURIComponent(file)}`)));
+  });
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/source', { ...task, bodyLimit: 8 * 1024 * 1024 }, async request => {
+    const current = store.task(request.params.id), project = store.project(current.projectId), b = (request.body || {}) as any;
+    const client = await connectReview(project.path), route = `${taskRoute(current.name)}/source/file`;
+    const input = { id: string(b.id, 'Source edit ID', 80), round: b.round, file: string(b.file, 'Source file', 1024), revision: b.revision, text: b.text };
+    const value = await workspace.reviewWrite(current.id, true, async () => {
+      const response = await fetch(client.url + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Review-Token': client.token }, body: JSON.stringify(input), signal: AbortSignal.timeout(120000) });
+      const value = await response.json() as { error?: string; source?: SourceFileRead };
+      if (!confirmedReviewResponse(response.status, value, current.name)) throw new Error('The source edit could not be confirmed. Check task status before retrying.');
+      return value;
+    }, { route, body: input });
+    if (value.error || !value.source) throw Object.assign(new Error(value.error || 'The source edit could not be confirmed. Check task status before retrying.'), { statusCode: 409 });
+    store.updateTask(current.id, { error: null });
+    settle(workspace, current.id);
+    // The review continues from this state, as after an edit made in it.
+    const { source, ...state } = value;
+    return { source: taskSource(source), state: annotateReviewState(rewriteReviewJson(state, `/review/${project.id}`), store.tasks().filter(item => item.projectId === project.id)) };
   });
   app.get<{ Params: { id: string }; Querystring: { key: string } }>('/api/tasks/:id/note-options', task, async request => {
     const project = store.project(store.task(request.params.id).projectId);
