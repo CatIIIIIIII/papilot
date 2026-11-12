@@ -45,4 +45,6 @@ On phones the paper fills the screen under a slim translucent bar. The PDF and r
 
 Existing desktop users can check **Settings → Updates** for a compatible in-place update or the matching installer. Compiling your own papers requires Git and a TeX distribution; AI tasks use your connected agent.
 
+Thanks to @jiangsy for continuous note review with a single compile of the final selection, and for faster CI with cached TeX, and to @CatIIIIIIII for DeepSeek task permissions.
+
 [Detailed changelog](https://github.com/PapilotAI/papilot/blob/v0.10.0/CHANGELOG.md) · [All changes since 0.9.4](https://github.com/PapilotAI/papilot/compare/v0.9.4...v0.10.0)
