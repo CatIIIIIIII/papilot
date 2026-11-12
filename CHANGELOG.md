@@ -4,13 +4,22 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-12
+
+Review and edit a task's changes in the source editor, the part of the source editor meant for 0.10.0, and drag the desktop window from every toolbar.
+
 ### Added
 
-- **Review and edit a task's changes in the source editor.** In a task's review, LaTeX on a change opens its whole file in the source editor, in a tab beside the chat, at that change. The round's changes show in the text as the review's cards: each under a header with its title and Accept, Reject and Comment, the lines before, with struck words marked, over the lines after. They act through the review itself, and the editor and the review follow each other. ⌘S saves the file into the task and reviews it in a new round, where the review keeps its place. On phones and in the demo, LaTeX still shows inline in the review. ([#146](https://github.com/PapilotAI/papilot/pull/146))
+- **Review and edit a task's changes in the source editor.** In a task's review, LaTeX on a change opens its whole file in the source editor, in a tab beside the chat, at that change. The round's changes show in the text as the review's cards: each under a header with its title and Accept, Reject and Comment, the lines before, with struck words marked, over the lines after. They act through the review itself, and the editor and the review follow each other. ⌘S saves the file into the task and reviews it in a new round, where the review keeps its place. On phones and in the demo, for an earlier round, and for changes the editor cannot show (a new file, a bibliography entry, a file with CRLF line endings), LaTeX still shows inline in the review. ([#146](https://github.com/PapilotAI/papilot/pull/146))
 
 ### Changed
 
 - **The PDF highlight gives way to your edit.** When the source editor opens from the PDF, the passage is highlighted on the PDF too, until you start typing. ([#146](https://github.com/PapilotAI/papilot/pull/146))
+
+### Fixed
+
+- **Drag the desktop window from any toolbar.** Empty toolbar space over a task's changes now moves the window, as it does elsewhere, while the review's buttons still take clicks. Toolbars side by side now share one height, so their lines meet. ([#143](https://github.com/PapilotAI/papilot/pull/143))
+- **A source save too large to read back is refused before writing.** A save within the character limit could exceed the file limit once encoded, as Chinese text or CRLF line endings do; it wrote the file, then reported a failed save that every retry repeated. ([#146](https://github.com/PapilotAI/papilot/pull/146))
 
 ## [0.10.0] - 2026-11-12
 
@@ -502,7 +511,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/PapilotAI/papilot/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/PapilotAI/papilot/compare/v0.9.4...v0.10.0
 [0.9.4]: https://github.com/PapilotAI/papilot/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/PapilotAI/papilot/compare/v0.9.2...v0.9.3
