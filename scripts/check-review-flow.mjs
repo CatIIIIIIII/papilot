@@ -52,7 +52,7 @@ function detail(round) {
 }
 // The server keeps whether indirect changes are tracked; reloading reads it.
 let indirectChanges = false;
-await page.route('**/api/**', async route => {
+const appRoutes = async route => {
   const url = new URL(route.request().url());
   if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/indirect-changes') {
@@ -98,8 +98,8 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname.endsWith('/messages')) { task.status = 'running'; task.review.unsent = 0; return route.fulfill({ json: { ok: true } }); }
   throw Error(`Unexpected app request ${url.pathname}`);
-});
-await page.route('**/review/**', async route => {
+};
+const reviewRoutes = async route => {
   const url = new URL(route.request().url()), relative = url.pathname.slice(prefix.length);
   if (relative === '/') return route.fulfill({ contentType: 'text/html', body: rewriteReviewHtml(fs.readFileSync('engine/dist/web/index.html', 'utf8'), prefix) });
   if (relative.startsWith('/assets/')) return route.fulfill({ path: path.resolve('engine/dist/web' + relative), contentType: relative.endsWith('.js') ? 'text/javascript' : relative.endsWith('.css') ? 'text/css' : 'font/otf' });
@@ -124,12 +124,37 @@ await page.route('**/review/**', async route => {
     update();
   }
   return route.fulfill({ json: { ...annotateReviewState(state(round), [task]), ...(restored ? { restored } : {}) } });
-});
+};
+await page.route('**/api/**', appRoutes);
+await page.route('**/review/**', reviewRoutes);
 const viewer = () => page.frameLocator('.review-frame');
 const sync = async () => page.evaluate(() => window.dispatchEvent(new Event('online')));
 try {
   await page.goto(origin);
   await viewer().locator('.change.current').waitFor();
+  // The desktop window moves from the toolbar row, also where the row is the
+  // viewer's own bar: app-region does nothing inside the iframe, so the host
+  // bar above it drags, with a no-drag hole over each of the bar's controls.
+  const desktop = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, height: 1000 } });
+  desktop.on('pageerror', error => errors.push(error.message));
+  await desktop.addInitScript(() => { window.papilotDesktop = { platform: 'darwin', minimize() {}, maximize() {}, close() {} }; });
+  await desktop.route('**/api/**', appRoutes); await desktop.route('**/review/**', reviewRoutes);
+  await desktop.goto(origin);
+  await desktop.frameLocator('.review-frame').locator('.bar .accept-all').waitFor();
+  const dragRegions = () => desktop.evaluate(() => {
+    const host = document.querySelector('.review-host-bar'), frame = document.querySelector('.review-frame'), offset = frame.getBoundingClientRect();
+    const holes = [...host.querySelectorAll('.review-bar-hole')].filter(hole => getComputedStyle(hole).getPropertyValue('-webkit-app-region') === 'no-drag').map(hole => hole.getBoundingClientRect());
+    const controls = [...frame.contentDocument.querySelectorAll('.bar :is(.accept-all,.reject-all,.history)')].map(control => {
+      const box = control.getBoundingClientRect(), left = offset.left + box.left, top = offset.top + box.top, right = offset.left + box.right, bottom = offset.top + box.bottom;
+      const covered = holes.some(hole => hole.left <= left && hole.right >= right && hole.top <= top && hole.bottom >= bottom);
+      // The holes take no clicks: the button under each still gets them.
+      const reached = document.elementFromPoint((left + right) / 2, (top + bottom) / 2) === frame;
+      return `${control.getAttribute('aria-label') || control.textContent}${covered ? '' : ' drags'}${reached ? '' : ' blocked'}`;
+    });
+    return `${getComputedStyle(host).getPropertyValue('-webkit-app-region')}: ${controls.join(' · ')}`;
+  });
+  await expect.poll(dragRegions).toBe('drag: Accept all (4) · Reject all (4) · History');
+  await desktop.close();
   // Ordinary edits fold their knock-on changes; source-only and visually
   // unchanged definitions retain the PDF evidence needed to review them.
   const indirect = () => viewer().locator('.change[data-stop="0"] .effects');

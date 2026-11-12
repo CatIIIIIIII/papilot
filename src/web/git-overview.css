@@ -7,7 +7,7 @@
 .git-workspace .git-merge{flex:0 1 auto;overflow:auto;max-height:60%;margin-top:8px}
 .git-file-lists{flex:1;min-height:72px;overflow:auto;padding:0 6px 12px}
 .git-details{min-width:0;min-height:0;display:flex;flex-direction:column;container-type:inline-size}
-.git-details-toolbar{flex:none;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
+.git-details-toolbar{flex:none;display:flex;align-items:center;gap:8px;min-height:var(--toolbar-height);padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
 .git-details-refresh{margin-left:auto;width:30px;height:30px}
 .git-details .git-detail-switcher>button>span{display:inline}
 .git-file-preview{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -16,7 +16,7 @@
 .git-repository-view .git-graph-scroll{max-height:none}
 .git-file-preview[hidden],.git-repository-view[hidden]{display:none}
 /* Single compact top bar: branch & sync status inline with panel actions. */
-.git-toolbar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:46px;padding:4px 8px 4px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
+.git-toolbar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:var(--toolbar-height);padding:4px 8px 4px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
 .git-toolbar:has(>.sidebar-toggle){padding-left:8px}
 .git-branch{display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1 1 64px;font-size:12.5px;color:var(--text-3)}
 .git-branch>svg{flex:none}

@@ -1,6 +1,6 @@
 import { isPlayground } from './playground-mode.ts';
 import taskCommitStyles from './task-commit.css?inline';
-import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '../shared.ts';
 import { useReviewDraft } from './review-draft.ts';
@@ -8,6 +8,7 @@ import { ReviewNotes } from './review-notes.tsx';
 import { Icon } from './icons.tsx';
 import themeStyles from './theme.css?inline';
 import { syncAppearance } from './appearance.ts';
+import { desktopWindow } from './desktop-chrome.tsx';
 import { language, t, useLanguage } from './i18n.ts';
 import { NoteReviewControls, NoteReviewScope, useNoteResults } from './note-results.tsx';
 import { ReviewNoteConnections } from './review-note-connections.tsx';
@@ -82,7 +83,7 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
       --accept:var(--green);--reject:var(--red);--comment:var(--accent);--ok-soft:var(--green-soft);--bad-soft:var(--red-soft);--warn:var(--amber-text);--warn-soft:var(--amber-soft);--warn-line:var(--amber-line);
     }
     .review-body{margin-left:var(--papilot-rail,0px)}
-    .bar{display:flex;align-items:center;height:var(--papilot-bar-height,44px);min-height:var(--papilot-bar-height,44px);padding:0 max(14px,calc(var(--papilot-tools,0px) + 4px)) 0 calc(var(--papilot-lead,0px) + 14px);gap:12px;flex-wrap:nowrap;overflow:hidden}
+    .bar{display:flex;align-items:center;height:var(--papilot-bar-height,46px);min-height:var(--papilot-bar-height,46px);padding:0 max(14px,calc(var(--papilot-tools,0px) + 4px)) 0 calc(var(--papilot-lead,0px) + 14px);gap:12px;flex-wrap:nowrap;overflow:hidden}
     .bar .identity h1,.bar .identity span{display:none}
     .bar .identity{flex:1;min-width:0;flex-direction:row;gap:6px}
     .bar .identity span{font-size:13px;font-weight:600;color:var(--text-2);overflow:hidden;text-overflow:ellipsis}
@@ -256,7 +257,7 @@ function compactReviewFrame(doc: Document, reserve: number, lead: number, change
     :root[data-papilot-build-indicator] .bar .status[data-state="building"]{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%)}
     .bar .accept-all,.bar .reject-all{flex-shrink:0;white-space:nowrap}
     .bar .batch-count{margin-left:0;background:var(--bg-muted);color:var(--text-2)}
-    :root[data-papilot-toolbar-stacked] .bar{padding:calc(var(--papilot-bar-height,44px) + 4px) 8px 4px;min-height:calc(var(--papilot-bar-height,44px) + 44px)}
+    :root[data-papilot-toolbar-stacked] .bar{padding:calc(var(--papilot-bar-height,46px) + 4px) 8px 4px;min-height:calc(var(--papilot-bar-height,46px) + 44px)}
     :root[data-papilot-toolbar-stacked] .bar .identity{display:none}
     :root[data-papilot-toolbar-stacked] .bar .bar-end{margin-left:auto}
     /* The common PDF toolbar owns the first row; review decisions keep a
@@ -301,6 +302,44 @@ function cropMargins(doc: Document) {
   const root = doc.documentElement.style, span = max - min + 0.04;
   if (max <= min || span >= 0.95) { root.removeProperty('--pdf-crop-scale'); root.removeProperty('--pdf-crop-shift'); return; }
   root.setProperty('--pdf-crop-scale', (1 / span).toFixed(4)); root.setProperty('--pdf-crop-shift', Math.max(0, min - 0.02).toFixed(4));
+}
+
+// The desktop app moves its window from the toolbar row. Over the changes the
+// row's middle is the viewer's own bar, inside the iframe, where app-region has
+// no effect. The host bar on top drags instead, with a no-drag hole over each
+// control of the viewer's bar, so its buttons still take clicks.
+const BAR_CONTROLS = 'button,a,input,select,textarea,[role="slider"],[role="combobox"]';
+type DragHole = { left: number; top: number; width: number; height: number };
+function useDragHoles(host: RefObject<HTMLElement | null>, frame: RefObject<HTMLIFrameElement | null>, doc: Document | null, ready: boolean, readingPdf: boolean) {
+  const [holes, setHoles] = useState<DragHole[]>([]);
+  useEffect(() => {
+    const area = host.current, box = frame.current, bar = doc?.querySelector<HTMLElement>('.bar'), view = doc?.defaultView;
+    if (!desktopWindow || !area || !box || !bar || !view) { setHoles([]); return; }
+    let pending = 0;
+    const measure = () => {
+      pending = 0;
+      if (!area.isConnected || !box.isConnected) return;
+      const outer = area.getBoundingClientRect(), inner = box.getBoundingClientRect();
+      const x = inner.left - outer.left, y = inner.top - outer.top, next: DragHole[] = [];
+      for (const control of bar.querySelectorAll(BAR_CONTROLS)) {
+        const r = control.getBoundingClientRect();
+        const left = Math.max(0, Math.floor(x + r.left)), right = Math.min(outer.width, Math.ceil(x + r.right));
+        const top = Math.max(0, Math.floor(y + r.top)), bottom = Math.min(outer.height, Math.ceil(y + r.bottom));
+        if (right > left && bottom > top) next.push({ left, top, width: right - left, height: bottom - top });
+      }
+      setHoles(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+    };
+    const schedule = () => { pending ||= requestAnimationFrame(measure); };
+    // Each document measures its own elements.
+    const outside = new ResizeObserver(schedule), inside = new view.ResizeObserver(schedule);
+    outside.observe(area); outside.observe(box);
+    const observe = () => { inside.disconnect(); for (const element of [bar, ...bar.querySelectorAll('*')]) inside.observe(element); schedule(); };
+    const changes = new MutationObserver(observe);
+    changes.observe(bar, { childList: true, subtree: true, attributes: true });
+    observe();
+    return () => { cancelAnimationFrame(pending); outside.disconnect(); inside.disconnect(); changes.disconnect(); };
+  }, [doc, ready, readingPdf]);
+  return holes;
 }
 
 
@@ -585,6 +624,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
   const readiness = useRef(onReadyChange); readiness.current = onReadyChange;
   useEffect(() => { onReadyChange?.(ready, displayedRound); }, [ready, displayedRound, onReadyChange]);
   useEffect(() => () => { readiness.current?.(false); }, []);
+  const dragHoles = useDragHoles(hostBar, frame, document, ready, readingPdf);
   const [slot, setSlot] = useState<Element | null>(null);
   useEffect(() => {
     if (!document || !ready) { setSlot(null); return; }
@@ -613,6 +653,7 @@ export function ReviewFrame({ task, changesOf, tools, lead, completion, onCommen
       {readingPdf && <PdfFindButton open={findOpen} onClick={() => findOpen ? closeFind() : setFindOpen(true)}/>}
       <div ref={toolbar} className="review-tools">{task && onComment && <ReviewNotes railSlot={railSlot} doc={ready && !noteLinks?.preview ? document : null} task={task} onComment={onComment}/>}{tools}</div>
       {readingPdf && findOpen && <PdfFind inputRef={findInput} query={query} matches={reader?.find || { current: 0, total: 0 }} notFound={reader?.find?.notFound || false} onQuery={value => { setQuery(value); readerCommand({ type: 'find', query: value, again: false, previous: false }); }} onNext={previous => readerCommand({ type: 'find', query, again: true, previous })} onClose={closeFind}/>}
+      {dragHoles.map((hole, index) => <span key={index} className="review-bar-hole" style={hole}/>)}
     </div>
     {task && onComment && <div ref={setRailSlot} className="review-marking-rail"/>}
     {slot && completion ? createPortal(completion, slot) : null}

@@ -33,6 +33,15 @@ const showSidebar = async () => { const home = page.locator('.manuscript-link');
 const openTask = async id => { await showSidebar(); await page.locator(`[data-task="${id}"] .task-link`).click(); };
 const openManuscript = async () => { await showSidebar(); await page.getByRole('button', { name: 'Manuscript', exact: true }).click(); };
 const marks = () => page.locator('.page[data-page-number="1"] .note-tag[data-kind="point"]');
+// Toolbars side by side share one bottom line, in the desktop title row.
+const toolbarLines = () => page.evaluate(() => {
+  const top = document.querySelector('.main').getBoundingClientRect().top, lines = new Set();
+  const add = (element, offset = 0) => { const box = element?.getBoundingClientRect(); if (box?.height) lines.add(Math.round(box.bottom + offset - top)); };
+  document.querySelectorAll('.main :is(.pdf-toolbar,.panel-heading,.manuscript-side-header,.workspace-navigation,.review-placeholder-toolbar,.git-toolbar,.git-details-toolbar,.git-diff-toolbar)').forEach(element => add(element));
+  const frame = document.querySelector('.review-frame'), viewer = frame?.contentDocument;
+  if (viewer && !viewer.documentElement.hasAttribute('data-papilot-reader')) add(viewer.querySelector('.bar'), frame.getBoundingClientRect().top);
+  return [...lines].join(' ');
+});
 const markersFit = () => page.locator('.note-tag').evaluateAll(elements => {
   const boxes = elements.map(element => element.getBoundingClientRect());
   return boxes.every((box, index) => box.width > 0 && box.left >= 0 && box.right <= innerWidth &&
@@ -170,6 +179,7 @@ try {
   await expect(download).toHaveCount(0);
   await openManuscript();
   await expect(input).toHaveValue('Make the design philosophy more concrete.');
+  await expect.poll(toolbarLines).toBe('46');
   await presets.getByRole('button', { name: 'More prepared tasks', exact: true }).click();
   await expect(presets.locator('.demo-preset')).toHaveCount(6);
   await presets.getByRole('button', { name: 'Open prepared task: Fix the cropped-page coordinates', exact: true }).click();
@@ -221,9 +231,11 @@ try {
   await review.locator('.change.current').getByRole('button', { name: 'LaTeX', exact: true }).click();
   await expect(review.locator('.change.current .source-code')).toBeVisible();
   await review.locator('.change.current').getByRole('button', { name: 'LaTeX', exact: true }).click();
+  await expect.poll(toolbarLines).toBe('46');
   await page.getByRole('button', { name: 'PDF', exact: true }).click();
   await expect(review.locator('.paper-page')).toHaveCount(2);
   await expect(review.locator('.paper-slice canvas').first()).toBeVisible();
+  await expect.poll(toolbarLines).toBe('46');
   await page.getByRole('button', { name: 'Changes', exact: true }).click();
   await review.locator('.change.current button.accept').click();
   await expect(page.locator('[data-task="example-clarity"] .task-badge')).toHaveText('1');
@@ -309,6 +321,7 @@ try {
   await page.locator('.sidebar').getByRole('button', { name: /^Version Management/ }).click();
   const git = page.locator('.git-workspace');
   await expect(git.locator('.git-file')).toHaveCount(3);
+  await expect.poll(toolbarLines).toBe('46');
   await expect(download).not.toBeVisible();
   await git.getByRole('button', { name: 'Stage main.tex', exact: true }).click();
   await expect(git.getByRole('group', { name: 'Staged changes', exact: true }).locator('.git-file')).toHaveCount(2);

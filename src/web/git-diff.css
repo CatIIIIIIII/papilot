@@ -1,6 +1,6 @@
 .manuscript-pages.git-diff-view{grid-column:1;grid-row:1;display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;background:var(--bg);container-type:inline-size}
 .manuscript-pages.behind-source{grid-column:1;grid-row:1;visibility:hidden;pointer-events:none}
-.git-diff-toolbar{display:flex;align-items:center;gap:12px;flex:none;min-height:46px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
+.git-diff-toolbar{display:flex;align-items:center;gap:12px;flex:none;min-height:var(--toolbar-height);padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
 .git-diff-file-bar{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
 .git-diff-title{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;font-size:13px}
 .git-diff-title strong{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:var(--text)}

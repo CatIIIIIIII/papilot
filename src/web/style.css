@@ -16,6 +16,9 @@
   --mono:"Paper Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --r-sm:6px;--r:8px;--r-md:10px;--r-lg:14px;--r-xl:18px;
   --ease:cubic-bezier(.2,.8,.2,1);
+  /* Every top toolbar shares the desktop title row: side by side, their
+     bottom lines meet, and the window controls sit centered in them. */
+  --toolbar-height:46px;
   font:14px/1.5 var(--sans);color:var(--text);background:var(--bg);font-synthesis:none;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-kerning:normal;
 }
 *{box-sizing:border-box}
@@ -186,7 +189,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .status.failed,.status.uncertain,.status.deleting{color:var(--red)}
 
 /* Navigation shares the content toolbars; phones keep a compact view switcher. */
-.workspace-navigation,.review-placeholder-toolbar{height:44px;flex-shrink:0;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 8px;gap:6px;background:var(--bg)}
+.workspace-navigation,.review-placeholder-toolbar{height:var(--toolbar-height);flex-shrink:0;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 8px;gap:6px;background:var(--bg)}
 .workspace-navigation>.view-selector{margin-left:auto}
 .workspace-nav-end{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .task-state-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
@@ -231,7 +234,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 @keyframes workspace-panel-out{to{opacity:0;transform:translateX(var(--workspace-shift,16px))}}
 .review-panel{display:flex;flex-direction:column;position:relative;min-height:0;min-width:0;background:var(--canvas);container-type:inline-size}
 .review-viewport{container-type:inline-size;position:relative;display:flex;flex:1;min-height:0;min-width:0;overflow:clip}
-.review-marking-rail{position:absolute;z-index:4;left:0;top:44px;bottom:0;display:flex}
+.review-marking-rail{position:absolute;z-index:4;left:0;top:var(--toolbar-height);bottom:0;display:flex}
 .review-frame{display:block;width:100%;height:100%;flex:1;border:0;background:var(--canvas);min-height:0}
 .review-pending>.review-frame{visibility:hidden}
 .review-host-bar{position:absolute;z-index:3;inset:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;pointer-events:none}
@@ -240,7 +243,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .review-host-bar.pdf-toolbar .review-lead{min-height:0;padding:0;flex-wrap:wrap}
 .review-host-bar.pdf-toolbar .review-tools{min-height:0;margin-left:0;padding:0}
 .review-host-bar.pdf-toolbar .pdf-find{flex:0 0 100%;min-width:0}
-.review-tools{margin-left:auto;min-height:44px;max-width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px;padding:0 8px 0 0}
+.review-tools{margin-left:auto;min-height:var(--toolbar-height);max-width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px;padding:0 8px 0 0}
 .review-tools .icon-button{width:30px;height:30px}
 .review-tools [aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
 .review-tools .commit-staged{height:28px;padding:0 9px;font-size:13px;border-radius:7px;gap:6px}
@@ -253,7 +256,7 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 .pdf-modes>button:focus-visible{position:relative;outline-offset:1px}
 @container (max-width:620px){.pdf-modes>button{width:32px;padding:0}.pdf-modes>button>span{display:none}}
 .pdf-modes.labeled>button{width:auto;padding:0 10px}.pdf-modes.labeled>button>span{display:inline}
-.review-lead{min-height:44px;display:flex;align-items:center;gap:4px;padding-left:8px;flex-shrink:0}
+.review-lead{min-height:var(--toolbar-height);display:flex;align-items:center;gap:4px;padding-left:8px;flex-shrink:0}
 /* Before the first PDF exists, use the same toolbar sizing and responsive
    modes as the viewer. Only the toolbar spacer grows, never the icon gaps. */
 .manuscript-lead{container-type:inline-size}
@@ -299,7 +302,7 @@ body.resizing iframe{pointer-events:none}
 
 /* Chat */
 .activity-panel{background:var(--bg);border-left:1px solid var(--line);min-width:0;display:flex;flex-direction:column;min-height:0}
-.panel-heading{height:44px;flex-shrink:0;padding:0 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.panel-heading{height:var(--toolbar-height);flex-shrink:0;padding:0 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
 .panel-tools{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
 .panel-tools .task-state-actions{order:1;margin-left:auto}
 .panel-tools .workspace-view-selector{margin-right:auto}
@@ -596,11 +599,11 @@ body.resizing iframe{pointer-events:none}
 .manuscript-note.error{color:var(--red);background:var(--red-soft);border-bottom-color:var(--red-line)}
 .manuscript-note pre{margin:6px 0 0;max-height:200px;overflow:auto;white-space:pre-wrap;color:var(--text);font:13px/1.5 var(--mono)}
 .manuscript-side{min-width:0;min-height:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--bg)}
-.manuscript-side-header{display:flex;align-items:center;min-width:0;padding:0 8px 0 4px;border-bottom:1px solid var(--line);flex-shrink:0}
+.manuscript-side-header{display:flex;align-items:center;height:var(--toolbar-height);min-width:0;padding:0 8px 0 4px;border-bottom:1px solid var(--line);flex-shrink:0}
 .manuscript-side-header>.icon-button{width:30px;height:30px}
 .manuscript-panel-toggle[aria-expanded=true]:not(:hover){background:transparent;color:var(--text-2)}
 .manuscript-side-header{container-type:inline-size}
-.side-tabs{display:flex;flex:1;min-width:0;gap:2px;padding:8px;overflow-x:auto;scrollbar-width:none}
+.side-tabs{display:flex;align-items:center;align-self:stretch;flex:1;min-width:0;gap:2px;padding:0 8px;overflow-x:auto;scrollbar-width:none}
 .side-tabs::-webkit-scrollbar{display:none}
 /* A narrow panel keeps the open tab's name and shows the others as icons,
    named by their tooltip and, for screen readers, by their hidden label. */
@@ -668,8 +671,8 @@ body.resizing iframe{pointer-events:none}
 .skills-picker-menu>button>svg{flex-shrink:0}
 /* pdf.js viewer: toolbar, find bar, pages and the note layer above each page */
 .pdf-view{flex:1;min-height:0;display:flex;flex-direction:column;container-type:inline-size}
-.pdf-toolbar{display:flex;align-items:center;gap:6px;height:46px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
-.pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding-block:4px}
+.pdf-toolbar{display:flex;align-items:center;gap:6px;height:var(--toolbar-height);padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
+.pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:var(--toolbar-height);flex-wrap:wrap;padding-block:4px}
 .pdf-toolbar-spacer{flex:1;min-width:0}
 .pdf-pager,.pdf-zoom{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .pdf-pager{font-size:13px;color:var(--text-2)}
@@ -1092,7 +1095,7 @@ body.resizing iframe{pointer-events:none}
 /* A resized desktop pane needs the same room for controls as a small phone. */
 @media(min-width:681px){
   @container (max-width:480px){
-    .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:46px;flex-wrap:wrap;padding:4px}
+    .pdf-toolbar:has(.pdf-contents-trigger){height:auto;min-height:var(--toolbar-height);flex-wrap:wrap;padding:4px}
     .pdf-toolbar:has(.pdf-contents-trigger) .pdf-toolbar-spacer{flex:0 0 100%;height:0}
     .pdf-contents-trigger{width:auto;padding:0 8px}
     .pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:inline}
