@@ -180,6 +180,12 @@ In a task review, expand **LaTeX** under a change and select the pencil (**Edit*
 
 Wait for active agent work and PDF builds before saving. Earlier rounds are read-only, and a rejected change must be undone before editing. If another operation changes the source after you opened it, saving refuses to overwrite it and keeps your draft. If compilation fails, reopen **Edit** to repair the saved source; the previous PDF remains available. Manual compilation failures are not sent to an agent automatically.
 
+### Fix a LaTeX build
+
+In the manuscript's **Compilation Problems** panel, select **Fix with an agent…** to have the selected agent diagnose the failed build. Papilot gives it the compiler diagnostics and relevant source excerpts in a read-only turn. If the agent proposes changes to the engine, source directory, or use of the current `latexmkrc`, Papilot tests them and saves a successful configuration in its data directory for this paper and compiler host. Later builds use those settings after a restart. A subsequent change to the paper's explicit build settings takes precedence. If the agent thinks a different main document should be used, it asks you to check the selection.
+
+If the agent recommends editing the paper, review its diagnosis and select **Start task** to let the agent make the proposed edits in a task worktree. If the original cannot produce a PDF and the revision compiles, the review shows the source changes and the original compiler errors. You can accept the changes and apply them to the manuscript from that review.
+
 ## AI review
 
 In **Manuscript → New task**, choose the **AI review** skill from the composer’s **+** menu, or type `/ai-review`. Optionally describe a focus (for example, assumptions, argument structure, or clarity), choose Codex, Claude, or GLM, and send it like any other skill. Papilot builds and preserves a PDF from the task's own manuscript copy, so you don't need to wait for the preview to finish compiling. The reviewer reads its extracted text and produces comments anchored to its actual lines. It runs in read-only mode and cannot publish or apply manuscript edits.

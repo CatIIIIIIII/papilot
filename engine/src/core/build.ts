@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzip, gzip } from "node:zlib";
 import type { ChildProcess } from "node:child_process";
-import { Repo } from "./git.ts";
+import { cleanPath, Repo } from "./git.ts";
 import { readJson, writeJsonAsync, withLock, now } from "./files.ts";
 import { stripComments } from "./outline.ts";
 import { signature, type Project } from "./config.ts";
@@ -21,6 +21,45 @@ export class BuildError extends Error {
   ) {
     super(message);
   }
+}
+function tikzDirectory(file: string) {
+  const parent = path.posix.dirname(file.replaceAll("\\", "/"));
+  if (parent === "." || /[\x00-\x1f<>:"|?*]/.test(parent)) return null;
+  try {
+    const dir = cleanPath(parent);
+    return dir && !dir.split("/").some(part => /[. ]$/.test(part)) ? dir : null;
+  } catch {
+    return null;
+  }
+}
+function relativeInside(root: string, file: string) {
+  const relative = path.relative(root, file);
+  return relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative) ? null : relative;
+}
+async function prepareBuildDirectory(root: string, directory: string) {
+  const relative = relativeInside(root, directory);
+  if (relative === null) return false;
+  if (!relative) return true;
+  let current = root;
+  for (const part of relative.split(path.sep)) {
+    current = path.join(current, part);
+    const stat = await fs.promises.lstat(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (!stat) {
+      await fs.promises.mkdir(directory, { recursive: true });
+      return true;
+    }
+    if (stat.isSymbolicLink()) {
+      const [snapshot, target] = await Promise.all([
+        fs.promises.realpath(root),
+        fs.promises.realpath(current).catch(() => null),
+      ]);
+      if (!target || relativeInside(snapshot, target) === null || !(await fs.promises.stat(target)).isDirectory()) return false;
+    } else if (!stat.isDirectory()) return false;
+  }
+  return true;
 }
 const AUXILIARY = new Set([
   ".aux",
@@ -561,7 +600,7 @@ export class Builder {
     // such as minted's cache, come along, so it reruns only what leaving out
     // the other chapters changes. Manual recompilation starts clean, and so
     // does a retry when leftover state broke a build.
-    const start = options.force ? null : (await this.closest(context, targets, tree)) ?? (partial ? (seed && { info: seed, date: null }) : "author");
+    const start = options.force ? null : (await this.closest(context, targets, tree)) ?? (partial ? (seed && { info: seed, date: null }) : "author" as const);
     const waiters = [...(waiting.get(requestKey) ?? [])],
       priority = waiters.reduce<BuildPriority>((top, w) => (RANK[current(w.priority)] > RANK[top] ? current(w.priority) : top), "background");
     const run: Active = { key: requestKey, priority, paused: false, watchers: new Set(waiters.flatMap((w) => (w.pass ? [w.pass] : []))) };
@@ -572,15 +611,32 @@ export class Builder {
       run.progress = value;
       for (const waiter of waiting.get(requestKey) ?? []) waiter.progress?.(value);
     };
-    let result: BuildInfo;
+    let continuation = start, result: BuildInfo;
+    const knownDirectories = (start && start !== "author" ? start.info : seed)?.tikzDirectories ?? [];
+    const tikzDirectories = new Set(knownDirectories.filter(dir => tikzDirectory(dir + "/cache.md5") === dir));
     try {
-      try {
-        result = await this.compile(rev, tree, key, targets, seed, date, dated, start, progress, run, signal, pastErrors);
-      } catch (error) {
-        // A cancelled build is not a failure that a clean start could fix.
-        if (error instanceof Cancelled || signal?.aborted) throw error;
-        if (!start || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
-        result = await this.compile(rev, tree, key, targets, seed, date, dated, null, progress, run, signal, pastErrors);
+      for (;;) {
+        try {
+          result = await this.compile(rev, tree, key, targets, seed, date, dated, continuation, tikzDirectories, progress, run, signal, pastErrors);
+          break;
+        } catch (error) {
+          if (error instanceof Cancelled || signal?.aborted) throw error;
+          // TeX writes TikZ's checksum before running its external compiler.
+          // Git does not retain empty cache directories and latexmk's output
+          // directory needs its own copy of the directory structure.
+          const directories = error instanceof BuildError ? error.details.flatMap(line => {
+            const file = /Can't write on file `([^']+\.md5)'/i.exec(line)?.[1];
+            const directory = file && tikzDirectory(file);
+            return directory && !tikzDirectories.has(directory) ? [directory] : [];
+          }) : [];
+          if (directories.length && tikzDirectories.size < knownDirectories.length + 8) {
+            for (const directory of directories) tikzDirectories.add(directory);
+            continue;
+          }
+          // As before, retry from clean auxiliary state if it broke the build.
+          if (!continuation || (error instanceof BuildError && !error.details.some(line => /(?:^|\s|\()(?:\.\/)?build\//.test(line)))) throw error;
+          continuation = null;
+        }
       }
     } finally {
       active.delete(run);
@@ -671,6 +727,7 @@ export class Builder {
     date: ReturnType<typeof buildDate>,
     dated: boolean,
     start: { info: BuildInfo; date: unknown } | "author" | null,
+    tikzDirectories: Set<string>,
     progress?: (progress: BuildProgress) => void,
     scheduled?: Active,
     signal?: AbortSignal,
@@ -697,9 +754,18 @@ export class Builder {
       main = path.posix.basename(p.main),
       job = path.posix.basename(main, ".tex"),
       out = path.join(cwd, "build");
-    await fs.promises.mkdir(out, { recursive: true });
+    if (!(await prepareBuildDirectory(source, out)))
+      throw new BuildError("LaTeX failed to compile.", ["The build output path must be a directory inside the snapshot."]);
     const included = includes(await fs.promises.readFile(path.join(cwd, main), "utf8"));
-    await Promise.all(included.map((target) => fs.promises.mkdir(path.join(out, path.dirname(target)), { recursive: true })));
+    const auxDirectories = [...new Set(included.map(target => path.dirname(path.resolve(out, target + ".aux"))))];
+    const prepared = await Promise.all(auxDirectories.map(dir => prepareBuildDirectory(source, dir)));
+    const readyDirs = new Set(auxDirectories.filter((_, index) => prepared[index]));
+    await Promise.all([
+      ...[...tikzDirectories].flatMap(directory => [
+        prepareBuildDirectory(source, path.join(cwd, directory)),
+        prepareBuildDirectory(source, path.join(out, directory)),
+      ]),
+    ]);
     // Preview outputs carry across days. A dated comparison can still use
     // older auxiliary state, but TeX must refresh the date on its pages.
     // Pages of other targets, such as a chapter build's full seed, are never
@@ -722,7 +788,10 @@ export class Builder {
       if (fs.existsSync(path.join(own, job + ".fdb_latexmk")))
         await Promise.all([
           ...(await fs.promises.readdir(own)).filter((name) => (name.startsWith(job + ".") && !OUTPUT.test(name) && !name.endsWith(".fls")) || name.startsWith("_minted")),
-          ...included.map((target) => target + ".aux"),
+          ...included.flatMap(target => {
+            const file = path.resolve(out, target + ".aux"), relative = relativeInside(out, file);
+            return relative && readyDirs.has(path.dirname(file)) ? [relative] : [];
+          }),
         ].map(async (name) => {
           try {
             if ((await fs.promises.stat(path.join(own, name))).isDirectory()) await fs.promises.cp(path.join(own, name), path.join(out, name), { recursive: true });
@@ -733,8 +802,8 @@ export class Builder {
         }));
     }
     if (signal?.aborted) return abandon();
-    // Nor is a PDF that the paper's repository keeps in the output folder.
-    if (pastErrors) await Promise.all(["pdf", "xdv"].map((ext) => fs.promises.rm(path.join(out, `${job}.${ext}`), { force: true })));
+    // A clean build must generate its own PDF, even if the paper tracks one.
+    if (!start || pastErrors) await Promise.all(["pdf", "xdv"].map((ext) => fs.promises.rm(path.join(out, `${job}.${ext}`), { force: true })));
     const args = [
       "-norc",
       ...(p.latexmkrc
@@ -808,7 +877,8 @@ export class Builder {
       }
     };
     if (keeping) args.push("-e", PASS_HOOK);
-    args.push(main);
+    // A repository can contain a filename that looks like a latexmk option.
+    args.push(main.startsWith("-") ? "./" + main : main);
     const transcript = path.join(folder, "latexmk.log"),
       log = await fs.promises.open(transcript, "w"),
       // Pages are counted against the build this one continues from.
@@ -921,6 +991,7 @@ export class Builder {
       pdf,
       seconds: Math.round((now() - ran) * 10) / 10,
       warnings: warnings(logText),
+      ...(tikzDirectories.size ? { tikzDirectories: [...tikzDirectories] } : {}),
       ...(errors ? { errors } : {}),
     };
     await writeJsonAsync(path.join(folder, "result.json"), result);

@@ -1,4 +1,9 @@
 {
+  "Connect the selected agent before diagnosing compilation problems.": "コンパイルの問題を診断する前に、選択したエージェントに接続してください。",
+  "The proposed settings would enable a different latexmkrc.": "提案された設定では別の latexmkrc が有効になります。",
+  "The manuscript could not be compiled.": "原稿をコンパイルできませんでした。",
+  "The agent returned an invalid LaTeX repair response.": "エージェントから無効な LaTeX 修正案が返されました。",
+  "The manuscript build changed. Check the latest compilation problems.": "原稿のコンパイル結果が変わりました。最新のコンパイルエラーを確認してください。",
   "A commit is already in progress. Wait for it to finish.": "コミットがすでに実行中です。完了するまでお待ちください。",
   "A commit is in progress. Try again when it finishes.": "コミットを実行中です。完了してから再試行してください。",
   "A review action is already in progress. Wait for it to finish.": "レビュー操作がすでに実行中です。完了するまでお待ちください。",

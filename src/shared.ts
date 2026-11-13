@@ -153,7 +153,7 @@ export interface GitOverview { worktrees: GitWorktree[]; commits: GitGraphCommit
 // A running compilation, from latexmk's output: its step, the TeX pass, and
 // the pages typeset in that pass against the last known page count.
 export interface BuildProgress { step: 'tex' | 'bibliography' | 'pdf'; pass: number; pages: number; total: number | null; startedAt: number }
-export interface ManuscriptBuild { status: 'building' | 'ready' | 'failed'; key?: string; pages?: [number, number][]; builtAt?: number; error?: string; current: boolean;
+export interface ManuscriptBuild { status: 'building' | 'ready' | 'failed'; key?: string; pages?: [number, number][]; builtAt?: number; error?: string; failureId?: string; current: boolean;
   /** The working tree this build compiles or compiled, failed or not. */
   tree?: string; problems?: BuildProblemCounts; progress?: BuildProgress }
 // What the last finished build reported. Errors stop the build; warnings are
@@ -176,7 +176,8 @@ export function countProblems(problems: Pick<BuildProblem, 'severity' | 'kind' |
   return counts;
 }
 // `key` names the PDF whose pages the locations refer to.
-export interface ManuscriptProblems { status: ManuscriptBuild['status']; key?: string; problems: BuildProblem[]; log: boolean }
+export interface ManuscriptProblems { status: ManuscriptBuild['status']; key?: string; failureId?: string; problems: BuildProblem[]; log: boolean }
+export interface BuildRepairResult { kind: 'settings' | 'source' | 'advice'; summary: string }
 // A delete mark asks for the marked text to go, or to be replaced by its
 // comment; a point marks a place rather than a passage. A stamp is the short
 // name of a quick note the author picked; its comment holds the instruction.

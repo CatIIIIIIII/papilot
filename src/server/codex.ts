@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import type { TaskPermissions, TaskPermissionOption } from '../shared.ts';
 import { DATA, ROOT, VERSION } from './paths.ts';
 import { codexBinary } from './codex-binary.ts';
-import { codexCandidates } from '../../bin/codex-lookup.mjs';
+import { codexCandidates, codexWorkingDirectory } from '../../bin/codex-lookup.mjs';
 import { taskAccessInstructions } from './task-permissions.ts';
 
 export class RpcResponseError extends Error {}
@@ -68,7 +68,7 @@ export class Codex extends EventEmitter {
     const generation = this.generation;
     const binary = this.binary || await codexBinary(this.env, DATA, controller.signal);
     if (generation !== this.generation) throw new Error('Codex is not connected.');
-    const child = spawnCommand(binary, this.args, { cwd: ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnCommand(binary, this.args, { cwd: codexWorkingDirectory(this.env) ?? ROOT, env: { ...this.env, PATH: agentPath(this.env) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     const lines = createInterface({ input: child.stdout! });
     // A closed launch's child may still print before it exits; only the current one speaks for Codex.

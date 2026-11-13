@@ -8,6 +8,8 @@ export const WEB = path.join(ROOT, "dist/web");
 export function environmentVersion(env: NodeJS.ProcessEnv = process.env) {
   const keys = [
     "PATH",
+    "PAPILOT_DATA",
+    "WSL_DISTRO_NAME",
     "PYTHONHOME",
     "PYTHONPATH",
     "BIBINPUTS",

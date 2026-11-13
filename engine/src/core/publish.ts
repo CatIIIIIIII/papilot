@@ -6,7 +6,7 @@ import { Builder, BuildError, auxiliaryBuildError, buildDate, reprioritize, type
 import { diffUnitsAsync, scopeViolationsAsync, withHashesAsync, withUnits } from "./changes.ts";
 import { provisional, roundFolder, writeProvisional } from "./carry.ts";
 import { acceptNoteOption, noteOptionUnits } from "./note-options.ts";
-import { isFigure } from "./config.ts";
+import { isFigure, signature } from "./config.ts";
 import { REFS } from "./git.ts";
 import { now, readJson, writeJson } from "./files.ts";
 import { Cancelled, runAsync } from "./process.ts";
@@ -179,6 +179,14 @@ export async function attribute(
 }
 // Renders a comparison. `variant` compiles the accepted text with only some
 // of the edits; without it, changes outside every crop list every edit.
+export function sourceComparison(units: Unit[]): RenderedRound {
+  return {
+    units: Object.fromEntries(units.map(unit => [unit.id, { visual: "unmapped", pages: [], section: null }])),
+    sections: [],
+    loose: units.map(unit => ({ kind: "change", units: [unit.id], identical: false, before: [], after: [] })),
+  };
+}
+
 export async function render(
   output: string,
   request: RenderRequest,
@@ -680,11 +688,13 @@ export class Publisher {
       );
     // A round from before the choice existed listed indirect changes.
     const indirect = this.indirect.get(job.id) ?? this.tracking.get(name) ?? false;
+    const buildSettings = signature(project);
     if (
       latest &&
       latest.before === before &&
       (await app.repo.treeIdAsync(latest.after)) === (await app.repo.treeIdAsync(after)) &&
       latest.summary.renderer === codeVersion() &&
+      latest.summary.buildSettings === buildSettings &&
       (latest.summary.indirect ?? true) === indirect
     )
       // A round whose render failed or was interrupted renders again.
@@ -736,7 +746,7 @@ export class Publisher {
     } finally {
       await fs.promises.rm(pending, { recursive: true, force: true });
     }
-    const round = await insert(units, { renderer: codeVersion(), indirect, warnings: [], targets, date: buildDate(), builds: [], job: job.id }, "pending");
+    const round = await insert(units, { renderer: codeVersion(), buildSettings, indirect, warnings: [], targets, date: buildDate(), builds: [], job: job.id }, "pending");
     return { round };
   }
   /** Inserts the worktree's round now when an earlier build of the task is
@@ -824,51 +834,60 @@ export class Publisher {
       const past = await this.compile(job, "baseline", builder, before, targets, seed, { date, pastErrors: true }).catch(compileFailure);
       if (past) builds = [{ status: "fulfilled", value: past }, builds[1]];
     }
-    // A failure of either is reported once both have settled, the baseline's first.
     const [baseline, revised] = builds,
-      old = baseline.status === "fulfilled" ? baseline.value : failed("The comparison baseline could not be compiled.")(baseline.reason),
+      baselineErrors = !this.stopping && baseline.status === "rejected" && baseline.reason instanceof BuildError && revised.status === "fulfilled"
+        ? [baseline.reason.message, ...baseline.reason.details] : undefined,
+      old = baseline.status === "fulfilled" ? baseline.value : baselineErrors ? null : failed("The comparison baseline could not be compiled.")(baseline.reason),
       next = revised.status === "fulfilled" ? revised.value : failed("The revised document could not be compiled.")(revised.reason);
     if (this.roundSuperseded(round)) return superseded;
-    const warnings = next.warnings.filter((w) => !old.warnings.includes(w));
+    const warnings = next.warnings.filter((w) => !old?.warnings.includes(w));
     this.phase(job, "render");
     const final = roundFolder(app, name, round.number),
       output = final + ".pending-" + randomBytes(4).toString("hex");
     fs.mkdirSync(output, { recursive: true });
     const summary = {
       ...round.summary,
+      buildSettings: signature(project),
       warnings,
       targets,
       date,
-      builds: [seed, old, next].filter((b) => b !== null).map((b) => b.key),
-      baselineErrors: old.errors,
+      builds: old ? [seed, old, next].filter((b) => b !== null).map((b) => b.key) : [next.key],
+      baselineErrors: old?.errors ?? baselineErrors,
+      sourceOnly: old ? undefined : true,
     };
     try {
-      // The comparison the agent's writes were rendered into ahead, when it
-      // shows exactly these builds and edits; otherwise it renders now.
-      const rendered = await this.renderCached(
-        {
-          main: project.main,
-          source_dir: project.source_dir,
-          figures: project.figures,
-          old,
-          new: next,
-          units,
-          indirect,
-        },
-        // Only a round that lists indirect changes compiles variants to
-        // find the edits behind them.
-        indirect
-          ? (subset, shared) =>
-              builder.build(
-                withUnits(app.repo, before, after, subset),
-                targets,
-                seed,
-                { date, ...shared },
-              )
-          : undefined,
-        () => this.priority(job),
-      );
-      await cloneTree(rendered, output);
+      // A successful repair can still be reviewed when there are no Before
+      // pages. Use the regular source diffs and require the same decisions.
+      if (!old) {
+        await fs.promises.writeFile(path.join(output, "round.json"), JSON.stringify(sourceComparison(units)));
+      } else {
+        // The comparison the agent's writes were rendered into ahead, when it
+        // shows exactly these builds and edits; otherwise it renders now.
+        const rendered = await this.renderCached(
+          {
+            main: project.main,
+            source_dir: project.source_dir,
+            figures: project.figures,
+            old,
+            new: next,
+            units,
+            indirect,
+          },
+          // Only a round that lists indirect changes compiles variants to
+          // find the edits behind them.
+          indirect
+            ? (subset, shared) =>
+                builder.build(
+                  withUnits(app.repo, before, after, subset),
+                  targets,
+                  seed,
+                  { date, ...shared },
+                )
+            : undefined,
+          () => this.priority(job),
+        );
+        await cloneTree(rendered, output);
+      }
       // Decisions go on meanwhile; they never change a round's versions.
       await app.exclusive(async () => {
         await fs.promises.mkdir(final, { recursive: true });

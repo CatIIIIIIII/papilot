@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Repo } from '../engine/src/core/git.ts';
 import { Builder } from '../engine/src/core/build.ts';
-import { loadProject } from '../engine/src/core/config.ts';
+import { loadProject, saveBuildOverrides } from '../engine/src/core/config.ts';
 import { findCommand } from '../engine/src/core/platform.mjs';
 
 const { Fixture, METHOD, fakeRound } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
@@ -346,6 +346,82 @@ test('the full paper of a round that compiled the whole paper is that round\'s o
     assert.notEqual(await fullPaperPdf(stray, f.root, 'p-task', 2, 'after'), published);
     assert.equal(fs.readFileSync(calls, 'utf8').trim().split('\n').length, 1);
   } finally { process.env.PATH = previousPath; f.close(); }
+});
+
+test('round PDFs keep their own builds when repaired settings change without changing either revision', async () => {
+  const { fullPaperPdf, retainedPaperPdf, nextPaperPass } = await import('../src/server/pdf.ts');
+  const f = paper({ 'main.tex': document('Before.\n') }), previousData = process.env.PAPILOT_DATA;
+  process.env.PAPILOT_DATA = path.join(f.base, 'data');
+  try {
+    const before = f.repo.rev('HEAD'), after = f.commit({ 'main.tex': document('After.\n') }), project = loadProject(f.root);
+    const publish = async (key: string, revision: string) => {
+      const folder = path.join(project.state, 'cache/builds', key), pdf = path.join(folder, 'src/build/main.pdf');
+      fs.mkdirSync(path.dirname(pdf), { recursive: true });
+      fs.writeFileSync(pdf, `%PDF-1.4 ${key}`);
+      fs.writeFileSync(path.join(folder, 'result.json'), JSON.stringify({ key, tree: await f.repo.treeIdAsync(revision, project.source_dir), targets: ['full'], root: path.join(folder, 'src'), cwd: path.join(folder, 'src'), pdf, seconds: 1, warnings: [] }));
+      return pdf;
+    };
+    const keys = ['1', '2', '3', '4'].map(value => value.repeat(32));
+    const first = [await publish(keys[0], before), await publish(keys[1], after)];
+    const connect = async () => ({ get: async (route: string) => {
+      const builds = route.endsWith('/1') ? keys.slice(0, 2) : keys.slice(2);
+      return { before, after, builds, build: { key: builds[1], targets: ['full'] } } as any;
+    } });
+    assert.equal(await fullPaperPdf(connect, f.root, 'p-task', 1, 'before'), first[0]);
+    assert.equal(await fullPaperPdf(connect, f.root, 'p-task', 1, 'after'), first[1]);
+    saveBuildOverrides(f.root, { engine: 'xelatex' });
+    const second = [await publish(keys[2], before), await publish(keys[3], after)];
+    assert.equal(await fullPaperPdf(connect, f.root, 'p-task', 2, 'before'), second[0], 'the unchanged baseline uses the repaired build');
+    assert.equal(await retainedPaperPdf(connect, f.root, 'p-task', 2), second[1], 'the retained reader uses the repaired build');
+    assert.deepEqual(await nextPaperPass(connect, f.root, 'p-task', 2, 0, 0), { pass: null });
+    assert.deepEqual(await Promise.all([1, 2, 1, 2].map(async round => [
+      await fullPaperPdf(connect, f.root, 'p-task', round, 'before'),
+      await fullPaperPdf(connect, f.root, 'p-task', round, 'after'),
+    ])), [first, second, first, second], 'concurrent readers of old and new rounds retain their exact PDFs');
+  } finally {
+    if (previousData === undefined) delete process.env.PAPILOT_DATA; else process.env.PAPILOT_DATA = previousData;
+    f.close();
+  }
+});
+
+test('a repaired chapter round does not reuse the prior round\'s full paper or passes', { skip: !tex && 'needs latexmk and pdflatex', timeout: 180000 }, async () => {
+  const { fullPaperPdf, retainedPaperPdf, nextPaperPass, paperPassPdf } = await import('../src/server/pdf.ts');
+  const f = paper({ 'main.tex': document('Unused.\n'), 'src/main.tex': document('\\section{One}\\label{one}See page~\\pageref{two}.\n\\section{Two}\\label{two}Text.\n') });
+  const previousData = process.env.PAPILOT_DATA, teX = slowTeX(f.base);
+  process.env.PAPILOT_DATA = path.join(f.base, 'data');
+  try {
+    f.write({ '.git/papilot/settings.json': JSON.stringify({ main: 'src/main.tex', engine: 'pdflatex' }) });
+    const rev = f.repo.rev('HEAD'), keys = ['5', '6'].map(value => value.repeat(32));
+    const chapters = keys.map(key => {
+      const folder = path.join(loadProject(f.root).state, 'cache/builds', key), pdf = path.join(folder, 'chapters.pdf');
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(pdf, `%PDF-1.4 ${key}`);
+      fs.writeFileSync(path.join(folder, 'result.json'), JSON.stringify({ pdf }));
+      return pdf;
+    });
+    const connect = async () => ({ get: async (route: string) => ({ before: rev, after: rev, build: { key: keys[route.endsWith('/1') ? 0 : 1], targets: ['one'] } }) as any });
+    const original = await fullPaperPdf(connect, f.root, 'p-task', 1, 'after');
+    saveBuildOverrides(f.root, { source_dir: '' });
+    assert.equal(await retainedPaperPdf(connect, f.root, 'p-task', 2), chapters[1], 'the new chapter PDF precedes the newly requested full build');
+    const shown: string[] = [];
+    for (let after = 0; ;) {
+      const next = await nextPaperPass(connect, f.root, 'p-task', 2, after, 60000);
+      if (next.pass === null) break;
+      if (typeof next.pass !== 'number') continue;
+      shown.push(await paperPassPdf(connect, f.root, 'p-task', 2, next.pass));
+      after = next.pass;
+    }
+    assert.equal(shown[0], chapters[1]);
+    assert.ok(shown.length > 1, 'the repaired full build exposes its own intermediate passes');
+    const repaired = await fullPaperPdf(connect, f.root, 'p-task', 2, 'after');
+    assert.notEqual(repaired, original);
+    assert.equal(await fullPaperPdf(connect, f.root, 'p-task', 1, 'after'), original);
+    assert.ok(shown.every(pdf => fs.existsSync(pdf)));
+  } finally {
+    teX.restore();
+    if (previousData === undefined) delete process.env.PAPILOT_DATA; else process.env.PAPILOT_DATA = previousData;
+    f.close();
+  }
 });
 
 test('a delivery preview is exactly what applying the task writes, with pending changes accepted', async () => {

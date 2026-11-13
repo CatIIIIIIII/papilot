@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
-import { countProblems, type BuildProblem, type BuildProblemCounts, type ManuscriptBuild, type ManuscriptProblems } from '../shared.ts';
+import { countProblems, type BuildProblem, type BuildProblemCounts, type BuildRepairResult, type ManuscriptBuild, type ManuscriptProblems } from '../shared.ts';
 import { Icon } from './icons.tsx';
 import { t, tn } from './i18n.ts';
 import './build-problems.css';
@@ -41,14 +41,17 @@ export function fixRequest(problems: BuildProblem[], limit = 40) {
 // count red, warnings leave it grey, and typesetting remarks are never counted.
 // Nothing opens by itself; the list loads when someone asks for it.
 export const ProblemsButton = forwardRef<ProblemsHandle, {
-  counts?: BuildProblemCounts; status?: ManuscriptBuild['status']; pdfKey?: string; logUrl: string;
-  load: () => Promise<ManuscriptProblems>; onJump: (problem: BuildProblem) => void; onFix?: (problems: BuildProblem[]) => void;
-}>(function ProblemsButton({ counts, status, pdfKey, logUrl, load, onJump, onFix }, ref) {
+  counts?: BuildProblemCounts; status?: ManuscriptBuild['status']; failureId?: string; pdfKey?: string; logUrl: string;
+  load: () => Promise<ManuscriptProblems>; onJump: (problem: BuildProblem) => void;
+  onFix?: (problems: BuildProblem[], sourceDiagnosis?: string) => void; diagnose?: (failureId: string) => Promise<BuildRepairResult>;
+}>(function ProblemsButton({ counts, status, failureId, pdfKey, logUrl, load, onJump, onFix, diagnose }, ref) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [data, setData] = useState<ManuscriptProblems | null>(null), [error, setError] = useState('');
+  const pendingRepair = useRef(false), [repairing, setRepairing] = useState(false);
+  const [repair, setRepair] = useState<{ signature: string; result?: BuildRepairResult; error?: string }>();
   const loadRef = useRef(load); loadRef.current = load;
   const errors = counts?.errors || 0, warnings = counts?.warnings || 0, shown = errors || warnings;
-  const signature = JSON.stringify([counts, status, pdfKey]);
+  const signature = JSON.stringify([counts, status, failureId, pdfKey]);
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -77,6 +80,25 @@ export const ProblemsButton = forwardRef<ProblemsHandle, {
   ];
   const minor = problems.filter(problem => problem.severity === 'minor');
   const fixable = problems.filter(problem => problem.kind !== 'other');
+  const diagnosis = repair?.signature === signature ? repair.result : undefined;
+  const saved = repair?.result?.kind === 'settings' && (repair.signature === signature || status !== 'failed');
+  const repairError = repair?.signature === signature ? repair.error : undefined;
+  const currentFailure = status === 'failed' && data?.status === 'failed' && data.failureId === failureId;
+  const fixDisabled = repairing || status === 'building' || (status === 'failed' || data?.status === 'failed') && !currentFailure;
+  async function fix() {
+    if (!onFix || fixDisabled || pendingRepair.current) return;
+    if (diagnose && failureId && currentFailure && diagnosis?.kind !== 'source') {
+      pendingRepair.current = true; setRepairing(true); setRepair(undefined);
+      try { setRepair({ signature, result: await diagnose(failureId) }); }
+      catch (error) { setRepair({ signature, error: error instanceof Error ? error.message : String(error) }); }
+      finally { pendingRepair.current = false; setRepairing(false); }
+      return;
+    }
+    panel.current?.hidePopover();
+    if (diagnosis?.kind === 'source') onFix(fixable.filter(problem => problem.severity === 'error'), diagnosis.summary);
+    else onFix(fixable);
+    setRepair(undefined);
+  }
   const label = errors ? tn(errors, '{n} compilation error', '{n} compilation errors') : warnings ? tn(warnings, '{n} compilation warning', '{n} compilation warnings') : t('Compilation log');
   const row = (problem: BuildProblem, index: number) => {
     const where = problemPlace(problem), canJump = problem.page !== undefined && Boolean(problem.rect) && data?.key === pdfKey;
@@ -115,9 +137,13 @@ export const ProblemsButton = forwardRef<ProblemsHandle, {
             </details>}
           </>}
       </div>
+      {(repairing || saved || diagnosis || repairError) && <div className="problems-repair" role={repairError ? 'alert' : 'status'}>
+        {repairing ? t('Diagnosing the compilation failure…') : saved ? <>{t('Test compilation succeeded. Build settings saved.')}<div>{repair.result?.summary}</div></> : repairError || diagnosis?.summary}
+        {diagnosis?.kind === 'source' && <p>{t('Submit a repair task to approve changes to project files.')}</p>}
+      </div>}
       {(data?.log || (onFix && fixable.length > 0)) && <footer className="problems-footer">
         {data?.log && <a href={logUrl} target="_blank" rel="noreferrer">{t('Raw log')}</a>}
-        {onFix && fixable.length > 0 && <button type="button" className="button ghost compact" onClick={() => { panel.current?.hidePopover(); onFix(fixable); }}><Icon name="tool" size={14}/>{t('Fix with an agent…')}</button>}
+        {onFix && fixable.length > 0 && <button type="button" className="button ghost compact" disabled={fixDisabled} onClick={() => void fix()}><Icon name="tool" size={14}/>{diagnosis?.kind === 'source' ? t('Prepare source repair…') : t('Fix with an agent…')}</button>}
       </footer>}
     </div>
   </span>;

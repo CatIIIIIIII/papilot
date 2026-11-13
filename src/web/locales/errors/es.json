@@ -1,4 +1,9 @@
 {
+  "Connect the selected agent before diagnosing compilation problems.": "Conecta el agente seleccionado antes de diagnosticar los problemas de compilación.",
+  "The proposed settings would enable a different latexmkrc.": "Los ajustes propuestos activarían otro archivo latexmkrc.",
+  "The manuscript could not be compiled.": "No se pudo compilar el manuscrito.",
+  "The agent returned an invalid LaTeX repair response.": "El agente devolvió una respuesta de reparación de LaTeX no válida.",
+  "The manuscript build changed. Check the latest compilation problems.": "El resultado de compilación del manuscrito cambió. Revisa los problemas de compilación más recientes.",
   "A commit is already in progress. Wait for it to finish.": "Ya hay una confirmación en curso. Espera a que termine.",
   "A commit is in progress. Try again when it finishes.": "Hay una confirmación en curso. Inténtalo de nuevo cuando termine.",
   "A review action is already in progress. Wait for it to finish.": "Ya hay una acción de revisión en curso. Espera a que termine.",

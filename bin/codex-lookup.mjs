@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { agentPath, findExecutables, killTree, spawnCommand, WINDOWS } from './agent-paths.mjs';
 
@@ -18,17 +19,25 @@ export function codexCandidates(env, data, root, wsl = isWsl(env)) {
   return env.PAPILOT_CODEX_BIN ? [env.PAPILOT_CODEX_BIN] : findExecutables('codex', env, [path.join(root, 'node_modules', '.bin'), path.join(data, 'agents', 'node_modules', '.bin')], dir => !wsl || !windowsDrive(dir));
 }
 
+// Volta resolves package commands from the working directory. The desktop
+// server's package.json declares Codex for development, but the installer
+// omits that dependency. Start the host's Codex outside the server package.
+export function codexWorkingDirectory(env = process.env) {
+  return env.PAPILOT_DESKTOP === '1' ? (WINDOWS ? env.USERPROFILE : env.HOME) || os.homedir() : undefined;
+}
+
 /** The first candidate that runs, tried with the PATH Codex is started with. */
 export async function firstRunnable(candidates, env = process.env, { timeout = 15000, budget = 30000, signal } = {}) {
   if (signal?.aborted) return null;
   const deadline = Date.now() + budget;
   const probe = { ...env, PATH: agentPath(env) };
+  const cwd = codexWorkingDirectory(env);
   for (const file of candidates) {
     const remaining = deadline - Date.now();
     if (signal?.aborted || remaining <= 0) return null;
     try {
       const runs = await new Promise(resolve => {
-        const child = spawnCommand(file, ['--version'], { env: probe, stdio: 'ignore', detached: !WINDOWS });
+        const child = spawnCommand(file, ['--version'], { cwd, env: probe, stdio: 'ignore', detached: !WINDOWS });
         let settled = false;
         const finish = runs => {
           if (settled) return;

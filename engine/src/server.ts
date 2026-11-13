@@ -7,7 +7,7 @@ import compress from "@fastify/compress";
 import { WEB, codeVersion, environmentVersion } from "./runtime.ts";
 import { Repo, stateDir } from "./core/git.ts";
 import { serverHome } from "./client.ts";
-import { loadProject, settingsFile, type Project } from "./core/config.ts";
+import { buildOverridesFile, loadProject, settingsFile, type Project } from "./core/config.ts";
 import { Store } from "./core/store.ts";
 import { Tasks } from "./core/tasks.ts";
 import { Review } from "./core/review.ts";
@@ -42,7 +42,7 @@ export class App {
   references: ReferenceChecker;
   confirmations: Confirmations;
   private cachedProject?: Project;
-  private stamp?: number;
+  private stamp?: string;
   constructor(root: string) {
     this.root = realPath(root);
     this.repo = new Repo(this.root);
@@ -83,8 +83,10 @@ export class App {
     return result;
   }
   get project() {
-    const config = settingsFile(this.root),
-      stamp = fs.existsSync(config) ? fs.statSync(config).mtimeMs : 0;
+    const stamp = [settingsFile(this.root), buildOverridesFile(this.root)].map(file => {
+      const stat = file ? fs.statSync(file, { throwIfNoEntry: false }) : undefined;
+      return stat ? `${stat.ino}:${stat.mtimeMs}` : "";
+    }).join(";");
     if (!this.cachedProject || this.stamp !== stamp) {
       this.cachedProject = loadProject(this.root);
       this.stamp = stamp;

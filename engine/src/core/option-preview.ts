@@ -7,7 +7,7 @@ import { groupFormattingChanges } from "./formatting-changes.ts";
 import { splitLines } from "./changes.ts";
 import { Builder, buildDate } from "./build.ts";
 import { readJson, writeJson } from "./files.ts";
-import { render } from "./publish.ts";
+import { render, sourceComparison } from "./publish.ts";
 import type { OptionInput } from "./note-options.ts";
 
 /** Keep annotation IDs and old ranges stable while adjusting candidate ranges.
@@ -97,7 +97,7 @@ export async function previewNoteOption(app: App, name: string, input: OptionInp
   // rejection/undo cannot put a different comparison under the browser's key.
   if (input.rejected !== undefined && JSON.stringify(input.rejected) !== JSON.stringify(rejected))
     throw new Error("The review changed. Reload the options.");
-  const key = createHash("sha256").update(JSON.stringify([3, round.before, round.after, input.edits, rejected, project, targets, date])).digest("hex");
+  const key = createHash("sha256").update(JSON.stringify([3, round.before, round.after, input.edits, rejected, project, targets, date, ...(round.summary.sourceOnly ? [true] : [])])).digest("hex");
   const output = path.join(app.state, "cache/option-previews", name, String(round.number), key);
   const cached = readJson<RoundDetail | null>(path.join(output, "preview.json"), null);
   if (cached) return cached;
@@ -118,7 +118,7 @@ export async function previewNoteOption(app: App, name: string, input: OptionInp
       : (keys.length > 2 ? await builder.completed(keys[0]) : null) ?? await builder.buildSeed(task.base);
     const baseline = keys.length >= 2 ? await builder.completed(keys.at(-2)!) : null;
     const [old, next] = await Promise.all([
-      baseline ?? builder.build(round.before, targets, seed, { date }),
+      round.summary.sourceOnly ? null : baseline ?? builder.build(round.before, targets, seed, { date }),
       builder.build(after, targets, seed, { date }),
     ]);
     fs.mkdirSync(output, { recursive: true });
@@ -126,13 +126,17 @@ export async function previewNoteOption(app: App, name: string, input: OptionInp
     // an insertion). Keep its decision ID in the saved round, but do not render
     // a before/after card for an edit that this candidate no longer contains.
     const visible = candidate.units.filter(unit => unit.kind !== "text" || unit.truncated || unit.whole_file || unit.old_text !== unit.new_text);
-    await render(output, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units: visible, indirect: false });
-    const rendered = readJson<RenderedRound>(path.join(output, "round.json"), { units: {}, sections: [], loose: [] });
+    if (old) await render(output, { main: project.main, source_dir: project.source_dir, figures: project.figures, old, new: next, units: visible, indirect: false });
+    const rendered = old
+      ? readJson<RenderedRound>(path.join(output, "round.json"), { units: {}, sections: [], loose: [] })
+      : sourceComparison(visible);
     fs.copyFileSync(next.pdf, path.join(output, "preview.pdf"));
     const files = `/option-files/${name}/${round.number}/${key}/`;
     const detail: RoundDetail = groupFormattingChanges({ ...rendered, task: name, round: round.number, before: round.before, after,
       units: visible.map(unit => ({ ...unit, ...rendered.units[unit.id] })),
-      warnings: [...old.warnings, ...next.warnings], files, pdf: files + "preview.pdf", build: { key: next.key, targets } }, file => app.repo.blob(round.before, file)?.toString("utf8") ?? null);
+      warnings: [...(old?.warnings ?? []), ...next.warnings], files, pdf: files + "preview.pdf", build: { key: next.key, targets },
+      ...(round.summary.sourceOnly ? { sourceOnly: true, baselineErrors: round.summary.baselineErrors } : {}),
+    }, file => app.repo.blob(round.before, file)?.toString("utf8") ?? null);
     writeJson(path.join(output, "preview.json"), detail);
     return detail;
   })();

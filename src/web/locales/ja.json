@@ -1,4 +1,8 @@
 {
+  "Diagnosing the compilation failure…": "コンパイルエラーを診断しています…",
+  "Prepare source repair…": "ソース修正タスクを準備…",
+  "Submit a repair task to approve changes to project files.": "修正タスクを送信して、プロジェクトファイルの変更を承認します。",
+  "Test compilation succeeded. Build settings saved.": "試験コンパイルに成功し、コンパイル設定を保存しました。",
   ", ": "、",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A few tools are needed before you can work on papers.": "論文を扱う前に、いくつかのツールを準備する必要があります。",

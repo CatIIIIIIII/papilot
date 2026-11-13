@@ -667,6 +667,10 @@ export const zhCN: Record<string, string> = {
   'Compilation log': '编译日志', 'p. {page}': '第 {page} 页', 'Compilation problems': '编译问题', 'Recompiling; this list will update.': '正在重新编译，列表稍后更新。',
   'Loading…': '正在加载…', 'The first build is still running.': '首次编译仍在进行。', 'No problems in the last build.': '上次编译没有发现问题。',
   'Typesetting and other remarks': '排版及其他提示', 'Raw log': '原始日志', 'Fix with an agent…': '交给代理修复…',
+  'Diagnosing the compilation failure…': '正在诊断编译错误…',
+  'Test compilation succeeded. Build settings saved.': '试编译成功，已保存编译参数。',
+  'Prepare source repair…': '准备工程修复任务…',
+  'Submit a repair task to approve changes to project files.': '提交修复任务后，代理才会修改工程文件。',
   'The latest changes did not compile. This is the last PDF that did.': '最新的修改未能编译，当前显示的是上一次编译成功的 PDF。', 'Show problems': '查看问题', 'Reported {n} times': '出现 {n} 次',
   // PDF marking tools and quick notes.
   'Select': '选择', 'Select text to copy it or add a note from the button beside it.': '选中文字可以复制，或用旁边的按钮添加批注。', 'Note': '批注',

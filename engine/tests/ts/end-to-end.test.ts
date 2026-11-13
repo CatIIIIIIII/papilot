@@ -230,6 +230,50 @@ it.skipIf(!tex)(
   120000,
 );
 it.skipIf(!tex)(
+  "creates nested TikZ checksum directories only in the build snapshot",
+  async () => {
+    const f = new Fixture();
+    try {
+      f.write("paper/main.tex", String.raw`\documentclass{article}
+\newwrite\checksum
+\begin{document}
+\immediate\openout\checksum=figures/cache/sketch.md5
+\immediate\write\checksum{test checksum}
+\immediate\closeout\checksum
+A figure.
+\end{document}
+`);
+      f.repo.run(["commit", "-qam", "nested checksum"]);
+      const app = f.app();
+      const built = await new Builder(app.project, app.repo).build("HEAD");
+      expect(fs.existsSync(built.pdf)).toBe(true);
+      expect(fs.existsSync(path.join(built.cwd, "build/figures/cache/sketch.md5"))).toBe(true);
+      expect(fs.existsSync(path.join(f.root, "paper/figures/cache"))).toBe(false);
+    } finally {
+      await f.close();
+    }
+  },
+);
+it.skipIf(!tex)(
+  "keeps include output directories inside the exported snapshot",
+  async () => {
+    const f = new Fixture();
+    try {
+      const app = f.app(), project = app.project;
+      const outside = path.join(f.root, "outside-snapshot");
+      const out = path.join(project.state, "cache/builds/key/src/build");
+      const target = path.relative(out, path.join(outside, "chapter")).split(path.sep).join("/");
+      const file = "paper/main.tex";
+      f.write(file, f.read(file).replace("\\end{document}", `\\include{${target}}\n\\end{document}`));
+      f.repo.run(["commit", "-qam", "include outside snapshot"]);
+      await expect(new Builder(project, app.repo).build("HEAD")).rejects.toBeInstanceOf(BuildError);
+      expect(fs.existsSync(outside)).toBe(false);
+    } finally {
+      await f.close();
+    }
+  },
+);
+it.skipIf(!tex)(
   "compares a task that fixes a compilation error with its text typeset past the error",
   async () => {
     const f = new Fixture();
@@ -280,6 +324,37 @@ it.skipIf(!tex)(
     }
   },
   180000,
+);
+it.skipIf(!tex)(
+  "reviews and applies a compilation fix when the baseline cannot produce a PDF",
+  async () => {
+    const f = new Fixture();
+    try {
+      const file = "paper/main.tex";
+      const missing = "\\input{missing-fixture-input}\n";
+      f.write(file, f.read(file).replace("\\begin{document}", missing + "\\begin{document}"));
+      f.repo.run(["commit", "-qam", "fatal baseline"]);
+      const app = f.app(), task = app.tasks.create("fix", undefined, [], [], true);
+      f.edit(task, file, missing, "");
+      const job = app.publisher.submit(task.name);
+      await app.publisher.join();
+      const done = app.publisher.job(job.id);
+      expect(done.status, JSON.stringify(done.result)).toBe("done");
+      const detail = app.review.roundDetail(task.name, 1);
+      expect(detail.sourceOnly).toBe(true);
+      expect(detail.baselineErrors?.join("\n")).toContain("missing-fixture-input");
+      expect(detail.units[0]?.old_text).toContain(missing.trim());
+      expect(fs.existsSync((await new Builder(app.project, app.repo).completed(detail.build!.key))!.pdf)).toBe(true);
+      expect(f.read(file)).toContain(missing);
+      await app.review.decide(task.name, { action: "accept", round: 1, changes: detail.units.map(unit => unit.id) });
+      expect(f.read(file)).toContain(missing);
+      expect((await app.delivery.apply(task.name)).delivery?.mode).toBe("workspace");
+      expect(f.read(file)).not.toContain(missing);
+    } finally {
+      await f.close();
+    }
+  },
+  120000,
 );
 it.skipIf(!tex)(
   "a build past errors fails when TeX writes no PDF, whatever PDF the repository keeps",

@@ -1,4 +1,8 @@
 {
+  "Diagnosing the compilation failure…": "컴파일 오류를 진단하는 중…",
+  "Prepare source repair…": "소스 수정 작업 준비…",
+  "Submit a repair task to approve changes to project files.": "프로젝트 파일 변경을 승인하려면 수정 작업을 제출하세요.",
+  "Test compilation succeeded. Build settings saved.": "시험 컴파일에 성공하여 컴파일 설정을 저장했습니다.",
   ", ": ", ",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A few tools are needed before you can work on papers.": "논문 작업을 시작하기 전에 몇 가지 도구를 준비해야 합니다.",

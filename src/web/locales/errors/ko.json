@@ -1,4 +1,9 @@
 {
+  "Connect the selected agent before diagnosing compilation problems.": "컴파일 문제를 진단하기 전에 선택한 에이전트에 연결하세요.",
+  "The proposed settings would enable a different latexmkrc.": "제안된 설정은 다른 latexmkrc를 활성화합니다.",
+  "The manuscript could not be compiled.": "원고를 컴파일하지 못했습니다.",
+  "The agent returned an invalid LaTeX repair response.": "에이전트가 잘못된 LaTeX 수정 응답을 반환했습니다.",
+  "The manuscript build changed. Check the latest compilation problems.": "원고의 컴파일 결과가 변경되었습니다. 최신 컴파일 문제를 확인하세요.",
   "A commit is already in progress. Wait for it to finish.": "커밋이 이미 진행 중입니다. 완료될 때까지 기다려 주세요.",
   "A commit is in progress. Try again when it finishes.": "커밋이 진행 중입니다. 완료되면 다시 시도하세요.",
   "A review action is already in progress. Wait for it to finish.": "검토 동작이 이미 진행 중입니다. 완료될 때까지 기다려 주세요.",

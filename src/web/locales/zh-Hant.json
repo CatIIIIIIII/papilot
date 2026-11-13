@@ -1,4 +1,8 @@
 {
+  "Diagnosing the compilation failure…": "正在診斷編譯錯誤…",
+  "Prepare source repair…": "準備專案修復任務…",
+  "Submit a repair task to approve changes to project files.": "送出修復任務後，代理才會修改專案檔案。",
+  "Test compilation succeeded. Build settings saved.": "測試編譯成功，已儲存編譯設定。",
   ", ": "、",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A few tools are needed before you can work on papers.": "開始處理論文前，還需要準備幾個工具。",

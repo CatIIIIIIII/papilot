@@ -10,6 +10,7 @@ import { Store } from './store.ts';
 import { Attachments } from './attachments.ts';
 import { Codex, RpcResponseError } from './codex.ts';
 import { taskAccessInstructions } from './task-permissions.ts';
+import { latexRepairInstructions } from './latex-repair.ts';
 import { AGENT_NAMES, AntigravityAgent, ClaudeAgent, GlmAgent, type AgentRuntime } from './agents.ts';
 import { ACP_PROFILES, AcpAgent } from './acp.ts';
 import { CursorAgent } from './cursor.ts';
@@ -1286,6 +1287,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     if (!id) throw new Error(`Sign in to an agent, such as Codex, to ${task}.`);
     const models = this.runtimes[id].models;
     return { id, model: (light ? lightModel(models) : undefined) || models.find(item => item.id === choice.model) || models.find(item => item.isDefault) };
+  }
+  async diagnoseLatexBuild(root: string, prompt: string, choice: { agent: AgentId; model?: string }) {
+    const id = choice.agent, runtime = this.runtimes[id];
+    if (!this.agents[id].ready || !runtime.authenticated) throw new Error('Connect the selected agent before diagnosing compilation problems.');
+    const model = runtime.models.find(item => item.id === choice.model) || runtime.models.find(item => item.isDefault);
+    return this.oneOff(id, { cwd: root, sandbox: 'read-only', model, timeout: 120000, what: 'diagnose the LaTeX build', instructions: latexRepairInstructions, prompt });
   }
   async repairImport(root: string, error: string, choice: { agent?: AgentId } = {}) {
     const { id, model } = this.helper(choice, 'repair the imported paper');

@@ -1,4 +1,6 @@
 import type { ReviewSnapshot } from './ai-review.ts';
+import type { Project as BuildProject } from '../../engine/src/core/config.ts';
+import type { BuildInfo } from '../../engine/src/types.ts';
 import { ReviewSnapshots } from './review-snapshot.ts';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -10,11 +12,12 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { ENGINE, ROOT } from './paths.ts';
 import { stateDir } from './state.ts';
-import type { Annotation, BuildProblem, BuildProgress, GitDiffScope, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
+import type { Annotation, BuildProblem, BuildProgress, BuildRepairResult, GitDiffScope, GitFile, GitStatus, ManuscriptBuild, ManuscriptProblems } from '../shared.ts';
 import { ignorePattern } from '../commit.ts';
 import { PdfReader } from './pdf-reader.ts';
 import { annotatePdf, type ExportNote } from './annotated-pdf.ts';
 import { collectProblems, countProblems, locateProblems, scrubLog, sortProblems, type StoredProblem } from './build-problems.ts';
+import { parseLatexRepair } from './latex-repair.ts';
 // Where a note comes from in the source, worked out in the PDF reader's worker.
 export { anchor, followLines, parseSynctex, settleLines, sourceExcerpt, type Anchor } from './note-location.ts';
 
@@ -365,13 +368,13 @@ async function pageSizes(mupdf: any, pdf: string) {
 }
 
 async function engine() {
-  const [{ Builder, BuildError, reprioritize }, { Repo, gitBinary }, { loadProject }, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
-    import(pathToFileURL(path.join(ENGINE, 'src/core/build.ts')).href),
-    import(pathToFileURL(path.join(ENGINE, 'src/core/git.ts')).href),
-    import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href),
+  const [{ Builder, BuildError, reprioritize }, { Repo, gitBinary }, config, { mupdf, PdfDocument, containsCenter, walkText }] = await Promise.all([
+    import(pathToFileURL(path.join(ENGINE, 'src/core/build.ts')).href) as Promise<typeof import('../../engine/src/core/build.ts')>,
+    import(pathToFileURL(path.join(ENGINE, 'src/core/git.ts')).href) as Promise<typeof import('../../engine/src/core/git.ts')>,
+    import(pathToFileURL(path.join(ENGINE, 'src/core/config.ts')).href) as Promise<typeof import('../../engine/src/core/config.ts')>,
     import(pathToFileURL(path.join(ENGINE, 'src/render/pdf.ts')).href),
   ]);
-  return { Builder, BuildError, reprioritize, Repo, gitBinary, loadProject, mupdf, PdfDocument, containsCenter, walkText };
+  return { config, loadProject: config.loadProject, Builder, BuildError, reprioritize, Repo, gitBinary, mupdf, PdfDocument, containsCenter, walkText };
 }
 
 // Every word on a page with its exact place, for the PDF view's selection
@@ -408,6 +411,7 @@ export async function pdfWords(pdf: string, page: number) {
 interface Build {
   tree: string; status: ManuscriptBuild['status']; key?: string; pdf?: string; root?: string; sourceDir?: string; pages?: [number, number][]; builtAt?: number; error?: string; progress?: BuildProgress;
   problems?: StoredProblem[]; problemsKey?: string; log?: string; logFolder?: string; previewOnly?: () => boolean;
+  failureId?: string; failedProject?: BuildProject;
 }
 
 
@@ -417,6 +421,7 @@ export class Manuscripts extends EventEmitter {
   // Notes are located and placed on PDFs off the event loop.
   private pdfReader = new PdfReader();
   private builds = new Map<string, Build>();
+  private repairs = new WeakMap<Build, Promise<BuildRepairResult>>();
   // When each paper's view last asked for its manuscript: the build of a
   // manuscript on screen compiles in the foreground, others behind it.
   private viewed = new Map<string, number>();
@@ -563,8 +568,8 @@ export class Manuscripts extends EventEmitter {
     const tree = building ? current.tree : await this.snapshot(root), status = await this.gitStatus(root, building, building ? undefined : tree);
     let build = this.builds.get(projectId);
     if (!build || (build.status !== 'building' && (build.tree !== tree || rebuild))) build = this.start(projectId, root, tree, build, rebuild);
-    const { status: state, key, pages, builtAt, error } = build;
-    return { git: status, build: { status: state, key, pages, builtAt, error, tree: build.tree, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems), ...(state === 'building' && build.progress ? { progress: build.progress } : {}) } };
+    const { status: state, key, pages, builtAt, error, failureId } = build;
+    return { git: status, build: { status: state, key, pages, builtAt, error, failureId, tree: build.tree, current: build.tree === tree && state === 'ready', problems: build.problems && countProblems(build.problems), ...(state === 'building' && build.progress ? { progress: build.progress } : {}) } };
   }
 
   /** Compiles the working tree if it changed, without waiting for anyone to
@@ -614,7 +619,7 @@ export class Manuscripts extends EventEmitter {
   }
 
   // Keep the previous pages visible while a newer working tree compiles.
-  private start(projectId: string, root: string, tree: string, previous?: Build, force = false) {
+  private start(projectId: string, root: string, tree: string, previous?: Build, force = false, tested?: { project: BuildProject; result: BuildInfo; pages: [number, number][] }) {
     if (previous?.key && previous.pdf) this.oldPdfs.set(`${root}:${previous.key}`, previous.pdf);
     const build: Build = { tree, status: 'building', key: previous?.key, pdf: previous?.pdf, root: previous?.root, sourceDir: previous?.sourceDir, pages: previous?.pages, builtAt: previous?.builtAt, problems: previous?.problems, problemsKey: previous?.problemsKey, log: previous?.log, logFolder: previous?.logFolder };
     this.builds.set(projectId, build);
@@ -622,10 +627,10 @@ export class Manuscripts extends EventEmitter {
     this.stale.delete(projectId);
     this.emit('change', projectId);
     void (async () => {
-      let project: { source_dir?: string; doc_dir?: string; state: string } | undefined;
+      let project: BuildProject | undefined;
       try {
         const { Builder, Repo, loadProject, mupdf } = await engine();
-        project = loadProject(root);
+        project = tested?.project ?? loadProject(root);
         const startedAt = Date.now();
         const sizes = (pdf: string) => pageSizes(mupdf, pdf);
         // A pass that latexmk follows with more work already shows the edit;
@@ -639,8 +644,8 @@ export class Manuscripts extends EventEmitter {
           Object.assign(build, { key, pdf: preview.pdf, root: preview.root, sourceDir: project!.source_dir || '', pages, builtAt: Date.now() });
           this.emit('change', projectId);
         };
-        const result = await new Builder(project, new Repo(root)).build(tree, ['full'], null, { force, priority: () => Date.now() - (this.viewed.get(projectId) ?? 0) < 15000 ? 'foreground' : 'normal', pass: (preview: { pdf: string; root: string }) => void pass(preview).catch(() => undefined), progress: (progress: Omit<BuildProgress, 'startedAt'>) => { if (this.builds.get(projectId) === build) build.progress = { ...progress, startedAt }; } });
-        const pages = await sizes(result.pdf);
+        const result = tested?.result ?? await new Builder(project, new Repo(root)).build(tree, ['full'], null, { force, priority: () => Date.now() - (this.viewed.get(projectId) ?? 0) < 15000 ? 'foreground' : 'normal', pass: (preview: { pdf: string; root: string }) => void pass(preview).catch(() => undefined), progress: (progress: Omit<BuildProgress, 'startedAt'>) => { if (this.builds.get(projectId) === build) build.progress = { ...progress, startedAt }; } });
+        const pages = tested?.pages ?? await sizes(result.pdf);
         const key = createHash('sha256').update(result.key + result.pdf).digest('hex').slice(0, 16);
         this.remember(projectId, key, result.pdf, result.root, project!.source_dir || '');
         if (this.builds.get(projectId) !== build) return;
@@ -674,7 +679,7 @@ export class Manuscripts extends EventEmitter {
         // a pass of this build that was shown went with its folder.
         Object.assign(build, { key: previous?.key, pdf: previous?.pdf, root: previous?.root, sourceDir: previous?.sourceDir, pages: previous?.pages, builtAt: previous?.builtAt });
         const shown = build.problemsKey && build.problemsKey === build.key ? (build.problems || []).filter(problem => problem.severity !== 'error') : [];
-        Object.assign(build, { status: 'failed', error: message, problems: [...problems, ...shown], problemsKey: shown.length ? build.problemsKey : undefined, log: detail.log && fs.existsSync(detail.log) ? detail.log : undefined, logFolder });
+        Object.assign(build, { status: 'failed', failureId: randomUUID(), failedProject: project, error: message, problems: [...problems, ...shown], problemsKey: shown.length ? build.problemsKey : undefined, log: detail.log && fs.existsSync(detail.log) ? detail.log : undefined, logFolder });
       }
       this.emit('change', projectId);
       // Edits made while this build ran are compiled next, right away.
@@ -738,8 +743,8 @@ export class Manuscripts extends EventEmitter {
   async problems(projectId: string): Promise<ManuscriptProblems> {
     const build = this.builds.get(projectId);
     if (!build?.problems) return { status: build?.status || 'building', problems: [], log: Boolean(build?.log) };
-    const { problems, problemsKey: key, pdf } = build;
-    if (!key || key !== build.key || !pdf) return { status: build.status, problems: sortProblems(problems.map(({ source: _source, occurrence: _occurrence, ...problem }) => problem)), log: Boolean(build.log) };
+    const { problems, problemsKey: key, pdf, failureId } = build;
+    if (!key || key !== build.key || !pdf) return { status: build.status, failureId, problems: sortProblems(problems.map(({ source: _source, occurrence: _occurrence, ...problem }) => problem)), log: Boolean(build.log) };
     let placed = this.located.get(problems);
     if (!placed) {
       placed = (async () => {
@@ -763,13 +768,80 @@ export class Manuscripts extends EventEmitter {
       placed.catch(() => this.located.delete(problems));
       this.located.set(problems, placed);
     }
-    return { status: build.status, key, problems: await placed, log: Boolean(build.log) };
+    return { status: build.status, key, failureId, problems: await placed, log: Boolean(build.log) };
   }
 
   log(projectId: string) {
     const build = this.builds.get(projectId);
     if (!build?.log || !fs.existsSync(build.log)) throw Object.assign(new Error('There is no compilation log yet.'), { statusCode: 404 });
     return scrubLog(fs.readFileSync(build.log, 'utf8'), build.logFolder);
+  }
+
+  repair(projectId: string, root: string, failureId: string, diagnose: (prompt: string) => Promise<string>): Promise<BuildRepairResult> {
+    const failed = this.builds.get(projectId);
+    const stale = () => Object.assign(new Error('The manuscript build changed. Check the latest compilation problems.'), { statusCode: 409 });
+    if (failed?.status !== 'failed' || failed.failureId !== failureId) throw stale();
+    const { tree, failedProject: project } = failed;
+    const pending = this.repairs.get(failed);
+    if (pending) return pending;
+    const checkCurrent = async () => {
+      if (this.builds.get(projectId) !== failed || await this.snapshot(root) !== tree || this.builds.get(projectId) !== failed) throw stale();
+    };
+    const repair = (async (): Promise<BuildRepairResult> => {
+      const { Builder, BuildError, Repo, config, mupdf } = await engine();
+      const { ENGINES, loadBuildDocuments, loadProject, readBuildOverrides, readSettings, saveBuildOverrides, signature } = config;
+      const { which } = await import(pathToFileURL(path.join(ENGINE, 'src/core/process.ts')).href) as typeof import('../../engine/src/core/process.ts');
+      const repo = new Repo(root), defaults = readSettings(root), saved = readBuildOverrides(root, defaults);
+      let documents: ReturnType<typeof loadBuildDocuments> | undefined = project;
+      if (!documents) try { documents = loadBuildDocuments(root, defaults, saved.ignoreLatexmkrc); }
+      catch { /* An unresolved main document still permits diagnosis and advice. */ }
+      const checkSettings = () => {
+        if (JSON.stringify(readSettings(root)) !== JSON.stringify(defaults) || JSON.stringify(readBuildOverrides(root)) !== JSON.stringify(saved)) throw stale();
+      };
+      const entries = (await repo.entriesAsync(tree)).filter(entry => entry.mode.startsWith('100'));
+      const candidates = entries.filter(entry => /\.tex$/i.test(entry.file)).map(entry => entry.file).slice(0, 80);
+      const errors = (failed.problems || []).filter(problem => problem.severity === 'error');
+      const focus = new Set([documents?.main, ...errors.map(problem => problem.file)]);
+      const small = new Set(entries.filter(entry => entry.size <= 100_000 && /\.(tex|sty|cls|bib)$/i.test(entry.file)).map(entry => entry.file));
+      const files = [...focus].filter((file): file is string => Boolean(file && small.has(file))).slice(0, 6);
+      const blobs = await repo.blobsAsync(tree, files);
+      const excerpts = files.map(file => {
+        const lines = blobs[file]?.toString('utf8').split('\n') || [];
+        const line = errors.find(problem => problem.file === file && problem.line)?.line ?? 1;
+        const start = Math.max(0, line - 5);
+        return { file, line: start + 1, text: lines.slice(start, start + 14).join('\n').slice(0, 1600) };
+      });
+      const { main, latexmkrc } = documents || {}, { engine: compiler, source_dir } = project || {};
+      const prompt = JSON.stringify({ platform: process.platform, installedEngines: ENGINES.filter(name => which(name)), latexmkInstalled: Boolean(which('latexmk')),
+        settings: { main, engine: compiler, source_dir, latexmkrc, ...saved }, candidates, excerpts, error: scrubLog(failed.error || '', failed.logFolder).slice(0, 12000) });
+      await checkCurrent();
+      const { kind, summary, settings } = parseLatexRepair(await diagnose(prompt));
+      await checkCurrent();
+      if (!settings) return { kind, summary };
+      checkSettings();
+      const next = { ...saved, ...settings }, candidate = loadProject(root, next);
+      if (!entries.some(entry => entry.file === candidate.main)) throw new Error('Choose an existing TeX main file.');
+      if (candidate.latexmkrc && (!documents || candidate.latexmkrc !== documents.latexmkrc || candidate.doc_dir !== documents.doc_dir))
+        throw new Error('The proposed settings would enable a different latexmkrc.');
+      if (project && signature(project) === signature(candidate)) return { kind: 'advice', summary };
+      let result: BuildInfo;
+      try { result = await new Builder(candidate, repo).build(tree, ['full'], null, { force: true, priority: 'foreground' }); }
+      catch (error) {
+        if (!(error instanceof BuildError)) throw error;
+        return { kind: 'advice', summary: `${summary}\n\n${scrubLog([error.message, ...error.details].join('\n'))}` };
+      }
+      const pages = await pageSizes(mupdf, result.pdf);
+      if (!pages.length) throw new Error('The manuscript could not be compiled.');
+      await checkCurrent();
+      checkSettings();
+      if (signature(loadProject(root, next)) !== signature(candidate)) throw stale();
+      saveBuildOverrides(root, next);
+      this.emit('build-settings', projectId);
+      this.start(projectId, root, tree, failed, false, { project: candidate, result, pages });
+      return { kind, summary };
+    })().finally(() => this.repairs.delete(failed));
+    this.repairs.set(failed, repair);
+    return repair;
   }
 
   // Compile the task's frozen source tree, then retain its PDF outside the build cache.

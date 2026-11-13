@@ -125,6 +125,9 @@ export async function buildApp(options: AppOptions) {
   // An AI review resumed after a restart compiles its copy here too.
   workspace.prepareReview = (task, worktree) => manuscripts.captureReview(store.project(task.projectId).path, worktree, task.id);
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
+  const buildSettingsChanged = (projectId: string) => changes.buildSettingsChanged(projectId);
+  manuscripts.on('build-settings', buildSettingsChanged);
+  app.addHook('onClose', async () => { manuscripts.off('build-settings', buildSettingsChanged); });
   guard(app, { listener, csrf: options.csrf });
   const updateRequests = new WeakMap<object, () => void>();
   app.addHook('onRequest', async (request, reply) => {
@@ -701,6 +704,14 @@ export async function buildApp(options: AppOptions) {
   // What the last build reported, placed on its PDF, and the TeX log itself.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/log', project(), (request, reply) => reply.type('text/plain; charset=utf-8').header('Cache-Control', 'no-store').send(manuscripts.log(store.project(request.params.id).id)));
+  app.post<{ Params: { id: string }; Body: { failureId?: unknown; agent?: unknown; model?: unknown } }>('/api/projects/:id/manuscript/repair', project(), request => {
+    const paper = store.project(request.params.id), body = request.body;
+    const selected = body?.agent;
+    if (!isAgentId(selected)) throw new Error('Connect the selected agent before diagnosing compilation problems.');
+    return manuscripts.repair(paper.id, paper.path, string(body.failureId, 'Compilation failure ID', 64), prompt => workspace.diagnoseLatexBuild(paper.path, prompt, {
+      agent: selected, model: typeof body.model === 'string' ? body.model : undefined,
+    }));
+  });
   // Exact word places for the PDF view's selection layer; immutable per build key.
   app.get<{ Params: { id: string }; Querystring: { key?: string; page?: string } }>('/api/projects/:id/manuscript/words', project(), async (request, reply) => {
     const project = store.project(request.params.id);

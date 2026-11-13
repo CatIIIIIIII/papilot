@@ -96,14 +96,16 @@ export interface Round {
     builds: string[];
     date?: { SOURCE_DATE_EPOCH: string; FORCE_SOURCE_DATE?: string };
     renderer?: string;
+    buildSettings?: string;
     /** Whether the round lists indirect changes; absent in older rounds,
      * which did. */
     indirect?: boolean;
     /** The build job that inserted the round. */
     job?: string;
-    /** The accepted text does not compile: the errors that its side of the
-     *  comparison was typeset past. */
+    /** Compilation errors in the accepted text. */
     baselineErrors?: string[];
+    /** The accepted text produced no PDF, so the review shows source diffs. */
+    sourceOnly?: true;
   };
   created: number;
   /** Whether its PDF comparison is rendered. A round is inserted first and
@@ -197,6 +199,8 @@ export interface BuildInfo {
   pdf: string;
   seconds: number;
   warnings: string[];
+  /** Relative directories needed by TikZ externalization. */
+  tikzDirectories?: string[];
   /** The errors TeX typeset past, in a build that went on after them. */
   errors?: string[];
 }
@@ -489,9 +493,9 @@ export interface RoundDetail extends Omit<RenderedRound, "units"> {
   after: string;
   units: (Unit & Partial<VisualUnit> & { history?: History[]; formattingFor?: string; waiting?: boolean; carried?: number })[];
   warnings: string[];
-  /** The errors of the accepted text, when its side of the comparison was
-   *  typeset past them. */
+  /** Compilation errors in the accepted text. */
   baselineErrors?: string[];
+  sourceOnly?: true;
   /** The round's own comparison is still rendering, or failed. */
   rendering?: "pending" | "failed";
   files: string;

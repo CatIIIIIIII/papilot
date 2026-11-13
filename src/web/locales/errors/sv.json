@@ -1,4 +1,9 @@
 {
+  "Connect the selected agent before diagnosing compilation problems.": "Anslut den valda agenten innan du felsöker kompileringsproblem.",
+  "The proposed settings would enable a different latexmkrc.": "De föreslagna inställningarna skulle aktivera en annan latexmkrc.",
+  "The manuscript could not be compiled.": "Manuskriptet kunde inte kompileras.",
+  "The agent returned an invalid LaTeX repair response.": "Agenten gav ett ogiltigt svar för LaTeX-korrigeringen.",
+  "The manuscript build changed. Check the latest compilation problems.": "Manuskriptets kompileringsresultat har ändrats. Kontrollera de senaste kompileringsproblemen.",
   "A commit is already in progress. Wait for it to finish.": "En commit pågår redan. Vänta tills den är klar.",
   "A commit is in progress. Try again when it finishes.": "En commit pågår. Försök igen när den är klar.",
   "A review action is already in progress. Wait for it to finish.": "En granskningsåtgärd pågår redan. Vänta tills den är klar.",

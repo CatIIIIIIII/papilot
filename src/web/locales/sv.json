@@ -1,4 +1,8 @@
 {
+  "Diagnosing the compilation failure…": "Undersöker kompileringsfelet…",
+  "Prepare source repair…": "Förbered en uppgift för att rätta källfilerna…",
+  "Submit a repair task to approve changes to project files.": "Skicka uppgiften för att godkänna ändringar i projektfilerna.",
+  "Test compilation succeeded. Build settings saved.": "Testkompileringen lyckades. Kompileringsinställningarna har sparats.",
   ", ": ", ",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A few tools are needed before you can work on papers.": "Några verktyg behövs innan du kan arbeta med dina artiklar.",

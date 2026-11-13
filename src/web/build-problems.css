@@ -33,6 +33,8 @@
 .problems-footer a{flex-shrink:0;white-space:nowrap;color:var(--text-2);font-size:12.5px}
 .problems-footer a:hover{color:var(--text)}
 .problems-footer .button{margin-left:auto;gap:6px}
+.problems-repair{max-height:160px;overflow:auto;padding:8px 14px;border-top:1px solid var(--line);color:var(--text-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.problems-repair p{margin:6px 0 0;font-weight:600}
 
 /* A jump marks the problem for a moment, then gets out of the way. */
 .problem-flash{position:absolute;z-index:3;border-radius:3px;outline:2px solid color-mix(in srgb,var(--primary) 70%,transparent);outline-offset:1px;background:color-mix(in srgb,var(--primary) 16%,transparent);pointer-events:none;animation:problem-flash 2.2s var(--ease) forwards}

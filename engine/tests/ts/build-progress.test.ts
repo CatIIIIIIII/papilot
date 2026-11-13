@@ -18,7 +18,7 @@ it.each([true, false])("shares current and subsequent progress when the first ca
   // Only replace the compiler: keep the real build-key deduplication,
   // scheduling, and subscriber lifecycle across separate Builder instances.
   const compile = vi.spyOn(Builder.prototype as any, "compile").mockImplementation(async (...args: any[]) => {
-    report = args[8];
+    report = args[9];
     started();
     await done;
     return { key: args[2] };

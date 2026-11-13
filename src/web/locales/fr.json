@@ -1,4 +1,8 @@
 {
+  "Diagnosing the compilation failure…": "Diagnostic de l’échec de compilation…",
+  "Prepare source repair…": "Préparer une tâche de correction des sources…",
+  "Submit a repair task to approve changes to project files.": "Envoyez la tâche de correction pour autoriser la modification des fichiers du projet.",
+  "Test compilation succeeded. Build settings saved.": "La compilation de test a réussi. Les paramètres de compilation ont été enregistrés.",
   ", ": ", ",
   "/Users/you/papers/my-paper": "/Users/you/papers/my-paper",
   "A few tools are needed before you can work on papers.": "Quelques outils sont nécessaires avant de pouvoir travailler sur vos articles.",

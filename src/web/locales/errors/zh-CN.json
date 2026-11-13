@@ -1,4 +1,9 @@
 {
+  "Connect the selected agent before diagnosing compilation problems.": "请连接所选 Agent，再诊断编译问题。",
+  "The proposed settings would enable a different latexmkrc.": "建议的设置会启用另一份 latexmkrc。",
+  "The manuscript could not be compiled.": "无法编译稿件。",
+  "The agent returned an invalid LaTeX repair response.": "代理返回了无效的 LaTeX 修复建议。",
+  "The manuscript build changed. Check the latest compilation problems.": "稿件的编译结果已更新，请查看最新的编译问题。",
   "A commit is already in progress. Wait for it to finish.": "已有提交正在进行，请等待其完成。",
   "A commit is in progress. Try again when it finishes.": "正在进行提交，请完成后重试。",
   "A review action is already in progress. Wait for it to finish.": "已有审阅操作正在进行，请等待其完成。",
