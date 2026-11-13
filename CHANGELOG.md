@@ -4,6 +4,23 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-13
+
+Fix Windows window controls and MiKTeX compilation, improve recovery from LaTeX build failures, and answer PDF-note questions without editing the manuscript.
+
+### Changed
+
+- **Tasks follow recent activity.** Continuing an older conversation moves it to the top of the sidebar, matching its displayed timestamp and preserving the order after reload. ([#150](https://github.com/PapilotAI/papilot/pull/150))
+- Update the Hono and Node server adapter dependencies. ([#149](https://github.com/PapilotAI/papilot/pull/149), [#151](https://github.com/PapilotAI/papilot/pull/151))
+
+### Fixed
+
+- **Windows window buttons respond to mouse clicks.** Minimize, maximize/restore and close no longer behave as title-bar drag handles, including in compact windows and Version Management. ([#154](https://github.com/PapilotAI/papilot/pull/154))
+- **MiKTeX builds start correctly on Windows.** Preview hooks no longer lose their quotes in the latexmk launcher and fail with a Perl syntax error before TeX starts. Foreground previews and background builds keep the paper's own hooks. ([#156](https://github.com/PapilotAI/papilot/pull/156))
+- **PDF-note questions get an answer in chat.** Editing remains the default, but questions and requests for explanation or discussion no longer direct the agent to rewrite the manuscript unless an edit is also requested. Mixed notes are handled individually. ([#157](https://github.com/PapilotAI/papilot/pull/157))
+- **Recover from LaTeX build failures.** Compilation Problems can diagnose a failure with the selected agent, test proposed build settings and retain settings that work. Nested output and TikZ checksum directories are handled correctly, and a repaired revision remains available for source review when the original manuscript produced no PDF. Task PDFs stay tied to their published build. ([#148](https://github.com/PapilotAI/papilot/pull/148))
+- **Find desktop Codex installations managed by Volta on Windows.** The probe and app-server start from the user's home directory so the host installation resolves outside the packaged app. ([#148](https://github.com/PapilotAI/papilot/pull/148))
+
 ## [0.10.1] - 2026-11-12
 
 Review and edit a task's changes in the source editor, the part of the source editor meant for 0.10.0, and drag the desktop window from every toolbar.
@@ -511,7 +528,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/PapilotAI/papilot/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/PapilotAI/papilot/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/PapilotAI/papilot/compare/v0.9.4...v0.10.0
 [0.9.4]: https://github.com/PapilotAI/papilot/compare/v0.9.3...v0.9.4
