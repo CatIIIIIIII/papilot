@@ -1,0 +1,60 @@
+import { readyRequirements } from './required-tools-fixture.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import Fastify from 'fastify';
+import staticFiles from '@fastify/static';
+import { chromium, expect } from './playwright.mjs';
+
+fs.mkdirSync('test-results', { recursive: true });
+const baseline = process.env.PAPILOT_BASELINE === '1';
+const server = Fastify();
+await server.register(staticFiles, { root: path.resolve(process.env.PAPILOT_WEB_DIST || 'dist') });
+await server.listen({ host: '127.0.0.1', port: 0 });
+const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
+const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1200, height: 780 } });
+const errors = []; page.on('pageerror', error => errors.push(error.message));
+const now = Date.now();
+const task = (id, createdAt) => ({ id, projectId: 'paper', agent: 'codex', name: id, title: id === 'older' ? 'Earlier conversation' : 'Newer conversation', instructions: 'Review the paper.', worktree: '/tmp/paper', threadId: id, turnId: null, status: 'reviewing', createdAt, updatedAt: createdAt, review: null });
+const older = task('older', now - 120000), newer = task('newer', now - 60000);
+const runtime = { connected: true, authenticated: true, models: [] };
+const snapshot = { version: 'test', csrf: 'fixture', projects: [{ id: 'paper', name: 'Example paper', path: '/tmp/paper' }], tasks: [older, newer], requests: [], runtime, runtimes: { codex: runtime } };
+const items = [];
+await page.route('**/api/**', async route => {
+  const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
+  if (url.pathname === '/api/runtime/requirements') return json(readyRequirements);
+  if (url.pathname === '/api/state') return json(snapshot);
+  if (url.pathname === '/api/updates') return json({ currentVersion: 'test', phase: 'idle', canUpdate: false });
+  if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
+  if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
+  if (url.pathname.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
+  if (url.pathname.endsWith('/items')) return json({ items });
+  if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
+  if (url.pathname.endsWith('/skills')) return json({ skills: [] });
+  if (url.pathname.endsWith('/git')) return json({ files: [], branch: 'main' });
+  if (url.pathname.endsWith('/manuscript')) return json({ git: { files: [] }, annotations: [], build: { status: 'building', current: false } });
+  throw Error(`Unexpected fixture request ${url.pathname}`);
+});
+try {
+  await page.goto(`http://127.0.0.1:${server.server.address().port}`);
+  const titles = page.locator('.task-list .task-title');
+  await expect(titles).toHaveText(['Newer conversation', 'Earlier conversation']);
+  // The state endpoint retains insertion order after a follow-up updates the older task.
+  older.updatedAt = Date.now();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(titles).toHaveText(baseline ? ['Newer conversation', 'Earlier conversation'] : ['Earlier conversation', 'Newer conversation']);
+  await page.screenshot({ animations: 'disabled', path: `test-results/task-recency-${baseline ? 'before' : 'after'}.png` });
+  await page.reload();
+  await expect(titles).toHaveText(baseline ? ['Newer conversation', 'Earlier conversation'] : ['Earlier conversation', 'Newer conversation']);
+  newer.updatedAt = Date.now() + 1000;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(titles).toHaveText(['Newer conversation', 'Earlier conversation']);
+  older.updatedAt = newer.updatedAt;
+  await page.reload();
+  await expect(titles).toHaveText(['Newer conversation', 'Earlier conversation']);
+  await page.getByRole('searchbox', { name: 'Search tasks', exact: true }).fill('Earlier');
+  await expect(titles).toHaveText(['Earlier conversation']);
+  assert.deepEqual(snapshot.tasks.map(task => task.id), ['older', 'newer']);
+  assert.deepEqual(errors, []);
+  console.log(`PASS: ${baseline ? 'baseline reproduces stale ordering' : 'follow-up reorders live list and survives reload'}; subsequent updates, ties and search checked.`);
+} finally { await browser.close(); await server.close(); }
