@@ -5,6 +5,7 @@ export type { NoteSummary } from './shared.ts';
 // PDF notes reach the agent as one plain-text message. The chat shows that
 // message as the notes again, so the format and its reader live together.
 const PREAMBLE = 'Revise the manuscript according to these notes the author marked on the compiled PDF.';
+const NOTE_INTENT = 'Treat each note as a request to edit the manuscript by default. If a note asks a question or requests an explanation or discussion, answer it in chat without editing unless the author also asks for a manuscript change. Handle mixed notes individually and keep edits within the requested scope.';
 const QUOTE = '   PDF text: "', POINT = '   Marked point (‸) in this PDF line: "', REGION = '   Marked region: a figure, equation or other non-text area', NOTE = '\n   Note: ';
 const DELETE = 'Delete the marked text.', REPLACE = 'Replace the marked text with: ';
 const MARKS = 'A note headed "Delete" or "Replace" asks you to remove exactly the marked text, or to put the given text in its place; change nothing else beyond what grammar and LaTeX then require. A marked point is a place rather than a passage: ‸ shows where it falls in that line.';
@@ -34,7 +35,7 @@ export function noteAnchor(note: NoteSummary): NoteAnchor {
 
 export function reviewNotesInstructions(notes: NoteSummary[], request = '') {
   const items = notes.map((note, index) => `${index + 1}. ${heading(note)}\n${marked(note)}${NOTE}${comment(note)}`);
-  return `${PREAMBLE}${notes.some(note => note.group) ? ` ${GROUP_INSTRUCTIONS}` : ''}${marks(notes)}${request.trim() ? ` Overall request: ${request.trim()}\n\n` : ''} These notes refer to the displayed review round and its Before, After or Unchanged text. Region coordinates are percentages of the displayed PDF strip (left, top, right, bottom); any quoted text for a region is nearby context. Read the current source before editing. Preserve accepted changes and do not reintroduce rejected edits unless a note explicitly asks for it.\n\n${items.join('\n\n')}`;
+  return `${PREAMBLE} ${NOTE_INTENT}${notes.some(note => note.group) ? ` ${GROUP_INSTRUCTIONS}` : ''}${marks(notes)}${request.trim() ? ` Overall request: ${request.trim()}\n\n` : ''} These notes refer to the displayed review round and its Before, After or Unchanged text. Region coordinates are percentages of the displayed PDF strip (left, top, right, bottom); any quoted text for a region is nearby context. If an edit is requested, read the current source before changing it. Preserve accepted changes and do not reintroduce rejected edits unless a note explicitly asks for it.\n\n${items.join('\n\n')}`;
 }
 
 export function notesInstructions(notes: Annotation[], request = '', groupInstructions: GroupInstructions = {}) {
@@ -46,10 +47,10 @@ export function notesInstructions(notes: Annotation[], request = '', groupInstru
     const source = note.source?.excerpt ? ['   LaTeX source of the marked region:', `   ${fence}latex`, ...note.source.excerpt.split('\n').map(line => '   ' + line), `   ${fence}`] : [];
     return [`${index + 1}. ${heading({ ...note, where })}`, ...source, marked(note), `${NOTE.slice(1)}${comment(note)}`].join('\n');
   });
-  const scope = request.trim() ? `follow both the overall request and the notes.\n\nOverall request:\n${request.trim()}` : 'change only what the notes ask for.';
+  const scope = request.trim() ? ` Follow both the overall request and the notes.\n\nOverall request:\n${request.trim()}` : '';
   const groups = NOTE_GROUPS.filter(group => groupInstructions[group]?.trim() && notes.some(note => note.group && canonicalGroup(note.group) === group));
   const directions = groups.length ? `\n\nInstructions for color groups (apply only to the attached locations in that group):\n${groups.map(group => `${GROUP_NAMES[group]}:\n   ${groupInstructions[group]!.trim().replace(/\n/g, '\n   ')}`).join('\n')}` : '';
-  return `${PREAMBLE}${notes.some(note => note.group) ? ` ${GROUP_INSTRUCTIONS}` : ''}${marks(notes)} SyncTeX mapped each marked region to the LaTeX file and lines that produced it; the PDF text is what the author saw. Read the current source before editing, and ${scope}${directions}\n\n${items.join('\n\n')}`;
+  return `${PREAMBLE} ${NOTE_INTENT}${notes.some(note => note.group) ? ` ${GROUP_INSTRUCTIONS}` : ''}${marks(notes)} SyncTeX mapped each marked region to the LaTeX file and lines that produced it; the PDF text is what the author saw. If an edit is requested, read the current source before changing it.${scope}${directions}\n\n${items.join('\n\n')}`;
 }
 
 // The notes in a message written by notesInstructions, or null for any other message.
