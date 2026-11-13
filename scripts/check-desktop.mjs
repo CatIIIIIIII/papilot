@@ -12,6 +12,7 @@ import { findCommand } from '../engine/src/core/platform.mjs';
 import { _electron as electron, expect } from './playwright.mjs';
 import { selectOption, selectedValue } from './select.mjs';
 import { checkDesktopNotifications } from './check-desktop-notifications.mjs';
+import { checkWindowsHitRegions } from './check-desktop-windows.mjs';
 import { assertInstalledTools } from './desktop-requirements.mjs';
 
 const require = createRequire(import.meta.url);
@@ -106,9 +107,11 @@ try {
     assert.equal(overlap, false, 'Toolbar controls stay clear of the Windows window buttons');
   }
   if (process.platform !== 'darwin') {
+    await checkWindowsHitRegions(application, page);
     const maximize = page.getByRole('button', { name: /^(Maximize or restore window|最大化或还原窗口)$/ });
     await maximize.click();
     await expect.poll(() => application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
+    await checkWindowsHitRegions(application, page);
     await maximize.click();
     await expect.poll(() => application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(false);
   }
@@ -120,11 +123,13 @@ try {
     await expect.poll(() => page.evaluate(() => innerWidth)).toBe(900);
     await expect(page.locator('.sidebar')).toBeHidden();
     await expect.poll(async () => (await page.locator('.main').boundingBox()).x).toBe(0);
+    await checkWindowsHitRegions(application, page);
     await page.screenshot({ path: 'test-results/desktop-windows-compact.png' });
     await page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ }).click();
     await page.locator('.sidebar').getByRole('button', { name: /^(Version Management|版本管理)/ }).click();
     await expect(page.locator('.git-workspace')).toBeVisible();
     await expect(page.locator('.sidebar')).toBeHidden();
+    await checkWindowsHitRegions(application, page);
     await page.screenshot({ path: 'test-results/desktop-windows-version-management.png' });
     await page.getByRole('button', { name: /^(Show task list|显示任务列表)$/ }).click();
     await page.locator('.sidebar').getByRole('button', { name: /^(Manuscript|稿件)/ }).click();
@@ -238,6 +243,7 @@ try {
     // again and must be dismissed before clicking the HTML window controls.
     await dismissInitialSetup(moved);
     if (process.platform !== 'darwin') {
+      await checkWindowsHitRegions(application, moved);
       const closed = application.waitForEvent('close');
       await moved.getByRole('button', { name: /^(Close window|关闭窗口)$/ }).click();
       await closed;

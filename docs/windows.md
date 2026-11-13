@@ -84,7 +84,7 @@ npm.cmd run test:desktop
 node scripts/check-desktop-environments.mjs
 ```
 
-The focused tests check Unicode/spaces, drive and UNC path rejection where a relative path is required, npm `.cmd` launchers with multiline arguments, SyncTeX source lookup, dependency junctions, descendant process cleanup and a real SQLite backend startup/shutdown. The desktop smoke test checks the window, demo PDF, imports, persistence and app updates. Run the desktop smoke test in an interactive Windows desktop session; a background SSH session alone is not a substitute for GUI verification.
+The focused tests check Unicode/spaces, drive and UNC path rejection where a relative path is required, npm `.cmd` launchers with multiline arguments, SyncTeX source lookup, dependency junctions, descendant process cleanup and a real SQLite backend startup/shutdown. The desktop smoke test checks the window, demo PDF, imports, persistence and app updates. On Windows it also uses `WM_NCHITTEST` to verify that all three window buttons receive client clicks in normal, maximized and compact layouts, including Version Management. Browser-simulated clicks alone bypass native drag regions and cannot catch buttons that Windows treats as title-bar drag handles (issue #152). Run the desktop smoke test in an interactive Windows desktop session; a background SSH session alone is not a substitute for GUI verification.
 
 Initial validation used the 0.9.0 source base (`64afda0`) with these Windows changes on a native Chinese Windows 11 Home x64 machine (build 26200), using Node 24.22.2, Git 2.56.0 and TeX Live 2026 on 2026-11-06:
 
