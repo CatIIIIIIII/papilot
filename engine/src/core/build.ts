@@ -876,7 +876,16 @@ export class Builder {
         else if (next && saved > followed && !/^(?:xdvipdfmx|dvipdfmx?|dvips|ps2pdf)$/.test(next[1])) { followed = saved; preview(); }
       }
     };
-    if (keeping) args.push("-e", PASS_HOOK);
+    if (keeping) {
+      // MiKTeX's Windows launcher strips embedded quotes when forwarding -e
+      // to Perl. Keep the code in this build's cache, outside the exported
+      // paper, and load it after the project's own rc file.
+      const hook = path.join(folder, "papilot-pass.latexmkrc");
+      await fs.promises.writeFile(hook, PASS_HOOK + "\n");
+      // The cache is an ancestor of cwd: a relative path also avoids passing
+      // Unicode checkout paths through a legacy Windows Perl code page.
+      args.push("-r", path.relative(cwd, hook).split(path.sep).join("/"));
+    }
     // A repository can contain a filename that looks like a latexmk option.
     args.push(main.startsWith("-") ? "./" + main : main);
     const transcript = path.join(folder, "latexmk.log"),
