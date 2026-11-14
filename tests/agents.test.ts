@@ -130,6 +130,39 @@ test('Antigravity turns finish when agy recovers from a failed model request', a
   } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+// A real macOS conversation had its 503 at step 49. Resumed turns starting
+// at 51 and 68 ended with replies at 67 and 76, but agy returned that old 503
+// again without streaming the historical error_message step.
+for (const scenario of ['recovered', 'new-error', 'no-reply', 'unfinished-tool', 'unfinished-reply', 'quota', 'transport', 'fresh'] as const) {
+  test(`Antigravity resumed conversation with a historical API error: ${scenario}`, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-history-'));
+    const file = path.join(dir, 'conversations.json');
+    const apiError = 'API error (attempt 1): UNAVAILABLE (code 503): The service is currently unavailable.';
+    const error = scenario === 'quota' ? 'Quota exceeded' : scenario === 'transport' ? 'stream reading error: unexpected EOF' : apiError;
+    const step = (step_index: number, step_type: string, more: Record<string, unknown> = {}) => JSON.stringify({ event: 'step_update', step_update: { step_index, step_type, state: 'DONE', ...more } });
+    const lines = [step(68, 'user_input'), step(71, 'tool', { tool_name: 'read_file', tool_info: { parameters: { Path: '/work/main.tex' } } })];
+    if (scenario !== 'no-reply') lines.push(step(76, 'agent_response', { text_delta: 'The merged proposal is ready for review.' }));
+    if (scenario === 'new-error') lines.push(step(77, 'error_message'));
+    if (scenario === 'unfinished-tool') lines.push(step(77, 'tool', { state: 'ACTIVE', tool_name: 'edit_file' }));
+    if (scenario === 'unfinished-reply') lines.push(step(77, 'agent_response', { state: 'ACTIVE', text_delta: 'One more thing' }));
+    lines.push(JSON.stringify({ event: 'result', result: { status: 'ERROR', error, finished_reason: 'error' } }));
+    // Restore the conversation from disk, as after restarting Papilot.
+    if (scenario !== 'fresh') fs.writeFileSync(file, JSON.stringify({ 'saved-thread': 'saved-conversation' }));
+    const fake = fakeAgy([lines]), agent = new AntigravityAgent('agy', file, fake.launch as any);
+    agent.ready = true;
+    try {
+      const { thread } = await agent.request('thread/resume', { threadId: 'saved-thread', cwd: '/work' });
+      const seen = events(agent);
+      await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Continue.' }] });
+      const turn = await completed(seen);
+      assert.equal(turn.status, scenario === 'recovered' ? 'completed' : 'failed');
+      assert.equal(turn.error?.message, scenario === 'recovered' ? undefined : error);
+      assert.equal(fake.launches.length, 1, 'Never repeat edits to recover an already finished turn');
+      assert.equal(fake.launches[0].args.includes('--conversation'), scenario !== 'fresh');
+    } finally { agent.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
 test('Antigravity grants only selected images read access for the current turn', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-agy-images-'));
   const image = path.join(dir, 'attached.png'); fs.writeFileSync(image, 'image fixture');

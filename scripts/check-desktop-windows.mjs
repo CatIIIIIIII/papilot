@@ -21,9 +21,12 @@ export async function checkWindowsHitRegions(application, page) {
         const box = element.getBoundingClientRect();
         return { x: Math.round((box.x + box.width / 2) * devicePixelRatio), y: Math.round((box.y + box.height / 2) * devicePixelRatio) };
       });
-      const { stdout } = await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-        '-Window', handle, '-X', String(point.x), '-Y', String(point.y)], { timeout: 10_000, windowsHide: true });
+      // PowerShell startup and Add-Type compilation share this budget with
+      // the native probe. A cold CI runner can exceed ten seconds before it
+      // returns a hit result; WM_NCHITTEST still has its own five-second limit.
+      const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
+        '-Window', handle, '-X', String(point.x), '-Y', String(point.y)], { timeout: 30_000, windowsHide: true });
       return Number(stdout.trim());
-    }, { message: `${label} must hit HTCLIENT (1), not HTCAPTION (2)` }).toBe(1);
+    }, { timeout: 60_000, message: `${label} must hit HTCLIENT (1), not HTCAPTION (2)` }).toBe(1);
   }
 }

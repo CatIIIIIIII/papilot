@@ -601,9 +601,13 @@ export class AntigravityAgent extends Adapter {
       if (denied.length) this.item(turn, { id: `${turn.id}:denied`, type: 'toolCall', status: 'declined', text: `Antigravity could not run ${[...new Set(denied)].join(', ')}: the operation needs permission, and its headless CLI cannot ask for approval.` });
       // agy retries a failed model request itself and records each failed
       // attempt as an error step. It still reports the turn as an error when a
-      // retry succeeded and the agent went on to finish, so a reply after the
-      // last error step, with nothing after it, means the turn completed.
-      const recovered = result?.status === 'ERROR' && lastError >= 0 && lastReply > lastError && lastReply === lastStep;
+      // retry succeeded and the agent went on to finish. Resuming a conversation
+      // can return an earlier turn's API error too, without streaming its old
+      // error step. In either case require a finished reply as the final step;
+      // a new error, unfinished work, or an unrelated result-only failure stays
+      // failed. Do not resend the prompt: its edits have already happened.
+      const historicalApiError = conversation && lastError < 0 && /^API error \(attempt \d+\):/.test(result?.error || '');
+      const recovered = result?.status === 'ERROR' && (lastError >= 0 || historicalApiError) && lastReply > lastError && lastReply === lastStep;
       if (result?.status === 'SUCCESS' || recovered) this.finish(turn, 'completed');
       else this.finish(turn, 'failed', result?.error || stderr.trim().split('\n').filter(line => !line.startsWith('{')).slice(-3).join(' ') || 'Antigravity stopped without a result.');
     });
