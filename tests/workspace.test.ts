@@ -2796,7 +2796,7 @@ for (const permissions of ['full', 'workspace'] as const) test(`loaded native co
     assert.equal(f.codex.calls.some(call => call.method === 'thread/resume'), false);
     const text = f.codex.calls.find(call => call.method === 'turn/start')?.params.input[0].text;
     assert.match(text, /supersedes earlier Papilot messages fixing the access mode/);
-    assert.match(text, /Keep manuscript edits in this isolated task worktree/);
+    assert.match(text, /By default, keep manuscript edits in this isolated task worktree/);
     assert.match(text, permissions === 'full' ? /current permissions are Full access/ : /current permissions are Workspace access/);
     assert.ok(text.endsWith(run.prompt));
     assert.doesNotMatch(run.prompt, /Papilot settings update/, 'internal context must not alter the author’s stored message');
@@ -2806,13 +2806,22 @@ for (const permissions of ['full', 'workspace'] as const) test(`loaded native co
 test('editing instructions keep manuscript boundaries without pinning mutable access permissions', () => {
   const f = fixture();
   try {
-    for (const agent of ['codex', 'claude', 'glm', 'cursor', 'grok', 'antigravity'] as const) {
+    for (const agent of AGENT_IDS) {
       const instructions = (permissions: 'workspace' | 'full') => (f.workspace as any).instructions({ ...f.task, agent, permissions });
       assert.equal(instructions('workspace'), instructions('full'));
-      assert.match(instructions('workspace'), /Keep manuscript edits in this isolated task worktree/);
+      assert.match(instructions('workspace'), /By default, keep manuscript edits in this isolated task worktree/);
       assert.match(instructions('workspace'), /runtime's current sandbox and approval requirements/);
       assert.doesNotMatch(instructions('workspace'), /Only edit this isolated task worktree|The user selected full access/);
-      assert.match(instructions('full'), /Never edit the manuscript checkout, other task worktrees, or Papilot's own source\/state/);
+      assert.match(instructions('full'), /Never edit other task worktrees or Papilot's own source\/state/);
+      assert.match(instructions('full'), /explicitly asks you to copy, apply, or edit specified files in the manuscript checkout/);
+      assert.match(instructions('full'), /without requiring Apply to workspace or repeated confirmation/);
+      assert.match(instructions('full'), /Do not commit or push without user authorization/);
+      assert.match(instructions('full'), /necessary Git fetch\/pull, staging, commit, and push in the manuscript checkout/);
+      assert.match(instructions('full'), /include only files within the requested scope, and preserve unrelated work/);
+      assert.match(instructions('full'), /do not force-push or discard changes/);
+      assert.match(instructions('full'), /Full filesystem access alone does not authorize unrelated changes/);
+      assert.match(instructions('full'), /do not overwrite accepted manuscript content unless the user explicitly requests that replacement/);
+      assert.doesNotMatch(instructions('full'), /Never edit the manuscript checkout|Never commit, push|never overwrite the accepted manuscript/);
     }
   } finally { f.close(); }
 });
@@ -3121,5 +3130,17 @@ test('duplicate Start task requests save one task, one message and one copy', as
     assert.equal(f.store.items(input.id).length, 1);
     assert.equal(f.calls.filter(call => call.route === '/api/tasks').length, 1);
     await assert.rejects(f.workspace.createTask({ ...input, projectId: 'other-paper' }), /Invalid task ID/);
+  } finally { f.close(); }
+});
+
+
+test('review instructions retain read-only manuscript boundaries despite editing authorization exceptions', () => {
+  const f = fixture();
+  try {
+    for (const agent of AGENT_IDS) {
+      const instructions = (f.workspace as any).instructions({ ...f.task, agent, mode: 'review', permissions: 'full' });
+      assert.match(instructions, /Never edit the manuscript checkout, other task worktrees, or Papilot's state/);
+      assert.doesNotMatch(instructions, /that request authorizes those writes|necessary Git fetch\/pull/);
+    }
   } finally { f.close(); }
 });

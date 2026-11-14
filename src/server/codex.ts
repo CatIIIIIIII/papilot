@@ -22,7 +22,7 @@ export class Codex extends EventEmitter {
     // Resuming even a cold thread retains its original developer instructions.
     // Application context supplies a later developer message on every turn,
     // including after restart, without discarding the conversation's history.
-    const additionalContext = { 'papilot-task-access': { kind: 'application', value: `These are Papilot's current task access instructions. They replace earlier Papilot instructions about access outside the task worktree; manuscript review scope and protected-path rules still apply.\n${taskAccessInstructions}` } };
+    const additionalContext = { 'papilot-task-access': { kind: 'application', value: `These are Papilot's current task access instructions. They replace earlier Papilot instructions about access outside the task worktree, including blanket prohibitions on explicitly authorized manuscript writes, commits, and pushes. Manuscript review scope still applies; other task worktrees and Papilot's own source/state remain protected.\n${taskAccessInstructions}` } };
     if (value === 'full') return { thread, turn: { approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' }, additionalContext } };
     // A loaded thread/resume can keep the previous policy (including full access).
     // Resolve a fresh native policy to retain configured roots and tmp exclusions,

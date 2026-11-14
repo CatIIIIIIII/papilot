@@ -63,7 +63,7 @@ for (const initial of ['workspace', 'full'] as const) test(`real Codex switches 
     const legacyAccess = initial === 'workspace' ? 'Only edit this isolated task worktree.'
       : 'The user selected full access. You may run authorized commands including SSH and access files outside this worktree. Keep manuscript edits in this isolated task worktree.';
     const { thread } = await codex.request('thread/start', { cwd, ...first.thread,
-      developerInstructions: history === 'new' ? developerInstructions : developerInstructions.replace(taskAccessInstructions, legacyAccess) });
+      developerInstructions: history === 'new' ? developerInstructions : developerInstructions.replace(taskAccessInstructions, legacyAccess + " Never edit the manuscript checkout. Never commit, push, stash, or accept/reject/undo review decisions.") });
     if (history !== 'new') {
       // Seed a pre-upgrade turn without the new application context.
       const { additionalContext: _, ...policy } = first.turn;
@@ -92,14 +92,16 @@ for (const initial of ['workspace', 'full'] as const) test(`real Codex switches 
         assert.ok(effective.sandbox.writableRoots.includes(extra));
       }
       const sent = JSON.stringify(modelRequests.at(-1));
-      assert.match(sent, /Keep manuscript edits in this isolated task worktree/);
+      assert.match(sent, /By default, keep manuscript edits in this isolated task worktree/);
       assert.match(sent, /runtime's current sandbox and approval requirements/);
-      assert.match(sent, /Never edit the manuscript checkout, other task worktrees, or Papilot's own source\/state/);
+      assert.match(sent, /Never edit other task worktrees or Papilot's own source\/state/);
       const input: any[] = modelRequests.at(-1).input;
       const update = input.findLastIndex(item => item.role === 'developer' && JSON.stringify(item).includes('<papilot-task-access>'));
       assert.ok(update >= 0, 'current access instructions must have developer authority');
       assert.match(JSON.stringify(input[update]), /replace earlier Papilot instructions about access outside the task worktree/);
-      assert.match(JSON.stringify(input[update]), /manuscript review scope and protected-path rules still apply/);
+      assert.match(JSON.stringify(input[update]), /blanket prohibitions on explicitly authorized manuscript writes, commits, and pushes/);
+      assert.match(JSON.stringify(input[update]), /Manuscript review scope still applies/);
+      assert.match(JSON.stringify(input[update]), /necessary Git fetch\/pull, staging, commit, and push/);
       if (history === 'new') assert.doesNotMatch(sent, /Only edit this isolated task worktree|The user selected full access/);
       else {
         const legacy = input.findIndex(item => item.role === 'developer' && JSON.stringify(item).includes(legacyAccess));
